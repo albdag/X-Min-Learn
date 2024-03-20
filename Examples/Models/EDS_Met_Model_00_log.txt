@@ -1,0 +1,69 @@
+ALGM_NAME
+'Softmax Regression'
+
+
+OPTIM_NAME
+'SGD'
+
+
+LOSS_NAME
+'Cross-Entropy'
+
+
+ORDERED_XFEAT
+['Al', 'BSE', 'Ca', 'Fe', 'K', 'Mg', 'Mn', 'Na', 'Si', 'Ti']
+
+
+Y_DICT
+{'AlSi': 0, 'Amp': 1, 'Ap': 2, 'Bt': 3, 'Chl': 4, 'Ep': 5, 'FeOx': 6, 'Grt': 7, 'Ilm': 8, 'Kfs': 9, 'Pl': 10, 'Px': 11, 'Qtz': 12, 'Rt': 13, 'Ttn': 14, 'Wm': 15}
+
+
+TEST_RATEO
+0.24
+
+
+LOSS
+(0.25288254022598267, 0.26818880438804626)
+
+
+ACCURACY
+(0.9404298937143661, 0.918411494749092)
+
+
+F1_SCORES
+array([[0.94044016, 0.94039601, 0.94039601],
+       [0.91841149, 0.77417463, 0.93304799]])
+
+
+EPOCHS
+700
+
+
+LR
+0.1
+
+
+WD
+0.001
+
+
+MTM
+0.9
+
+
+BALANCING_INFO
+{'Strategy': 85242, 'OS': 'SMOTE', 'US': 'RandUS', 'n-neigh_US': 3, 'k-neigh_OS': 5, 'm-neigh_OS': 10, 'Seed': 64784, 'New test_rateo': 0.24}
+
+
+SEED
+64784
+
+
+PARENTMODEL_PATH
+''
+
+
+GT_DATASET_PATH
+'C:/Users/dagos/Desktop/Working Directory/Datasets/EDS_Met_Dataset.csv'
+
+
