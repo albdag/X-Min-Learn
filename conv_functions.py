@@ -2,7 +2,7 @@
 """
 Created on Wed Apr 28 12:12:28 2021
 
-@author: dagos
+@author: albdag
 """
 
 from os.path import split, splitext

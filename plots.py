@@ -2,8 +2,12 @@
 """
 Created on Mon Jan 23 09:14:45 2023
 
-@author: dagos
+@author: albdag
 """
+
+from PyQt5.QtGui import QCursor, QMouseEvent
+from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtWidgets import QAction, QSizePolicy, QWidgetAction
 
 import preferences as pref
 import customObjects as cObj
@@ -13,14 +17,12 @@ import os
 from weakref import proxy
 
 import matplotlib as MPL
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_interactions import panhandler
 
-from PyQt5.QtGui import QCursor, QMouseEvent
-from PyQt5.QtCore import Qt, QSize, QTimer
-from PyQt5.QtWidgets import QAction, QSizePolicy, QWidgetAction
-MPL.use('Qt5Agg')
+
+# MPL.use('Qt5Agg')
 
 
 
@@ -214,9 +216,12 @@ class _CanvasBase(FigureCanvasQTAgg):
         if tight and constrained : constrained = False
 
     # Define the figure and the ax of the matplotlib canvas
+        # self.fig = MPL.figure.Figure(figsize=size, facecolor=pref.IVORY,
+        #                              edgecolor='#19232D', linewidth=2,
+        #                              tight_layout=tight, constrained_layout=constrained)
         self.fig = MPL.figure.Figure(figsize=size, facecolor=pref.IVORY,
-                                     edgecolor='#19232D', linewidth=2,
-                                     tight_layout=tight, constrained_layout=constrained)
+                                edgecolor='#19232D', linewidth=2,
+                                layout='compressed')
         self.ax = self.fig.add_subplot(111, facecolor=pref.IVORY)
         self.ax.axis('off')
 
@@ -224,7 +229,7 @@ class _CanvasBase(FigureCanvasQTAgg):
         super(_CanvasBase, self).__init__(self.fig)
 
     # Set the default style
-        MPL.style.use('seaborn-colorblind') # preferences to change style
+        MPL.style.use('seaborn-v0_8-colorblind') # preferences to change style
 
     # Set events connections for mouse-wheel zoom and mouse-wheel pan, if enabled
         if wheelZoomEnabled:

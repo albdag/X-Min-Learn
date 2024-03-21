@@ -2,7 +2,7 @@
 """
 Created on Mon Jun 21 17:16:01 2021
 
-@author: dagos
+@author: albdag
 """
 
 from PyQt5 import QtWidgets as QW
@@ -501,7 +501,7 @@ class Image2Minmap(QW.QWidget):
         self.autoLoad_cbox.setChecked(True)
 
     # Save button
-        self.save_btn = cObj.IconButton('Icons\save.png', 'Save')
+        self.save_btn = cObj.IconButton(r'Icons\save.png', 'Save')
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self.save_minmap)
 
@@ -523,7 +523,7 @@ class Image2Minmap(QW.QWidget):
         view_group = cObj.GroupArea(view_vbox)
 
     # Adjust main Layout
-        main_hsplit = cObj.SplitterGroup((options_grid, view_group), (1, 3)) # TODO splitter layout
+        main_hsplit = cObj.SplitterGroup((options_grid, view_group), (1, 3)) # use splitter layout instead
         mainLayout = QW.QHBoxLayout()
         mainLayout.addWidget(main_hsplit)
         self.setLayout(mainLayout)
@@ -1382,7 +1382,7 @@ class MineralClassifier(cObj.DraggableTool):
         # allows users to easily link each map to the correct feature name.
         # Consequently the following func should only pass the maps as first
         # argument.
-        csf = active_tab.getClassifier(dict(zip(maps, maps_names)), mask=None) # TODO mask
+        csf = active_tab.getClassifier(dict(zip(maps, maps_names)), mask=None) # implement mask
 
         if csf is not None:
             csf.thread.taskInitialized.connect(self._setProgression)
@@ -1402,7 +1402,7 @@ class MineralClassifier(cObj.DraggableTool):
             mmap, pmap = result
             minmap = MineralMap(mmap, pmap)
             self.output_maps.append(minmap)
-            # TODO visually add minmap to results listwidget (yet to be done)
+            # visually add minmap to results listwidget (yet to be done)
             self.canvas.draw_discretemap(*minmap.get_plotData()) # !!! temp
         else:
             e = result[0]
@@ -1519,7 +1519,7 @@ class MineralClassifier(cObj.DraggableTool):
 
         # Check if all required input maps are present and order them to fit
         # the correct order
-        # TODO add a user-friendly popup to link each map to required feat
+        # add a user-friendly popup to link each map to required feat instead (enhancement)
             maps, maps_names = zip(*inmaps_dict.items())
             required_features = self.model.inFeat
             ordered_maps = []
@@ -1562,7 +1562,7 @@ class MineralClassifier(cObj.DraggableTool):
             self.roimap_path = cObj.PathLabel(full_display=False)
 
         # Remove (unload) ROI map (Styled Button)
-            self.unload_btn = cObj.StyledButton(QIcon(self.style().standardIcon(QW.QStyle.SP_DialogCloseButton))) # TODO icon
+            self.unload_btn = cObj.StyledButton(QIcon(self.style().standardIcon(QW.QStyle.SP_DialogCloseButton))) # use custom icon
             self.unload_btn.setToolTip('Remove ROI map')
 
         # Include pixel proximity (Checkbox)
@@ -4555,7 +4555,7 @@ class ModelLearner(cObj.DraggableTool):
         right_scroll = cObj.GroupScrollArea(right_vbox)
 
     # Adjust final layout
-        main_hsplit = cObj.SplitterGroup((left_scroll, right_scroll), (0, 1)) # TODO SplitterLayout
+        main_hsplit = cObj.SplitterGroup((left_scroll, right_scroll), (0, 1)) # use SplitterLayout
         mainLayout = QW.QGridLayout()
         mainLayout.addWidget(main_hsplit)
         self.setLayout(mainLayout)
@@ -5879,7 +5879,7 @@ class PhaseRefiner(QW.QWidget):
             plot_area.setRowStretch(1, 2)
             plot_area.setRowStretch(2, 1)
 
-            main_split = cObj.SplitterGroup((left_area, plot_area), (1, 2)) # TODO SplitterLayout
+            main_split = cObj.SplitterGroup((left_area, plot_area), (1, 2)) # use SplitterLayout
 
             mainLayout = QW.QHBoxLayout()
             mainLayout.addWidget(main_split)
@@ -6168,7 +6168,7 @@ class PhaseRefiner(QW.QWidget):
             left_box.addWidget(TOC_group)
             left_box.addWidget(options_group)
 
-            mainSplit = cObj.SplitterGroup((left_box, preview_group), # TODO SplitterLayout
+            mainSplit = cObj.SplitterGroup((left_box, preview_group), # use SplitterLayout
                                            (1, 2))
             mainLayout = QW.QHBoxLayout()
             mainLayout.addWidget(mainSplit)

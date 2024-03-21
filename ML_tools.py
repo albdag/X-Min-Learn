@@ -2,12 +2,11 @@
 """
 Created on Wed Apr 28 13:06:51 2021
 
-@author: dagos
+@author: albdag
 """
 
 import numpy as np
-from sklearn.metrics import (accuracy_score, confusion_matrix, f1_score,
-                             silhouette_score, silhouette_samples,
+from sklearn.metrics import (confusion_matrix, f1_score,
                              calinski_harabasz_score, davies_bouldin_score)
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.neighbors import KNeighborsClassifier
@@ -139,7 +138,7 @@ class EagerModel():
             model.load_state_dict(self.stateDict)
             return model
 
-# TODO find a more elegant solution (equation?)
+# find a more elegant solution (equation?)
     def inFeatPoly(self):
         infeat = len(self.inFeat)
         dummy_arr = np.arange(infeat).reshape(1, infeat)
@@ -472,14 +471,6 @@ def K_Means(data, k, seed):
     dist = kmeans.transform(data).min(axis=1)
     prob = 1 - dist/dist.max()
     return pred, prob
-
-def silhouette_metric(data, pred, type):
-    if type == 'avg':
-        return silhouette_score(data, pred, metric='euclidean')
-    elif type == 'all':
-        return silhouette_samples(data, pred, metric='euclidean')
-    else:
-        raise NameError(f'{type} is not a valid silhouette score type.')
 
 def CHIscore(data, pred):
     return calinski_harabasz_score(data, pred)
@@ -855,9 +846,6 @@ def getOptimizer(optimizer_key, model, lr, mtm, wd):
                                     momentum=mtm, weight_decay=wd)
     else: raise KeyError(f'Invalid optimizer {optimizer_key}')
     return optimizer
-
-def accuracy(true, preds):
-    return accuracy_score(true, preds)
 
 def confusionMatrix(true, preds, IDs, percent=False):
     cm = confusion_matrix(true, preds, labels=IDs)

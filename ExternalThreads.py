@@ -2,11 +2,11 @@
 """
 Created on Fri Jan 21 21:54:40 2022
 
-@author: dagos
+@author: albdag
 """
 
 from PyQt5.QtCore import QThread, pyqtSignal
-import ML_tools
+from sklearn.metrics import accuracy_score, silhouette_score, silhouette_samples
 
 
 class MultiTaskThread(QThread):
@@ -57,16 +57,23 @@ class SilhouetteThread(QThread):
         self.data = data
         self.pred = pred
 
+    def silhouette_metric(data, pred, type):
+        if type == 'avg':
+            return silhouette_score(data, pred, metric='euclidean')
+        elif type == 'all':
+            return silhouette_samples(data, pred, metric='euclidean')
+        else:
+            raise NameError(f'{type} is not a valid silhouette score type.')
+
     def run(self):
         try:
         # Compute the overall average silhouette score
             mask = self.pred != '_ND_' # exclude ND data for the average prediction
-            sil_avg = ML_tools.silhouette_metric(self.data[mask, :], self.pred[mask],
-                                                 type='avg')
+            sil_avg = self.silhouette_metric(self.data[mask, :], self.pred[mask], type='avg')
             self.subtaskCompleted.emit()
 
         # Compute the silhouette score for each sample
-            sil_sam = ML_tools.silhouette_metric(self.data, self.pred, type='all')
+            sil_sam = self.silhouette_metric(self.data, self.pred, type='all')
             self.subtaskCompleted.emit()
 
             success = True
@@ -149,8 +156,8 @@ class LearningThread(QThread):
                 tr_loss, vd_loss, tr_pred, vd_pred = self.func()
 
             # Compute accuracy
-                tr_acc = ML_tools.accuracy(self.Y_tr, tr_pred)
-                vd_acc = ML_tools.accuracy(self.Y_vd, vd_pred)
+                tr_acc = accuracy_score(self.Y_tr, tr_pred)
+                vd_acc = accuracy_score(self.Y_vd, vd_pred)
 
             # Update progress bar and scores
                 self.epochCompleted.emit((e, (tr_loss, vd_loss),

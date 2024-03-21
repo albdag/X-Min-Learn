@@ -2,7 +2,7 @@
 """
 Created on Wed Apr 28 12:27:17 2021
 
-@author: dagos
+@author: albdag
 """
 from PyQt5 import QtWidgets as QW
 from PyQt5.QtGui import (QColor, QCursor, QFont, QFontMetrics, QDrag, QRegion,
@@ -20,7 +20,7 @@ from pandas import read_csv, concat
 from matplotlib import (colors as mpl_colors, colormaps as mpl_cmaps, patheffects as mpe,
                         text as mpl_text, use as mpl_use)
 from matplotlib.backend_bases import MouseButton
-from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg,
+from matplotlib.backends.backend_qtagg import (FigureCanvasQTAgg,
                                                 NavigationToolbar2QT as NavigationToolbar)
 from matplotlib.collections import PolyCollection
 from matplotlib.figure import Figure
@@ -34,7 +34,7 @@ import conv_functions as CF
 import plots
 from _base import InputMap, MineralMap, RoiMap, Mask
 
-mpl_use('Qt5Agg')
+# mpl_use('Qt5Agg')
 
 
 
@@ -264,7 +264,7 @@ class DataGroup(QW.QTreeWidgetItem):
         self.inmaps = DataSubGroup('Input Maps')
         self.minmaps = DataSubGroup('Mineral Maps')
         self.masks = DataSubGroup('Masks')
-        # TODO self.points = DataSubGroup('Point Analysis')
+        # add self.points = DataSubGroup('Point Analysis')
         self.subgroups = (self.inmaps, self.minmaps, self.masks)
         self.addChildren(self.subgroups)
 
@@ -280,7 +280,7 @@ class DataGroup(QW.QTreeWidgetItem):
 
         '''
     # Collect in a single list the objects from all subgroup
-        # TODO include points data (maybe?)
+        # include points data (maybe?)
         objects = []
         for subgr in self.subgroups:
             objects.extend(subgr.getChildren())
@@ -354,7 +354,6 @@ class DataGroup(QW.QTreeWidgetItem):
 
 
     def clear(self):
-    # TODO add point data
         for subgr in self.subgroups:
             subgr.takeChildren()
 
@@ -507,7 +506,7 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(1, 3, '')
 
     # Set the "checked" state for togglable data (Masks and Points [in future])
-        if isinstance(data, (Mask,)): # TODO add PointAnalysis class
+        if isinstance(data, (Mask,)): # add PointAnalysis class
             self.setData(0, 10, Qt.Unchecked) # CheckedRole (= 10)
 
 
@@ -529,7 +528,7 @@ class DataObject(QW.QTreeWidgetItem):
                 obj_type = 'map'
             else:
                 obj_type = 'mask'
-            # TODO add Point Analysis here
+            # add Point Analysis here
             name = f'Unnamed {obj_type}'
         else:
             name = CF.path2fileName(filepath)
@@ -587,7 +586,6 @@ class DataObject(QW.QTreeWidgetItem):
 
 
     # def holdsPointsData(self):
-        #  TODO
 
 
 
@@ -896,7 +894,7 @@ class DataManager(QW.QTreeWidget):
                 mergemask_submenu.addAction('Intersection',
                                             lambda: self.mergeMasks(group,'I'))
 
-        # TODO specific actions when item hold point data
+        # add specific actions when item holds point data
 
 
     # Deal with anything else, just for safety reasons
@@ -1094,7 +1092,7 @@ class DataManager(QW.QTreeWidget):
             self.loadMasks(group)
 
         elif name == 'Point Analysis':
-            # TODO
+            # implement
             pass
 
         else: return
@@ -1145,7 +1143,7 @@ class DataManager(QW.QTreeWidget):
                 filext = 'Mineral maps (*.mmp)'
             elif item.holdsMask():
                 filext = 'Mask (*.msk)'
-            # TODO PointAnalysis
+            # add PointAnalysis
             else: return # safety
 
             path, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
@@ -1619,7 +1617,7 @@ class DataManager(QW.QTreeWidget):
 #         rename = QW.QAction(QIcon('Icons/rename.png'), 'Rename')
 #         rename.triggered.connect(lambda: self.rename_class(item))
 
-#     # TODO Merge classes
+#     # to do Merge classes
 
 #     # Copy current color HEX string
 #         copy_color = QW.QAction('Copy color string')
@@ -2454,7 +2452,7 @@ class HistogramViewer(QW.QWidget):
         self.canvas.ax.get_yaxis().set_visible(False)
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
         self.canvas.setMinimumSize(300, 200)
-        # self.canvas.setFixedSize(300, 200) # TODO for better performance
+        # self.canvas.setFixedSize(300, 200) # for better performance
         # self.canvas.setSizePolicy(QW.QSizePolicy.Minimum, QW.QSizePolicy.Minimum)
 
     # Histogram Navigation Toolbar
@@ -2463,7 +2461,7 @@ class HistogramViewer(QW.QWidget):
         self.navTbar.removeToolByIndex([3, 4, 5, 8, 9])
 
     # Toggle log scale [-> NavTbar Action]
-    # TODO set a proper icon
+    # set a proper icon
         self.logscale_action = QW.QAction(QIcon('Icons/equalizer.png'),
                                           'Log scale', self.navTbar)
         self.logscale_action.setCheckable(True)
@@ -3361,7 +3359,7 @@ class RoiSelector(QW.QWidget):
         self.addroi_action.setEnabled(False)
 
     # Extract mask [-> Toolbar Action]
-        # TODO add mask icon
+        # add mask icon
         self.extr_mask_action = QW.QAction('Extract mask', self.toolbar)
         self.extr_mask_action.setEnabled(False)
 
@@ -3401,7 +3399,7 @@ class RoiSelector(QW.QWidget):
         self.hideroi_btn.setToolTip('Hide ROI map')
 
     # Remove (unload) ROI map (Styled Button)
-        self.unload_btn = StyledButton(QIcon(self.style().standardIcon(QW.QStyle.SP_DialogCloseButton))) # TODO icon
+        self.unload_btn = StyledButton(QIcon(self.style().standardIcon(QW.QStyle.SP_DialogCloseButton))) # use custom icon
         self.unload_btn.setToolTip('Remove ROI map')
 
     # Remove ROI button [-> Corner table widget]
@@ -4550,7 +4548,7 @@ class Crosshair(MultiCursor): # !!! Not used yet
 
 
 
-class PolySel(PolygonSelector): # TODO future improvement to ROIs
+class PolySel(PolygonSelector): # future improvement to ROIs
 
     def __init__(self, canvasAx, onselect, useblit=True):
         self.props = dict(color='k', linestyle='-', linewidth=2, alpha=0.5)

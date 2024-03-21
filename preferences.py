@@ -2,7 +2,7 @@
 """
 Created on Tue Dec 14 14:09:21 2021
 
-@author: dagos
+@author: albdag
 """
 
 from PyQt5.QtWidgets import QApplication
@@ -35,7 +35,7 @@ BTN_RED = '#A21709'             # (162, 23, 9)
 HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
 
 
-#TODO place here all the script's style-sheets
+# All style-sheets should go into a new module "stylesheets"
 SS_menu = (
     '''QMenu {
             background-color: %s;

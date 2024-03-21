@@ -2,7 +2,7 @@
 """
 Created on Fri Dec 16 17:52:30 2022
 
-@author: dagos
+@author: albdag
 """
 import os
 import numpy as np
@@ -662,7 +662,7 @@ class MineralMap():
             assert os.path.splitext(outpath)[1] == '.mmp'
             np.savez(op, minmap=self.minmap,
                          probmap=self.probmap,
-                         palette=self.palette) #!!! add name as an attribute? Should also be done in InputMaps
+                         palette=self.palette) #!!! add other properties (like the name) as attributes? Could be saved as a dictionary. Should also be done in InputMaps
         self.filepath = outpath
 
 

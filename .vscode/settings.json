@@ -1,0 +1,6 @@
+{
+    "autoDocstring.docstringFormat": "numpy",
+    "autoDocstring.quoteStyle": "'''",
+    "outline.showVariables": false,
+    "outline.showModules": false
+}
