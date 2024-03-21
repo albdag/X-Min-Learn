@@ -156,7 +156,7 @@ class Pane(QW.QDockWidget):
     of a PyQt DockWidget.
     '''
 
-    def __init__(self, qObject, title='', scroll=True):
+    def __init__(self, qObject, title='', icon=None, scroll=True):
         '''
         Pane class constructor.
 
@@ -166,6 +166,9 @@ class Pane(QW.QDockWidget):
             The central widget/layout to be displayed in the pane.
         title : str, optional
             The title of the pane. The default is ''.
+        icon : QIcon, optional
+            The icon of the pane, that is displayed in the panes toolbar. The
+            default is None.
         scroll : bool, optional
             Wether or not the pane should be scrollable. The default is True.
 
@@ -176,12 +179,11 @@ class Pane(QW.QDockWidget):
         '''
         super(Pane, self).__init__()
 
-        # self._temporarily_hidden = False
-
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setWindowTitle(title)
 
         self.title = title
-        self.setWindowTitle(self.title)
+        self.icon = icon
 
     # If the qObject is a layout, build a dummy widget to contain it first
         if isinstance(qObject, QW.QLayout):

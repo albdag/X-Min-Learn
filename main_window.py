@@ -24,19 +24,14 @@ class MainWindow(QW.QMainWindow):
         self.resize(1600, 900)
         self.setWindowTitle('X-Min Learn - Alpha version')
         self.setWindowIcon(QG.QIcon('Icons/XML_logo.png'))
+        self.setDockOptions(self.AnimatedDocks | self.AllowTabbedDocks)
         self.statusBar()
-        self.setDockOptions(self.AnimatedDocks | self.AllowTabbedDocks |
-                            self.VerticalTabs)
-
-        # self.setAnimated(False) #to remove the animation of dockwidgets
 
         self.setStyleSheet(pref.SS_mainWindow)
 
         self.init_ui()
         self.showMaximized()
 
-        self.tabifiedDockWidgetActivated.connect(lambda w: print(w.title))
-        self.panes[0].setHidden(True)
 
     def init_ui(self):
 
@@ -89,14 +84,29 @@ class MainWindow(QW.QMainWindow):
         self.roiEditor.rectangleSelectorUpdated.connect(self.updateHistogram)
 
     # Create panes (QDockWidgets)
-        manager_pane = cObj.Pane(self.dataManager, 'Data Manager', scroll=False)
-        histogram_pane = cObj.Pane(self.histogram, 'Histogram')
-        mode_pane = cObj.Pane(self.modeViewer, 'Mode')
-        probmap_pane = cObj.Pane(self.pmapViewer, 'Probability Map')
-        rgba_pane = cObj.Pane(self.rgbaViewer, 'RGBA Composite Map')
-        roi_pane = cObj.Pane(self.roiEditor, 'Regions of Interest (ROI)')
+        manager_pane = cObj.Pane(self.dataManager, 'Data Manager', 
+                                 QG.QIcon(r'Icons/data_manager.png'), False)
+        histogram_pane = cObj.Pane(self.histogram, 'Histogram',
+                                   QG.QIcon(r'Icons/histogram.png'))
+        mode_pane = cObj.Pane(self.modeViewer, 'Mode',
+                              QG.QIcon(r'Icons/mode.png'))
+        probmap_pane = cObj.Pane(self.pmapViewer, 'Probability Map',
+                                 QG.QIcon(r'Icons/probmap.png'))
+        rgba_pane = cObj.Pane(self.rgbaViewer, 'RGBA Composite Map',
+                              QG.QIcon(r'Icons/rgba.png'))
+        roi_pane = cObj.Pane(self.roiEditor, 'Regions of Interest (ROI)',
+                             QG.QIcon(r'Icons/roi.png'))
         self.panes = (manager_pane, histogram_pane, mode_pane, probmap_pane,
                       rgba_pane, roi_pane)
+        
+    # Store the panes toggle view actions and set their icons
+        self.panes_tva = []
+        for p in self.panes:
+            action = p.toggleViewAction()
+            if p.icon is not None:
+                action.setIcon(p.icon)
+                action.setIconVisibleInMenu(True)
+            self.panes_tva.append(action)
 
     # Add panes to main window
         self.addPane(QC.Qt.LeftDockWidgetArea, manager_pane)
@@ -197,23 +207,30 @@ class MainWindow(QW.QMainWindow):
 
 
 
-    # ==============================   TOOLBAR   ==============================
-        toolBar = QW.QToolBar('Toolbar')
+    # ==============================   TOOLBARS   =============================
+        dialogs_toolbar = QW.QToolBar('Dialogs toolbar')
 
-        toolBar.setIconSize(QC.QSize(32, 32))
+        dialogs_toolbar.setIconSize(QC.QSize(32, 32))
         # import data actions (button menu), followed by a separator
-        toolBar.addAction(dsBuilderTool)
-        toolBar.addAction(modelLearnerTool)
-        toolBar.addAction(classifyTool)
-        toolBar.addAction(phaseRefinerTool)
+        dialogs_toolbar.addAction(dsBuilderTool)
+        dialogs_toolbar.addAction(modelLearnerTool)
+        dialogs_toolbar.addAction(classifyTool)
+        dialogs_toolbar.addAction(phaseRefinerTool)
         # separator followed by preference dialog
         # other future tools (e.g. map algebra calculator)
+        
+        dialogs_toolbar.setStyleSheet(pref.SS_mainToolbar)
+        
+        panes_toolbar = QW.QToolBar('Panes toolbar')
+        panes_toolbar.setIconSize(QC.QSize(32, 32))
+        panes_toolbar.addActions(self.panes_tva)
 
-        toolBar.setStyleSheet(pref.SS_mainToolbar)
+        panes_toolbar.setStyleSheet(pref.SS_mainToolbar)
+        
 
-        self.addToolBar(QC.Qt.TopToolBarArea, toolBar)
-
-
+        
+        self.addToolBar(QC.Qt.LeftToolBarArea, panes_toolbar)
+        self.addToolBar(QC.Qt.LeftToolBarArea, dialogs_toolbar)
 
     # ================================   MENU   ===============================
         menuBar = self.menuBar()
@@ -249,9 +266,10 @@ class MainWindow(QW.QMainWindow):
         # (View Menu)
         viewMenu = menuBar.addMenu('&View')
         panesSubMenu = viewMenu.addMenu('&Panes')
-        panesSubMenu.addActions([p.toggleViewAction() for p in self.panes])
+        panesSubMenu.addActions(self.panes_tva)
         viewMenu.addSeparator()
-        viewMenu.addAction(toolBar.toggleViewAction())
+        viewMenu.addAction(panes_toolbar.toggleViewAction())
+        viewMenu.addAction(dialogs_toolbar.toggleViewAction())
 
         menuBar.setStyleSheet(pref.SS_menuBar + pref.SS_menu)
 
