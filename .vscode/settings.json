@@ -2,5 +2,7 @@
     "autoDocstring.docstringFormat": "numpy",
     "autoDocstring.quoteStyle": "'''",
     "outline.showVariables": false,
-    "outline.showModules": false
+    "outline.showModules": false,
+    "editor.wordWrap": "off",
+    "editor.wordWrapColumn": 80
 }
