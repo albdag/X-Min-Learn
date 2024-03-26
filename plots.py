@@ -188,19 +188,18 @@ class NavTbar(NavigationToolbar2QT):
 class _CanvasBase(FigureCanvasQTAgg):
     '''A base class for any type of plot.'''
 
-    def __init__(self, size=(6.4, 4.8), tight=False, constrained=False,
-                     wheelZoomEnabled=True, wheelPanEnabled=True):
+    def __init__(self, size=(6.4, 4.8), layout='none', 
+                 wheelZoomEnabled=True, wheelPanEnabled=True):
         '''
         _CanvasBase class constructor.
 
         Parameters
         ----------
         size : tuple, optional
-            Width and height (in inches) of the canvas. The default is (6.4, 4.8).
-        tight : bool, optional
-            Wether or not to use a tight layout. The default is False.
-        constrained : bool, optional
-            Wether or not to use a constrained layout. If <tight> is True, it will be not considered. The default is False.
+            Width and height (in inches) of canvas. The default is (6.4, 4.8).
+        layout : str, optional
+            Layout engine of the figure. One of ['constrained', 'compressed', 
+            'tight' and 'none']. The default is 'none'.
         wheelZoomEnabled : bool, optional
             Wether or not allow zooming with mouse wheel. The default is True.
         wheelPanEnabled : TYPE, optional
@@ -212,16 +211,11 @@ class _CanvasBase(FigureCanvasQTAgg):
 
         '''
 
-    # If both tight and constrained are True, constrained is ignored
-        if tight and constrained : constrained = False
 
     # Define the figure and the ax of the matplotlib canvas
-        # self.fig = MPL.figure.Figure(figsize=size, facecolor=pref.IVORY,
-        #                              edgecolor='#19232D', linewidth=2,
-        #                              tight_layout=tight, constrained_layout=constrained)
         self.fig = MPL.figure.Figure(figsize=size, facecolor=pref.IVORY,
-                                edgecolor='#19232D', linewidth=2,
-                                layout='compressed')
+                                     edgecolor='#19232D', linewidth=2,
+                                     layout=layout)
         self.ax = self.fig.add_subplot(111, facecolor=pref.IVORY)
         self.ax.axis('off')
 
@@ -393,9 +387,7 @@ class _CanvasBase(FigureCanvasQTAgg):
             if xdata is None or ydata is None: return
 
         # Reduce the scale when pressing Ctrl key (accurate zoom)
-        # !!! Event.key works ok in MPL 3.5.1. With 3.7.1+ versions event.modifiers is best.
-            scale = 1.1 if event.key == 'control' else base_scale
-
+            scale = 1.1 if 'ctrl' in event.modifiers else base_scale
         # Set zoom in or out
             if event.button == 'down':
                 scale_factor = 1/scale
@@ -479,6 +471,9 @@ class ImageCanvas(_CanvasBase):
         self.has_cbar = cbar
         self.cbar, self.cax = None, None
 
+    def is_empty(self):
+        return self.image is None
+
 
     def set_cbar(self):
         '''
@@ -518,7 +513,7 @@ class ImageCanvas(_CanvasBase):
 
 
     def alter_cmap(self, col_arg):
-        if self.image is None: return
+        if self.is_empty(): return
 
         if (t := type(col_arg)) == str:
             self.set_heatmap_cmap(col_arg)
@@ -533,7 +528,7 @@ class ImageCanvas(_CanvasBase):
 
 
     def contains_masked_data(self):
-        if self.image is None:
+        if self.is_empty():
             return False
         else:
             return np.ma.is_masked(self.image.get_array())
@@ -580,22 +575,33 @@ class ImageCanvas(_CanvasBase):
         self.update_clim()
 
 
-    def update_clim(self):
+    def update_clim(self, vmin=None, vmax=None):
         '''
         Update the image norm limits.
+
+        Parameters
+        ----------
+        vmin : int or float or None, optional
+            Lower limit. The default is None.
+        vmax : int or float or None, optional
+            Upper limit. The default is None.
 
         Returns
         -------
         None.
 
         '''
-        if self.image is not None:
+        if not self.is_empty():
 
-        # We use the scaled clims if they are present
-            if self.scaled_clim is not None:
+        # We use the vmin, vmax args if provided
+            if vmin is not None and vmax is not None:
+                self.image.set_clim(vmin, vmax)
+
+        # If vmin, vmax are None, we use the scaled clims if they are present
+            elif self.scaled_clim is not None:
                 self.image.set_clim(*self.scaled_clim)
 
-        # Else we use the current image clims
+        # Otherwise we use the current image clims (reset clims)
             else:
                 data = self.image.get_array()
                 self.image.set_clim(data.min(), data.max())
@@ -611,7 +617,7 @@ class ImageCanvas(_CanvasBase):
 
         '''
 
-        if self.image is not None:
+        if not self.is_empty():
             # shape = self.image.get_array().shape
         # We set the data as an array of NaNs for compatibility with the colormaps
         # behavior, where NaN data is colored in white (see build_cmap func of DiscreteClassCanvas sub-class)
@@ -650,7 +656,7 @@ class ImageCanvas(_CanvasBase):
         None.
 
         '''
-        if self.image is not None:
+        if not self.is_empty():
             self.image.set_picker(True if enabled else None)
             # self.draw_idle()
             # self.flush_events()
@@ -666,7 +672,7 @@ class ImageCanvas(_CanvasBase):
         None.
 
         '''
-        if self.image is not None:
+        if not self.is_empty():
             data = self.image.get_array()
             extents = (-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5)
         # Fix axes extents
@@ -675,7 +681,7 @@ class ImageCanvas(_CanvasBase):
         # Fix image extents (correct aspect ratio)
             self.image.set_extent(extents)
         # Force norm limits to default (fix colormap bugs with discrete maps)
-            self.image.set_clim(data.min(), data.max())
+            self.update_clim()
         # Fix image zoom issues when pressing home button multiple times
             if self.fig.get_tight_layout():
                 self.fig.tight_layout()
@@ -700,7 +706,7 @@ class ImageCanvas(_CanvasBase):
         None.
 
         '''
-        if self.image is not None:
+        if not self.is_empty():
             data = self.image.get_array()
             if x <= (data.shape[1] - 1) and y <= (data.shape[0] - 1):
                 self.ax.set_xlim((x - 1, x + 1))
@@ -748,7 +754,7 @@ class ImageCanvas(_CanvasBase):
         norm = MPL.colors.BoundaryNorm(range(n_colors+1), n_colors)
 
     # Set image
-        if self.image is None:
+        if self.is_empty():
             self.image = self.ax.imshow(data, cmap=self.cmap, norm=norm,
                                         interpolation='none')
         else:
@@ -816,7 +822,7 @@ class ImageCanvas(_CanvasBase):
         norm = MPL.colors.Normalize()
 
     # Set image
-        if self.image is None:
+        if self.is_empty():
             self.image = self.ax.imshow(data, cmap=self.cmap, norm=norm,
                                         interpolation='none')
         else:
@@ -863,7 +869,7 @@ class ImageCanvas(_CanvasBase):
             The mask, if <return_mask> is True and the array is masked.
 
         '''
-        if self.image is None: return None
+        if self.is_empty(): return None
 
         array = self.image.get_array()
 

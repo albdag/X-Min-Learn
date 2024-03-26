@@ -2449,7 +2449,7 @@ class HistogramViewer(QW.QWidget):
 
     # Histogram Canvas
         self.canvas = plots.HistogramCanvas(logscale=True, size=(3, 1.5),
-                                            tight=True, wheelZoomEnabled=False,
+                                            wheelZoomEnabled=False,
                                             wheelPanEnabled=False)
         self.canvas.ax.get_yaxis().set_visible(False)
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
@@ -2578,8 +2578,8 @@ class HistogramViewer(QW.QWidget):
 
     # Check if xmax and xmin are valid before setting the new image norm limits
         xmin, xmax = round(xmin), round(xmax)
-        if xmax > xmin and self.maps_canvas.image is not None:
-            self.maps_canvas.image.set_clim(xmin, xmax)
+        if xmax > xmin and not self.maps_canvas.is_empty():
+            self.maps_canvas.update_clim(xmin, xmax)
         else:
             xmin, xmax = None, None
 
@@ -2717,9 +2717,15 @@ class ProbabilityMapViewer(QW.QWidget):
     is currently displayed in the data viewer.
     '''
 
-    def __init__(self):
+    def __init__(self, maps_canvas):
         '''
-        ProbabilityMapViewer class constructor.
+        Constructor.
+
+        Parameters
+        ----------
+        maps_canvas : ImageCanvas
+            The canvas that displays the mineral map which is linked to the
+            probability map displayed in this widget.
 
         Returns
         -------
@@ -2728,9 +2734,15 @@ class ProbabilityMapViewer(QW.QWidget):
         '''
         super(ProbabilityMapViewer, self).__init__()
 
+        self.maps_canvas = maps_canvas
+
+        self._init_ui()
+        self._connect_slots()
+
+    def _init_ui(self):
+        '''GUI constructor'''
     # Canvas
-        self.canvas = plots.ImageCanvas(tight=True)
-        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
+        self.canvas = plots.ImageCanvas()
         self.canvas.setMinimumSize(300, 300)
 
     # Navigation Toolbar
@@ -2738,11 +2750,63 @@ class ProbabilityMapViewer(QW.QWidget):
         self.navTbar.fixHomeAction()
         self.navTbar.removeToolByIndex([3, 4, 8, 9])
 
+    # View Range toolbar
+        self.rangeTbar = QW.QToolBar(self)
+        self.rangeTbar.setStyleSheet(pref.SS_toolbar)
+
+    # Toggle range selection [-> View Range Toolbar]
+        self.toggle_range_action = QW.QAction(QIcon(r'Icons/range.png'), 
+                                              'Set range', self.rangeTbar)
+        self.toggle_range_action.setCheckable(True)
+
+    # Extract mask from range [-> View Range Toolbar]
+        self.mask_action = QW.QAction(QIcon(r'Icons/add_mask.png'), 
+                                      "Extract mask", self.rangeTbar)
+        self.mask_action.setEnabled(False)
+
+    # Add actions to View Range Toolbar
+        self.rangeTbar.addActions([self.toggle_range_action, self.mask_action])
+
+    # Range values inputs [-> View Range Toolbar]
+        self.min_input = QW.QDoubleSpinBox()
+        self.min_input.setValue(0.0)
+        self.min_input.setToolTip('Min. range value')
+        self.max_input = QW.QDoubleSpinBox()
+        self.max_input.setValue(1.0)
+        self.max_input.setToolTip('Max. range value')
+        for wid in (self.min_input, self.max_input):
+            wid.setMaximum(1.0)
+            wid.setSingleStep(0.05)
+            wid.setMaximumWidth(100)
+            wid.setEnabled(False)
+
+    # Add widgets to View Range Toolbar
+        self.rangeTbar.addWidget(self.min_input)
+        self.rangeTbar.addWidget(self.max_input)
+
     # Adjust layout
         main_layout = QW.QVBoxLayout()
         main_layout.addWidget(self.navTbar)
+        main_layout.addWidget(self.rangeTbar)
         main_layout.addWidget(self.canvas)
         self.setLayout(main_layout)
+
+
+    def _connect_slots(self):
+        '''Signals-slots connector'''
+
+    # Context menu on canvas
+        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
+
+    # Toggle view range action
+        self.toggle_range_action.toggled.connect(self.onViewRangeToggled)
+
+    # Set min and max range actions
+        self.min_input.valueChanged.connect(self.setViewRange)
+        self.max_input.valueChanged.connect(self.setViewRange)
+
+    # Extract mask action
+        self.mask_action.triggered.connect(self.extractMaskFromRange)
 
 
     def showContextMenu(self, point):
@@ -2761,9 +2825,102 @@ class ProbabilityMapViewer(QW.QWidget):
         '''
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navTbar)
+
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
+
+    def onViewRangeToggled(self, toggled):
+        '''
+        Actions to be performed when the set view range action is toggled.
+
+        Parameters
+        ----------
+        toggled : bool
+            Toggled state of the action.
+
+        Returns
+        -------
+        None.
+
+        '''
+    # Enable/disable all functions in the View Range Toolbar
+        self.mask_action.setEnabled(toggled)
+        self.min_input.setEnabled(toggled)
+        self.max_input.setEnabled(toggled)
+    
+    # Change the view range or reset it to default values
+        if toggled:
+            self.setViewRange()
+        else:
+            self.canvas.update_clim()
+            self.canvas.draw()
+    
+
+    def setViewRange(self):
+        '''
+        Change the view range (clims) of the probability map.
+
+        Returns
+        -------
+        None.
+
+        '''
+    # Exit function if no probability map is displayed
+        if self.canvas.is_empty():
+            return
+    
+    # If range values are correct change the clims, otherwise send warning
+        vmin, vmax = self.min_input.value(), self.max_input.value()
+        if vmin < vmax:
+            self.canvas.update_clim(vmin, vmax)
+            self.canvas.draw()
+        else:
+            text = 'Lower range limit cannot be equal or greater than upper '\
+            'range limit.'
+            QW.QMessageBox.warning(self, 'X-Min Learn', text)
+
+
+    def extractMaskFromRange(self):
+        '''
+        Extract mask from current view range.
+
+        Returns
+        -------
+        None.
+
+        '''
+    # Exit function if no probability map is displayed
+        if self.canvas.is_empty():
+            return
+    
+    # Get the range values from the view range toolbar widgets
+        vmin, vmax = self.min_input.value(), self.max_input.value()
+        
+    # Get the probability map array
+        array = self.canvas.get_map()
+        
+    # Extract the current mask (legacy mask)
+        _, legacy_mask = self.maps_canvas.get_map(return_mask=True)
+
+    # If the legacy mask exists, intersect it with the new mask
+        mask_array = np.logical_or(array < vmin, array > vmax)
+        if legacy_mask is not None:
+            mask_array = mask_array + legacy_mask
+        mask = Mask(mask_array)
+
+    # Save mask file
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
+                                                    pref.get_dirPath('out'),
+                                                    '''Mask file (*.msk)''')
+        if outpath:
+            pref.set_dirPath('out', dirname(outpath))
+            try:
+                mask.save(outpath)
+            except Exception as e:
+                return RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                                  'An error occurred while saving the file',
+                                  detailedText = repr(e))
 
 
 
@@ -2787,7 +2944,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.channels = ('R', 'G', 'B', 'A')
 
     # Canvas
-        self.canvas = plots.ImageCanvas(cbar=False, tight=True)
+        self.canvas = plots.ImageCanvas(cbar=False)
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
         self.canvas.setMinimumSize(300, 300)
 
@@ -2847,7 +3004,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
 
     def clear_channel(self, *args):
-        if self.canvas.image is not None:
+        if not self.canvas.is_empty():
             rgba_map = self.canvas.image.get_array()
             for arg in args:
                 # [R=0, G=0, B=0, A=1]
@@ -2880,7 +3037,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         data, filepath = inmap.map, inmap.filepath
 
     # Get the current rgba map or build a new one
-        if self.canvas.image is None:
+        if self.canvas.is_empty():
             rgba_map = np.zeros((*inmap.shape, 4))
             rgba_map[:, :, 3] = 1   # invert A channel (opacity)
         else:
@@ -2957,7 +3114,7 @@ class ModeViewer(QW.QWidget):
 
     # Canvas
         self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
-                                      tight=True, wheelPanEnabled=False,
+                                      wheelPanEnabled=False,
                                       wheelZoomEnabled=False)
         self.canvas.setMinimumSize(200, 200)
 
@@ -3418,7 +3575,7 @@ class RoiSelector(QW.QWidget):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
 
     # Bar plot canvas
-        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4), tight=True,
+        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4),
                                          wheelZoomEnabled=False,
                                          wheelPanEnabled=False)
         self.barCanvas.setMinimumSize(300, 300)
@@ -4015,7 +4172,7 @@ class RoiSelector(QW.QWidget):
 
         '''
     # Exit function if image is empty
-        if self.canvas.image is None: return
+        if self.canvas.is_empty(): return
 
     # Extract the displayed array shape and its current mask (legacy mask)
         array, legacy_mask = self.canvas.get_map(return_mask=True)
@@ -4074,7 +4231,7 @@ class RoiSelector(QW.QWidget):
 
     # If there is a loaded image that has the same shape of the current ROI map
     # and it has a legacy mask, intersect it with the new mask
-        if self.canvas.image is not None:
+        if not self.canvas.is_empty():
             array, legacy_mask = self.canvas.get_map(return_mask=True)
             if array.shape == shape and legacy_mask is not None:
                 mask.mask = mask.mask + legacy_mask

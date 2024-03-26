@@ -1183,7 +1183,7 @@ class MineralClassifier(cObj.DraggableTool):
         self.progdesc = QW.QLabel()
 
     # Maps canvas (Image Canvas)
-        self.canvas = plots.ImageCanvas(tight=True)
+        self.canvas = plots.ImageCanvas()
         self.canvas.setMinimumWidth(250)
 
     # Navigation Toolbar (NavTbar)
@@ -6356,7 +6356,7 @@ class DataViewer(QW.QWidget):
 
         '''
     # Maps Canvas
-        self.canvas = plots.ImageCanvas(tight=True)
+        self.canvas = plots.ImageCanvas()
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
         self.canvas.enable_picking(True)
         self.canvas.setMinimumWidth(500)

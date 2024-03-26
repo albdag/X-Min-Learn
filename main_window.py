@@ -70,7 +70,7 @@ class MainWindow(QW.QMainWindow):
         self.modeViewer.updateSceneRequested.connect(self.update_scene)
 
     # Probability Maps Viewer
-        self.pmapViewer = cObj.ProbabilityMapViewer()
+        self.pmapViewer = cObj.ProbabilityMapViewer(self.dataViewer.canvas)
         # Share pmap and data viewer axis
         CF.shareAxis(self.pmapViewer.canvas.ax, self.dataViewer.canvas.ax)
 
@@ -375,6 +375,8 @@ class MainWindow(QW.QMainWindow):
                 self.dataViewer.canvas.draw_discretemap(mmap, enc, col, title)
                 self.modeViewer.update(item, title)
                 self.pmapViewer.canvas.draw_heatmap(pmap, title)
+                if self.pmapViewer.toggle_range_action.isChecked():
+                    self.pmapViewer.setViewRange()
                 self.histogram.hideScaler()
                 self.histogram.canvas.clear_canvas()
 
