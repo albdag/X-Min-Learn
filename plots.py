@@ -508,8 +508,16 @@ class ImageCanvas(_CanvasBase):
     #         floatRGBA = [floatRGBA[u] for u in np.unique((data[~mask]))]
     # Set colormap
         self.cmap = MPL.colors.ListedColormap(floatRGBA, name=name)
+    # Set outliers as ivory
+        self.cmap.set_over(pref.IVORY)
+        self.cmap.set_under(pref.IVORY)
     # Set masked data as ivory
         self.cmap.set_bad(pref.IVORY)
+
+    
+    def set_boundary_norm(self, n_classes):
+        norm = MPL.colors.BoundaryNorm(range(n_classes+1), n_classes)
+        return norm
 
 
     def alter_cmap(self, col_arg):
@@ -605,6 +613,10 @@ class ImageCanvas(_CanvasBase):
             else:
                 data = self.image.get_array()
                 self.image.set_clim(data.min(), data.max())
+            # Re-apply boundary norm if image is a discrete map
+                if self.contains_discretemap():
+                    norm = self.set_boundary_norm(len(np.unique(data)))
+                    self.image.set_norm(norm)
 
 
     def clear_canvas(self):
@@ -680,8 +692,8 @@ class ImageCanvas(_CanvasBase):
             self.ax.set_ylim(extents[2:])
         # Fix image extents (correct aspect ratio)
             self.image.set_extent(extents)
-        # Force norm limits to default (fix colormap bugs with discrete maps)
-            self.update_clim()
+        # Force re-applying current clims (fix colormap bug of discrete maps)
+            self.update_clim(*self.image.get_clim())
         # Fix image zoom issues when pressing home button multiple times
             if self.fig.get_tight_layout():
                 self.fig.tight_layout()
@@ -750,8 +762,7 @@ class ImageCanvas(_CanvasBase):
         self.set_discretemap_cmap(colors)
 
     # Define boundary norm
-        n_colors = len(colors)
-        norm = MPL.colors.BoundaryNorm(range(n_colors+1), n_colors)
+        norm = self.set_boundary_norm(len(colors))
 
     # Set image
         if self.is_empty():
@@ -834,7 +845,7 @@ class ImageCanvas(_CanvasBase):
             self.cax.set_visible(True)
 
     # ??? Update norm limits. Is this really useful?
-        self.update_clim()
+        # self.update_clim()
 
     # Adjust aspect ratio
         self.image.set_extent((-0.5,data.shape[1]-0.5, data.shape[0]-0.5,-0.5))
@@ -1574,6 +1585,10 @@ class HistogramCanvas(_CanvasBase):
         self.hist, self.ROI_hist = None, None
 
 
+    def is_empty(self):
+        return self.hist is None
+
+
     def clear_canvas(self):
         '''
         Clear out the plot and reset some attributes.
@@ -1616,7 +1631,7 @@ class HistogramCanvas(_CanvasBase):
 
 
     def refresh_view(self):
-        if self.hist is not None:
+        if not self.is_empty():
             data = self.histData
             ROI_data = self.ROI_histData
             title = self.ax.get_title()
@@ -1651,7 +1666,7 @@ class HistogramCanvas(_CanvasBase):
         super(HistogramCanvas, self).update_canvas()
 
     # Clear the canvas if it is already populated
-        if self.hist is not None:
+        if not self.is_empty():
             self.ax.clear()
 
     # Set the title
@@ -1687,15 +1702,15 @@ class HistogramCanvas(_CanvasBase):
         None.
 
         '''
-        if self.hist is None: return
-    # Update the xy limits
-        self.update_xylim()
-    # Fix image zoom issues when pressing home button multiple times
-        if self.fig.get_tight_layout():
-            self.fig.tight_layout()
-    # Redraw canvas
-        self.draw_idle()
-        # self.flush_events()
+        if not self.is_empty():
+        # Update the xy limits
+            self.update_xylim()
+        # Fix image zoom issues when pressing home button multiple times
+            if self.fig.get_tight_layout():
+                self.fig.tight_layout()
+        # Redraw canvas
+            self.draw_idle()
+            # self.flush_events()
 
     def update_xylim(self):
         self.ax.relim()

@@ -11,41 +11,43 @@ from PyQt5 import QtWidgets as QW
 
 import conv_functions as CF
 import customObjects as cObj
-import dialogs
+import docks
 import preferences as pref
-
+import tools
 
 # MAIN WINDOW (make the whole syntax nicer)
 class MainWindow(QW.QMainWindow):
 
     def __init__(self):
+        '''Constructor.'''
         super(MainWindow, self).__init__()
 
+    # Set main window properties
         self.resize(1600, 900)
         self.setWindowTitle('X-Min Learn - Alpha version')
-        self.setWindowIcon(QG.QIcon('Icons/XML_logo.png'))
+        self.setWindowIcon(QG.QIcon(r'Icons/XML_logo.png'))
         self.setDockOptions(self.AnimatedDocks | self.AllowTabbedDocks)
         self.statusBar()
-
         self.setStyleSheet(pref.SS_mainWindow)
 
-        self.init_ui()
+    # Initialize GUI
+        self._init_ui()
+    
+    # Connect signals with slots
+        self._connect_slots()
+
+    # Show window in full screen
         self.showMaximized()
 
 
-    def init_ui(self):
-
-    # ==========================   CENTRAL WIDGET   ===========================
-
+    def _init_ui(self):
+        '''GUI constructor.'''
     # Data Viewer
-        self.dataViewer = dialogs.DataViewer()
-        # self.dataViewer.rectangleSelectorUpdated.connect(self.update_histogram)
+        self.dataViewer = tools.DataViewer()
 
     # Central Widget (Tab Widget)
-        self.tabWidget = cObj.MainTabWidget(self)
+        self.tabWidget = MainTabWidget(self)
         self.tabWidget.addTab(self.dataViewer)
-        # self.tabWidget.currentChanged.connect(self.test) # !!! too chunky
-
 
     # Hide the close button from the data viewer tab
         self.tabWidget.tabBar().tabButton(0, QW.QTabBar.RightSide).hide()
@@ -53,51 +55,59 @@ class MainWindow(QW.QMainWindow):
     # Set the central widget
         self.setCentralWidget(self.tabWidget)
 
+    # Initialize panes
+        self._init_panes()
 
-    # =============================   PANES   =================================
+    # Initialize menu/toolbar actions
+        self._init_actions()
 
+    # Initialize toolbars
+        self._init_toolbars()
+
+    # Initialize menu
+        self._init_menu()
+
+
+    def _init_panes(self):
+        '''Initialize window panes (QDockWidgets).'''
     # Data Manager
-        self.dataManager = cObj.DataManager()
-        self.dataManager.updateSceneRequested.connect(self.update_scene)
-        self.dataManager.clearSceneRequested.connect(self.clear_scene)
-        self.dataManager.rgbaChannelSet.connect(self.set_rgba_channel)
+        self.dataManager = docks.DataManager()
 
-    # Input Maps Histogram
-        self.histogram = cObj.HistogramViewer(self.dataViewer.canvas)
+    # Input Maps Histogram Viewer
+        self.histViewer = docks.HistogramViewer(self.dataViewer.canvas)
 
     # Mineral Maps Mode Viewer
-        self.modeViewer = cObj.ModeViewer(self.dataViewer.canvas)
-        self.modeViewer.updateSceneRequested.connect(self.update_scene)
+        self.modeViewer = docks.ModeViewer(self.dataViewer.canvas)
+
+    # ROI Editor
+        self.roiEditor = docks.RoiEditor(self.dataViewer.canvas)
 
     # Probability Maps Viewer
-        self.pmapViewer = cObj.ProbabilityMapViewer(self.dataViewer.canvas)
+        self.pmapViewer = docks.ProbabilityMapViewer(self.dataViewer.canvas)
         # Share pmap and data viewer axis
         CF.shareAxis(self.pmapViewer.canvas.ax, self.dataViewer.canvas.ax)
 
     # RGBA Composite Maps Viewer
-        self.rgbaViewer = cObj.RgbaCompositeMapViewer()
+        self.rgbaViewer = docks.RgbaCompositeMapViewer()
         # Share rgba and data viewer axis
         CF.shareAxis(self.rgbaViewer.canvas.ax, self.dataViewer.canvas.ax)
 
-    # Training ROI editor
-        self.roiEditor = cObj.RoiSelector(self.dataViewer.canvas)
-        self.roiEditor.rectangleSelectorUpdated.connect(self.updateHistogram)
-
-    # Create panes (QDockWidgets)
-        manager_pane = cObj.Pane(self.dataManager, 'Data Manager', 
-                                 QG.QIcon(r'Icons/data_manager.png'), False)
-        histogram_pane = cObj.Pane(self.histogram, 'Histogram',
-                                   QG.QIcon(r'Icons/histogram.png'))
-        mode_pane = cObj.Pane(self.modeViewer, 'Mode',
-                              QG.QIcon(r'Icons/mode.png'))
-        probmap_pane = cObj.Pane(self.pmapViewer, 'Probability Map',
-                                 QG.QIcon(r'Icons/probmap.png'))
-        rgba_pane = cObj.Pane(self.rgbaViewer, 'RGBA Composite Map',
-                              QG.QIcon(r'Icons/rgba.png'))
-        roi_pane = cObj.Pane(self.roiEditor, 'Regions of Interest (ROI)',
-                             QG.QIcon(r'Icons/roi.png'))
-        self.panes = (manager_pane, histogram_pane, mode_pane, probmap_pane,
-                      rgba_pane, roi_pane)
+    # Create panes 
+        manager_pane = docks.Pane(self.dataManager, 'Data Manager', 
+                                  QG.QIcon(r'Icons/data_manager.png'), False)
+        histogram_pane = docks.Pane(self.histViewer, 'Histogram',
+                                    QG.QIcon(r'Icons/histogram.png'))
+        mode_pane = docks.Pane(self.modeViewer, 'Mode',
+                               QG.QIcon(r'Icons/mode.png'))
+        roi_pane = docks.Pane(self.roiEditor, 'ROI Editor',
+                              QG.QIcon(r'Icons/roi.png'))
+        probmap_pane = docks.Pane(self.pmapViewer, 'Probability Map',
+                                  QG.QIcon(r'Icons/probmap.png'))
+        rgba_pane = docks.Pane(self.rgbaViewer, 'RGBA Map',
+                               QG.QIcon(r'Icons/rgba.png'))
+        
+        self.panes = (manager_pane, histogram_pane, mode_pane, roi_pane, 
+                      probmap_pane, rgba_pane)
         
     # Store the panes toggle view actions and set their icons
         self.panes_tva = []
@@ -110,207 +120,269 @@ class MainWindow(QW.QMainWindow):
 
     # Add panes to main window
         self.addPane(QC.Qt.LeftDockWidgetArea, manager_pane)
-        self.addPane(QC.Qt.RightDockWidgetArea, histogram_pane)
-        self.addPane(QC.Qt.LeftDockWidgetArea, mode_pane)
+        self.addPane(QC.Qt.LeftDockWidgetArea, histogram_pane, visible=False)
+        self.addPane(QC.Qt.LeftDockWidgetArea, mode_pane, visible=False)
+        self.tabifyDockWidget(manager_pane, histogram_pane)
+        self.tabifyDockWidget(manager_pane, mode_pane)
+        self.addPane(QC.Qt.RightDockWidgetArea, roi_pane, visible=False)
         self.addPane(QC.Qt.RightDockWidgetArea, probmap_pane, visible=False)
         self.addPane(QC.Qt.RightDockWidgetArea, rgba_pane, visible=False)
-        self.addPane(QC.Qt.RightDockWidgetArea, roi_pane)
+        self.tabifyDockWidget(roi_pane, probmap_pane)
+        self.tabifyDockWidget(roi_pane, rgba_pane)
 
     # Resize panes
-        panes_width = [int(0.2 * self.width())] * len(self.panes)
-        self.resizeDocks(self.panes, panes_width, QC.Qt.Horizontal)
-        # self.resizeDocks([histogram_pane, probmap_pane],
-        #                  [int(0.2 * self.height())]*2, QC.Qt.Vertical)
+        p_width = max([p.widget.minimumSizeHint().width() for p in self.panes])
+        self.resizeDocks(self.panes, [p_width] * len(self.panes), 
+                         QC.Qt.Horizontal)
+        
+    def _init_actions(self):
+        '''Initialize actions shared by menu and toolbars.'''
+    # Quit app action
+        self.close_action = QW.QAction('&Exit')
+        self.close_action.setShortcut('Ctrl+Q')
+
+    # Import X-Ray Maps Action 
+        self.load_inmaps_action = QW.QAction('&Input Maps')
+        self.load_inmaps_action.setShortcut('Ctrl+I')
+
+    # Import Mineral Maps Action
+        self.load_minmaps_action = QW.QAction('&Mineral Maps')
+        self.load_minmaps_action.setShortcut('Ctrl+M')
+
+    # Import Masks Action
+        self.load_masks_action = QW.QAction('Masks')
+
+    # Launch Preferences Action
+        self.pref_action = QW.QAction(QG.QIcon('Icons/wrench.png'),
+                                      '&Preferences')
+        self.pref_action.setShortcut('Ctrl+P')
+
+    # Launch Convert Grayscale to ASCII Action
+        self.conv2ascii_action = QW.QAction('Grayscale to Input Map')
+        self.conv2ascii_action.setStatusTip('Convert grayscale image to '\
+                                            'input map')
+
+    # Launch Convert RGB to Mineral Maps Action
+        self.conv2mmap_action = QW.QAction('RGB to Mineral Map')
+        self.conv2mmap_action.setStatusTip('Convert RGB image to Mineral Map')
+
+    # Launch Build Dummy Maps Action
+        self.dummy_map_action = QW.QAction('Generate &Dummy Maps')
+        self.dummy_map_action.setStatusTip('Build placeholder noisy maps')
+
+    # Launch Sub-sample Dataset Action
+        self.subsample_ds_action = QW.QAction('&Sub-sample dataset')
+        self.subsample_ds_action.setStatusTip('Extract sub-datasets from an '\
+                                              'existent dataset')
+
+    # Launch Merge Datasets Action
+        self.merge_ds_action = QW.QAction('&Merge datasets')
+        self.merge_ds_action.setStatusTip('Merge multiple datasets')
+
+    # Launch Dataset Builder Action
+        self.ds_builder_action = QW.QAction(QG.QIcon(r'Icons/compile_dataset.png'),
+                                            'Dataset &Builder')
+        self.ds_builder_action.setShortcut('Ctrl+Alt+B')
+        self.ds_builder_action.setStatusTip('Compile ground truth datasets')
+
+    # Launch Model Learner Action
+        self.model_learner_action = QW.QAction(QG.QIcon(r'Icons/merge.png'),
+                                               'Model &Learner')
+        self.model_learner_action.setShortcut('Ctrl+Alt+L')
+        self.model_learner_action.setStatusTip('Build machine learning models')
+
+    # Launch Mineral Classifier Action
+        self.classifier_action = QW.QAction(QG.QIcon(r'Icons/classify.png'),
+                                            'Mineral &Classifier', self)
+        self.classifier_action.setShortcut('Ctrl+Alt+C')
+        self.classifier_action.setStatusTip('Predict mineral maps')
+
+    # Launch Phase Refiner Action
+        self.refiner_action = QW.QAction(QG.QIcon(r'Icons/refine.png'),
+                                         'Phase &Refiner', self)
+        self.refiner_action.setShortcut('Ctrl+Alt+R')
+        self.refiner_action.setStatusTip('Use morphological image processing '\
+                                         'tools to refine mineral maps.')
 
 
-    # ==============================   ACTIONS   ==============================
-
-        # Import X-Ray Maps Action [--> Import subMenu --> File Menu]
-        load_inmaps_action = QW.QAction('&Input Maps', self)
-        load_inmaps_action.setShortcut('Ctrl+I')
-        load_inmaps_action.triggered.connect(lambda: self.load_data('inmaps'))
-
-        # Import Mineral Maps Action [--> Import subMenu --> File Menu]
-        load_minmaps_action = QW.QAction('&Mineral Maps', self)
-        load_minmaps_action.setShortcut('Ctrl+M')
-        load_minmaps_action.triggered.connect(lambda: self.load_data('minmaps'))
-
-        # Import Masks Action [--> Import subMenu --> File Menu]
-        load_masks_action = QW.QAction('Masks', self)
-        load_masks_action.triggered.connect(lambda: self.load_data('masks'))
-
-        # Edit Preferences [--> File Menu]
-        PreferenceAction = QW.QAction(QG.QIcon('Icons/wrench.png'),
-                                      '&Preferences', self)
-        PreferenceAction.setShortcut('Ctrl+P')
-        # PreferenceAction.triggered.connect(self.run_Preferences)
-
-        # To close the app [--> File Menu]
-        closeAction = QW.QAction('&Exit', self)
-        closeAction.setShortcut('Ctrl+Q')
-        closeAction.triggered.connect(self.close)
-
-        # To convert grayscale xmaps to ASCII files [--> Convert sub-menu --> Utilty Menu]
-        convXmapsAction = QW.QAction('Grayscale to &ASCII ', self)
-        convXmapsAction.setStatusTip('Convert grayscale X-Ray Maps to a X-Min Learn compatible format')
-        # convXmapsAction.triggered.connect(self.run_Convert2xmap)
-
-        # To convert RGB images to MinMaps [--> Convert sub-menu --> Utilty Menu]
-        convMinmapsAction = QW.QAction('RGB image to &Mineral Map', self)
-        convMinmapsAction.setStatusTip('Convert a RGB image to a Mineral Map')
-        # convMinmapsAction.triggered.connect(self.run_Convert2minmap)
-
-        # To build dummy maps [--> Utility Menu]
-        dummyMapAction = QW.QAction('Generate &Dummy Maps', self)
-        dummyMapAction.setStatusTip('Build placeholder noisy maps.')
-        # dummyMapAction.triggered.connect(self.run_DummyMapsBuilder)
-
-        # Sub-sample dataset [--> Dataset Tools Menu]
-        subSampleDSAction = QW.QAction('&Sub-sample dataset', self)
-        subSampleDSAction.setStatusTip('Extract a sub-dataset from a given dataset')
-        # subSampleDSAction.triggered.connect(self.run_SubSampleDataset)
-
-        # Merge Datasets [--> Dataset Tools Menu]
-        mergeDSAction = QW.QAction('&Merge datasets', self)
-        mergeDSAction.setStatusTip('Merge multiple datasets')
-        # mergeDSAction.triggered.connect(self.run_MergeDatasets)
-
-        # Dataset Builder Tool [--> Toolbar] & [--> Dataset Tools Menu]
-        dsBuilderTool = QW.QAction(QG.QIcon('Icons/compile_dataset.png'),
-                                    'Dataset &Builder', self)
-        dsBuilderTool.setShortcut('Ctrl+Alt+B')
-        dsBuilderTool.setStatusTip('Design a new ground-truth dataset')
-        dsBuilderTool.triggered.connect(
-            lambda: self.tabWidget.addTab(dialogs.DatasetBuilder(self)))
-
-        # ML Model Builder [--> Toolbar] & [--> Classification Menu]
-        modelLearnerTool = QW.QAction(QG.QIcon('Icons/merge.png'),
-                                      'Model &Learner', self)
-        modelLearnerTool.setShortcut('Ctrl+Alt+L')
-        modelLearnerTool.setStatusTip('Build a new machine learning model')
-        # modelLearnerTool.triggered.connect(self.run_ModelLearner)
-
-        # Classify Tool [--> Toolbar] & [--> Classification Menu]
-        classifyTool = QW.QAction(QG.QIcon('Icons/classify.png'),
-                                    'Mineral &Classifier', self)
-        classifyTool.setShortcut('Ctrl+Alt+C')
-        classifyTool.setStatusTip('Predict mineral maps')
-        classifyTool.triggered.connect(
-            lambda: self.tabWidget.addTab(dialogs.MineralClassifier(self)))
-
-        # Phase Refiner Tool [--> Toolbar] & [Post-classification Menu]
-        phaseRefinerTool = QW.QAction(QG.QIcon('Icons/refine.png'),
-                                      'Phase &Refiner', self)
-        phaseRefinerTool.setShortcut('Ctrl+Alt+R')
-        phaseRefinerTool.setStatusTip('Use morphological image processing tools to refine a mineral map.')
-        # phaseRefinerTool.triggered.connect(self.run_PhaseRefiner)
-
-
-
-    # ==============================   TOOLBARS   =============================
-        dialogs_toolbar = QW.QToolBar('Dialogs toolbar')
-
-        dialogs_toolbar.setIconSize(QC.QSize(32, 32))
+    def _init_toolbars(self):
+        '''Initialize main toolbars.'''
+    # Tools toolbar
+        self.tools_toolbar = QW.QToolBar('Tools toolbar')
+        self.tools_toolbar.setIconSize(QC.QSize(32, 32))
+        self.tools_toolbar.setStyleSheet(pref.SS_mainToolbar)
         # import data actions (button menu), followed by a separator
-        dialogs_toolbar.addAction(dsBuilderTool)
-        dialogs_toolbar.addAction(modelLearnerTool)
-        dialogs_toolbar.addAction(classifyTool)
-        dialogs_toolbar.addAction(phaseRefinerTool)
+        self.tools_toolbar.addActions((self.ds_builder_action, 
+                                       self.model_learner_action, 
+                                       self.classifier_action, 
+                                       self.refiner_action))
         # separator followed by preference dialog
         # other future tools (e.g. map algebra calculator)
+    
+    # Panes toolbar
+        self.panes_toolbar = QW.QToolBar('Panes toolbar')
+        self.panes_toolbar.setIconSize(QC.QSize(32, 32))
+        self.panes_toolbar.setStyleSheet(pref.SS_mainToolbar)
+        self.panes_toolbar.addActions(self.panes_tva)
+
+    # Set default toolbars position in the window
+        self.addToolBar(QC.Qt.LeftToolBarArea, self.panes_toolbar)
+        self.addToolBar(QC.Qt.RightToolBarArea, self.tools_toolbar)
+
+
+    def _init_menu(self):
+        '''Initialize main menu.'''
+    # Set custom stylesheet to menu bar
+        menu_bar = self.menuBar()
+        menu_bar.setStyleSheet(pref.SS_menuBar + pref.SS_menu)
+
+    # File Menu
+        file_menu = menu_bar.addMenu('&File')
+        import_submenu = file_menu.addMenu(QG.QIcon(r'Icons/import.png'),
+                                           '&Import...')
+        import_submenu.addActions((self.load_inmaps_action, 
+                                   self.load_minmaps_action,
+                                   self.load_masks_action))
+        file_menu.addActions((self.pref_action, self.close_action))
+
+    # Dataset Menu
+        dataset_menu = menu_bar.addMenu('&Dataset')
+        dataset_menu.addActions((self.ds_builder_action, 
+                                 self.subsample_ds_action, 
+                                 self.merge_ds_action))
         
-        dialogs_toolbar.setStyleSheet(pref.SS_mainToolbar)
+    # Classification Menu
+        class_menu = menu_bar.addMenu('&Classification')
+        class_menu.addActions((self.classifier_action, 
+                               self.model_learner_action))
+
+    # Post-classification Menu
+        postclass_menu = menu_bar.addMenu('&Post-classification')
+        postclass_menu.addAction(self.refiner_action)
+
+    # Utility Menu
+        utility_menu = menu_bar.addMenu('&Utility')
+        convert_submenu = utility_menu.addMenu('&Convert')
+        convert_submenu.addActions((self.conv2ascii_action, 
+                                    self.conv2mmap_action))
+        utility_menu.addAction(self.dummy_map_action)
+
+    # View Menu
+        view_menu = menu_bar.addMenu('&View')
+        panes_submenu = view_menu.addMenu('&Panes')
+        panes_submenu.addActions(self.panes_tva)
+        view_menu.addSeparator()
+        view_menu.addActions((self.panes_toolbar.toggleViewAction(),
+                             self.tools_toolbar.toggleViewAction()))
         
-        panes_toolbar = QW.QToolBar('Panes toolbar')
-        panes_toolbar.setIconSize(QC.QSize(32, 32))
-        panes_toolbar.addActions(self.panes_tva)
 
-        panes_toolbar.setStyleSheet(pref.SS_mainToolbar)
-        
+    def _connect_slots(self):
+        '''Signal-slot connector.'''
+    # Data Manager pane actions 
+        self.dataManager.updateSceneRequested.connect(self.update_scene)
+        self.dataManager.clearSceneRequested.connect(self.clear_scene)
+        self.dataManager.rgbaChannelSet.connect(self.set_rgba_channel)
 
-        
-        self.addToolBar(QC.Qt.LeftToolBarArea, panes_toolbar)
-        self.addToolBar(QC.Qt.LeftToolBarArea, dialogs_toolbar)
+    # Mode Viewer pane actions
+        self.modeViewer.updateSceneRequested.connect(self.update_scene)
 
-    # ================================   MENU   ===============================
-        menuBar = self.menuBar()
-        # menuBar.setStyleSheet('''QMenuBar::item {color: white;}''')
+    # ROI Editor pane actions
+        self.roiEditor.rectangleSelectorUpdated.connect(self.updateHistogram)
 
-        # (File Menu)
-        fileMenu = menuBar.addMenu('&File')
-        # fileMenu.setStyleSheet('''QMenu {background-color: black;} ''')
-        importSubMenu = fileMenu.addMenu(QG.QIcon('Icons/generic_add_black.png'),
-                                          '&Import...')
-        importSubMenu.addActions((load_inmaps_action, load_minmaps_action,
-                                  load_masks_action))
-        fileMenu.addActions((PreferenceAction, closeAction))
+    # Quit app 
+        self.close_action.triggered.connect(self.close)
 
-        # (Dataset Tools Menu)
-        datasetMenu = menuBar.addMenu('&Dataset Tools')
-        datasetMenu.addActions((dsBuilderTool, subSampleDSAction, mergeDSAction))
+    # Import X-Ray Maps  
+        self.load_inmaps_action.triggered.connect(lambda: self.load('inmaps'))
 
-        # (Classification Menu)
-        classMenu = menuBar.addMenu('&Classification')
-        classMenu.addActions((classifyTool, modelLearnerTool))
+    # Import Mineral Maps 
+        self.load_minmaps_action.triggered.connect(lambda: self.load('minmaps'))
 
-        # (Post-classification Menu)
-        postClassMenu = menuBar.addMenu('&Post-classification')
-        postClassMenu.addAction(phaseRefinerTool)
+    # Import Masks 
+        self.load_masks_action.triggered.connect(lambda: self.load('masks'))
 
-        # (Utility Menu)
-        utilityMenu = menuBar.addMenu('&Utility')
-        convertSubMenu = utilityMenu.addMenu('&Conversion tools')
-        convertSubMenu.addActions((convXmapsAction, convMinmapsAction))
-        utilityMenu.addAction(dummyMapAction)
+    # Launch Preferences 
+        self.pref_action.triggered.connect(
+            lambda: self.launch('Preferences', tabbed=False))
 
-        # (View Menu)
-        viewMenu = menuBar.addMenu('&View')
-        panesSubMenu = viewMenu.addMenu('&Panes')
-        panesSubMenu.addActions(self.panes_tva)
-        viewMenu.addSeparator()
-        viewMenu.addAction(panes_toolbar.toggleViewAction())
-        viewMenu.addAction(dialogs_toolbar.toggleViewAction())
+    # Launch Convert Grayscale images to ASCII 
+        self.conv2ascii_action.triggered.connect(
+            lambda: self.launch('Grayscale2Ascii'))
 
-        menuBar.setStyleSheet(pref.SS_menuBar + pref.SS_menu)
+    # Launch Convert RGB yo Mineral Maps 
+        self.conv2mmap_action.triggered.connect(
+            lambda: self.launch('Rgb2Minmap'))
 
+    # Launch Build Dummy Maps 
+        self.dummy_map_action.triggered.connect(
+            lambda: self.launch('DummyMaps'))
 
+    # Launch Sub-sample Dataset 
+        self.subsample_ds_action.triggered.connect(
+            lambda: self.launch('SubSampleDataset'))
 
+    # Launch Merge Datasets 
+        self.merge_ds_action.triggered.connect(
+            lambda: self.launch('MergeDatasets'))
 
+    # Launch Dataset Builder 
+        self.ds_builder_action.triggered.connect(
+            lambda: self.launch('DatasetBuilder'))
 
+    # Launch Model Learner 
+        self.model_learner_action.triggered.connect(
+            lambda: self.launch('ModelLearner'))
 
-    # def test(self, idx): #??? IS THIS USEFUL OR TOO CHUNKY ???
-    #     tab = self.tabWidget.widget(idx)
-    #     if isinstance(tab, cObj.DraggableTool):
-    #         for pane in self.panes:
-    #             if pane.isVisible():
-    #                 pane.setVisible(False, hide_temporarily=True)
-    #     else:
-    #         for pane in self.panes:
-    #             if pane.isTemporarilyHidden():
-    #                 pane.setVisible(True)
+    # Launch Mineral Classifier 
+        self.classifier_action.triggered.connect(
+            lambda: self.launchMineralClassifier())
+
+    # Launch Phase Refiner 
+        self.refiner_action.triggered.connect(
+            lambda: self.launch('PhaseRefiner'))
 
 
     def addPane(self, dockWidgetArea, pane, visible=True):
         self.addDockWidget(dockWidgetArea, pane)
         pane.setVisible(visible)
-        # # add a connection to the main window for the widget inside the pane
-        # pane.widget.mainWin = self
 
 
     def createPopupMenu(self):
         popupmenu = super(MainWindow, self).createPopupMenu()
-
-    # # Insert a title section
-    #     popupmenu.insertSection(popupmenu.actions()[0], 'Panes & Toolbar')
-
-    # Set the menu style-sheet
         popupmenu.setStyleSheet(pref.SS_menu)
-
         return popupmenu
+    
+    def launchMineralClassifier(self, tabbed=True):
+        mc = tools.MineralClassifier()
+    
+    # Connect this MineralClassifier instance's signals with appropriate slots
+        mc.sample_combox.clicked.connect(
+            lambda: mc.updateSamples(self.dataManager.getAllGroups()))
+        mc.sample_combox.activated.connect(
+            lambda idx: mc.updateInmapsList(
+                self.dataManager.topLevelItem(idx).inmaps))
+    
+    # Show the Mineral Classifier as a tab or as a stand-alone window
+        if tabbed:
+            self.tabWidget.addTab(mc)
+        else:
+            mc.show()
+
+    def launch(self, toolname, tabbed=True):
+        tools_dict = {'DatasetBuilder': tools.DatasetBuilder}
+        tool = tools_dict.get(toolname, None)
+
+        if tool is not None:
+            if tabbed:
+                self.tabWidget.addTab(tool(self))
+            else:
+                tool(self).show()
+
+        else:
+            print(f'{toolname} not implemented.')
 
 
-
-    def load_data(self, datatype):
+    def load(self, datatype):
     # Get currently active group. If none, build a new one
         current_item = self.dataManager.currentItem()
         group = self.dataManager.getItemParentGroup(current_item)
@@ -361,8 +433,10 @@ class MainWindow(QW.QMainWindow):
                 self.dataViewer.canvas.draw_heatmap(inmap, title)
                 self.modeViewer.clear_all()
                 self.pmapViewer.canvas.clear_canvas()
-                self.histogram.hideScaler()
                 self.updateHistogram()
+                if self.histViewer.scaler_action.isChecked():
+                    self.histViewer.setScalerExtents()
+   
 
         # Actions to be performed if item holds mineral map data
             elif item.holdsMineralMap():
@@ -377,8 +451,8 @@ class MainWindow(QW.QMainWindow):
                 self.pmapViewer.canvas.draw_heatmap(pmap, title)
                 if self.pmapViewer.toggle_range_action.isChecked():
                     self.pmapViewer.setViewRange()
-                self.histogram.hideScaler()
-                self.histogram.canvas.clear_canvas()
+                self.histViewer.hideScaler()
+                self.histViewer.canvas.clear_canvas()
 
         # Actions to be performed if item holds mask data
         # We re-call this function using the currently displayed (map) item so
@@ -406,8 +480,8 @@ class MainWindow(QW.QMainWindow):
         self.dataViewer.canvas.clear_canvas()
         self.modeViewer.clear_all()
         self.pmapViewer.canvas.clear_canvas()
-        self.histogram.hideScaler()
-        self.histogram.canvas.clear_canvas()
+        self.histViewer.hideScaler()
+        self.histViewer.canvas.clear_canvas()
         self.rgbaViewer.clear_all()
 
 
@@ -424,14 +498,14 @@ class MainWindow(QW.QMainWindow):
         roi_coords, roi_mask = self.roiEditor.current_selection, None
 
     # Populate the ROI mask using ROI coords if they're valid
-        if roi_coords is not None and self.roiEditor.rectSel.active:
+        if roi_coords is not None and self.roiEditor.rect_sel.active:
             r0,r1, c0,c1 = roi_coords
             roi_mask = data[r0:r1, c0:c1]
             if not len(roi_mask):
                 roi_mask = None
 
     # Update histogram canvas
-        self.histogram.canvas.update_canvas(data, roi_mask, title)
+        self.histViewer.canvas.update_canvas(data, roi_mask, title)
 
 
     def set_rgba_channel(self, channel):
@@ -443,8 +517,7 @@ class MainWindow(QW.QMainWindow):
 
         # If the RGBA Viewer is hidden, let's show it to provide feedback
              if not self.rgbaViewer.isVisible():
-                 # actually showing the rgba pane
-                 self.panes[4].setVisible(True)
+                 self.panes[5].setVisible(True)
 
 
 
@@ -499,6 +572,211 @@ class MainWindow(QW.QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+
+class MainTabWidget(cObj.StyledTabWidget):
+    '''
+    Central widget of the X-Min Learn window. It is a reimplementation of a
+    QTabWidget, customized to accept drag and drop events of its own tabs. Such
+    tabs are the major X-Min Learn windows, that can be attached to this widget
+    or detached and visualized as separated windows. See the "DraggableTool"
+    class in "tools.py" module for more details.
+    '''
+
+    def __init__(self, parent):
+        '''
+        MainTabWidget class constructor.
+
+        Parameters
+        ----------
+        parent : QWidget
+            The GUI parent of this widget.
+
+        Returns
+        -------
+        None.
+
+        '''
+        super(MainTabWidget, self).__init__(parent)
+
+    # Set properties
+        self.setAcceptDrops(True)
+        self.setMovable(True)
+        self.setTabsClosable(True)
+
+    # Connect signals to slots
+        self._connect_slots()
+
+
+    def _connect_slots(self):
+        '''
+        MainTabWidget class signal-slots connector.
+
+        Returns
+        -------
+        None.
+
+        '''
+    # Tab 'X' button pressed --> close the tab
+        self.tabCloseRequested.connect(self.closeTab)
+    # Tab Double-clicked --> detach the tab
+        self.tabBarDoubleClicked.connect(self.popOut)
+
+
+    def addTab(self, widget):
+        '''
+        Reimplementation of the default addTab function. A GroupScrollArea is
+        set as the <widget> container. This helps in the visualization of
+        complex widgets across different sized screens.
+
+        Parameters
+        ----------
+        widget : QWidget
+            The widget to be added as tab.
+
+        Returns
+        -------
+        None.
+
+        '''
+        icon, title = widget.windowIcon(), widget.windowTitle()
+        widget = cObj.GroupScrollArea(widget)
+        super(MainTabWidget, self).addTab(widget, icon, title)
+        self.setCurrentWidget(widget)
+
+
+    def widget(self, index):
+        '''
+        Reimplementation of the default widget function. Returns the widget
+        held by the tab at <index> bypassing the GroupScrollArea widget that
+        contains it (see addTab function for more details).
+
+        Parameters
+        ----------
+        index : int
+            The position of the widget in the tab bar.
+
+        Returns
+        -------
+        wid : QWidget or None
+            The widget in the tab page or None if <index> is out of range.
+
+        '''
+        scroll_area = self.scrollArea(index)
+        wid = None if scroll_area is None else scroll_area.widget()
+        return wid
+
+
+    def scrollArea(self, index):
+        '''
+        Returns the scroll area that holds the widget.
+
+        Parameters
+        ----------
+        index : int
+            The position of the widget in the tab bar.
+
+        Returns
+        -------
+        scroll_area : GroupScrollArea
+            The scroll area that contains the widget.
+
+        '''
+        scroll_area = super(MainTabWidget, self).widget(index)
+        return scroll_area
+
+
+    def closeTab(self, index):
+        '''
+        Close the tab at index <index>. Triggers the closeEvent of the widget.
+
+        Parameters
+        ----------
+        index : int
+            The tab index in the tab bar.
+
+        Returns
+        -------
+        None.
+
+        '''
+    # The tab is closed only if the widget closeEvent is accepted
+        closed = self.widget(index).close()
+        if closed:
+            scroll_area = self.scrollArea(index)
+            self.removeTab(index)
+            scroll_area.deleteLater()
+
+
+    def popOut(self, index):
+        '''
+        Detach the tab from the MainTabWidget and display it as a separate
+        window.
+
+        Parameters
+        ----------
+        index : int
+            The indec of the tab to be detached.
+
+        Returns
+        -------
+        None.
+
+        '''
+        wid = self.widget(index)
+        scroll_area = self.scrollArea(index)
+    # Only pop out draggable tools
+        if isinstance(wid, tools.DraggableTool):
+            self.removeTab(index)
+            wid.setParent(None)
+            wid.setVisible(True)
+            wid.move(0, 0)
+            wid.adjustSize()
+            scroll_area.deleteLater()
+
+
+    def dragEnterEvent(self, e):
+        '''
+        Reimplementation of the default dragEnterEvent function. Customized to
+        accept only DraggableTool instances.
+
+        Parameters
+        ----------
+        e : dragEvent
+            The dragEvent triggered by the user's drag action.
+
+        Returns
+        -------
+        None.
+
+        '''
+        if isinstance(e.source(), tools.DraggableTool):
+            e.accept()
+
+    def dropEvent(self, e):
+        '''
+        Reimplementation of the default dropEvent function. Customized to
+        accept only DraggableTool instances.
+
+        Parameters
+        ----------
+        e : dropEvent
+            The dropEvent triggered by the user's drag & drop action.
+
+        Returns
+        -------
+        None.
+
+        '''
+        if isinstance(e.source(), tools.DraggableTool):
+            e.setDropAction(QC.Qt.MoveAction)
+            e.accept()
+
+        # Suppress updates temporarily for better performances
+            wid = e.source()
+            self.setUpdatesEnabled(False)
+            self.addTab(wid)
+            self.setUpdatesEnabled(True)
 
 
 

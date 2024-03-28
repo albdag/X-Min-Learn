@@ -328,6 +328,23 @@ SS_mainWindow = (
     %(BLOSSOM, BLACK_PEARL))
 
 
+SS_pane = (
+    '''QDockWidget {
+        font-weight: bold;}'''
+    '''QDockWidget::title {
+        background: %s;}'''
+    '''QDockWidget::close-button, QDockWidget::float-button {
+        background: %s;
+        border: 1px solid %s;
+        padding: -1px;}'''
+    '''QDockWidget::close-button:hover, QDockWidget::float-button:hover {
+        background: %s;}'''
+    '''QDockWidget::close-button:pressed, QDockWidget::float-button:pressed {
+        border: 2px solid %s;
+        padding: 1px;}'''
+    %(CASPER_dark, IVORY, SAN_MARINO, BLOSSOM, SAN_MARINO))
+
+
 
 
 def get_setting(name, default=None, type=None):

@@ -9,7 +9,6 @@ from os.path import split, splitext
 from collections import Counter
 import numpy as np
 from PIL import Image
-# import libtiff
 import tifffile
 
 
@@ -311,3 +310,21 @@ def decode_labels(array, transDict, dtype='U8'):
     res = np.copy(array).astype(dtype)
     for k, v in transDict.items(): res[array==v] = k
     return res
+
+
+def merge_masks(masks:list, mode):
+# 0*1 = 0 --> The more masks I add, the more 0's there'll be (UNION)  
+    if mode in ('union', 'U'):
+        func = np.prod
+# 0+1 = 1 --> Only overlapping holes (0's) will survive (INTERSECTION)
+    elif mode in ('intersection', 'I'):
+        func = np.sum
+    else:
+        raise TypeError(f'{mode} is not a valid argument for mode.')
+    
+    if len(masks) < 2:
+        raise ValueError('This function requires at least 2 masks.')
+    else:
+        merged = func(np.array(masks), axis=0)
+
+    return merged
