@@ -4,6 +4,7 @@ Created on Wed Apr 28 12:27:17 2021
 
 @author: albdag
 """
+
 from PyQt5 import QtWidgets as QW
 from PyQt5.QtGui import (QColor, QCursor, QFont, QFontMetrics, QDrag, QRegion,
                         QIcon, QImage, QIntValidator, QPixmap, QTextDocument)
