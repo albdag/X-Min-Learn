@@ -214,8 +214,8 @@ class DataSubGroup(QW.QTreeWidgetItem):
 
     # Set the font as underlined
         font = self.font(0)
-        # font.setItalic(True)
-        font.setUnderline(True)
+        font.setItalic(True)
+        # font.setUnderline(True)
         self.setFont(0, font)
         self.setText(0, name)
 
@@ -926,7 +926,7 @@ class Legend(QW.QTreeWidget):
         elif column == 1:
             self.requestClassRename(item)
         else:
-            return
+            self.requestItemHighlight(item != self._highlighted_item, item)
 
     def copyColorHexToClipboard(self, item):
         '''
@@ -1169,12 +1169,6 @@ class Legend(QW.QTreeWidget):
 
 
 
-
-class StyledTabWidget(QW.QTabWidget):
-    def __init__(self, parent=None):
-        super(StyledTabWidget, self).__init__(parent)
-
-        self.setStyleSheet(pref.SS_tabWidget)
 
 
 
@@ -1741,14 +1735,20 @@ class StyledComboBox(QW.QComboBox):
 
 
 
-class AutoUpdateComboBox(StyledComboBox):
+class AutoUpdateComboBox(QW.QComboBox):
     clicked = pyqtSignal()
+
     def __init__(self, parent=None):
         super(AutoUpdateComboBox, self).__init__(parent)
+        self.setStyleSheet(pref.SS_combox)
 
     def showPopup(self):
         self.clicked.emit()
         super(AutoUpdateComboBox, self).showPopup()
+
+    def updateItems(self, items:list):
+        self.clear()
+        self.addItems(items)
 
 
 class StyledMenu(QW.QMenu):
@@ -1776,15 +1776,6 @@ class StyledListWidget(QW.QListWidget):
         items = [self.item(row) for row in range(self.count())]
         return items
 
-
-class StyledLineEdit(QW.QLineEdit):
-    def __init__(self, text=None, parent=None):
-        if text is None:
-            super(StyledLineEdit, self).__init__(parent)
-        else:
-            super(StyledLineEdit, self).__init__(text, parent)
-    # Set stylesheet for context menu
-        self.setStyleSheet(pref.SS_menu)
 
 
 class StyledTable(QW.QTableWidget):
@@ -1884,23 +1875,24 @@ class RadioBtnLayout(QW.QBoxLayout):
 
 
 class StyledButton(QW.QPushButton):
-    def __init__(self, icon=None, text=None, bg_color=None):
+    def __init__(self, icon=None, text=None, bg_color=None, text_padding=1):
         super(StyledButton, self).__init__()
 
-        if icon is not None:
-            self.setIcon(icon)
+        self.setSizePolicy(QW.QSizePolicy.Preferred, QW.QSizePolicy.Fixed)
 
-        if text is not None:
+        if icon:
+            self.setIcon(icon)
+            if text: # add spacing between icon and text
+                text = text.rjust(text_padding + len(text))
+
+        if text:
             self.setText(text)
 
     # Overwrite default background color if requested
         ss = pref.SS_button
-        if bg_color is not None:
+        if bg_color:
             ss+= 'StyledButton {background-color: %s; font: bold;}' %(bg_color)
         self.setStyleSheet(ss)
-
-        self.setSizePolicy(QW.QSizePolicy.Preferred, QW.QSizePolicy.Fixed)
-
 
 
 
@@ -2373,14 +2365,16 @@ class PixelFinder(QW.QFrame):
     # X and Y coords input (with integer validator)
         validator = QIntValidator(0, 10**8)
 
-        self.X_input = StyledLineEdit()
+        self.X_input = QW.QLineEdit()
+        self.X_input.setStyleSheet(pref.SS_menu)
         self.X_input.setAlignment(Qt.AlignHCenter)
         self.X_input.setPlaceholderText('X (C)')
         self.X_input.setValidator(validator)
         self.X_input.setToolTip('X or Column value')
         self.X_input.setMaximumWidth(50)
 
-        self.Y_input = StyledLineEdit()
+        self.Y_input = QW.QLineEdit()
+        self.Y_input.setStyleSheet(pref.SS_menu)
         self.Y_input.setAlignment(Qt.AlignHCenter)
         self.Y_input.setPlaceholderText('Y (R)')
         self.Y_input.setValidator(validator)
@@ -2435,6 +2429,7 @@ class DocumentBrowser(QW.QWidget):
     def _init_ui(self):
     # Text browser space
         self.browser = QW.QTextEdit()
+        self.browser.setVerticalScrollBar(StyledScrollBar(Qt.Vertical)) 
         self.browser.setStyleSheet(pref.SS_menu)
         self.browser.setReadOnly(self.readOnly)
 
@@ -2443,14 +2438,15 @@ class DocumentBrowser(QW.QWidget):
         self.toolbar.setStyleSheet(pref.SS_toolbar)
 
     # Edit document checkbox
-        self.edit_cbox = QW.QCheckBox('Enable editing')
+        self.edit_cbox = QW.QCheckBox('Editing')
         self.edit_cbox.setChecked(not self.readOnly)
         self.edit_cbox.stateChanged.connect(
             lambda state: self.browser.setReadOnly(not state))
         self.toolbar.addWidget(self.edit_cbox)
 
     # Search box
-        self.searchBox = StyledLineEdit()
+        self.searchBox = QW.QLineEdit()
+        self.searchBox.setStyleSheet(pref.SS_menu)
         self.searchBox.setPlaceholderText('Search')
         self.searchBox.setClearButtonEnabled(True)
         self.searchBox.setMaximumWidth(100)
@@ -2458,22 +2454,22 @@ class DocumentBrowser(QW.QWidget):
         self.toolbar.addWidget(self.searchBox)
 
     # Search Up Action
-        self.searchUpAction = QW.QAction(QIcon('Icons/arrow_up.png'),
-                                         'Search Up', self.toolbar)
+        self.searchUpAction = QW.QAction(QIcon(r'Icons/up.png'), 'Search up', 
+                                         self.toolbar)
         self.searchUpAction.triggered.connect(self._findTextUp)
 
     # Search Down Action
-        self.searchDownAction = QW.QAction(QIcon('Icons/arrow_down.png'),
-                                         'Search Down', self.toolbar)
+        self.searchDownAction = QW.QAction(QIcon(r'Icons/down.png'),
+                                           'Search down', self.toolbar)
         self.searchDownAction.triggered.connect(self._findTextDown)
 
     # Zoom in Action
-        self.zoomInAction = QW.QAction(QIcon('Icons/zoom_in.png'),
+        self.zoomInAction = QW.QAction(QIcon(r'Icons/zoom_in.png'),
                                        'Zoom in', self.toolbar)
         self.zoomInAction.triggered.connect(lambda: self._alterZoom(+1))
 
     # Zoom out Action
-        self.zoomOutAction = QW.QAction(QIcon('Icons/zoom_out.png'),
+        self.zoomOutAction = QW.QAction(QIcon(r'Icons/zoom_out.png'),
                                         'Zoom out', self.toolbar)
         self.zoomOutAction.triggered.connect(lambda: self._alterZoom(-1))
 

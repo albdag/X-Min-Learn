@@ -276,10 +276,10 @@ SS_table = (
 
 SS_pathLabel = (
     '''QLabel {
-            border: 1px solid %s;
+            border: 2px solid %s;
             border-radius: 3px;
             padding: 2px;}'''
-    %(BLACK_PEARL))
+    %(SAN_MARINO))
 
 
 SS_groupArea = (

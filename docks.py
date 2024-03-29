@@ -199,16 +199,15 @@ class DataManager(QW.QTreeWidget):
             load_masks.triggered.connect(lambda: self.loadMasks(item))
 
         # Rename group
-            rename_group = QW.QAction(QIcon(r'Icons/rename.png'), 
-                                      'Rename sample')
+            rename_group = QW.QAction(QIcon(r'Icons/rename.png'), 'Rename')
             rename_group.triggered.connect(lambda: self.onEdit(item))
 
         # Clear group
-            clear_group = QW.QAction(QIcon(r'Icons/clear.png'), 'Clear sample')
+            clear_group = QW.QAction(QIcon(r'Icons/clear.png'), 'Clear')
             clear_group.triggered.connect(self.clearGroup)
 
         # Delete group
-            del_group = QW.QAction(QIcon(r'Icons/remove.png'), 'Delete sample')
+            del_group = QW.QAction(QIcon(r'Icons/remove.png'), 'Delete')
             del_group.triggered.connect(self.delGroup)
 
             load_submenu.addActions((load_inmaps, load_minmaps, load_masks))
@@ -1278,7 +1277,7 @@ class HistogramViewer(QW.QWidget):
 
 
 
-class ModeViewer(QW.QWidget):
+class ModeViewer(QW.QTabWidget):
     '''
     A widget to visualize the modal amounts of the mineral classes occurring in
     the mineral map that is currently displayed in the Data Viewer. It includes
@@ -1302,6 +1301,9 @@ class ModeViewer(QW.QWidget):
         '''
         super(ModeViewer, self).__init__(parent)
 
+    # Set stylesheey
+        self.setStyleSheet(pref.SS_tabWidget)
+
     # Set principal attributes
         self._current_data_object = None
         self.map_canvas = map_canvas
@@ -1318,6 +1320,8 @@ class ModeViewer(QW.QWidget):
         GUI constructor.
         
         '''
+    # Interactive legend
+        self.legend = cObj.Legend(interactive=True)
 
     # Canvas
         self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
@@ -1335,19 +1339,18 @@ class ModeViewer(QW.QWidget):
         self.showLabels_action.setCheckable(True)
         self.navTbar.insertAction(self.navTbar.findChildren(QW.QAction)[10],
                                   self.showLabels_action)
+    
+    # Wrap canvas and navigation toolbar in a GroupBox
+        plot_layout = QW.QVBoxLayout()
+        plot_layout.addWidget(self.navTbar)
+        plot_layout.addWidget(self.canvas)
+        plot_group = cObj.GroupArea(plot_layout)
 
-    # Interactive legend
-        self.legend = cObj.Legend(interactive=True)
-
-    # Adjust layout
-        mode_vbox = QW.QVBoxLayout()
-        mode_vbox.addWidget(self.navTbar)
-        mode_vbox.addWidget(self.canvas)
-
-        main_layout = cObj.SplitterLayout(Qt.Vertical)
-        main_layout.addLayout(mode_vbox, -1)
-        main_layout.addWidget(self.legend, 1)
-        self.setLayout(main_layout)
+    # Add tabs to the Mode Viewer
+        self.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
+        self.addTab(plot_group, QIcon(r'Icons/plot.png'), None)
+        self.setTabToolTip(0, 'Legend')
+        self.setTabToolTip(1, 'Bar plot')
 
 
     def _connect_slots(self):
@@ -1611,8 +1614,6 @@ class ModeViewer(QW.QWidget):
             pref.set_dirPath('out', os.path.dirname(outpath))
             try:
                 mask.save(outpath)
-                return QW.QMessageBox.information(self, 'X-Min Learn',
-                                                  'File saved with success')
             except Exception as e:
                 text = 'An error occurred while saving the file'
                 return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
@@ -1688,7 +1689,7 @@ class RoiEditor(QW.QWidget):
 
     # Toggle ROI selection [-> Toolbar Action]
         self.draw_action = QW.QAction(QIcon(r'Icons/roi_selection.png'),
-                                      'Select ROI', self.toolbar)
+                                      'Draw ROI', self.toolbar)
         self.draw_action.setCheckable(True)
 
     # Add ROI [-> Toolbar Action]
@@ -1775,23 +1776,29 @@ class RoiEditor(QW.QWidget):
         self.showlabels_action.setCheckable(True)
         self.navTbar.insertAction(self.navTbar.findChildren(QW.QAction)[10],
                                   self.showlabels_action)
+        
+    # Wrap bar plot and its navigation toolbar in a QGroupArea
+        barplot_layout = QW.QVBoxLayout()
+        barplot_layout.addWidget(self.navTbar)
+        barplot_layout.addWidget(self.barCanvas)
+        barplot_group = cObj.GroupArea(barplot_layout)
+
+    # ROI visualizer (tab widget -> [ROI table | bar plot])
+        roi_visualizer = QW.QTabWidget()
+        roi_visualizer.setStyleSheet(pref.SS_tabWidget)
+        roi_visualizer.addTab(self.table, QIcon(r'Icons/table.png'), None)
+        roi_visualizer.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
+        roi_visualizer.setTabToolTip(0, 'Table')
+        roi_visualizer.setTabToolTip(1, 'Bar plot')
 
     # Adjust Layout
-        top_layout = QW.QGridLayout()
-        top_layout.addWidget(self.toolbar, 0, 0, 1, -1)
-        top_layout.addWidget(self.mappath, 1, 0)
-        top_layout.addWidget(self.hideroi_btn, 1, 1)
-        top_layout.addWidget(self.unload_btn, 1, 2)
-        top_layout.addWidget(self.table, 2, 0, 1, -1)
-        top_layout.setRowStretch(2, 1)
-        top_layout.setColumnStretch(0, 1)
-
-        bot_layout = QW.QVBoxLayout()
-        bot_layout.addWidget(self.navTbar)
-        bot_layout.addWidget(self.barCanvas, 1)
-
-        main_layout = cObj.SplitterLayout(Qt.Vertical)
-        main_layout.addLayouts((top_layout, bot_layout))
+        main_layout = QW.QGridLayout()
+        main_layout.addWidget(self.toolbar, 0, 0, 1, -1)
+        main_layout.addWidget(self.mappath, 1, 0)
+        main_layout.addWidget(self.hideroi_btn, 1, 1)
+        main_layout.addWidget(self.unload_btn, 1, 2)
+        main_layout.addWidget(roi_visualizer, 2, 0, 1, -1)
+        main_layout.setColumnStretch(0, 1)
         self.setLayout(main_layout)
 
 

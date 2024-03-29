@@ -611,11 +611,11 @@ class ImageCanvas(_CanvasBase):
 
         # Otherwise we use the current image clims (reset clims)
             else:
-                data = self.image.get_array()
-                self.image.set_clim(data.min(), data.max())
+                array = self.image.get_array()
+                self.image.set_clim(array.min(), array.max())
             # Re-apply boundary norm if image is a discrete map
                 if self.contains_discretemap():
-                    norm = self.set_boundary_norm(len(np.unique(data)))
+                    norm = self.set_boundary_norm(len(np.unique(array.data)))
                     self.image.set_norm(norm)
 
 

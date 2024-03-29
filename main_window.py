@@ -15,7 +15,6 @@ import docks
 import preferences as pref
 import tools
 
-# MAIN WINDOW (make the whole syntax nicer)
 class MainWindow(QW.QMainWindow):
 
     def __init__(self):
@@ -142,15 +141,18 @@ class MainWindow(QW.QMainWindow):
         self.close_action.setShortcut('Ctrl+Q')
 
     # Import X-Ray Maps Action 
-        self.load_inmaps_action = QW.QAction('&Input Maps')
+        self.load_inmaps_action = QW.QAction(QG.QIcon(r'Icons/inmap.png'),
+                                             '&Input Maps')
         self.load_inmaps_action.setShortcut('Ctrl+I')
 
     # Import Mineral Maps Action
-        self.load_minmaps_action = QW.QAction('&Mineral Maps')
+        self.load_minmaps_action = QW.QAction(QG.QIcon(r'Icons/minmap.png'),
+                                              '&Mineral Maps')
         self.load_minmaps_action.setShortcut('Ctrl+M')
 
     # Import Masks Action
-        self.load_masks_action = QW.QAction('Masks')
+        self.load_masks_action = QW.QAction(QG.QIcon(r'Icons/mask.png'),
+                                            'Masks')
 
     # Launch Preferences Action
         self.pref_action = QW.QAction(QG.QIcon('Icons/wrench.png'),
@@ -574,13 +576,14 @@ class MainWindow(QW.QMainWindow):
             event.ignore()
 
 
-class MainTabWidget(cObj.StyledTabWidget):
+class MainTabWidget(QW.QTabWidget):
     '''
     Central widget of the X-Min Learn window. It is a reimplementation of a
     QTabWidget, customized to accept drag and drop events of its own tabs. Such
     tabs are the major X-Min Learn windows, that can be attached to this widget
     or detached and visualized as separated windows. See the "DraggableTool"
     class in "tools.py" module for more details.
+
     '''
 
     def __init__(self, parent):
@@ -592,12 +595,11 @@ class MainTabWidget(cObj.StyledTabWidget):
         parent : QWidget
             The GUI parent of this widget.
 
-        Returns
-        -------
-        None.
-
         '''
         super(MainTabWidget, self).__init__(parent)
+
+    # Set stylesheet
+        self.setStyleSheet(pref.SS_tabWidget)
 
     # Set properties
         self.setAcceptDrops(True)
@@ -610,11 +612,7 @@ class MainTabWidget(cObj.StyledTabWidget):
 
     def _connect_slots(self):
         '''
-        MainTabWidget class signal-slots connector.
-
-        Returns
-        -------
-        None.
+        Signals-slots connector.
 
         '''
     # Tab 'X' button pressed --> close the tab
@@ -633,10 +631,6 @@ class MainTabWidget(cObj.StyledTabWidget):
         ----------
         widget : QWidget
             The widget to be added as tab.
-
-        Returns
-        -------
-        None.
 
         '''
         icon, title = widget.windowIcon(), widget.windowTitle()
@@ -695,10 +689,6 @@ class MainTabWidget(cObj.StyledTabWidget):
         index : int
             The tab index in the tab bar.
 
-        Returns
-        -------
-        None.
-
         '''
     # The tab is closed only if the widget closeEvent is accepted
         closed = self.widget(index).close()
@@ -717,10 +707,6 @@ class MainTabWidget(cObj.StyledTabWidget):
         ----------
         index : int
             The indec of the tab to be detached.
-
-        Returns
-        -------
-        None.
 
         '''
         wid = self.widget(index)
@@ -745,10 +731,6 @@ class MainTabWidget(cObj.StyledTabWidget):
         e : dragEvent
             The dragEvent triggered by the user's drag action.
 
-        Returns
-        -------
-        None.
-
         '''
         if isinstance(e.source(), tools.DraggableTool):
             e.accept()
@@ -762,10 +744,6 @@ class MainTabWidget(cObj.StyledTabWidget):
         ----------
         e : dropEvent
             The dropEvent triggered by the user's drag & drop action.
-
-        Returns
-        -------
-        None.
 
         '''
         if isinstance(e.source(), tools.DraggableTool):

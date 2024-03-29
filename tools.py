@@ -1220,47 +1220,40 @@ class MineralClassifier(DraggableTool):
     One of the main tools of X-Min Learn, that allows the classification of
     input maps using pre-trained eager ML models, ROI-based lazy ML algorithms
     and/or clustering algorithms. It also allows sub-phase classifications.
+
     '''
 
     inputDataChanged = pyqtSignal()
 
     def __init__(self):
         '''
-        MineralClassifier class constructor.
-
-        Parameters
-        ----------
-        main_window : QMainWindow
-            The main window of X-Min Learn.
-
-        Returns
-        -------
-        None.
+        Constructor.
 
         '''
         super(MineralClassifier, self).__init__()
+
     # Set tool title and icon
         self.setWindowTitle('Mineral Classifier')
         self.setWindowIcon(QIcon('Icons/classify.png'))
+
     # Set main attributes
         self.input_maps = []
         self.output_maps = [] # list of MineralMap objects
+
     # Initialize classification thread states and attributes
         self._isBusyClassifying = False
         self._current_worker = None
+
     # Set GUI
         self._init_ui()
         self.adjustSize()
+
     # Connect signals to slots
         self._connect_slots()
 
     def _init_ui(self):
         '''
-        MineralClassifier class GUI constructor.
-
-        Returns
-        -------
-        None.
+        GUI constructor.
 
         '''
     # Sample selector (Auto-update Combo Box)
@@ -1270,7 +1263,8 @@ class MineralClassifier(DraggableTool):
         self.inmaps_list = cObj.StyledListWidget()
 
     # Classifier panel (Tab Widget)
-        self.classifier_panel = cObj.StyledTabWidget()
+        self.classifier_panel = QW.QTabWidget()
+        self.classifier_panel.setStyleSheet(pref.SS_tabWidget)
         self.classifier_panel.addTab(self.PreTrainedClassifierTab(self),
                                      'Pre-trained')
         self.classifier_panel.addTab(self.RoiBasedClassifierTab(self),
@@ -1337,11 +1331,7 @@ class MineralClassifier(DraggableTool):
 
     def _connect_slots(self):
         '''
-        MineralClassifier class signals-slots connector.
-
-        Returns
-        -------
-        None.
+        Signals-slots connector.
 
         '''
     # Update samples list when interacting with the sample selector
@@ -1366,79 +1356,97 @@ class MineralClassifier(DraggableTool):
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
 
 
-    def updateSamples(self, samples):
+    def updateSamples(self, samples:list):
         '''
-        Collects updated samples information from the Data Manager pane. This
-        information is also used to populate the sample selector combo box.
-
-        Returns
-        -------
-        None.
-
-        '''
-    # Get the names of currently loaded samples in the Data Manager pane
-        # samples = self.main_win.dataManager.getAllGroups()
-        samples_names = [s.text(0) for s in samples]
-    # Refresh the sample selector combo box
-        self.sample_combox.clear()
-        self.sample_combox.addItems(samples_names)
-
-
-    def updateInmapsList(self, inmaps_subgr):
-        '''
-        Updates the list of currently loaded input maps owned by the sample
-        identified with index <sample_index> in the Data Manager. This function
-        is called every time the user activates the sample selector combo box.
+        Populate the samples combobox with the samples currently loaded in the
+        Data Manager. This function is called by the main window when the 
+        combobox is clicked.
 
         Parameters
         ----------
-        sample_idx : int
-            The index that defines the selected sample in the Data Manager.
+        samples : list
+            List of DataGroup objects.
 
-        Returns
-        -------
-        None.
+        '''
+        samples_names = [s.text(0) for s in samples]
+        self.sample_combox.updateItems(samples_names)
+
+
+    def updateInmapsList(self, inmaps_subgr:cObj.DataSubGroup):
+        '''
+        Updates the list of currently loaded input maps owned by the sample 
+        currently selected in the samples combobox. This function is called by
+        the main window when a new item is selected in the sample combobox.
+
+        Parameters
+        ----------
+        inmaps_subgr : DataSubGroup
+            The input maps subgroup of the currently selected sample.
 
         '''
     # Clear the input maps lists
         self.input_maps.clear()
         self.inmaps_list.clear()
-    # Get the inmaps subgroup from selected sample (=group)
-        # inmaps_subgr = self.main_win.dataManager.topLevelItem(sample_idx).inmaps
 
-        # Get every input map object (=DataObject) and get their data & names
-        if not inmaps_subgr.isEmpty():
-            inmaps = inmaps_subgr.getChildren()
-            data, names = zip(*(i.get('data', 'name') for i in inmaps))
+    # Exit function if the subgroup is empty
+        if inmaps_subgr.isEmpty():
+            return
 
-        # Populate the input maps list with input maps names
-            items = [QW.QListWidgetItem(n, self.inmaps_list) for n in names]
-        # Add checkboxes to each item
-            for i in items: i.setCheckState(Qt.Checked)
+    # Get every input map object (= DataObject) and get their data and names
+        inmaps = inmaps_subgr.getChildren()
+        data, names = zip(*(i.get('data', 'name') for i in inmaps))
 
-        # Store input maps
-            self.input_maps = list(data)
+    # Populate the input maps list with input maps names
+        items = [QW.QListWidgetItem(n, self.inmaps_list) for n in names]
 
-        # Send a signal to inform that input maps data changed
-            self.inputDataChanged.emit()
+    # Add checkboxes to each item
+        for i in items: i.setCheckState(Qt.Checked)
+
+    # Store input maps data
+        self.input_maps = list(data)
+
+    # Send a signal to inform that input maps data changed
+        self.inputDataChanged.emit()
 
 
     def _getCheckedInputMaps(self):
+        '''
+        Get the data of currently checked input maps.
+
+        Returns
+        -------
+        checked_maps : list
+            List of checked input maps data.
+
+        '''
         checked_idx = [i.checkState() for i in self.inmaps_list.getItems()]
         checked_maps = [m for m, c in zip(self.input_maps, checked_idx) if c]
         return checked_maps
 
     def _getCheckedInputMapsNames(self):
+        '''
+        Get the names of currently checked input maps.
+
+        Returns
+        -------
+        checked_names : list
+            List of checked input maps names.
+
+        '''
         items = self.inmaps_list.getItems()
         checked_names = [i.text() for i in items if i.checkState()]
         return checked_names
 
     def updateClassifyButtonState(self):
+        '''
+        Toggle on/off the CLASSIFY button.
+
+        '''
         enabled = len(self.input_maps)
         self.classify_btn.setEnabled(enabled)
 
 
-    def showContextMenu(self, point):
+    def showContextMenu(self, point:QPoint):
         '''
         Shows a context menu with custom actions.
 
@@ -1447,10 +1455,6 @@ class MineralClassifier(DraggableTool):
         point : QPoint
             The position of the context menu event that the widget receives.
 
-        Returns
-        -------
-        None.
-
         '''
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navTbar)
@@ -1458,16 +1462,40 @@ class MineralClassifier(DraggableTool):
         menu.exec(QCursor.pos())
 
 
-    def showInputMap(self, index):
-        if index == -1: return
+    def showInputMap(self, index:int):
+        '''
+        Display input maps at index <index> in the maps viewer.
+
+        Parameters
+        ----------
+        index : int
+            Index of the input map in the input maps list.
+
+        '''
+    # Exit function if index is invalid (safety)
+        if index == -1: 
+            return
+        
+    # Get data required to plot the map 
         array = self.input_maps[index].map
         sample_name = self.sample_combox.currentText()
         map_name = self.inmaps_list.item(index).text()
         title = f'{sample_name} - {map_name}'
+
+    # Plot the map
         self.canvas.draw_heatmap(array, title)
 
 
-    def _setProgression(self, step_description):
+    def _setProgression(self, step_description:str):
+        '''
+        Update the classification progress bar.
+
+        Parameters
+        ----------
+        step_description : str
+            Current process description.
+
+        '''
         self.progbar.setValue(self.progbar.value() + 1)
         self.progdesc.setText(step_description)
 
@@ -2772,7 +2800,8 @@ class DatasetBuilder(DraggableTool):
         elem_scroll = cObj.GroupScrollArea(elem_grid)
 
     # Custom feature entry (Line Edit)
-        self.customEntry_lbl = cObj.StyledLineEdit()
+        self.customEntry_lbl = QW.QLineEdit()
+        self.customEntry_lbl.setStyleSheet(pref.SS_menu)
         self.customEntry_lbl.setPlaceholderText('Custom feature name')
         self.customEntry_lbl.returnPressed.connect(self.add_inputFeature)
 
