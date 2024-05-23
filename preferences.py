@@ -20,8 +20,8 @@ settings = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
 BLACK_PEARL = '#19232D'         # (25, 35, 45)
 # CASPER = '#A9B9BC'              # (169, 185, 188)
 CASPER = '#C9C9C9'              # (201, 201, 201)
-# CASPER_dark = '#9AA8AB'         # (154, 168, 171)
-CASPER_dark = '#B0B0B0'         # (188, 188, 188)
+# CASPER_DARK = '#9AA8AB'         # (154, 168, 171)
+CASPER_DARK = '#B0B0B0'         # (188, 188, 188)
 SAN_MARINO = '#497096'          # (73, 112, 150)
 IVORY = '#F9F9F4'               # (249, 249, 244)
 BLOSSOM = '#EEB5B6'             # (238, 181, 182)
@@ -82,10 +82,10 @@ SS_splitter = (
             background-color: %s;
             border: 1px solid %s;
             border-radius: 2px;
-            margin: 3px;}'''
+            margin: 10px;}'''
     '''QSplitter::handle:hover {
             background-color: %s;}'''
-    %(BLACK_PEARL, BLACK_PEARL, SAN_MARINO))
+    %(SAN_MARINO, BLACK_PEARL, BLOSSOM))
 
 
 SS_horizScrollBar = (
@@ -129,7 +129,7 @@ SS_horizScrollBar = (
     '''QScrollBar::left-arrow:horizontal:pressed,
        QScrollBar::right-arrow:horizontal:pressed {
             background: %s;}'''
-    %(BLACK_PEARL, CASPER_dark, BLACK_PEARL, IVORY, SAN_MARINO, SAN_MARINO,
+    %(BLACK_PEARL, CASPER_DARK, BLACK_PEARL, IVORY, SAN_MARINO, SAN_MARINO,
       BLACK_PEARL, BLACK_PEARL, SAN_MARINO, SAN_MARINO, BLACK_PEARL,
       BLACK_PEARL, SAN_MARINO, SAN_MARINO, IVORY, BLACK_PEARL))
 
@@ -176,7 +176,7 @@ SS_vertScrollBar = (
     '''QScrollBar::up-arrow:vertical:pressed,
        QScrollBar::down-arrow:vertical:pressed {
             background: %s;}'''
-    %(BLACK_PEARL, CASPER_dark, BLACK_PEARL, IVORY, SAN_MARINO, SAN_MARINO,
+    %(BLACK_PEARL, CASPER_DARK, BLACK_PEARL, IVORY, SAN_MARINO, SAN_MARINO,
       BLACK_PEARL, BLACK_PEARL, SAN_MARINO, SAN_MARINO, BLACK_PEARL,
       BLACK_PEARL, SAN_MARINO, SAN_MARINO, IVORY, BLACK_PEARL))
 
@@ -188,6 +188,10 @@ SS_combox = (
             border-radius: 3px;
             color: black;
             selection-background-color: %s;}'''
+    '''QComboBox:!enabled {
+            background-color: lightgray;
+            border: 1px solid gray;
+            color: darkgray;}'''
     '''QComboBox:hover {
             border: 2px solid %s;}'''
     '''QComboBox::drop-down {
@@ -196,6 +200,8 @@ SS_combox = (
             subcontrol-origin: padding;
             subcontrol-position: top right;
             width: 16px;}'''
+    '''QComboBox::drop-down:!enabled {
+            background-color: gray;}'''
     '''QComboBox::down-arrow {
             image: url(Icons/arrowDown.png);}'''
     '''QComboBox QAbstractItemView {
@@ -211,6 +217,9 @@ SS_button = (
             border: 1px solid %s;
             border-radius: 4px;
             padding: 5px;}'''
+    '''QPushButton:!enabled {
+            background-color: lightgray;
+            border: 1px solid gray;}'''
     '''QPushButton:flat {
             border: none;
             background-color: transparent;}'''
@@ -226,6 +235,10 @@ SS_button = (
     %(IVORY, BLACK_PEARL, BLOSSOM, BLACK_PEARL, BLOSSOM, BLACK_PEARL))
 
 
+SS_radioButton = (
+    '''QRadioButton::indicator::checked {
+            image: url(Icons/radiobtn_checked.png);}''')
+
 SS_dataManager = (SS_menu +
     '''QTreeWidget::branch:has-children:!has-siblings:closed,
        QTreeWidget::branch:closed:has-children:has-siblings {
@@ -240,11 +253,7 @@ SS_dataManager = (SS_menu +
 SS_tabWidget = (
     '''QTabWidget::pane {
             background: %s;
-            border: 2px solid %s;
-            border-top: 3px solid %s;
-            border-top-right-radius: 4px;
-            border-bottom-right-radius: 4px;
-            border-bottom-left-radius: 4px;}'''
+            border-width: 0px;}'''
     '''QTabBar::tab {
             background: %s;
             border: 1px solid darkgray;
@@ -253,8 +262,10 @@ SS_tabWidget = (
             min-width: 8ex;
             padding-top: 2px;
             padding-bottom: 2px;
-            padding-right: 10px;
-            padding-left: 10px;}'''
+            padding-right: 6px;
+            padding-left: 6px;
+            margin-left: 4px;
+            margin-right: 4px;}'''
     '''QTabBar::tab:!selected {
             margin-top: 3px;}'''
     '''QTabBar::tab:selected {
@@ -262,8 +273,20 @@ SS_tabWidget = (
             border-bottom: 5px solid %s;}'''
     '''QTabBar::tab:hover {
             background: %s;}'''
-    %(CASPER_dark, SAN_MARINO, SAN_MARINO, IVORY, SAN_MARINO, SAN_MARINO,
-      SAN_MARINO))
+    %(CASPER_DARK, IVORY, SAN_MARINO, SAN_MARINO, SAN_MARINO))
+
+
+ss_mainTabWidget = (SS_tabWidget +
+    '''QTabWidget::pane {
+            border: 2px solid %s;
+            border-top: 3px solid %s;
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 4px;
+            border-bottom-left-radius: 4px;
+            margin-right: 4px;
+            margin-bottom: 4px;
+            margin-left: 4px;}'''
+    %(SAN_MARINO, SAN_MARINO))
 
 
 SS_table = (
@@ -282,38 +305,58 @@ SS_pathLabel = (
     %(SAN_MARINO))
 
 
-SS_groupArea = (
+SS_grouparea_notitle = (   
     '''QGroupBox {
             background-color: %s;
             border: 1px solid %s;
-            border-radius: 4px;
-            font: bold;
-            padding-top: 3ex;}'''
-    '''QGroupBox::title {
-            color: black;
-            subcontrol-origin: padding;
-            subcontrol-position: top;}'''
+            border-radius: 3px;
+            padding-top: 2px;}'''
     %(CASPER, BLACK_PEARL))
 
+
+SS_grouparea_title = (SS_grouparea_notitle + 
+    '''QGroupBox {
+            font: bold;
+            padding-top: 7ex;}'''
+    '''QGroupBox::title {
+            color: black;
+            padding: 2ex;
+            subcontrol-origin: padding;}''')
+
+
+SS_groupScrollArea_frame = (
+    '''QScrollArea {
+            border: 1px solid %s;
+            padding: 1px;}'''
+    %(BLACK_PEARL))
+
+
+SS_groupScrollArea_noframe = (SS_groupScrollArea_frame +
+    '''QScrollArea {
+            border-color: transparent;}''')          
 
 SS_toolbar = (SS_menu +
     '''QToolButton:hover {
             background-color: %s;}'''
-    %(BLOSSOM))
+    '''QToolBar::separator {
+            background: %s;
+            height: 2px;
+            margin: 7px;
+            width: 2px;}'''
+    %(BLOSSOM, SAN_MARINO))
 
 
-SS_mainToolbar = (
+SS_mainToolbar = (SS_toolbar + 
     '''QToolBar {
             background-color: %s;
             border: 2px solid %s;
             border-radius: 3px;
             border-style: outset;
+            margin: 4px;
             spacing: 16px;}'''
     '''QToolButton {
             padding: 10px;}'''
-    '''QToolButton:hover {
-            background-color: %s;}'''
-    %(CASPER_dark, BLACK_PEARL, BLOSSOM))
+    %(CASPER_DARK, BLACK_PEARL))
 
 
 SS_mainWindow = (
@@ -330,6 +373,7 @@ SS_mainWindow = (
 
 SS_pane = (
     '''QDockWidget {
+        border: 1px solid %s;
         font-weight: bold;}'''
     '''QDockWidget::title {
         background: %s;}'''
@@ -342,7 +386,7 @@ SS_pane = (
     '''QDockWidget::close-button:pressed, QDockWidget::float-button:pressed {
         border: 2px solid %s;
         padding: 1px;}'''
-    %(CASPER_dark, IVORY, SAN_MARINO, BLOSSOM, SAN_MARINO))
+    %(BLACK_PEARL, CASPER_DARK, IVORY, SAN_MARINO, BLOSSOM, SAN_MARINO))
 
 
 

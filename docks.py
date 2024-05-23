@@ -6,15 +6,17 @@ Created on Tue Mar  26 11:25:14 2024
 """
 
 import os
-import numpy as np
 
-from PyQt5 import QtWidgets as QW
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
+from PyQt5 import QtWidgets as QW
+
+import numpy as np
 
 from _base import InputMap, Mask, MineralMap, RoiMap
 import conv_functions as CF
 import customObjects as cObj
+import dialogs as dial
 import plots
 import preferences as pref
 
@@ -644,7 +646,7 @@ class DataManager(QW.QTreeWidget):
                     mmap = MineralMap.load(p)
                 # Convert legacy mineral maps to new file format (mmp)
                     if os.path.splitext(p)[1] != '.mmp':
-                        mmap.save(CF.extendFileName(p, '', '.mmp'))
+                        mmap.save(CF.extend_filename(p, '', '.mmp'))
                     group.minmaps.addData(mmap)
 
                 except Exception as e:
@@ -828,7 +830,7 @@ class DataManager(QW.QTreeWidget):
 
             # Also save the encoder if user requests it
                 if choice.checkBox().isChecked():
-                    encoder_path = CF.extendFileName(outpath, '_transDict')
+                    encoder_path = CF.extend_filename(outpath, '_transDict')
                     rows, cols = mmap.shape
                     with open(encoder_path, 'w') as ep:
                         for id_, lbl in mmap.encoder.items():
@@ -940,8 +942,7 @@ class HistogramViewer(QW.QWidget):
         '''
     # Histogram Canvas
         self.canvas = plots.HistogramCanvas(logscale=True, size=(3, 1.5),
-                                            wheelZoomEnabled=False,
-                                            wheelPanEnabled=False)
+                                            wheel_zoom=False, wheel_pan=False)
         self.canvas.ax.get_yaxis().set_visible(False)
         self.canvas.setMinimumSize(300, 200)
         # self.canvas.setFixedSize(300, 200) # for better performance
@@ -953,7 +954,7 @@ class HistogramViewer(QW.QWidget):
     # Navigation Toolbar
         self.navTbar = plots.NavTbar(self.canvas, self, coords=False)
         self.navTbar.fixHomeAction()
-        self.navTbar.removeToolByIndex([3, 4, 5, 8, 9])
+        self.navTbar.removeToolByIndex([3, 4, 8, 9])
 
     # Toggle log scale [-> NavTbar Action]
     # set a proper icon
@@ -965,8 +966,7 @@ class HistogramViewer(QW.QWidget):
                                   self.logscale_action)
 
     # HeatMap scaler toolbar
-        self.scaler_tbar = QW.QToolBar('Histogram scaler toolbar')
-        self.scaler_tbar.setStyleSheet(pref.SS_toolbar)
+        self.scaler_tbar = cObj.StyledToolbar('Histogram scaler toolbar')
 
     # Toggle scaler action [-> Heatmap scaler toolbar]
         self.scaler_action = QW.QAction(QIcon('Icons/range.png'),
@@ -1002,7 +1002,6 @@ class HistogramViewer(QW.QWidget):
     # Add widgets to Heatmap scaler toolbar
         self.scaler_tbar.addWidget(self.scaler_vmin)
         self.scaler_tbar.addWidget(self.scaler_vmax) 
-        self.scaler_tbar.addSeparator()
         self.warn_icon = self.scaler_tbar.addWidget(warn_lbl)
         self.warn_icon.setVisible(False) 
 
@@ -1236,7 +1235,7 @@ class HistogramViewer(QW.QWidget):
     # If the legacy mask exists, intersect it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mask_array = CF.merge_masks([mask_array, legacy_mask], mode='I')
+            mask_array = CF.binary_merge([mask_array, legacy_mask], mode='I')
         mask = Mask(mask_array)
 
     # Save mask file
@@ -1325,9 +1324,9 @@ class ModeViewer(QW.QTabWidget):
 
     # Canvas
         self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
-                                      wheelPanEnabled=False,
-                                      wheelZoomEnabled=False)
-        self.canvas.setMinimumSize(200, 200)
+                                      layout='constrained', wheel_zoom=False,
+                                      wheel_pan=False)
+        self.canvas.setMinimumSize(200, 350)
 
     # Navigation Toolbar
         self.navTbar = plots.NavTbar(self.canvas, self, coords=False)
@@ -1335,7 +1334,7 @@ class ModeViewer(QW.QTabWidget):
 
     # Show Labels Action in Navigation Toolbar (Show class %)
         self.showLabels_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                            'Show Amounts', self.navTbar)
+                                            'Show amounts', self.navTbar)
         self.showLabels_action.setCheckable(True)
         self.navTbar.insertAction(self.navTbar.findChildren(QW.QAction)[10],
                                   self.showLabels_action)
@@ -1442,7 +1441,7 @@ class ModeViewer(QW.QTabWidget):
         self.legend.clear()
 
 
-    def onColorChanged(self, legend_item, color):
+    def onColorChanged(self, legend_item:QW.QTreeWidgetItem, color:tuple):
         '''
         Alter the displayed color of a class. This function propagates the
         changes to the mineral map, the map canvas, the mode bar plot and the
@@ -1506,7 +1505,7 @@ class ModeViewer(QW.QTabWidget):
         self._current_data_object.setEdited(True)
 
 
-    def onClassRenamed(self, legend_item, new_name):
+    def onClassRenamed(self, legend_item:QW.QTreeWidgetItem, new_name:str):
         '''
         Rename a class. This function propagates the changes to the mineral
         map, the map canvas, the mode bar plot and the legend. It also sets the
@@ -1531,13 +1530,13 @@ class ModeViewer(QW.QTabWidget):
             minmap.rename_phase(old_name, new_name)
         else:
             return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'{new_name} is already taken.')
+                                           f'{new_name} is already taken')
 
     # Request update scene
         self.updateSceneRequested.emit(self._current_data_object)
 
     # # Update the image canvas
-    #     mmap, enc, col = minmap.get_plotData()
+    #     mmap, enc, col = minmap.get_plot_data()
     #     self.map_canvas.draw_discretemap(mmap, enc, col)
 
     # # Update the mode canvas
@@ -1550,7 +1549,22 @@ class ModeViewer(QW.QTabWidget):
         self._current_data_object.setEdited(True)
 
 
-    def onClassMerged(self, classes, new_name):
+    def onClassMerged(self, classes:list, new_name:str):
+        '''
+        Merge two or more classes into a new one. This function propagates the 
+        changes to the mineral map, the map canvas, the mode bar plot and the 
+        legend. It also sets the linked data object as edited. The arguments of 
+        this function are specifically compatible with the itemsMergeRequested 
+        signal emitted by the legend (see Legend object for more details).
+
+        Parameters
+        ----------
+        classes : list
+            List of class names.
+        new_name : str
+            New name for the merged class.
+
+        '''
     # Get mineral map data
         minmap = self._current_data_object.get('data')
 
@@ -1558,7 +1572,7 @@ class ModeViewer(QW.QTabWidget):
         minmap.merge_phases(classes, new_name)
 
     # # Update the image canvas
-    #     mmap, enc, col = minmap.get_plotData()
+    #     mmap, enc, col = minmap.get_plot_data()
     #     self.map_canvas.draw_discretemap(mmap, enc, col)
 
     # # Update the mode canvas
@@ -1574,9 +1588,25 @@ class ModeViewer(QW.QTabWidget):
         self._current_data_object.setEdited(True)
 
 
-    def onItemHighlighted(self, toggled, item_idx):
+    def onItemHighlighted(self, toggled:bool, legend_item:QW.QTreeWidgetItem):
+        '''
+        Highlight on/off the selected mineral class in the map canvas. The 
+        arguments of this function are specifically compatible with the 
+        itemHighlightRequested signal emitted by the legend (see Legend object 
+        for more details).
+
+        Parameters
+        ----------
+        toggled : bool
+            Highlight on/off
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested to be highlighted.
+
+        '''
         if toggled:
-            vmin, vmax = item_idx, item_idx + 0.5
+            minmap = self._current_data_object.get('data')
+            phase_id = minmap.as_id(legend_item.text(1))
+            vmin, vmax = phase_id - 0.5, phase_id + 0.5
         else:
             vmin, vmax = None, None
 
@@ -1601,7 +1631,7 @@ class ModeViewer(QW.QTabWidget):
     # If a legacy mask exists, intersect it with the new mask
         _, legacy_mask = self.map_canvas.get_map(return_mask=True)
         if legacy_mask is not None:
-            mask = CF.merge_masks([mask, legacy_mask], mode='I')
+            mask = CF.binary_merge([mask, legacy_mask], mode='I')
 
     # Create a new Mask object
         mask = Mask(mask)
@@ -1672,8 +1702,7 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Toolbar
-        self.toolbar = QW.QToolBar('ROI Toolbar', self)
-        self.toolbar.setStyleSheet(pref.SS_toolbar)
+        self.toolbar = cObj.StyledToolbar('ROI toolbar')
 
     # Load ROI map [-> Toolbar Action]
         self.load_action = QW.QAction(QIcon(r'Icons/import.png'),
@@ -1686,6 +1715,13 @@ class RoiEditor(QW.QWidget):
     # Save ROI map as... [-> Toolbar Action]
         self.saveas_action = QW.QAction(QIcon(r'Icons/save_as.png'),
                                         'Save ROI map as...', self.toolbar)
+        
+    # Auto detect ROI [-> Toolbar Action]
+        self.autoroi_action = QW.QAction(QIcon(r'Icons/roi_detection.png'),
+                                         'Auto detect ROI', self.toolbar)
+        
+    # Auto detect ROI dialog
+        self.autoroi_dial = dial.AutoRoiDetector()
 
     # Toggle ROI selection [-> Toolbar Action]
         self.draw_action = QW.QAction(QIcon(r'Icons/roi_selection.png'),
@@ -1731,8 +1767,9 @@ class RoiEditor(QW.QWidget):
         self.toolbar.addActions((self.load_action, self.save_action,
                                  self.saveas_action))
         self.toolbar.addSeparator()
-        self.toolbar.addActions((self.draw_action, self.addroi_action,
-                                 self.extr_mask_action, self.pref_action))
+        self.toolbar.addActions((self.autoroi_action, self.draw_action, 
+                                 self.addroi_action, self.extr_mask_action, 
+                                 self.pref_action))
 
     # Loaded ROI map path (Path Label)
         self.mappath = cObj.PathLabel(full_display=False)
@@ -1761,9 +1798,8 @@ class RoiEditor(QW.QWidget):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
 
     # Bar plot canvas
-        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4),
-                                         wheelZoomEnabled=False,
-                                         wheelPanEnabled=False)
+        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4), layout='constrained',
+                                         wheel_zoom=False, wheel_pan=False)
         self.barCanvas.setMinimumSize(300, 300)
 
     # Bar plot Navigation toolbar
@@ -1813,6 +1849,15 @@ class RoiEditor(QW.QWidget):
     # Save ROI map to file
         self.save_action.triggered.connect(self.saveRoiMap)
         self.saveas_action.triggered.connect(lambda: self.saveRoiMap(True))
+
+    # Launch ROI detector dialog
+        self.autoroi_action.triggered.connect(self.autoroi_dial.show)
+
+    # Connect ROI detector dialog signals
+        self.autoroi_dial.requestRoiMap.connect(
+            lambda: self.autoroi_dial.set_current_roimap(self.current_roimap))
+        self.autoroi_dial.drawingRequested.connect(self.addAutoRoi)
+
 
     # Toggle on/off the Rectangle Selector
         self.draw_action.toggled.connect(self.toggleRectSelect)
@@ -1885,11 +1930,13 @@ class RoiEditor(QW.QWidget):
         drawn ROI.
 
         '''
-        if self.current_roimap is not None:
+    # Clear the canvas if the RoiMap is None or empty
+        if not self.current_roimap or not self.current_roimap.class_count:
+            self.barCanvas.clear_canvas()
+    # Otherwise update the canvas
+        else:
             names, counts = zip(*self.current_roimap.class_count.items())
             self.barCanvas.update_canvas(counts, names, 'ROIs Counter')
-        else:
-            self.barCanvas.clear_canvas()
 
 
     def showTableContextMenu(self, point):
@@ -2055,7 +2102,7 @@ class RoiEditor(QW.QWidget):
         name = item.text()
 
     # Update the ROI map
-        self.current_roimap.renameRoi(idx, name)
+        self.current_roimap.rename_roi(idx, name)
 
     # Update the patch
         self.editPatchAnnotation(idx, name)
@@ -2207,6 +2254,30 @@ class RoiEditor(QW.QWidget):
         self._redraw()
 
 
+    def addAutoRoi(self, auto_roimap):
+    
+    # Create a new ROI map if there was no existent ROI map
+        if self.current_roimap is None:
+            self.mappath.setPath('*Unsaved ROI map')
+            self.current_roimap = auto_roimap
+    
+    # Otherwise add the new ROIs to the current ROI map
+        else:
+            # We can save some time by switching off safe mode. We are already
+            # sure that the new ROIs do NOT overlap with the current ones.
+            self.current_roimap.overwrite_roimap(auto_roimap, safe=False)
+
+    # Add new ROIs to table and canvas
+        for name, bbox in auto_roimap.roilist:
+            area = auto_roimap.bbox_area(bbox)
+            self.addRoiToTable(name, area)
+            self.addPatchToCanvas(name, bbox)
+    
+    # Refresh view
+        self.updateBarPlot()
+        self._redraw()
+        
+
     def addRoi(self):
         '''
         Wrapper function to easily add a new ROI with the extents of the
@@ -2229,7 +2300,7 @@ class RoiEditor(QW.QWidget):
 
     # If no ROI map is loaded, then create a new one.
         if self.current_roimap is None:
-            self.current_roimap = RoiMap.fromShape(map_shape)
+            self.current_roimap = RoiMap.from_shape(map_shape)
             self.mappath.setPath('*Unsaved ROI map')
 
     # Send a warning if a ROI map is loaded and has different shape of the map
@@ -2244,15 +2315,20 @@ class RoiEditor(QW.QWidget):
         # Exit function if user does not want to procede
             if choice == QW.QMessageBox.No: return
 
+    # Prevent drawing overlapping ROIs
+        if self.current_roimap.bbox_overlaps(bbox):
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'ROIs cannot overlap')
+
     # Show the dialog to type the ROI name
         text = 'Type name (max 8 ASCII characters)'
         name, ok = QW.QInputDialog.getText(self, 'X-Min Learn', text)
 
     # Proceed only if the new name is an ASCII <= 8 characters string
         if ok and 0 < len(name) < 9 and name.isascii():
-            area = self.current_roimap.bboxArea(bbox)
+            area = self.current_roimap.bbox_area(bbox)
         # Add to roimap
-            self.current_roimap.addRoi(name, bbox)
+            self.current_roimap.add_roi(name, bbox)
         # Add to table
             self.addRoiToTable(name, area)
         # Add to patches list and canvas
@@ -2327,12 +2403,12 @@ class RoiEditor(QW.QWidget):
             return
 
     # Initialize a new Mask of 1's and invert it to draw 'holes' using extents
-        mask = Mask.fromShape(shape, fillwith=1)
-        mask.invertRegion(extents)
+        mask = Mask.from_shape(shape, fillwith=1)
+        mask.invert_region(extents)
 
     # If the legacy mask exists, intersect it with the new mask
         if legacy_mask is not None:
-            mask.mask = CF.merge_masks([mask.mask, legacy_mask], mode='I')
+            mask.mask = CF.binary_merge([mask.mask, legacy_mask], mode='I')
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
@@ -2360,20 +2436,20 @@ class RoiEditor(QW.QWidget):
 
     # Initialize a new Mask of 1's with the shape of the current ROI map
         shape = self.current_roimap.shape
-        mask = Mask.fromShape(shape, fillwith=1)
+        mask = Mask.from_shape(shape, fillwith=1)
 
     # Use the extents of the selected ROIs to draw 'holes' (0's) on the mask
         for idx in selected:
-            roi_bbox = self.current_roimap.rois[idx][1]
-            extents = self.current_roimap.bboxToExtents(roi_bbox)
-            mask.invertRegion(extents)
+            roi_bbox = self.current_roimap.roilist[idx][1]
+            extents = self.current_roimap.bbox_to_extents(roi_bbox)
+            mask.invert_region(extents)
 
     # If there is a loaded image that has the same shape of the current ROI map
     # and it has a legacy mask, intersect it with the new mask
         if not self.canvas.is_empty():
             array, legacy_mask = self.canvas.get_map(return_mask=True)
             if array.shape == shape and legacy_mask is not None:
-                mask.mask = CF.merge_masks([mask.mask, legacy_mask], mode='I')
+                mask.mask = CF.binary_merge([mask.mask, legacy_mask], mode='I')
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
@@ -2408,7 +2484,7 @@ class RoiEditor(QW.QWidget):
 
             for row in sorted(selected, reverse=True):
             # Remove from roimap
-                self.current_roimap.delRoi(row)
+                self.current_roimap.del_roi(row)
             # Remove from table
                 self.table.removeRow(row)
             # Remove from patches list and canvas
@@ -2476,8 +2552,8 @@ class RoiEditor(QW.QWidget):
                                        detailedText = repr(e))
 
         # Populate the canvas and the ROIs table with the loaded ROIs
-            for name, bbox in self.current_roimap.rois:
-                area = self.current_roimap.bboxArea(bbox)
+            for name, bbox in self.current_roimap.roilist:
+                area = self.current_roimap.bbox_area(bbox)
                 self.addRoiToTable(name, area)
                 self.addPatchToCanvas(name, bbox)
             progbar.increase()
@@ -2587,8 +2663,7 @@ class ProbabilityMapViewer(QW.QWidget):
         self.navTbar.removeToolByIndex([3, 4, 8, 9])
 
     # View Range toolbar
-        self.rangeTbar = QW.QToolBar(self)
-        self.rangeTbar.setStyleSheet(pref.SS_toolbar)
+        self.rangeTbar = cObj.StyledToolbar('Probability range toolbar')
 
     # Toggle range selection [-> View Range Toolbar]
         self.toggle_range_action = QW.QAction(QIcon(r'Icons/range.png'), 
@@ -2627,7 +2702,6 @@ class ProbabilityMapViewer(QW.QWidget):
     # Add widgets to View Range Toolbar
         self.rangeTbar.addWidget(self.min_input)
         self.rangeTbar.addWidget(self.max_input)
-        self.rangeTbar.addSeparator()
         self.warn_icon = self.rangeTbar.addWidget(warn_lbl)
         self.warn_icon.setVisible(False)
 
@@ -2738,7 +2812,7 @@ class ProbabilityMapViewer(QW.QWidget):
     # If the legacy mask exists, intersect it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mask_array = CF.merge_masks([mask_array, legacy_mask], mode='I')
+            mask_array = CF.binary_merge([mask_array, legacy_mask], mode='I')
         mask = Mask(mask_array)
 
     # Save mask file

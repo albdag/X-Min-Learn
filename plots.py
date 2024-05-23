@@ -5,193 +5,90 @@ Created on Mon Jan 23 09:14:45 2023
 @author: albdag
 """
 
-from PyQt5.QtGui import QCursor, QMouseEvent
-from PyQt5.QtCore import Qt, QSize, QTimer
+from weakref import proxy
+from typing import Iterable
+
+from PyQt5.QtCore import QObject, Qt, QSize
+from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QWidgetAction
 
-import preferences as pref
-import customObjects as cObj
-
 import numpy as np
-import os
-from weakref import proxy
+import matplotlib as mpl
+import mpl_interactions
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
-import matplotlib as MPL
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_interactions import panhandler
+import customObjects as cObj
+import preferences as pref
 
-
-# MPL.use('Qt5Agg')
+# mpl.use('Qt5Agg')
 
 
 
 
-
-class PanHandler(panhandler):
-    '''Reimplemantation of the <panhandler> class from mpl_interactions library. It simply adds
-    a couple of functions to control the type of cursor'''
-
+class PanHandler(mpl_interactions.panhandler):
+    '''
+    Reimplemantation of the <panhandler> class from mpl_interactions library. 
+    It simply adds a couple of functions to control the type of cursor.
+    '''
     _pressCursor = QCursor(Qt.ClosedHandCursor)
     _releaseCursor = QCursor(Qt.ArrowCursor)
 
-    def __init__(self, fig, button=2):
+    def __init__(self, fig: mpl.figure.Figure, button=2):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        fig : Figure
+            Matplotlib figure.
+        button : int, optional
+            Mouse button that triggers the pan. 1: left-click, 2: middle-click,
+             3: right-click. The default is 2.
+
+        '''
         super(PanHandler, self).__init__(fig, button)
         self.wheelButton = button
 
-    def press(self, event):
+    def press(self, event: mpl.backend_bases.MouseEvent):
+        '''
+        Reimplementation of the press event. It just changes the cursor.
+
+        Parameters
+        ----------
+        event : MouseEvent
+            The mouse press event.
+
+        '''
         if event.button == self.wheelButton:
             self._releaseCursor = self.fig.canvas.cursor()
             self.fig.canvas.setCursor(self._pressCursor)
             super(PanHandler, self).press(event)
 
-    def release(self, event):
+
+    def release(self, event: mpl.backend_bases.MouseEvent):
+        '''
+        Reimplementation of the release event. It just changes the cursor.
+
+        Parameters
+        ----------
+        event : MouseEvent
+            The mouse release event.
+
+        '''
         if event.button == self.wheelButton:
             self.fig.canvas.setCursor(self._releaseCursor)
             super(PanHandler, self).release(event)
 
 
 
-
-class NavTbar(NavigationToolbar2QT):
-    '''A class to provide a navigation toolbar linked to a canvas object.'''
-    instances = []
-
-    def __init__(self, canvas, QtParent=None, orient=Qt.Horizontal, coords=True):
+class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
+    '''
+    A base canvas for any type of plot.
+    '''
+    def __init__(self, size=(6.4, 4.8), layout='none', wheel_zoom=True,
+                 wheel_pan=True):
         '''
-        Constructor of the class NavTbar.
-
-        Parameters
-        ----------
-        canvas : _CanvasBase object or one of its children classes.
-            The canvas object linked to the navigation toolbar.
-        QtParent : QWidget or None, optional
-            Parent widget of the toolbar in the GUI. The default is None.
-        orient : Qt orientation, optional
-            The orientation of the navigation toolbar. The default is
-            Qt.Horizontal.
-        coords : bool, optional
-            Display the coordinates in the navigation toolbar. The default is
-            True.
-
-        Returns
-        -------
-        None.
-
-        '''
-    # Weakly track all class instances
-        self.__class__.instances.append(proxy(self))
-
-    # Call the constructor of the parent class
-        super(NavTbar, self).__init__(canvas, QtParent, coordinates=coords)
-
-    # Set the main attributes of the class
-        self.canvas = canvas
-        self.orient = orient
-
-    # Set the icons size
-        size = pref.get_setting('plots/NTBsize', 20, type=int)
-        self.setIconSize(QSize(size, size))
-
-    # Set the orientation of the toolbar (vertical/horizontal)
-        self.setOrientation(self.orient)
-
-    # Avoid coords and data label to be cut off
-        if coords:
-            self.locLabel.setSizePolicy(QSizePolicy.Expanding,
-                                        QSizePolicy.Minimum)
-
-    # Set the toolbar style-sheet
-        self.setStyleSheet(pref.SS_toolbar)
-
-
-    def fixHomeAction(self):
-        '''
-        Function to fix the default zoom action of a canvas. Canvas must
-        implement the reset_view function.
-
-        Returns
-        -------
-        None.
-
-        '''
-        # Check that canvas has implemented the function reset_view
-        reset_view = getattr(self.canvas, "reset_view", None)
-        if callable(reset_view):
-            home = self.findChildren(QAction)[2]
-            home.triggered.connect(reset_view)
-
-
-    def getTrueActions(self):
-        '''
-        Returns a list of the true actions (= NOT QWidgetActions) held by the
-        toolbar.
-
-        Returns
-        -------
-        actions : list
-            True actions.
-
-        '''
-        actions = self.actions()
-        actions = [a for a in actions if not isinstance(a, QWidgetAction)]
-        return actions
-
-
-    def removeToolByIndex(self, list_of_indices):
-        '''
-        Remove actions from the navigation toolbar by their indices.
-
-        Parameters
-        ----------
-        list_of_indices : list
-            List of indices of the actions that should be excluded.
-
-        Returns
-        -------
-        None.
-
-        '''
-        for i in list_of_indices:
-            self.removeAction(self.findChildren(QAction)[i])
-
-
-    def resizeEvent(self, event):
-        '''
-        (EXPERIMENTAL) # !!!
-        Reimplementation of the resizeEvent function, that updates the minimum
-        height of the toolbar.
-
-        Parameters
-        ----------
-        event : QResizeEvent
-            The resize event.
-
-        Returns
-        -------
-        None.
-
-        '''
-        new_h = event.size().height()
-        old_h = event.oldSize().height()
-        if new_h > old_h and self.orient == Qt.Horizontal:
-            self.setMinimumHeight(new_h)
-
-
-
-
-
-
-
-
-
-class _CanvasBase(FigureCanvasQTAgg):
-    '''A base class for any type of plot.'''
-
-    def __init__(self, size=(6.4, 4.8), layout='none', 
-                 wheelZoomEnabled=True, wheelPanEnabled=True):
-        '''
-        _CanvasBase class constructor.
+        Constructor.
 
         Parameters
         ----------
@@ -200,20 +97,15 @@ class _CanvasBase(FigureCanvasQTAgg):
         layout : str, optional
             Layout engine of the figure. One of ['constrained', 'compressed', 
             'tight' and 'none']. The default is 'none'.
-        wheelZoomEnabled : bool, optional
-            Wether or not allow zooming with mouse wheel. The default is True.
-        wheelPanEnabled : TYPE, optional
-            Wether or not allow drag-pan with mouse buttons. The default is True.
-
-        Returns
-        -------
-        None.
+        wheel_zoom : bool, optional
+            Whether or not allow zooming with mouse wheel. The default is True.
+        wheel_pan : TYPE, optional
+            Whether or not allow drag-pan with mouse buttons. The default is 
+            True.
 
         '''
-
-
     # Define the figure and the ax of the matplotlib canvas
-        self.fig = MPL.figure.Figure(figsize=size, facecolor=pref.IVORY,
+        self.fig = mpl.figure.Figure(figsize=size, facecolor=pref.IVORY,
                                      edgecolor='#19232D', linewidth=2,
                                      layout=layout)
         self.ax = self.fig.add_subplot(111, facecolor=pref.IVORY)
@@ -223,13 +115,13 @@ class _CanvasBase(FigureCanvasQTAgg):
         super(_CanvasBase, self).__init__(self.fig)
 
     # Set the default style
-        MPL.style.use('seaborn-v0_8-colorblind') # preferences to change style
+        mpl.style.use('seaborn-v0_8-colorblind') # menu/pref to change style
 
-    # Set events connections for mouse-wheel zoom and mouse-wheel pan, if enabled
-        if wheelZoomEnabled:
-            self._id_zoom = self.wheelZoom_handler()
+    # Set events connections for mouse-wheel zoom and mouse-wheel pan
+        if wheel_zoom:
+            self._id_zoom = self.wheelZoomHandler()
             self.setMouseTracking(True)
-        if wheelPanEnabled:
+        if wheel_pan:
             self._id_pan = PanHandler(self.fig)
 
     # Enable custom context menu request (when right-clicking on canvas)
@@ -238,39 +130,32 @@ class _CanvasBase(FigureCanvasQTAgg):
 
     def clear_canvas(self, deep_clear=False):
         '''
-        Generic canvas clearing actions. Must be reimplemented in each subclass.
+        Generic canvas clearing actions. To be reimplemented in each subclass.
 
         Parameters
         ----------
         deep_clear : bool, optional
             Fully reset the ax. The default is False.
 
-        Returns
-        -------
-        None.
-
         '''
     # Fully reset the ax if requested:
-        if deep_clear: self.ax.clear()
+        if deep_clear: 
+            self.ax.clear()
 
     # Hide the axis (borders and ticks)
         self.ax.axis('off')
 
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: mpl.backend_bases.MouseEvent):
         '''
-        Set focus on the canvas widget when mouse hovering. Necessary to detect the
-        key attribute of the mouse wheel zoom event. See wheel_zoom() function for
-        further details.
+        Set focus on the canvas widget when mouse hovering. Necessary to detect
+        the key attribute of the mouse wheel zoom event. See wheel_zoom() 
+        function for further details.
 
         Parameters
         ----------
-        event : Matplotlib.backend_bases.MouseEvent
-            The Matplotlib mouse event (version 3.5.1).
-
-        Returns
-        -------
-        None.
+        event : MouseEvent
+            The Matplotlib mouse move event.
 
         '''
         super(_CanvasBase, self).mouseMoveEvent(event)
@@ -278,14 +163,14 @@ class _CanvasBase(FigureCanvasQTAgg):
             self.setFocus()
 
 
-    def get_navigation_context_menu(self, navTbar):
+    def get_navigation_context_menu(self, navtbar):
         '''
         Return a default context menu with actions extracted from the provided
         navigation toolbar.
 
         Parameters
         ----------
-        navTbar : NavTbar
+        navtbar : NavTbar
             The navigation toolbar associated with this canvas.
 
         Returns
@@ -294,14 +179,13 @@ class _CanvasBase(FigureCanvasQTAgg):
             A StyledMenu() populated with actions.
 
         '''
-
         menu = cObj.StyledMenu()
 
     # Get Navigation Toolbar true actions (exclude QWidgetActions, like coords)
-        ntbar_actions = navTbar.getTrueActions()
+        ntbar_actions = navtbar.getTrueActions()
 
     # Get the hidden 'Show toolbar' action
-        hide_ntbar = navTbar.findChildren(QAction)[1]
+        hide_ntbar = navtbar.findChildren(QAction)[1]
         hide_ntbar.setText('Show navigation toolbar')
 
     # Add actions to menu
@@ -312,13 +196,14 @@ class _CanvasBase(FigureCanvasQTAgg):
         return menu
 
 
-    def RGB_to_float(self, RGB_list):
+    def rgb_to_float(self, rgb_list: Iterable[tuple]):
         '''
-        Convert RGB values to matplotlib-compatible floating values ranging in [0, 1].
+        Convert RGB values to matplotlib compatible floating values ranging in
+        [0, 1].
 
         Parameters
         ----------
-        RGB_list : list
+        rgb_list : iterable of tuples
             A list of RGB triplets.
 
         Returns
@@ -327,20 +212,44 @@ class _CanvasBase(FigureCanvasQTAgg):
             A list of float RGB triplets.
 
         '''
-        floatRGB = [(r/255, g/255, b/255) for (r,g,b) in RGB_list]
-        if len(floatRGB) == 1:
-            return floatRGB[0]
+        float_rgb = [(r/255, g/255, b/255) for (r, g, b) in rgb_list]
+        if len(float_rgb) == 1:
+            return float_rgb[0]
         else:
-            return floatRGB
+            return float_rgb
+        
+
+    def share_axis(self, ax: mpl.axes.Axes, share=True):
+        '''
+        Share an ax from a different canvas with the ax of this canvas, so that 
+        zoom and pan operations on one ax are reflected on the other.
+
+        Parameters
+        ----------
+        ax : Axes
+            Sharing ax_
+        share : bool, optional
+            Toggle on/off sharing. The default is True.
+
+        '''
+        shared_x = self.ax._shared_axes['x']
+        shared_y = self.ax._shared_axes['y']
+    # For older version of Matplotlib
+        # shared_x = self.ax._shared_x_axes
+        # shared_y = self.ax._shared_y_axes
+
+        if share:
+            shared_x.join(self.ax, ax)
+            shared_y.join(self.ax, ax)
+        else:
+            shared_x.remove(ax)
+            shared_y.remove(ax)
+
 
 
     def update_canvas(self):
         '''
-        Generic canvas update actions. Must be reimplemented in each subclass.
-
-        Returns
-        -------
-        None.
+        Generic canvas update actions. To be reimplemented in each subclass.
 
         '''
     # Show the axis (borders and ticks)
@@ -350,7 +259,7 @@ class _CanvasBase(FigureCanvasQTAgg):
         #     # disconnect the zoom factory
         #     self._id_zoom()
         #     # reconnect the zoom factory
-        #     self._id_zoom = self.wheelZoom_handler()
+        #     self._id_zoom = self.wheelZoomHandler()
         # except AttributeError:
         #     # Wheelzoom is not enabled
         #     pass
@@ -358,7 +267,7 @@ class _CanvasBase(FigureCanvasQTAgg):
 
     # Inspired by https://gist.github.com/tacaswell/3144287
     # and https://github.com/mpl-extensions
-    def wheelZoom_handler(self, base_scale = 1.5):
+    def wheelZoomHandler(self, base_scale=1.5):
         '''
         Wheel zoom factory.
 
@@ -367,13 +276,18 @@ class _CanvasBase(FigureCanvasQTAgg):
         base_scale : float, optional
             Base zoom scale. The default is 1.5.
 
-        Returns
-        -------
-        None.
-
         '''
 
-        def zoom(event):
+        def zoom(event: mpl.backend_bases.MouseEvent):
+            '''
+            Apply zoom to canvas after mouse wheel event.
+
+            Parameters
+            ----------
+            event : MouseEvent
+                The mouse wheel event.
+
+            '''
 
         # Get the current x and y limits
             cur_xlim = self.ax.get_xlim()
@@ -388,6 +302,7 @@ class _CanvasBase(FigureCanvasQTAgg):
 
         # Reduce the scale when pressing Ctrl key (accurate zoom)
             scale = 1.1 if 'ctrl' in event.modifiers else base_scale
+
         # Set zoom in or out
             if event.button == 'down':
                 scale_factor = 1/scale
@@ -396,71 +311,52 @@ class _CanvasBase(FigureCanvasQTAgg):
             else:
                 scale_factor = 1
 
-        # Push the current view limits and position onto their respective stacks
-            self.toolbar.push_current() # ???
-
         # Set new limits
             self.ax.set_xlim([xdata - (xdata-cur_xlim[0]) / scale_factor,
                               xdata + (cur_xlim[1]-xdata) / scale_factor])
             self.ax.set_ylim([ydata - (ydata-cur_ylim[0]) / scale_factor,
                               ydata + (cur_ylim[1]-ydata) / scale_factor])
 
-
-
         # Redraw the canvas
             self.draw_idle()
             # self.flush_events() gets more framy
 
-    # Attach the call back
+    # Attach the callback
         cid = self.mpl_connect("scroll_event", zoom)
 
-        def disconnect_zoom():
-            self.mpl_disconnect(cid)
-
-    # Return the disconnect function
-        return disconnect_zoom
-
-
-
-
-
-
+    # Return the disconnect callback function
+        return lambda id_=cid: self.mpl_disconnect(id_)
 
 
 
 class ImageCanvas(_CanvasBase):
-    '''A base class for any type of canvas displaying images and maps'''
-
+    '''
+    A base class for any type of canvas displaying images and maps.
+    '''
     def __init__(self, binary=False, cbar=True, size=(10, 7.5), **kwargs):
         '''
-        ImageCanvas class constructor.
+        Constructor.
 
         Parameters
         ----------
         binary : bool, optional
-            Format the canvas to plot binary data. The default is False.
+            Adapt the canvas to plot binary data. The default is False.
         cbar : bool, optional
             Include a colorbar in the canvas. The default is True.
         size : tuple, optional
-            Width and height (in inches) of the canvas. The default is (10, 7.5).
+            Width and height (inches) of the canvas. The default is (10, 7.5).
         **kwargs
-            Parent class arguments (see _CanvasBase constructor).
-
-        Returns
-        -------
-        None.
+            Parent class arguments (see _CanvasBase class).
 
         '''
     # Call the constructor of the parent class
         super(ImageCanvas, self).__init__(size, **kwargs)
 
     # Set the pixel coordinate format
-        # self.ax.format_coord = lambda x, y: f"X : {round(x)}, Y : {round(y)}  |  " \
-        #                                     f"R : {round(y)}, C : {round(x)}"
         self.ax.format_coord = lambda x, y: f'X : {round(x)}, Y : {round(y)}'
 
     # Define the main attributes of the canvas
-        self.isBinary = binary
+        self.is_binary = binary
         self.image = None
         self.scaled_clim = None
 
@@ -471,7 +367,17 @@ class ImageCanvas(_CanvasBase):
         self.has_cbar = cbar
         self.cbar, self.cax = None, None
 
+
     def is_empty(self):
+        '''
+        Check if the canvas is empty.
+
+        Returns
+        -------
+        bool
+            Whether or not the canvas is empty.
+
+        '''
         return self.image is None
 
 
@@ -479,19 +385,29 @@ class ImageCanvas(_CanvasBase):
         '''
         Set the colorbar ax.
 
-        Returns
-        -------
-        None.
-
         '''
         divider = make_axes_locatable(self.ax)
         self.cax = divider.append_axes("right", size="5%", pad=0.1)
+        # consider using mappable as matplotlib.cm.ScalarMappable instead of self.image
+        # From Matplotlib docs: "Note that one can create a ScalarMappable 
+        #"on-the-fly" to generate colorbars not attached to a previously drawn
+        # artist, e.g.: 
+        #fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)"
         self.cbar = self.fig.colorbar(self.image, cax=self.cax, extend='both')
 
 
-    def set_heatmap_cmap(self, MPLcmap='Spectral_r'):
+    def set_heatmap_cmap(self, cmap_name='Spectral_r'):
+        '''
+        Set a colormap suited to display a heatmap.
+
+        Parameters
+        ----------
+        cmap_name : str, optional
+            Matplotlib colormap name. The default is 'Spectral_r'.
+
+        '''
     # Set colormap
-        self.cmap = MPL.colormaps['binary_r' if self.isBinary else MPLcmap]
+        self.cmap = mpl.colormaps['binary_r' if self.is_binary else cmap_name]
     # Set outliers as grayed-out
         self.cmap.set_over('0.2')
         self.cmap.set_under('0.5')
@@ -499,15 +415,26 @@ class ImageCanvas(_CanvasBase):
         self.cmap.set_bad(pref.IVORY)
 
 
-    def set_discretemap_cmap(self, colorlist, name='Custom_cmap'):
+    def set_discretemap_cmap(self, colors: Iterable[tuple], name='CustomCmap'):
+        '''
+        Set a colormap suited to display a discrete map.
+
+        Parameters
+        ----------
+        colors : iterable of tuples
+            List of RGB triplets.
+        name : str, optional
+            Colormap name. The default is 'CustomCmap'.
+
+        '''
     # Convert colorlist RGB triplets to float RGB values
-        floatRGBA = self.RGB_to_float(colorlist)
+        floatRGBA = self.rgb_to_float(colors)
     # # Filter the colorlist if the map data is masked (required as bug fix)
     #     if self.contains_masked_data():
     #         data, mask = self.get_map(return_mask=True)
     #         floatRGBA = [floatRGBA[u] for u in np.unique((data[~mask]))]
     # Set colormap
-        self.cmap = MPL.colors.ListedColormap(floatRGBA, name=name)
+        self.cmap = mpl.colors.ListedColormap(floatRGBA, name=name)
     # Set outliers as ivory
         self.cmap.set_over(pref.IVORY)
         self.cmap.set_under(pref.IVORY)
@@ -515,27 +442,73 @@ class ImageCanvas(_CanvasBase):
         self.cmap.set_bad(pref.IVORY)
 
     
-    def set_boundary_norm(self, n_classes):
-        norm = MPL.colors.BoundaryNorm(range(n_classes+1), n_classes)
+    def set_boundary_norm(self, n_colors: int):
+        '''
+        Return boundary norms based on the given amount of colors. Useful to 
+        properly set a colormap for a discrete map.
+
+        Parameters
+        ----------
+        n_colors : int
+            Number of colors.
+
+        Returns
+        -------
+        norm : BoundaryNorm
+            The boundary norm.
+
+        '''
+        boundaries = [n - 0.5 for n in range(n_colors + 1)]
+        norm = mpl.colors.BoundaryNorm(boundaries, n_colors)
         return norm
 
 
-    def alter_cmap(self, col_arg):
-        if self.is_empty(): return
+    def alter_cmap(self, color_arg: str|Iterable[tuple]):
+        '''
+        Change the current colormap.
 
-        if (t := type(col_arg)) == str:
-            self.set_heatmap_cmap(col_arg)
-        elif hasattr(t, '__iter__'):
-            self.set_discretemap_cmap(col_arg)
-        else:
+        Parameters
+        ----------
+        color_arg : str | Iterable of tuples
+            If this argument is a string, it must be a valid matplotlib default
+            colormap name, and the resulting colormap will be suited to display
+            a heatmap. If this argument is a list of RGB triplets, the colormap 
+            will be suited to display a discrete map.
+
+        Raises
+        ------
+        ValueError
+            color_arg must be a string or an iterable.
+
+        '''
+    # Exit function if the canvas is empty
+        if self.is_empty(): 
             return
 
+    # If color_arg is a string, set a heatmap cmap. If it is a list of RGB 
+    # triplets, set a discrete cmap. If neither of those, raise a ValueError.
+        if isinstance(color_arg, str):
+            self.set_heatmap_cmap(color_arg)
+        elif isinstance(color_arg, Iterable):
+            self.set_discretemap_cmap(color_arg)
+        else:
+            raise ValueError(f'{color_arg} is not a valid argument.')
+
+    # Set the new colormap and render it
         self.image.set_cmap(self.cmap)
         self.draw_idle()
         # self.flush_events()
 
 
     def contains_masked_data(self):
+        '''
+        Check if the canvas is displaying masked data.
+
+        Returns
+        -------
+        bool
+            Whether the displayed data is masked.
+        '''
         if self.is_empty():
             return False
         else:
@@ -543,14 +516,32 @@ class ImageCanvas(_CanvasBase):
 
 
     def contains_discretemap(self):
-        return isinstance(self.cmap, MPL.colors.ListedColormap)
+        '''
+        Check if the canvas is currently displaying a discrete map.
+
+        Returns
+        -------
+        bool
+            Whether the currently displayed data is a discrete map.
+
+        '''
+        return isinstance(self.cmap, mpl.colors.ListedColormap)
 
 
     def contains_heatmap(self):
-        return isinstance(self.cmap, MPL.colors.LinearSegmentedColormap)
+        '''
+        Check if the canvas is currently displaying a heatmap.
+
+        Returns
+        -------
+        bool
+            Whether the currently displayed data is a heatmap.
+
+        '''
+        return isinstance(self.cmap, mpl.colors.LinearSegmentedColormap)
 
 
-    def scale_clim(self, toggled, array_list=None):
+    def scale_clim(self, toggled: bool, arrays: list[np.ndarray]=[]):
         '''
         Toggle scaled norm limits.
 
@@ -558,45 +549,78 @@ class ImageCanvas(_CanvasBase):
         ----------
         toggled : bool
             Enable/disable scaled norm limits.
-        array_list : list, optional
-            List of NumPy ndarrays containg the data from which to extract the
-            scaled norm limits. It must be a non-ampty list if <toggled> is True.
-            The default is None.
+        arrays : list of numpy arrays, optional
+            List of arrays from which to extract the scaled norm limits. It
+            must be a non-empty list if <toggled> is True. The default is [].
 
-        Returns
-        -------
-        None.
+        Raises
+        ------
+        ValueError
+            The array list must be non-empty when toggled is True.
 
         '''
     # Enable scaled norm limits
         if toggled:
-            if not array_list:
-                raise ValueError('<array_list> must be a non-empty list if <toggled> is True')
-            glb_min = min([arr.min() for arr in array_list])
-            glb_max = max([arr.max() for arr in array_list])
+            if not len(arrays):
+                err = '<arrays> must be a non-empty list if <toggled> is True'
+                raise ValueError(err)
+            glb_min = min([arr.min() for arr in arrays])
+            glb_max = max([arr.max() for arr in arrays])
             self.scaled_clim = (glb_min, glb_max)
 
     # Disable scaled norm limits
-        else: self.scaled_clim = None
+        else: 
+            self.scaled_clim = None
 
     # Update the norm limits in any case
         self.update_clim()
 
 
-    def update_clim(self, vmin=None, vmax=None):
+    # def update_clim(self, vmin=None, vmax=None):
+    #     '''
+    #     Update the image norm limits.
+
+    #     Parameters
+    #     ----------
+    #     vmin : int or float or None, optional
+    #         Lower limit. The default is None.
+    #     vmax : int or float or None, optional
+    #         Upper limit. The default is None.
+
+    #     Returns
+    #     -------
+    #     None.
+
+    #     '''
+    #     if not self.is_empty():
+
+    #     # We use the vmin, vmax args if provided
+    #         if vmin is not None and vmax is not None:
+    #             self.image.set_clim(vmin, vmax)
+
+    #     # # If vmin, vmax are None, we use the scaled clims if they are present
+    #     #     elif self.scaled_clim is not None:
+    #     #         self.image.set_clim(*self.scaled_clim)
+
+    #     # Otherwise we use the current image clims (reset clims)
+    #         else:
+    #             array = self.image.get_array()
+    #             self.image.set_clim(array.min(), array.max())
+    #         # Re-apply boundary norm if image is a discrete map
+    #             if self.contains_discretemap():
+    #                 norm = self.set_boundary_norm(len(np.unique(array.data)))
+    #                 self.image.set_norm(norm)
+
+    def update_clim(self, vmin:int|float|None=None, vmax:int|float|None=None):
         '''
         Update the image norm limits.
 
         Parameters
         ----------
-        vmin : int or float or None, optional
+        vmin : int | float | None, optional
             Lower limit. The default is None.
-        vmax : int or float or None, optional
+        vmax : int | float | None, optional
             Upper limit. The default is None.
-
-        Returns
-        -------
-        None.
 
         '''
         if not self.is_empty():
@@ -604,18 +628,18 @@ class ImageCanvas(_CanvasBase):
         # We use the vmin, vmax args if provided
             if vmin is not None and vmax is not None:
                 self.image.set_clim(vmin, vmax)
-
-        # If vmin, vmax are None, we use the scaled clims if they are present
-            elif self.scaled_clim is not None:
-                self.image.set_clim(*self.scaled_clim)
+            # Set colorbar clim. Fixes a bug with item highlight of legends 
+                if self.contains_discretemap() and self.cbar is not None:
+                    self.cbar.mappable.set_clim(vmin, vmax)
 
         # Otherwise we use the current image clims (reset clims)
             else:
-                array = self.image.get_array()
-                self.image.set_clim(array.min(), array.max())
+                array = self.get_map()
+                vmin, vmax = array.min(), array.max()
+                self.image.set_clim(vmin, vmax)
             # Re-apply boundary norm if image is a discrete map
                 if self.contains_discretemap():
-                    norm = self.set_boundary_norm(len(np.unique(array.data)))
+                    norm = self.set_boundary_norm(int(vmax + 1))
                     self.image.set_norm(norm)
 
 
@@ -623,17 +647,8 @@ class ImageCanvas(_CanvasBase):
         '''
         Clear out certain elements of the canvas and resets their properties.
 
-        Returns
-        -------
-        None.
-
         '''
-
         if not self.is_empty():
-            # shape = self.image.get_array().shape
-        # We set the data as an array of NaNs for compatibility with the colormaps
-        # behavior, where NaN data is colored in white (see build_cmap func of DiscreteClassCanvas sub-class)
-            # self.image.set_data(np.empty(shape) * np.nan)
 
         # Call the parent function to run generic cleaning actions
             super(ImageCanvas, self).clear_canvas()
@@ -650,11 +665,12 @@ class ImageCanvas(_CanvasBase):
         # Remove the title
             self.ax.set_title('')
 
+        # Render the canvas
             self.draw_idle()
             # self.flush_events()
 
 
-    def enable_picking(self, enabled):
+    def enable_picking(self, enabled: bool):
         '''
         Enable data picking from this canvas.
 
@@ -662,10 +678,6 @@ class ImageCanvas(_CanvasBase):
         ----------
         enabled : bool
             Enable/disable data picking.
-
-        Returns
-        -------
-        None.
 
         '''
         if not self.is_empty():
@@ -678,10 +690,6 @@ class ImageCanvas(_CanvasBase):
         '''
         Show the original map view. Fixes issues when clicking home button in
         the Navigation Toolbar.
-
-        Returns
-        -------
-        None.
 
         '''
         if not self.is_empty():
@@ -697,12 +705,12 @@ class ImageCanvas(_CanvasBase):
         # Fix image zoom issues when pressing home button multiple times
             if self.fig.get_tight_layout():
                 self.fig.tight_layout()
-
+        # Render the canvas
             self.draw_idle()
             # self.flush_events()
 
 
-    def zoom_to(self, x, y):
+    def zoom_to(self, x: int, y: int):
         '''
         Zoom to a specific pixel in the map.
 
@@ -712,10 +720,6 @@ class ImageCanvas(_CanvasBase):
             The x coordinate of the pixel.
         y : int
             The y coordinate of the pixel.
-
-        Returns
-        -------
-        None.
 
         '''
         if not self.is_empty():
@@ -727,36 +731,32 @@ class ImageCanvas(_CanvasBase):
                 # self.flush_events()
 
 
-
-    def draw_discretemap(self, data, encoder, colors, title=None):
+    def draw_discretemap(self, data: np.ndarray, encoder: dict, 
+                         colors: list[tuple], title: str|None=None):
         '''
-        Update the canvas with a new classified image.
+        Update the canvas with a new discrete map.
 
         Parameters
         ----------
         data : NumPy ndarray
-            A 2D array storing the image pixels as nmerical class IDs.
+            A 2D array storing the image pixels as numerical class IDs.
         encoder : dict
             Dictionary that links the class IDs (key) with the corresponding
             class names (values).
         colors : list
             List of RGB tuples. The length of the list must match the length of
             the encoder dictionary.
-        title : str, optional
+        title : str | None, optional
             The image title. If None, the previous image title will be used.
             The default is None.
 
-        Returns
-        -------
-        None.
-
         '''
-
     # Call parent function to run generic update actions
         super(ImageCanvas, self).update_canvas()
 
     # Set image title
-        if title is not None: self.ax.set_title(title)
+        if title is not None: 
+            self.ax.set_title(title)
 
     # Set color map
         self.set_discretemap_cmap(colors)
@@ -791,7 +791,8 @@ class ImageCanvas(_CanvasBase):
             f"{'--' if np.ma.is_masked(k) else encoder[k]}"
 
     # Hide colorbar
-        if self.cbar is not None: self.cax.set_visible(False)
+        if self.cbar is not None: 
+            self.cax.set_visible(False)
 
     # Redraw canvas
         self.draw_idle()
@@ -802,7 +803,8 @@ class ImageCanvas(_CanvasBase):
         #     self.flush_events()
 
 
-    def draw_heatmap(self, data, title=None, MPLcmap='Spectral_r'):
+    def draw_heatmap(self, data: np.ndarray, title: str|None=None, 
+                     cmap_name='Spectral_r'):
         '''
         Update the canvas with a new heatmap.
 
@@ -810,10 +812,11 @@ class ImageCanvas(_CanvasBase):
         ----------
         data : NumPy ndarray
             A 2D array storing the image pixel values.
-        title : str, optional
-            The image title. If None, the previous image title will be used. The default is None.
-        MPLcmap : str
-            A Matplotlib colormap string. The default is "Spectral_r".
+        title : str | None, optional
+            The image title. If None, the previous image title will be used. 
+            The default is None.
+        cmap_name : str
+            A Matplotlib colormap name. The default is "Spectral_r".
 
         Returns
         -------
@@ -824,13 +827,14 @@ class ImageCanvas(_CanvasBase):
         super(ImageCanvas, self).update_canvas()
 
     # Set image title
-        if title is not None: self.ax.set_title(title)
+        if title is not None: 
+            self.ax.set_title(title)
 
     # Set color map
-        self.set_heatmap_cmap(MPLcmap)
+        self.set_heatmap_cmap(cmap_name)
 
     # Set linear boundary norm
-        norm = MPL.colors.Normalize()
+        norm = mpl.colors.Normalize()
 
     # Set image
         if self.is_empty():
@@ -839,13 +843,13 @@ class ImageCanvas(_CanvasBase):
         else:
             self.image.set(data=data, cmap=self.cmap, norm=norm)
 
+    # # Update norm limits
+    #     self.update_clim(data.min(), data.max())
+   
     # Set and show colorbar
         if self.has_cbar:
-            if self.cbar is None : self.set_cbar()
+            if self.cbar is None: self.set_cbar()
             self.cax.set_visible(True)
-
-    # ??? Update norm limits. Is this really useful?
-        # self.update_clim()
 
     # Adjust aspect ratio
         self.image.set_extent((-0.5,data.shape[1]-0.5, data.shape[0]-0.5,-0.5))
@@ -859,6 +863,7 @@ class ImageCanvas(_CanvasBase):
 
         # if not self.img.pickable():
         #     self.flush_events()
+
 
     def get_map(self, return_mask=False):
         '''
@@ -897,497 +902,53 @@ class ImageCanvas(_CanvasBase):
 
 
 
-
-# class _ImageCanvas(_CanvasBase):
-#     '''A base class for any type of canvas displaying images and maps'''
-
-#     def __init__(self, size=(10, 7.5), **kwargs):
-#         '''
-#         _ImageCanvas class constructor.
-
-#         Parameters
-#         ----------
-#         size : tuple, optional
-#             Width and height (in inches) of the canvas. The default is (10, 7.5).
-#         **kwargs
-#             Parent class arguments (see _CanvasBase constructor).
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#     # Call the constructor of the parent class
-#         super(_ImageCanvas, self).__init__(size, **kwargs)
-
-#     # Set the pixel coordinate format
-#         self.ax.format_coord = lambda x, y: f"X : {round(x)}, Y : {round(y)}  |  " \
-#                                             f"R : {round(y)}, C : {round(x)}"
-
-#     # Define the main attributes of the class
-#         self.image = None
-#         self.lock_zoom = False
-
-
-#     def clear_canvas(self):
-#         '''
-#         Clear out the canvas. The canvas is populated with an empty array with
-#         the shape of the previous displayed array.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-#             shape = self.image.get_array().shape
-#         # We set the data as an array of NaNs for compatibility with the colormaps
-#         # behavior, where NaN data is colored in white (see build_cmap func of DiscreteClassCanvas sub-class)
-#             self.image.set_data(np.empty(shape) * np.nan)
-#             self.ax.set_title('')
-#             self.draw_idle()
-
-
-#     def enable_picking(self, enabled):
-#         '''
-#         Enable data picking from this canvas.
-
-#         Parameters
-#         ----------
-#         enabled : bool
-#             Enable/disable data picking.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-#             self.image.set_picker(True if enabled else None)
-#             self.draw_idle()
-
-
-#     def reset_zoom(self):
-#         '''
-#         Zoom to the original map view. Fixes issues when clicking home button in the Navigation Toolbar
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-#             data = self.image.get_array()
-#             self.ax.set_xlim((-0.5, data.shape[1]-0.5))
-#             self.ax.set_ylim((data.shape[0]-0.5, -0.5))
-#             self.draw_idle()
-
-
-#     def toggle_zoomLock(self, signal):
-#         '''
-#         Lock the zoom when changing the displayed data.
-
-#         Parameters
-#         ----------
-#         signal : bool
-#             Enable/disable the zoom lock.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         self.lock_zoom = signal
-
-
-#     def zoom_to(self, x, y):
-#         '''
-#         Zoom to a specific pixel in the map.
-
-#         Parameters
-#         ----------
-#         x : int
-#             The x coordinate of the pixel.
-#         y : int
-#             The y coordinate of the pixel.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-#             data = self.image.get_array()
-#             if x <= (data.shape[1] - 1) and y <= (data.shape[0] - 1):
-#                 self.ax.set_xlim((x - 1, x + 1))
-#                 self.ax.set_ylim((y + 1, y - 1))
-#                 self.draw_idle()
-#                 # self.flush_events()
-
-
-
-# class DiscreteImageCanvas(_ImageCanvas):
-#     '''A canvas object for displaying image data with discrete pixel values (=classes)'''
-
-#     def __init__(self, **kwargs):
-#         '''
-#         Constructor of the DiscreteImageCanvas class.
-
-#         Parameters
-#         ----------
-#         **kwargs
-#             Parent class arguments (see _ImageCanvas constructor).
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#     # Call the parent class constructor
-#         super(DiscreteImageCanvas, self).__init__(**kwargs)
-
-#     # Initialize the colormap
-#         self.cmap = None
-
-
-#     def alter_cmap(self, colors):
-#         '''
-#         A function to change the colormap.
-
-#         Parameters
-#         ----------
-#         colors : list
-#             List of RGB tuples.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-#             self.cmap = self.build_cmap(colors)
-#             self.image.set_cmap(self.cmap)
-#             self.draw_idle()
-#             # self.flush_events()
-
-
-#     def build_cmap(self, colorList, name='Custom_cmap'):
-#         '''
-#         Generate a matplotlib-compatible colormap.
-
-#         Parameters
-#         ----------
-#         colorList : list
-#             List of RGB tuples.
-#         name : str, optional
-#             A name to identify the colormap. Not useful at the moment. The default is 'Custom_cmap'.
-
-#         Returns
-#         -------
-#         cmap : matplotlib.colors.Colormap
-#             The colormap.
-
-#         '''
-#         floatRGBA = self.RGB_to_float(colorList)
-#         cmap = MPL.colors.ListedColormap(floatRGBA, name=name)
-#     # NaN data will be colored in white regardless of the colormap colors
-#         cmap.set_bad('w')
-#         return cmap
-
-
-#     def export_array(self, filepath, encoder=None):
-#         '''
-#         A funtion to export the image data array in text format.
-
-#         Parameters
-#         ----------
-#         filepath : str or PATH-like object
-#             The filepath in which to store the array.
-#         encoder : dict or None, optional
-#             Wether or not to also store a text file containing a data decoder.
-#             If None, the file is not generated. The default is None.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-#             data = self.image.get_array()
-#             np.savetxt(filepath, data, fmt='%d')
-#             if encoder is not None:
-#                 encoder_path = os.path.splitext(filepath)[0] + '_transDict.txt'
-#                 with open(encoder_path, 'w') as ep:
-#                     for ID, lbl in encoder:
-#                         ep.write(f'{ID} :\t{lbl}\n')
-
-
-#     def update_canvas(self, data, encoder, colors, title=None):
-#         '''
-#         Update the canvas with a new classified image.
-
-#         Parameters
-#         ----------
-#         data : NumPy ndarray
-#             A 2D array storing the image pixels as nmerical class IDs.
-#         encoder : dictu
-#             Dictionary that links the class IDs (key) with the corresponding class names (values).
-#         colors : list
-#             List of RGB tuples. The length of the list must match the length of the encoder dictionary.
-#         title : str, optional
-#             The image title. If None, the previous image title will be used. The default is None.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-
-#     # Call the parent function to update the zoom factory
-#         super(DiscreteImageCanvas, self).update_canvas()
-
-#     # Set image title
-#         if title is not None: self.ax.set_title(title)
-
-#     # Build the color map
-#         self.cmap = self.build_cmap(colors)
-
-#     # Show Image
-#         if self.image is None:
-#             self.image = self.ax.imshow(data, cmap=self.cmap, interpolation='none',
-#                                         vmin=data.min(), vmax=data.max())
-#         else:
-#             self.image.set(data=data, cmap=self.cmap, clim=(data.min(), data.max()))
-
-#         # To manage map extent when arrays with different shape are loaded
-#             if not self.lock_zoom:
-#                 self.image.set_extent((-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5))
-
-#     # Set the cursor data format (i.e., when hovering with mouse over pixels)
-#         self.image.format_cursor_data = lambda k: f"Pixel Class = {encoder[k]}"
-
-#     # Redraw the canvas
-#         self.draw_idle()
-#         # # <self.flush_events()> da problemi al rectSel del phase refiner
-#         # # (rettangolo che si sposta dopo l'acquisizione dei suoi vertici)
-#         # if not self.img.pickable():
-#         #     self.flush_events()
-
-
-
-# class HeatmapCanvas(_ImageCanvas):
-#     '''A canvas object for displaying image data with continuos or binary pixel values'''
-
-#     def __init__(self, binary=False, cbar=True, **kwargs):
-#         '''
-#         Constructor of the HeatmapCanvas class.
-
-#         Parameters
-#         ----------
-#         binary : bool, optional
-#             Format the canvas to plot binary data. The default is False.
-#         cbar : bool, optional
-#             Include a colorbar in the canvas. The default is True.
-#         **kwargs
-#             Parent class arguments (see _ImageCanvas constructor).
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#     # Call the parent class contructor
-#         super(HeatmapCanvas, self).__init__(**kwargs)
-
-#     # Define the heatmap's main attributes
-#         self.has_cbar = cbar
-#         self.cbar, self.cax = None, None
-#         self.scaled_clim = None
-
-#     # Set a colormap and set its outliers as "Grayed-out"
-#         self.cmap = MPL.colormaps['binary_r' if binary else 'Spectral_r']
-#         self.cmap.set_over('0.2')
-#         self.cmap.set_under('0.5')
-
-
-#     def _init_cbar(self):
-#         '''
-#         Initialize the colorbar ax.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         divider = make_axes_locatable(self.ax)
-#         self.cax = divider.append_axes("right", size="5%", pad=0.1)
-#         self.cbar = self.fig.colorbar(self.image, cax=self.cax, extend='both')
-
-
-#     def get_global_clim(self, array_list):
-#         '''
-#         Extract the global min-max pixel values (norm limits) from a list of arrays.
-
-#         Parameters
-#         ----------
-#         array_list : list
-#             A list of NumPy ndarrays.
-
-#         Returns
-#         -------
-#         glb_min : int or float
-#             Global minimum value.
-#         glb_max : int or float
-#             Global maximum value.
-
-#         '''
-#         glb_min = min([arr.min() for arr in array_list])
-#         glb_max = max([arr.max() for arr in array_list])
-#         return (glb_min, glb_max)
-
-
-#     def scale_clim(self, toggled, maps_list=None):
-#         '''
-#         Toggle scaled norm limits.
-
-#         Parameters
-#         ----------
-#         toggled : bool
-#             Enable/disable scaled norm limits.
-#         maps_list : list, optional
-#             List of NumPy ndarrays containg the data from which to extract the
-#             scaled norm limits. It must be a non-ampty list if <toggled> is True.
-#             The default is None.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#     # Enable scaled norm limits
-#         if toggled:
-#             if not maps_list:
-#                 raise ValueError('<maps_list> must be a non-empty list if <toggled> is True')
-#             self.scaled_clim = self.get_global_clim(maps_list)
-
-#     # Disable scaled norm limits
-#         else: self.scaled_clim = None
-
-#     # Update the norm limits in any case
-#         self.update_clim()
-
-
-#     def update_clim(self):
-#         '''
-#         Update the image norm limits.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#         if self.image is not None:
-
-#         # We use the scaled clims if they are present
-#             if self.scaled_clim is not None:
-#                 self.image.set_clim(*self.scaled_clim)
-
-#         # Else we use the current image clims
-#             else:
-#                 data = self.image.get_array()
-#                 self.image.set_clim(data.min(), data.max())
-
-
-#     def update_canvas(self, data, title=None):
-#         '''
-#         Update the canvas with a new image.
-
-#         Parameters
-#         ----------
-#         data : NumPy ndarray
-#             A 2D array storing the image pixel values.
-#         title : str, optional
-#             The image title. If None, the previous image title will be used. The default is None.
-
-#         Returns
-#         -------
-#         None.
-
-#         '''
-#     # Call the parent function to update the zoom factory
-#         super(HeatmapCanvas, self).update_canvas()
-
-#     # Set image title
-#         if title is not None: self.ax.set_title(title)
-
-#     # Show the image
-#         if self.image is None:
-#             self.image = self.ax.imshow(data, self.cmap, interpolation='none')
-#             self.image.format_cursor_data = lambda v: f"Pixel Value = {v}"
-#             if self.has_cbar: self._init_cbar()
-
-#         else:
-#             self.image.set_data(data)
-#             self.update_clim()
-#             self.ax.autoscale(enable = not self.lock_zoom)
-
-#         # Manage map extent when arrays with different shape are loaded
-#             if not self.lock_zoom:
-#                 self.image.set_extent((-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5))
-#                 self.ax.relim()
-
-#     # Redraw the canvas
-#         self.draw_idle()
-
-#         # if not self.img.pickable():
-#         #     self.flush_events()
-
-
-
-
-
-
 class BarCanvas(_CanvasBase):
-    '''A canvas object for plotting bar charts, including grouped bar charts with labels.'''
-
+    '''
+    A canvas object for plotting bar charts, including grouped bar charts with 
+    labels.
+    '''
     def __init__(self, orientation='v', size=(6.4, 3.6), **kwargs):
         '''
         Constructor of the BarCanvas class.
 
         Parameters
         ----------
-        orientation : 'v' or 'h', optional
-            Orientation of the bars. The default is 'v' (vertical).
-
+        orientation : str, optional
+            Orientation of the bars. Can be 'h' (horizontal) or 'v' (vertical).
+            The default is 'v'.
         size : tuple, optional
             Size of the canvas. The default is (6.4, 3.6)
-
         **kwargs
-            Parent class arguments (see _CanvasBase constructor).
-
-        Returns
-        -------
-        None.
+            Parent class arguments (see _CanvasBase class).
 
         '''
     # Call the constructor of the parent class
-        super(BarCanvas, self).__init__(**kwargs)
+        super(BarCanvas, self).__init__(size=size, **kwargs)
 
-    # Define the main attributes of the class
+    # Set main attributes
         self.orient = orientation
         self.plot = None
-        self.barWidth = 0.5
+        self.bar_width = 0.5
         self.label_amounts = []
-        self.visibleAmounts = False
+        self.visible_amounts = False
+
+
+    def is_empty(self):
+        '''
+        Check if the canvas is empty.
+
+        Returns
+        -------
+        bool
+            Whether the canvas is empty.
+
+        '''
+        return self.plot is None
 
 
     def clear_canvas(self):
         '''
-        Clear out the plot and reset some properties.
-
-        Returns
-        -------
-        None.
+        Clear out the canvas and reset some properties.
 
         '''
     # Call the parent function to run generic cleaning actions
@@ -1395,50 +956,48 @@ class BarCanvas(_CanvasBase):
 
     # Reset the references to the plotted data
         self.plot = None
-        self.label_amounts.clear() # it is a list object
+        self.label_amounts.clear()
         self.draw_idle()
         # self.flush_events()
 
 
-    def show_amounts(self, enabled):
+    def show_amounts(self, enabled: bool):
         '''
         Show/hide amounts on top of the bars.
 
         Parameters
         ----------
         enabled : bool
-            Wether or not to display the amounts.
-
-        Returns
-        -------
-        None.
+            Whether or not to display the amounts.
 
         '''
-        self.visibleAmounts = enabled
+    # Update the attribute in any case
+        self.visible_amounts = enabled
 
-        if self.plot is not None:
+    # Exit function if the canvas is empty
+        if self.is_empty():
+            return
 
-        # Show the amounts
-            if enabled:
-                prec = pref.get_setting('plots/legendDec', 3, type=int)
-                pe = [MPL.patheffects.withStroke(linewidth=2, foreground='k')]
-                self.label_amounts = self.ax.bar_label(self.plot,
-                                                       fmt=f'%.{prec}f',
-                                                       label_type='center',
-                                                       padding=16, color='w',
-                                                       path_effects=pe)
+    # Show the amounts
+        elif enabled:
+            prec = pref.get_setting('plots/legendDec', 3, type=int)
+            pe = [mpl.patheffects.withStroke(linewidth=2, foreground='k')]
+            self.label_amounts = self.ax.bar_label(self.plot, fmt=f'%.{prec}f',
+                                                    label_type='center',
+                                                    padding=16, color='w',
+                                                    path_effects=pe)
 
-        # Remove the amounts
-            else:
-                for lbl in self.label_amounts:
-                    lbl.remove()
-                self.label_amounts.clear()
+    # Or hide the amounts
+        else:
+            for lbl in self.label_amounts:
+                lbl.remove()
+            self.label_amounts.clear()
 
-        # Redraw the canvas
-            self.draw_idle()
+    # Redraw the canvas
+        self.draw_idle()
 
 
-    def set_barWidth(self, width):
+    def set_barWidth(self, width: float):
         '''
         Set the width of plotted bars.
 
@@ -1447,55 +1006,54 @@ class BarCanvas(_CanvasBase):
         width : float
             The required width.
 
-        Returns
-        -------
-        None.
-
         '''
-        self.barWidth = width
+        self.bar_width = width
 
 
-    def update_canvas(self, data, tickslabels=None, title=None, colors=None,
-                      multibars=False, labels=None):
+    def update_canvas(self, data: list|list[list], 
+                      tickslabels: list[str]|None=None, title: str|None=None, 
+                      colors: list[tuple]|None=None, multibars=False, 
+                      labels:list[str]|None=None):
         '''
         Update the canvas with a new plot.
 
         Parameters
         ----------
-        data : list
-            X-axis values. If <multibars> is True, this should be provided as a list of lists,
-            where len(data) is the number of categories (or groups). Sub-lists must share the same
-            length.
-        tickslabels : list, optional
-            X-ticks labels. The length of the list must match the length of <data> (or of its
-            sub-lists if <multibars> is True). If None, no tick label is shown. The default is None.
-        title : str, optional
-             The plot title. If None, no title will be shown. The default is None.
-        colors : list, optional
-            A list of RGB tuples. The length of the list must match the length of <data> (or of its
-            sub-lists if <multibars> is True). If None, default matplotlib colors are used.
-            The default is None.
+        data : list | list of lists
+            X-axis values. If <multibars> is True, this should be provided as a
+            list of lists, where len(data) is the number of categories (or 
+            groups). Sub-lists must share the same length.
+        tickslabels : list of str | None, optional
+            X-ticks labels. The length of the list must match the length of 
+            <data> (or of its sub-lists if <multibars> is True). If None, no 
+            tick label is shown. The default is None.
+        title : str | None, optional
+             The plot title. If None, no title is shown. The default is None.
+        colors : list of tuples | None, optional
+            A list of RGB triplets. The length of the list must match the 
+            length of <data> (or of its sub-lists if <multibars> is True). If 
+            None, default matplotlib colors are used. The default is None.
         multibars : bool, optional
-            Format the plot to display bars in categories or groups. The default is False.
-        labels : list, optional
-            A list of labels associated with each bar or each category if <multibars> is True.
-            If provided, they will be displayed in a legend. The length of the list must match
-            the length of <data> (or of its sub-lists if <multibars> is True). If None, no legend
-            will be displayed. The default is None.
-
-        Returns
-        -------
-        None.
+            Whether to adapt the plot to display bars in categories or groups. 
+            The default is False.
+        labels : list of str | None, optional
+            A list of labels associated with each bar or each category if 
+            <multibars> is True. If provided, they are displayed in a legend. 
+            The length of the list must match the length of <data> (or of its 
+            sub-lists if <multibars> is True). If None, no legend will be 
+            displayed. The default is None.
 
         '''
     # Call the parent function to run generic update actions
         super(BarCanvas, self).update_canvas()
 
     # Clear the canvas and exit the function if data is empty
-        if not len(data): return self.clear_canvas()
+        if not len(data): 
+            return self.clear_canvas()
 
     # Remove the previous plot if there is one
-        if self.plot is not None: self.ax.clear()
+        if self.plot is not None: 
+            self.ax.clear()
 
     # Set the grid on for y or x axis
         gridax = 'y' if self.orient == 'v' else 'x'
@@ -1513,35 +1071,40 @@ class BarCanvas(_CanvasBase):
                 self.ax.invert_yaxis()
 
     # Set the title
-        if title is not None: self.ax.set_title(title)
+        if title is not None: 
+            self.ax.set_title(title)
 
     # Convert the bar colors to a matplotlib compatible format
-        if colors is not None: colors = self.RGB_to_float(colors)
+        if colors is not None: 
+            colors = self.rgb_to_float(colors)
 
-    # Adjust the canvas for a multibar plot, if required (<multibars> is a boolean switch)
-        shift = self.barWidth/len(data) * multibars
+    # Adjust the canvas for a multibar plot, if required (multibars is used as 
+    # a boolean switch)
+        shift = self.bar_width/len(data) * multibars
         shift_step = np.linspace(-shift, shift, len(data))
         n_iter = multibars * len(data)
 
-    # Show the plot
+    # Build the plot
         if not n_iter:
             data = (data,)
             n_iter = 1
-        for i in range(n_iter):
-            if self.orient == 'v':
-                self.plot = self.ax.bar(ticks+shift_step[i], data[i],
-                                        self.barWidth, color=colors,
-                                        edgecolor='k', label=labels if labels is None else labels[i])
-            else:
-                self.plot = self.ax.barh(ticks+shift_step[i], data[i],
-                                         self.barWidth, color=colors,
-                                         edgecolor='k', label=labels if labels is None else labels[i])
 
-    # Show the legend
-        if labels is not None: self.ax.legend()
+        for i in range(n_iter):
+            lbl = labels if labels is None else labels[i]
+            args = (ticks + shift_step[i], data[i], self.bar_width)
+            kwargs = {'color': colors, 'edgecolor': 'k', 'label': lbl}
+
+            if self.orient == 'v':
+                self.plot = self.ax.bar(*args, **kwargs)
+            else:
+                self.plot = self.ax.barh(*args, **kwargs)
+
+    # Build the legend
+        if labels is not None: 
+            self.ax.legend()
 
     # Refresh label amounts if required
-        self.show_amounts(self.visibleAmounts)
+        self.show_amounts(self.visible_amounts)
 
     # Redraw the canvas
         self.draw_idle()
@@ -1550,42 +1113,47 @@ class BarCanvas(_CanvasBase):
 
 
 class HistogramCanvas(_CanvasBase):
-    '''A canvas object for plotting histograms.'''
-
+    '''
+    A canvas object for plotting histograms.
+    '''
     def __init__(self, density=False, logscale=False, size=(3, 3), **kwargs):
         '''
-        Constructor of the HistogramCanvas class.
+        Constructor.
 
         Parameters
         ----------
         density : bool, optional
-            Scale y axes to [0, 1]. The default is False.
+            Whether to scale y axes to [0, 1]. The default is False.
         logscale : bool, optional
-            Use logarithmic scale. The default is False.
-
+            Whether to use logarithmic scale. The default is False.
         **kwargs
-            Parent class arguments (see _CanvasBase constructor).
-
-        Returns
-        -------
-        None.
+            Parent class arguments (see _CanvasBase class).
 
         '''
     # Call the constructor of the parent class
-        super(HistogramCanvas, self).__init__(**kwargs)
+        super(HistogramCanvas, self).__init__(size=size, **kwargs)
 
     # Set yaxis ticks properties
         self.ax.yaxis.set_ticks_position('both')
 
-    # Define the main attributes of the class
+    # Set main attributes
         self.density = density
         self.log = logscale
         self.nbins = 50
-        self.histData, self.ROI_histData = None, None
-        self.hist, self.ROI_hist = None, None
+        self.hist_data, self.roi_hist_data = None, None
+        self.hist, self.roi_hist = None, None
 
 
     def is_empty(self):
+        '''
+        Check if the canvas is empty.
+
+        Returns
+        -------
+        bool
+            Whether the canvas is empty.
+
+        '''
         return self.hist is None
 
 
@@ -1593,25 +1161,31 @@ class HistogramCanvas(_CanvasBase):
         '''
         Clear out the plot and reset some attributes.
 
-        Returns
-        -------
-        None.
         '''
     # Call the parent function to run generic cleaning actions
         super(HistogramCanvas, self).clear_canvas(deep_clear=True)
 
-        self.hist, self.ROI_hist = None, None
-        self.histData, self.ROI_histData = None, None
+        self.hist, self.roi_hist = None, None
+        self.hist_data, self.roi_hist_data = None, None
         self.draw_idle()
         # self.flush_events()
 
 
-    def toggle_logscale(self, toggled):
+    def toggle_logscale(self, toggled: bool):
+        '''
+        Toggle on/off logarithmic scale. The plot is refreshed automatically.
+
+        Parameters
+        ----------
+        toggled : bool
+            Toggle on/off.
+
+        '''
         self.log = toggled
         self.refresh_view()
 
 
-    def set_nbins(self, num):
+    def set_nbins(self, num: int):
         '''
         Set the number of histogram bins. The plot is refreshed automatically.
 
@@ -1620,25 +1194,25 @@ class HistogramCanvas(_CanvasBase):
         num : int
             Number of bins.
 
-        Returns
-        -------
-        None.
-
         '''
         self.nbins = num
         self.refresh_view()
 
 
-
     def refresh_view(self):
+        '''
+        Refresh (re-render) the plot.
+
+        '''
         if not self.is_empty():
-            data = self.histData
-            ROI_data = self.ROI_histData
+            data = self.hist_data
+            roi_data = self.roi_hist_data
             title = self.ax.get_title()
-            self.update_canvas(data, ROI_data, title)
+            self.update_canvas(data, roi_data, title)
 
 
-    def update_canvas(self, data, ROI_data=None, title=None):
+    def update_canvas(self, data: np.ndarray, roi_data: np.ndarray|None=None, 
+                      title: str|None=None):
         '''
         Update the canvas with a new plot.
 
@@ -1646,21 +1220,19 @@ class HistogramCanvas(_CanvasBase):
         ----------
         data : NumPy ndarray
             The histogram data.
-        ROI_data : NumPy ndarray, optional
-            The histogram of a ROI, plotted over the main plot. The default is
-            None.
-        title : TYPE, optional
-            DESCRIPTION. The default is None.
+        roi_data : NumPy ndarray | None, optional
+            The histogram data of a portion of a map enclosed by a ROI. Such
+            data is plotted over the main plot. The default is None.
+        title : str | None, optional
+            The title of the plot. If None, the previous title will be used. 
+            The default is None.
 
-        Returns
-        -------
-        None.
-
-        Example of ROI_data
+        Example of roi_data
         -----------------------------
         data = MAP.image.get_array()
-        r0,r1, c0,c1 = ROI.extents
-        ROI_data = data[r0:r1, c0:c1]
+        r0, r1, c0, c1 = ROI.extents
+        roi_data = data[r0:r1, c0:c1]
+
         '''
     # Call the parent function to run generic update actions
         super(HistogramCanvas, self).update_canvas()
@@ -1670,20 +1242,21 @@ class HistogramCanvas(_CanvasBase):
             self.ax.clear()
 
     # Set the title
-        if title is not None: self.ax.set_title(title)
+        if title is not None:
+            self.ax.set_title(title)
 
     # Plot the histogram data
-        self.histData = data.flatten()
-        self.hist = self.ax.hist(self.histData, bins=self.nbins,
+        self.hist_data = data.flatten()
+        self.hist = self.ax.hist(self.hist_data, bins=self.nbins,
                                  density=self.density, log=self.log)
 
     # Plot the ROI histogram data, if requested
-        self.ROI_histData = ROI_data
-        if ROI_data is not None:
-            self.ROI_histData = ROI_data.flatten()
-            self.ROI_hist = self.ax.hist(self.ROI_histData, bins=self.nbins,
-                                         density=self.density,
-                                         log=self.log, fc=pref.HIST_MASK)
+        self.roi_hist_data = roi_data
+        if roi_data is not None:
+            self.roi_hist_data = roi_data.flatten()
+            self.roi_hist = self.ax.hist(self.roi_hist_data, bins=self.nbins,
+                                         density=self.density, log=self.log, 
+                                         fc=pref.HIST_MASK)
     # Adjust the x and y lims
         self.update_xylim()
 
@@ -1697,10 +1270,6 @@ class HistogramCanvas(_CanvasBase):
         Show the original histogram view. Fixes issues when clicking home
         button in the Navigation Toolbar.
 
-        Returns
-        -------
-        None.
-
         '''
         if not self.is_empty():
         # Update the xy limits
@@ -1713,29 +1282,30 @@ class HistogramCanvas(_CanvasBase):
             # self.flush_events()
 
     def update_xylim(self):
+        '''
+        Update the plot xy limits.
+        
+        '''
         self.ax.relim()
         self.ax.autoscale()
 
 
 
-
-
-
-
-
 class ConfMatCanvas(_CanvasBase):
-    '''Canvas object specific for plotting confusion matrices'''
-    def __init__(self, size=(9, 9), cbar=True,
-                 title='', xlab='', ylab='', **kwargs):
+    '''
+    Canvas object specific for plotting confusion matrices.
+    '''
+    def __init__(self, size=(9, 9), cbar=True, title='', xlab='', ylab='', 
+                 **kwargs):
         '''
-        Constructor of the ConfMatCanvas class.
+        Constructor.
 
         Parameters
         ----------
         size : tuple, optional
             Width and height (in inches) of the canvas. The default is (9, 9).
         cbar : bool, optional
-            Include a colorbar in the canvas. The default is True.
+            Whether to include a colorbar in the canvas. The default is True.
         title : str, optional
             The title of the plot. The default is ''.
         xlab : str, optional
@@ -1743,19 +1313,15 @@ class ConfMatCanvas(_CanvasBase):
         ylab : str, optional
             Name of the y-axis. The default is ''.
         **kwargs
-            Parent class arguments (see _CanvasBase constructor).
-
-        Returns
-        -------
-        None.
+            Parent class arguments (see _CanvasBase class).
 
         '''
     # Call the constructor of the parent class
-        super(ConfMatCanvas, self).__init__(size, **kwargs)
+        super(ConfMatCanvas, self).__init__(size=size, **kwargs)
 
-    # Define main attributes
+    # Set main attributes
         self.mtx = None
-        self.showCbar = cbar
+        self.show_cbar = cbar
         self.cbar = None
         self.cax = None
 
@@ -1770,10 +1336,6 @@ class ConfMatCanvas(_CanvasBase):
         '''
         Populate the ax with the title and the labels.
 
-        Returns
-        -------
-        None.
-
         '''
         self.ax.set_title(self.title)
         self.ax.set_xlabel(self.xlab)
@@ -1784,28 +1346,20 @@ class ConfMatCanvas(_CanvasBase):
         '''
         Initialize the colorbar ax.
 
-        Returns
-        -------
-        None.
-
         '''
         divider = make_axes_locatable(self.ax)
         self.cax = divider.append_axes("right", size="5%", pad=0.1)
         self.cbar = self.fig.colorbar(self.mtx, cax=self.cax)
 
 
-    def annotate(self, data):
+    def annotate(self, data: np.ndarray):
         '''
         Populate the canvas with the matrix values.
 
         Parameters
         ----------
         data : NumPy ndarray
-            Confusion matrix array of shape (n, n).
-
-        Returns
-        -------
-        None.
+            Confusion matrix array with squared shape.
 
         '''
     # Define a meshgrid from the matrix shape
@@ -1815,26 +1369,27 @@ class ConfMatCanvas(_CanvasBase):
         x_coord, y_coord = np.meshgrid(col_ind, row_ind)
 
     # Annotate each node with the corresponding value
-        for txt, x, y in zip(data.flatten(), x_coord.flatten(), y_coord.flatten()):
-            self.ax.annotate(txt, (x, y), va='center', ha='center', color='w',
-                             path_effects=[MPL.patheffects.withStroke(linewidth=2, foreground='k')])
+        pe = [mpl.patheffects.withStroke(linewidth=2, foreground='k')]
+        for t,x,y in zip(data.flatten(), x_coord.flatten(), y_coord.flatten()):
+            self.ax.annotate(t, (x, y), va='center', ha='center', color='w',
+                             path_effects=pe)
 
 
     def clear_canvas(self):
         '''
         Clear out the plot and reset some properties.
 
-        Returns
-        -------
-        None.
-
         '''
     # Call the parent function to run generic cleaning actions
         super(ConfMatCanvas, self).clear_canvas(deep_clear=True)
 
+    # Reset some properties
         self.mtx = None
         self._init_ax()
-        if self.cax is not None: self.cax.clear()
+        if self.cax is not None: 
+            self.cax.clear()
+
+    # Redraw the canvas
         self.draw_idle()
         #self.flush_events()
 
@@ -1843,38 +1398,37 @@ class ConfMatCanvas(_CanvasBase):
         '''
         Remove any previous annotation on the canvas.
 
-        Returns
-        -------
-        None.
-
         '''
         for child in self.ax.get_children():
-            if isinstance(child, MPL.text.Annotation):
+            if isinstance(child, mpl.text.Annotation):
                 child.remove()
 
 
-    def set_ticks(self, labels, axis='both'):
+    def set_ticks(self, labels: list[str], axis='both'):
         '''
-        Set the ticks and their labels for the confusion matrix (true/predicted classes).
+        Set the ticks and their labels for the confusion matrix (true/predicted 
+        classes).
 
         Parameters
         ----------
-        labels : list
-            List of labels strings.
+        labels : list of str
+            List of labels.
         axis : str, optional
             Axis to be populated with labels. The available choices are 'x',
             'y' or 'both'. The default is 'both'.
 
-        Returns
-        -------
-        None.
+        Raises
+        ------
+        AsserionError
+            The axis argument must be one of ['x', 'y', 'both'].
 
         '''
         assert axis in ('x', 'y', 'both')
         ticks = np.arange(len(labels))
 
         if axis in ('x', 'both'):
-            self.ax.set_xticks(ticks, labels=labels, fontsize='x-small', rotation=-60)
+            self.ax.set_xticks(ticks, labels=labels, fontsize='x-small', 
+                               rotation=-60)
             self.ax.tick_params(labelbottom=True, labeltop=False)
         if axis in ('y', 'both'):
             self.ax.set_yticks(ticks, labels=labels, fontsize='x-small')
@@ -1883,18 +1437,14 @@ class ConfMatCanvas(_CanvasBase):
         #self.flush_events()
 
 
-    def update_canvas(self, data):
+    def update_canvas(self, data: np.ndarray):
         '''
         Update the canvas with a new matrix.
 
         Parameters
         ----------
         data : NumPy ndarray
-            Confusion matrix array of shape (n, n).
-
-        Returns
-        -------
-        None.
+            Confusion matrix array of squared shape.
 
         '''
     # Call the parent function to run generic update actions
@@ -1902,27 +1452,140 @@ class ConfMatCanvas(_CanvasBase):
 
     # If the matrix is empty, build the matrix and the colorbar (if required)
         if self.mtx is None:
-            self.mtx = self.ax.matshow(data, cmap='inferno', interpolation='none')
-            if self.showCbar: self._init_cbar()
+            self.mtx = self.ax.matshow(data, cmap='inferno', 
+                                       interpolation='none')
+            if self.show_cbar: 
+                self._init_cbar()
 
     # If the matrix is not empty, refresh it
         else:
             self.mtx.set_data(data)
             self.mtx.set_clim(data.min(), data.max())
-        # Set extent to allow plotting a different shaped matrix without calling clear_canvas() before
-            self.mtx.set_extent((-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5))
+        # Set extent to allow plotting a different shaped matrix without 
+        # calling clear_canvas() before
+            self.mtx.set_extent((-0.5, data.shape[1]-0.5, 
+                                 data.shape[0]-0.5, -0.5))
             self.remove_annotations()
 
     # Add new annotations
         self.annotate(data)
+
     # Redraw the canvas
         self.draw_idle()
         self.flush_events()
 
 
 
+class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
+    '''
+    A class to provide a navigation toolbar linked to a canvas object.
+    '''
+    # instances = []
+
+    def __init__(self, canvas: _CanvasBase, QtParent:QObject|None=None, 
+                 orient=Qt.Horizontal, coords=True):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        canvas : _CanvasBase
+            The canvas object linked to the navigation toolbar.
+        QtParent : QObject | None, optional
+            Parent widget of the toolbar in the GUI. The default is None.
+        orient : Qt.Orientation, optional
+            The orientation of the navigation toolbar. The default is
+            Qt.Horizontal.
+        coords : bool, optional
+            Whether to display the coordinates in the navigation toolbar. The 
+            default is True.
+
+        '''
+    # # Weakly track all class instances
+    #     self.__class__.instances.append(proxy(self))
+
+    # Call the constructor of the parent class
+        super(NavTbar, self).__init__(canvas, QtParent, coordinates=coords)
+
+    # Set the main attributes of the class
+        self.canvas = canvas
+        self.orient = orient
+
+    # Set the icons size
+        size = pref.get_setting('plots/NTBsize', 28, type=int)
+        self.setIconSize(QSize(size, size))
+
+    # Set the orientation of the toolbar (vertical/horizontal)
+        self.setOrientation(self.orient)
+
+    # Avoid coords and data label to be cut off
+        if coords:
+            self.locLabel.setSizePolicy(QSizePolicy.Expanding,
+                                        QSizePolicy.Minimum)
+
+    # Set the toolbar style-sheet
+        self.setStyleSheet(pref.SS_toolbar)
 
 
+    def fixHomeAction(self):
+        '''
+        Function to fix the default zoom action of a canvas. Canvas must
+        implement the reset_view function.
+
+        '''
+        # Check that canvas has implemented the function reset_view
+        reset_view = getattr(self.canvas, "reset_view", None)
+        if callable(reset_view):
+            home = self.findChildren(QAction)[2]
+            home.triggered.connect(reset_view)
+
+
+
+    def getTrueActions(self):
+        '''
+        Returns a list of the true actions (= NOT QWidgetActions) held by the
+        toolbar.
+
+        Returns
+        -------
+        actions : list
+            True actions.
+
+        '''
+        actions = self.actions()
+        actions = [a for a in actions if not isinstance(a, QWidgetAction)]
+        return actions
+
+
+    def removeToolByIndex(self, indices: list[int]):
+        '''
+        Remove actions from the navigation toolbar by their indices.
+
+        Parameters
+        ----------
+        indices : list of int
+            List of indices of the actions that should be excluded.
+
+        '''
+        for i in indices:
+            self.removeAction(self.findChildren(QAction)[i])
+
+
+    def resizeEvent(self, event):
+        '''
+        Reimplementation of the resizeEvent function, that updates the minimum
+        height of the toolbar.
+
+        Parameters
+        ----------
+        event : QResizeEvent
+            The resize event.
+
+        '''
+        new_h = event.size().height()
+        old_h = event.oldSize().height()
+        if new_h > old_h and self.orient == Qt.Horizontal:
+            self.setMinimumHeight(new_h)
 
 
 

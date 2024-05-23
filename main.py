@@ -6,9 +6,10 @@ Created on Wed Mar 20 12:31:39 2024
 """
 
 import sys
-from PyQt5.QtWidgets import QApplication, QSplashScreen
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPixmap
+from PyQt5.QtWidgets import QApplication, QSplashScreen
 
 import preferences as pref
 
@@ -37,9 +38,7 @@ if __name__ == "__main__":
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     loader = QSplashScreen(loader_bg, flags=flags)
     loader.show()
-    loader.showMessage('\nLoading app...', Qt.AlignHCenter,
-                       QColor(pref.IVORY))
-
+    loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(pref.IVORY))
 
     app.setStyle('fusion')
     pref.setAppPalette(app)

@@ -4,28 +4,26 @@ Created on Mon Jun 21 17:16:01 2021
 
 @author: albdag
 """
+import os
+import webbrowser as wb
+from statistics import mode as math_mode
+from datetime import datetime
+
+import numpy as np
+from scipy import ndimage as nd
+from pandas import DataFrame, concat
 
 from PyQt5 import QtWidgets as QW
 from PyQt5.QtGui import QIcon, QIntValidator, QPixmap, QDrag, QRegion, QCursor
 from PyQt5.QtCore import QSize, Qt, QMimeData, QPoint, pyqtSignal
 
-from os.path import dirname, join, splitext, exists
-from os import remove
-import webbrowser as wb
-
-
-import numpy as np
-from scipy import ndimage as nd
-from statistics import mode as math_mode
-from pandas import DataFrame, concat
-
 import preferences as pref
 import conv_functions as CF
 import customObjects as cObj
 import ML_tools
-import ExternalThreads as exthr
+import threads as exthr
 import plots
-from _base import InputMap, MineralMap, RoiMap, Mask
+from _base import InputMap, MineralMap, RoiMap, Mask, InputMapStack
 
 
 
@@ -122,8 +120,8 @@ class DraggableTool(QW.QWidget):
             Wether or not the close event is accepted.
 
         '''
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         f'Close {self.windowTitle()}?',
+        text = f'Close {self.windowTitle()}? Any unsaved data will be lost'
+        choice = QW.QMessageBox.question(self, 'X-Min Learn', text,
                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
                                          QW.QMessageBox.No)
     # accept() or ignore() are returned as boolean output, so that the event is
@@ -158,7 +156,7 @@ class Preferences(QW.QWidget):
         self._fontsize = pref.get_setting('main/fontsize', 10, type=int)
         self._dynSplitter = pref.get_setting('main/dynamic_splitter', False, type=bool)
         self._shareaxis = pref.get_setting('plots/shareaxis', True, type=bool)
-        self._NTBsize = pref.get_setting('plots/NTBsize', 20, type=int)
+        self._NTBsize = pref.get_setting('plots/NTBsize', 28, type=int)
         self._legendDec = pref.get_setting('plots/legendDec', 3, type=int)
         self._extendedLog = pref.get_setting('class/extLog', False, type=bool)
         self._trAreasCol = pref.get_setting('class/trAreasCol', (255,0,0), type=tuple)
@@ -346,7 +344,7 @@ class Preferences(QW.QWidget):
         minmapview = self.parent._minmaptab.MinMapView
         CF.shareAxis(xmapsview.ax, minmapview.ax, self._shareaxis)
 
-    def set_NTbarSize(self):
+    def set_NTbarSize(self): # deprecated! make it change after app restart
         self._NTBsize = self.NTBsize_slider.value()
         for i, ntb in enumerate(cObj.NavTbar.instances):
             try:
@@ -491,7 +489,7 @@ class Image2Ascii(QW.QWidget):
                                                     PNG (*.png)
                                                     JPEG (*.jpg; *.jpeg)''')
         if imgs:
-            pref.set_dirPath('in', dirname(imgs[0]))
+            pref.set_dirPath('in', os.path.dirname(imgs[0]))
             for i in imgs:
                 if i not in self.loadedImgs:
                     self.loadedList.addItem(i)
@@ -527,19 +525,19 @@ class Image2Ascii(QW.QWidget):
                     arr = CF.map2ASCII(p)
                     if arr.ndim == 3 and self.splitChannels_cbox.isChecked():
                         channels = np.split(arr, arr.shape[-1], axis=2)
-                        fname = CF.path2fileName(p)
+                        fname = CF.path2filename(p)
                         for n_ch, ch in enumerate(channels, start=1):
-                            outpath = join(outdir, CF.extendFileName(fname, f'_ch{n_ch}', ext))
+                            outpath = os.path.join(outdir, CF.extend_filename(fname, f'_ch{n_ch}', ext))
                             np.savetxt(outpath, np.squeeze(ch), delimiter=' ', fmt='%d')
                             outfiles.append(outpath) # prepare the out file to autoload
                     else:
-                        fname = CF.path2fileName(p)
-                        outpath = join(outdir, fname + ext)
+                        fname = CF.path2filename(p)
+                        outpath = os.path.join(outdir, fname + ext)
                         np.savetxt(outpath, arr, delimiter=' ', fmt='%d')
                         outfiles.append(outpath) # prepare the out file to autoload
                 except Exception as e:
                     errLog.append((p,e))
-                    remove(outpath)
+                    os.remove(outpath)
                 finally:
                     self.progBar.setValue(n+1)
 
@@ -655,7 +653,7 @@ class Image2Minmap(QW.QWidget):
                                                     PNG (*.png)
                                                     JPEG (*.jpg; *.jpeg)''')
         if img:
-            pref.set_dirPath('in', dirname(img))
+            pref.set_dirPath('in', os.path.dirname(img))
             self.imgPath.set_fullpath(img, predict_display=True)
             self.convert_btn.setEnabled(True)
 
@@ -676,7 +674,7 @@ class Image2Minmap(QW.QWidget):
 
     # Convert RGBA array to RGB
         elif chan == 4:
-            arr = CF.RGBAtoRGB(arr)
+            arr = CF.rgba2rgb(arr)
 
     # Reshape the array to get unique RGB values
         arr = arr.reshape(-1, 3)
@@ -720,7 +718,7 @@ class Image2Minmap(QW.QWidget):
                                                         '''Compressed ASCII file (*.gz)
                                                            ASCII file (*.txt)''')
         if outpath:
-            pref.set_dirPath('out', dirname(outpath))
+            pref.set_dirPath('out', os.path.dirname(outpath))
             np.savetxt(outpath, self.minmap, fmt='%s')
 
             if self.autoLoad_cbox.isChecked():
@@ -846,7 +844,7 @@ class DummyMapsBuilder(QW.QWidget):
                                                     '''Compressed ASCII file (*.gz)
                                                        ASCII file (*.txt)''')
         if outpath:
-            pref.set_dirPath('out', dirname(outpath))
+            pref.set_dirPath('out', os.path.dirname(outpath))
             np.savetxt(outpath, self.dummy_map, fmt='%d')
 
 
@@ -888,7 +886,7 @@ class SubSampleDataset(QW.QWidget):
         out_CSVdec_form.addRow('CSV decimal point', self.out_CSVdec)
 
         # Sub-sampled dataset separator selector
-        self.out_CSVsep = cObj.CSVSeparatorSelector()
+        self.out_CSVsep = cObj.SeparatorSymbolSelector()
         out_CSVsep_form = QW.QFormLayout()
         out_CSVsep_form.addRow('CSV separator', self.out_CSVsep)
 
@@ -964,7 +962,7 @@ class SubSampleDataset(QW.QWidget):
                                                  pref.get_dirPath('in'),
                                                  'Comma Separated Value (*.csv)')
         if path:
-            pref.set_dirPath('in', dirname(path))
+            pref.set_dirPath('in', os.path.dirname(path))
             dec = self.in_CSVdec.currentText()
             self.loadedDataset = cObj.CsvChunkReader(dec, pBar=True).read(path)
 
@@ -980,7 +978,7 @@ class SubSampleDataset(QW.QWidget):
             self.save_btn.setEnabled(True)
 
     def update_datasetPath(self, path):
-        self.dataset_path.set_displayName(CF.path2fileName(path))
+        self.dataset_path.set_displayName(CF.path2filename(path))
         self.dataset_path.set_fullpath(path)
 
     def update_datasetInfo(self):
@@ -1011,7 +1009,7 @@ class SubSampleDataset(QW.QWidget):
                                                     pref.get_dirPath('out'),
                                                     'Comma Separated Values (*.csv)')
         if outpath:
-            pref.set_dirPath('in', dirname(outpath))
+            pref.set_dirPath('in', os.path.dirname(outpath))
             progBar = cObj.PopUpProgBar(self, 1, 'Saving dataset', cancel=False)
             progBar.setValue(0)
             ylab = self.loadedDataset.columns[-1]
@@ -1050,7 +1048,7 @@ class MergeDatasets(QW.QWidget):
         self.in_CSVdec = cObj.DecimalPointSelector()
 
         # Input datasets list viewer
-        self.loadedDS_area = cObj.StyledListWidget(extendedSelection=False)
+        self.loadedDS_area = cObj.StyledListWidget(ext_selection=False)
         self.loadedDS_area.itemClicked.connect(self.show_inDSpreview)
 
         # Remove selected datasets button
@@ -1076,7 +1074,7 @@ class MergeDatasets(QW.QWidget):
         self.out_CSVdec = cObj.DecimalPointSelector()
 
         # Merged dataset separator selector
-        self.out_CSVsep = cObj.CSVSeparatorSelector()
+        self.out_CSVsep = cObj.SeparatorSymbolSelector()
 
         # Save merged dataset button
         self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
@@ -1136,7 +1134,7 @@ class MergeDatasets(QW.QWidget):
                                                    pref.get_dirPath('in'),
                                                  'Comma Separated Value (*.csv)')
         if paths:
-            pref.set_dirPath('in', dirname(paths[0]))
+            pref.set_dirPath('in', os.path.dirname(paths[0]))
             for p in paths[:]:
                 matching = self.loadedDS_area.findItems(p, Qt.MatchExactly)
                 if len(matching): paths.remove(p) # len as boolean
@@ -1202,7 +1200,7 @@ class MergeDatasets(QW.QWidget):
                                                    'Comma Separated Values (*.csv)')
 
         if outpath:
-            pref.set_dirPath('out', dirname(outpath))
+            pref.set_dirPath('out', os.path.dirname(outpath))
             sep = self.out_CSVsep.currentText()
             dec = self.out_CSVdec.currentText()
             self.merged.to_csv(outpath, sep=sep, index=False, decimal=dec)
@@ -1223,8 +1221,6 @@ class MineralClassifier(DraggableTool):
 
     '''
 
-    inputDataChanged = pyqtSignal()
-
     def __init__(self):
         '''
         Constructor.
@@ -1236,13 +1232,13 @@ class MineralClassifier(DraggableTool):
         self.setWindowTitle('Mineral Classifier')
         self.setWindowIcon(QIcon('Icons/classify.png'))
 
-    # Set main attributes
-        self.input_maps = []
-        self.output_maps = [] # list of MineralMap objects
+    # Initialize main attributes
+        self._mask = None
+        self._nodata_color = [0, 0, 0]
 
-    # Initialize classification thread states and attributes
+    # Initialize classification state and attributes
         self._isBusyClassifying = False
-        self._current_worker = None
+        self._current_classifier = None
 
     # Set GUI
         self._init_ui()
@@ -1256,19 +1252,93 @@ class MineralClassifier(DraggableTool):
         GUI constructor.
 
         '''
-    # Sample selector (Auto-update Combo Box)
-        self.sample_combox = cObj.AutoUpdateComboBox()
+#  -------------------------------------------------------------------------  #
+#                                DATA PANEL 
+#  -------------------------------------------------------------------------  #
+        
+    # Input maps selector 
+        self.inmaps_selector = cObj.InputMapsSelector()
 
-    # Input maps list (List Widget)
-        self.inmaps_list = cObj.StyledListWidget()
+    # Remove mask button (StyledButton)
+        self.del_mask_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+        self.del_mask_btn.setToolTip('Remove current mask')
+
+    # Loaded mask (Path Label)
+        self.mask_pathlbl = cObj.PathLabel(full_display=False)
+
+    # Load mask from file choice (RadioButton) [Default choice]
+        self.mask_radbtn_1 = QW.QRadioButton('Load from file')
+        self.mask_radbtn_1.setStyleSheet(pref.SS_radioButton)
+        self.mask_radbtn_1.setChecked(True)
+    
+    # Load mask from file (Styled Button)
+        self.load_mask_btn = cObj.StyledButton(QIcon(r'Icons/import.png'), 
+                                               'Load')
+        
+    # Get mask from class choice (RadioButton)
+        self.mask_radbtn_2 = QW.QRadioButton('Get from class')
+        self.mask_radbtn_2.setStyleSheet(pref.SS_radioButton)
+
+    # Minmap selector to get mask from (Auto Update Combobox)
+        self.minmap_combox = cObj.AutoUpdateComboBox()
+        self.minmap_combox.setEnabled(False)
+
+    # Mineral Class selector to get mask from (Combobox)
+        self.class_combox = cObj.StyledComboBox()
+        self.class_combox.setEnabled(False)
+
+    # Mineral maps list (Tree Widget)
+        self.minmaps_list = QW.QTreeWidget()
+        self.minmaps_list.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
+        self.minmaps_list.setHeaderHidden(True)
+        self.minmaps_list.setStyleSheet(pref.SS_menu)
+
+    # Save mineral map (Styled Button)
+        self.save_minmap_btn = cObj.StyledButton(QIcon(r'Icons/save_as.png'), 
+                                                 'SAVE')
+        self.save_minmap_btn.setToolTip('Save mineral map as...')
+
+    # Delete mineral map (Styled Button)
+        self.del_minmap_btn = cObj.StyledButton(QIcon(r'Icons/remove.png'), 
+                                                'DELETE')
+        self.del_minmap_btn.setToolTip('Remove mineral map')
+
+    # Mineral maps legend (Legend)
+        self.legend = cObj.Legend(interactive=False)
+        self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
+
+    # Mineral maps bar canvas (BarCanvas)
+        self.barplot = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
+                                       layout='constrained', wheel_zoom=False,
+                                       wheel_pan=False)
+        self.barplot.setMinimumSize(200, 350)
+    
+    # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
+        self.barplot_navtbar = plots.NavTbar(self.barplot, self, coords=False)
+        self.barplot_navtbar.removeToolByIndex(list(range(2,10)))
+
+    # Show labels percent in bar canvas Navigation Toolbar (Action)
+        self.show_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
+                                          'Show amounts', self.barplot_navtbar)
+        self.show_lbl_action.setCheckable(True)
+        before_action = self.barplot_navtbar.findChildren(QW.QAction)[10]
+        self.barplot_navtbar.insertAction(before_action, self.show_lbl_action)
+
+#  -------------------------------------------------------------------------  #
+#                              CLASSIFIER PANEL 
+#  -------------------------------------------------------------------------  #
 
     # Classifier panel (Tab Widget)
-        self.classifier_panel = QW.QTabWidget()
-        self.classifier_panel.setStyleSheet(pref.SS_tabWidget)
-        self.classifier_panel.addTab(self.PreTrainedClassifierTab(self),
-                                     'Pre-trained')
-        self.classifier_panel.addTab(self.RoiBasedClassifierTab(self),
-                                     'ROI-based')
+        self.classifier_tabwid = QW.QTabWidget()
+        self.classifier_tabwid.tabBar().setDocumentMode(True)
+        self.classifier_tabwid.tabBar().setExpanding(True)
+        self.classifier_tabwid.setStyleSheet(pref.SS_tabWidget)
+        self.classifier_tabwid.addTab(self.PreTrainedClassifierTab(self),
+                                      'Pre-trained')
+        self.classifier_tabwid.addTab(self.RoiBasedClassifierTab(self),
+                                      'ROI-based')
+        self.classifier_tabwid.addTab(self.UnsupervisedClassifierTab(self),
+                                      'Unsupervised')
 
     # Classification progress bar (ProgressBar)
         self.progbar = QW.QProgressBar()
@@ -1284,48 +1354,129 @@ class MineralClassifier(DraggableTool):
     # Current classification step description (Label)
         self.progdesc = QW.QLabel()
 
-    # Maps canvas (Image Canvas)
-        self.canvas = plots.ImageCanvas()
-        self.canvas.setMinimumWidth(250)
+#  -------------------------------------------------------------------------  #
+#                                VIEWER PANEL 
+#  -------------------------------------------------------------------------  #
 
-    # Navigation Toolbar (NavTbar)
-        self.navTbar = plots.NavTbar(self.canvas, self)
-        self.navTbar.fixHomeAction()
-        self.navTbar.removeToolByIndex([3, 4, 8, 9])
+    # Maps viewer (Image Canvas)
+        self.maps_viewer = plots.ImageCanvas()
+        self.maps_viewer.setMinimumWidth(250)
 
+    # Viewer Navigation Toolbar (Navigation Toolbar)
+        self.viewer_navtbar = plots.NavTbar(self.maps_viewer, self)
+        self.viewer_navtbar.fixHomeAction()
+        self.viewer_navtbar.removeToolByIndex([3, 4, 8, 9])
 
+    # Confidence value input (SpinBox)
+        self.conf_spbox = QW.QSpinBox()
+        self.conf_spbox.setToolTip('Confidence')
+        self.conf_spbox.setRange(0, 100)
+        self.conf_spbox.setSingleStep(1)
+        self.conf_spbox.setValue(50)
+        self.conf_spbox.setEnabled(False)
 
-        sample_vbox = QW.QVBoxLayout()
-        sample_vbox.addWidget(QW.QLabel('Select sample'))
-        sample_vbox.addWidget(self.sample_combox)
-        sample_vbox.addWidget(self.inmaps_list)
-        sample_group = cObj.GroupArea(sample_vbox, 'Input data')
+    # Confidence Label
+        conf_lbl = QW.QLabel('Confidence threshold')
+        conf_lbl.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
 
+    # Confidence slider (Slider)
+        self.conf_slider = QW.QSlider(Qt.Horizontal)
+        self.conf_slider.setSizePolicy(QW.QSizePolicy.MinimumExpanding,
+                                       QW.QSizePolicy.Fixed)
+        self.conf_slider.setRange(0, 100)
+        self.conf_slider.setSingleStep(5)
+        self.conf_slider.setSliderPosition(50)
+        self.conf_slider.setEnabled(False)
 
+#  -------------------------------------------------------------------------  #
+#                                 LAYOUT 
+#  -------------------------------------------------------------------------  #
+        
+    # Data panel layout
+        
+        # - Input data
+        input_data_group = cObj.GroupArea(self.inmaps_selector, tight=True)
 
+        # - Mask data
+        mask_data_grid = QW.QGridLayout()
+        mask_data_grid.setAlignment(Qt.Alignment(Qt.AlignLeft | Qt.AlignTop))
+        mask_data_grid.addWidget(self.del_mask_btn, 0, 0)
+        mask_data_grid.addWidget(self.mask_pathlbl, 0, 1)
+        mask_data_grid.addWidget(self.mask_radbtn_1, 2, 0, 1, -1)
+        mask_data_grid.addWidget(self.load_mask_btn, 3, 1)
+        mask_data_grid.addWidget(self.mask_radbtn_2, 4, 0, 1, -1)
+        mask_data_grid.addWidget(QW.QLabel('Select mineral map'), 5, 1)
+        mask_data_grid.addWidget(self.minmap_combox, 6, 1)
+        mask_data_grid.addWidget(QW.QLabel('Select class'), 7, 1)
+        mask_data_grid.addWidget(self.class_combox, 8, 1)
+        mask_data_grid.setRowMinimumHeight(1, 20)
+        mask_data_grid.setColumnStretch(1, 2)
+        mask_data_group = cObj.GroupArea(mask_data_grid)
+
+        # - Output data
+        barplot_vbox = QW.QVBoxLayout()
+        barplot_vbox.addWidget(self.barplot_navtbar)
+        barplot_vbox.addWidget(self.barplot)
+        barplot_group = cObj.GroupArea(barplot_vbox, tight=True)
+
+        legend_tabwid = QW.QTabWidget()
+        legend_tabwid.setStyleSheet(pref.SS_tabWidget)
+        legend_tabwid.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
+        legend_tabwid.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
+        legend_tabwid.setTabToolTip(0, 'Legend')
+        legend_tabwid.setTabToolTip(1, 'Bar plot')
+
+        output_data_grid = QW.QGridLayout()
+        output_data_grid.addWidget(self.minmaps_list, 0, 0, 1, 2)
+        output_data_grid.addWidget(legend_tabwid, 0, 2, -1, 1)
+        output_data_grid.addWidget(self.save_minmap_btn, 1, 0)
+        output_data_grid.addWidget(self.del_minmap_btn, 1, 1)
+        output_data_grid.setRowStretch(0, 1)
+        output_data_grid.setColumnStretch(2, 1)
+        output_data_group = cObj.GroupArea(output_data_grid)
+        
+        # - Panel layout
+        self.data_tabwid = QW.QTabWidget()
+        self.data_tabwid.setStyleSheet(pref.SS_tabWidget)
+        self.data_tabwid.tabBar().setDocumentMode(True)
+        self.data_tabwid.tabBar().setExpanding(True)
+        self.data_tabwid.addTab(input_data_group, QIcon(r'Icons/inmap.png'), 
+                                'Input maps')
+        self.data_tabwid.addTab(mask_data_group, QIcon(r'Icons/mask.png'), 
+                                'Mask')
+        self.data_tabwid.addTab(output_data_group, QIcon(r'Icons/minmap.png'), 
+                                'Output maps')
+        data_group = cObj.GroupArea(self.data_tabwid, 'Data panel')
+
+    # Classifier panel layout
         class_grid = QW.QGridLayout()
-        class_grid.addWidget(self.classifier_panel, 0, 0, 1, -1)
+        class_grid.addWidget(self.classifier_tabwid, 0, 0, 1, -1)
         class_grid.addWidget(self.progdesc, 1, 0, 1, -1, Qt.AlignCenter)
         class_grid.addWidget(self.progbar, 2, 0, 1, -1)
         class_grid.addWidget(self.classify_btn, 3, 0)
         class_grid.addWidget(self.stop_btn, 3, 1)
         class_group = cObj.GroupArea(class_grid, 'Classifier panel')
 
+    # Viewer panel layout
+        viewer_grid = QW.QGridLayout()
+        viewer_grid.addWidget(self.viewer_navtbar, 0, 0, 1, -1)
+        viewer_grid.addWidget(self.maps_viewer, 1, 0, 1, -1)
+        viewer_grid.addWidget(conf_lbl, 2, 0, 1, -1)
+        viewer_grid.addWidget(self.conf_spbox, 3, 0)
+        viewer_grid.addWidget(self.conf_slider, 3, 1)
+        viewer_group = cObj.GroupArea(viewer_grid, 'Viewer panel')
 
-        canvas_vbox = QW.QVBoxLayout()
-        canvas_vbox.addWidget(self.navTbar)
-        canvas_vbox.addWidget(self.canvas)
-        canvas_group = cObj.GroupArea(canvas_vbox, 'Maps Viewer')
-
-
-        left_vsplit = cObj.SplitterGroup((sample_group, class_group),
-                                         orient=Qt.Vertical)
-
-
+    # Main layout
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.addWidget(data_group)
+        left_vbox.addWidget(cObj.LineSeparator())
+        left_vbox.addWidget(class_group)
+        left_vbox.setSpacing(15)
+        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
 
         main_layout = cObj.SplitterLayout()
-        main_layout.addWidget(left_vsplit)
-        main_layout.addWidget(canvas_group)
+        main_layout.addWidget(left_scroll)
+        main_layout.addWidget(viewer_group)
         self.setLayout(main_layout)
 
 
@@ -1334,17 +1485,42 @@ class MineralClassifier(DraggableTool):
         Signals-slots connector.
 
         '''
-    # Update samples list when interacting with the sample selector
-    # Update the input maps list when a sample is selected
-        # self.sample_combox.clicked.connect(self.updateSamples)
-        # self.sample_combox.activated.connect(self.updateInmapsList)
-
     # Reset canvas and enable/disable classify button if input data is updated
-        self.inputDataChanged.connect(self.canvas.clear_canvas)
-        self.inputDataChanged.connect(self.updateClassifyButtonState)
+        self.inmaps_selector.inputDataChanged.connect(
+            self.maps_viewer.clear_canvas)
+        self.inmaps_selector.inputDataChanged.connect(
+            self.updateClassifyButtonState)
 
-    # Show clicked input map in the maps canvas
-        self.inmaps_list.currentRowChanged.connect(self.showInputMap)
+    # Actions to be performed when an input map is clicked
+        self.inmaps_selector.mapClicked.connect(self.showInputMap)
+
+    # Enable/disable mask radio buttons actions
+        self.mask_radbtn_1.toggled.connect(self.onMaskRadioButtonToggled)
+        self.mask_radbtn_2.toggled.connect(self.onMaskRadioButtonToggled)
+
+    # Load/remove masks actions
+        self.del_mask_btn.clicked.connect(self.removeMask)
+        self.load_mask_btn.clicked.connect(self.loadMaskFromFile)
+
+    # Actions to select a mask from mineral phase (comboboxes)
+        self.minmap_combox.clicked.connect(self.updateMineralMapsCombox)
+        self.minmap_combox.activated.connect(self.updateClassesCombox)
+        self.class_combox.textActivated.connect(self.getMaskFromClass)
+
+    # Actions to be performed when a mineral map is clicked
+        self.minmaps_list.itemClicked.connect(self.showMineralMap)
+
+    # Save and remove mineral maps button actions
+        self.save_minmap_btn.clicked.connect(self.saveMineralMap)
+        self.del_minmap_btn.clicked.connect(self.removeMineralMap)
+
+    # Connect legend signals (change item color, rename item, highlight item)
+        self.legend.colorChangeRequested.connect(self.changeClassColor)
+        self.legend.itemRenameRequested.connect(self.renameClass)
+        self.legend.itemHighlightRequested.connect(self.highlightClass)
+
+    # Show classes amounts in the bar plot
+        self.show_lbl_action.toggled.connect(self.barplot.show_amounts)
 
     # Run mineral classification when classify button is clicked
         self.classify_btn.clicked.connect(self.classify)
@@ -1353,102 +1529,74 @@ class MineralClassifier(DraggableTool):
         self.stop_btn.clicked.connect(self.stopClassification)
 
     # Show custom context menu when right-clicking on the maps canvas
-        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
+        self.maps_viewer.customContextMenuRequested.connect(
+            self.showMapsViewerContextMenu)
+        
+    # Change probability threshold with spinbox and scaler
+        self.conf_spbox.valueChanged.connect(self.setConfidenceThreshold)
+        self.conf_slider.valueChanged.connect(self.setConfidenceThreshold)
 
-
-    def updateSamples(self, samples:list):
+    
+    def onMaskRadioButtonToggled(self, toggled:bool):
         '''
-        Populate the samples combobox with the samples currently loaded in the
-        Data Manager. This function is called by the main window when the 
-        combobox is clicked.
+        Manage the GUI visualization of the input mask options. When one option
+        is toggled, the other is disabled.
 
         Parameters
         ----------
-        samples : list
-            List of DataGroup objects.
+        toggled : bool
+            _description_
+        '''
+        if self.sender() == self.mask_radbtn_1:
+            self.load_mask_btn.setEnabled(toggled)
+            self.minmap_combox.setEnabled(not toggled)
+            self.class_combox.setEnabled(not toggled)
+        
+        else:
+            self.load_mask_btn.setEnabled(not toggled)
+            self.minmap_combox.setEnabled(toggled)
+            self.class_combox.setEnabled(toggled)
+
+
+    def updateMineralMapsCombox(self):
+        '''
+        Populate the combobox that allows the seletion of a mineral map for 
+        extracting a mask.
 
         '''
-        samples_names = [s.text(0) for s in samples]
-        self.sample_combox.updateItems(samples_names)
+        count = self.minmaps_list.topLevelItemCount()
+        items = [self.minmaps_list.topLevelItem(idx) for idx in range(count)]
+        self.minmap_combox.updateItems([i.text(0) for i in items])
 
 
-    def updateInmapsList(self, inmaps_subgr:cObj.DataSubGroup):
+    def updateClassesCombox(self, idx:int):
         '''
-        Updates the list of currently loaded input maps owned by the sample 
-        currently selected in the samples combobox. This function is called by
-        the main window when a new item is selected in the sample combobox.
+        Populate the combobox that allows the selection of a mineral phase to 
+        use as input mask.
 
         Parameters
         ----------
-        inmaps_subgr : DataSubGroup
-            The input maps subgroup of the currently selected sample.
-
+        idx : int
+            The choosen mineral map index.
         '''
-    # Clear the input maps lists
-        self.input_maps.clear()
-        self.inmaps_list.clear()
+        mmap = self.minmaps_list.topLevelItem(idx)
+        classes = mmap.get('data').get_phases()
+        self.class_combox.clear()
+        self.class_combox.addItems(classes)
 
-    # Exit function if the subgroup is empty
-        if inmaps_subgr.isEmpty():
-            return
-
-    # Get every input map object (= DataObject) and get their data and names
-        inmaps = inmaps_subgr.getChildren()
-        data, names = zip(*(i.get('data', 'name') for i in inmaps))
-
-    # Populate the input maps list with input maps names
-        items = [QW.QListWidgetItem(n, self.inmaps_list) for n in names]
-
-    # Add checkboxes to each item
-        for i in items: i.setCheckState(Qt.Checked)
-
-    # Store input maps data
-        self.input_maps = list(data)
-
-    # Send a signal to inform that input maps data changed
-        self.inputDataChanged.emit()
-
-
-    def _getCheckedInputMaps(self):
-        '''
-        Get the data of currently checked input maps.
-
-        Returns
-        -------
-        checked_maps : list
-            List of checked input maps data.
-
-        '''
-        checked_idx = [i.checkState() for i in self.inmaps_list.getItems()]
-        checked_maps = [m for m, c in zip(self.input_maps, checked_idx) if c]
-        return checked_maps
-
-    def _getCheckedInputMapsNames(self):
-        '''
-        Get the names of currently checked input maps.
-
-        Returns
-        -------
-        checked_names : list
-            List of checked input maps names.
-
-        '''
-        items = self.inmaps_list.getItems()
-        checked_names = [i.text() for i in items if i.checkState()]
-        return checked_names
 
     def updateClassifyButtonState(self):
         '''
         Toggle on/off the CLASSIFY button.
 
         '''
-        enabled = len(self.input_maps)
+        enabled = self.inmaps_selector.itemCount()
         self.classify_btn.setEnabled(enabled)
 
 
-    def showContextMenu(self, point:QPoint):
+    def showMapsViewerContextMenu(self, point:QPoint):
         '''
-        Shows a context menu with custom actions.
+        Shows a context menu with custom actions in the map viewer.
 
         Parameters
         ----------
@@ -1457,36 +1605,371 @@ class MineralClassifier(DraggableTool):
 
         '''
     # Get context menu from NavTbar actions
-        menu = self.canvas.get_navigation_context_menu(self.navTbar)
+        menu = self.maps_viewer.get_navigation_context_menu(
+            self.viewer_navtbar)
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
 
-    def showInputMap(self, index:int):
+    def showInputMap(self, item: cObj.DataObject | None):
         '''
-        Display input maps at index <index> in the maps viewer.
+        Display input map item data in the maps viewer. If a mask is loaded, 
+        the input map is masked accordingly.
 
         Parameters
         ----------
-        index : int
-            Index of the input map in the input maps list.
+        item : DataObject or None
+            The data object that holds current input map data. If None the maps
+            viewer is cleared.
 
         '''
-    # Exit function if index is invalid (safety)
-        if index == -1: 
+    # Clear maps viewer and exit function if no item is selected
+        if item is None:
+            self.maps_viewer.clear_canvas()
             return
-        
+
     # Get data required to plot the map 
-        array = self.input_maps[index].map
-        sample_name = self.sample_combox.currentText()
-        map_name = self.inmaps_list.item(index).text()
+        if self._mask is None:
+            array = item.get('data').map
+        else:
+            array = item.get('data').get_masked(self._mask.mask)
+            
+        map_name = item.get('name')
+        sample_name = self.inmaps_selector.sample_combox.currentText()
         title = f'{sample_name} - {map_name}'
 
+    # Disable confidence spinbox and slider
+        self.conf_spbox.setEnabled(False)
+        self.conf_slider.setEnabled(False)
+
     # Plot the map
-        self.canvas.draw_heatmap(array, title)
+        self.maps_viewer.draw_heatmap(array, title)
 
 
-    def _setProgression(self, step_description:str):
+    def loadMaskFromFile(self):
+        '''
+        Load an input mask from file.
+
+        '''
+        path, _ = QW.QFileDialog.getOpenFileName(self, 'Load mask',
+                                                 pref.get_dirPath('in'),
+                                                 '''Mask (*.msk)
+                                                 Text file (*.txt)''')
+
+        if path:
+            pref.set_dirPath('in', os.path.dirname(path[0]))
+            
+            try:
+                mask = Mask.load(path)     
+            except Exception as e:
+                mask = None 
+                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                                'X-Min Learn', f'Unexpected file:\n{path}.',
+                                detailedText=repr(e))
+            finally:
+                if mask:
+                    self.mask_pathlbl.setPath(path)
+                    self.setMask(mask)
+                else:
+                    self.removeMask()
+
+
+
+    def getMaskFromClass(self, class_name:str):
+        '''
+        Extract a mask from the choosen mineral class of the choosen mineral 
+        map.
+
+        Parameters
+        ----------
+        class_name : str
+            Name of the choosen class.
+
+        '''
+        minmap_name = self.minmap_combox.currentText()
+        items = self.minmaps_list.findItems(minmap_name, Qt.MatchExactly, 0)
+        if items:
+            minmap = items[0].get('data').minmap
+            mask = Mask(minmap != class_name)
+            self.mask_pathlbl.setPath(f'{minmap_name}/{class_name}')
+            self.setMask(mask)
+        else:
+            self.minmap_combox.clear()
+            self.class_combox.clear()
+            self.removeMask()
+            QW.QMessageBox.critical(self, 'X-Min Learn', 'This mineral map '\
+                                    'is no more available')
+
+
+    def setMask(self, mask: Mask):
+        '''
+        Set a mask for classification. Masks are only rendered on top of Input 
+        Maps and not on top of Mineral Maps.
+
+        Parameters
+        ----------
+        mask : Mask
+            The mask object.
+
+        '''
+        self._mask = mask
+    
+    # We want masks to only rendered on input maps
+        if self.maps_viewer.contains_heatmap():
+            self.showInputMap(self.inmaps_selector.currentItem())
+
+
+    def removeMask(self):
+        '''
+        Remove mask.
+
+        '''
+        self._mask = None
+        self.mask_pathlbl.clearPath()
+
+    # Masks are only rendered on top of Input Maps
+        if self.maps_viewer.contains_heatmap():
+            self.showInputMap(self.inmaps_selector.currentItem())
+
+
+    def showMineralMap(self, item: cObj.DataObject | None):
+        '''
+        Display mineral map item data in the maps viewer and update the legend
+        and the bar plot.
+
+        Parameters
+        ----------
+        item : DataObject or None
+            The data object that holds current input map data.
+
+        '''
+    # Clear all and exit function if no item is selected
+        if item is None:
+            self.legend.clear()
+            self.barplot.clear_canvas()
+            self.maps_viewer.clear_canvas()
+            return
+            
+    # Enable confidence spinbox and slider
+        self.conf_spbox.setEnabled(True)
+        self.conf_slider.setEnabled(True)
+
+    # Alter minmap data with the confidence threshold
+        minmap = self._thresholdMineralMap(item.get('data'))
+
+    # Use item name as title
+        title = item.get('name')
+
+    # Update the legend
+        self.legend.update(minmap)
+    
+    # Update the bar plot
+        lbls, mode = zip(*minmap.get_labeled_mode().items())
+        mode_col = [minmap.get_phase_color(lbl) for lbl in lbls]
+        self.barplot.update_canvas(mode, lbls, title, mode_col)
+
+    # Update the maps viewer
+        mmap, enc, col = minmap.get_plot_data()
+        self.maps_viewer.draw_discretemap(mmap, enc, col, title)
+
+
+    def saveMineralMap(self): 
+        '''
+        Save selected mineral map to file.
+
+        '''
+        item = self.minmaps_list.currentItem()
+        path, _ = QW.QFileDialog.getSaveFileName(self, 'Save mineral map',
+                                                pref.get_dirPath('out'),
+                                                'Mineral map (*.mmp)')
+        if path:
+            pref.set_dirPath('out', os.path.dirname(path))
+            minmap = self._thresholdMineralMap(item.get('data'))
+            try:
+                minmap.save(path)
+            except Exception as e:
+                text = 'An error occurred while saving the file'
+                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                                       'X-Min Learn', text, 
+                                       detailedText=repr(e))
+
+
+    def removeMineralMap(self): 
+        '''
+        Remove the selected mineral map from the list of classified mineral 
+        maps.
+
+        '''
+        item = self.minmaps_list.currentItem()
+        item_idx = self.minmaps_list.indexOfTopLevelItem(item)
+        choice = QW.QMessageBox.warning(self, 'X-Min Learn', 
+                                        'Remove selected map?',
+                                        QW.QMessageBox.Yes | QW.QMessageBox.No, 
+                                        QW.QMessageBox.No)
+        if choice == QW.QMessageBox.Yes:
+            self.minmaps_list.takeTopLevelItem(item_idx)
+            new_displayed_item = self.minmaps_list.topLevelItem(item_idx - 1)
+            self.minmaps_list.setCurrentItem(new_displayed_item)
+            self.showMineralMap(new_displayed_item)
+
+
+    def setConfidenceThreshold(self, value:int):
+        '''
+        Change the probability threshold value. This function dinamically 
+        redraws the mineral map as well.
+
+        Parameters
+        ----------
+        value : int
+            Threshold value between 0 and 100.
+        '''
+        if self.sender() == self.conf_spbox:
+            other_wid = self.conf_slider
+        else:
+            other_wid = self.conf_spbox
+
+        other_wid.blockSignals(True)
+        other_wid.setValue(value)
+        other_wid.blockSignals(False)
+
+    # Re-draw the mineral map
+        self.showMineralMap(self.minmaps_list.currentItem())
+
+
+    def _thresholdMineralMap(self, minmap:MineralMap):
+        '''
+        Return a thresholded version of a mineral map. The returned version
+        will display _ND_ pixels where the associated probability score is
+        below the current confidence threshold value.
+
+        Parameters
+        ----------
+        minmap : MineralMap
+            Original mineral map.
+
+        Returns
+        -------
+        minmap_thr: MineralMap
+            Thresholded version of the mineral map.
+
+        '''
+    # Clone mineral map
+        minmap_thr = MineralMap(minmap.minmap, minmap.probmap, minmap.palette)
+    
+    # Use confidence threshold to alter the cloned mineral map 
+        thresh = self.conf_slider.value() / 100.
+        minmap_thr.edit_minmap(minmap_thr._with_nodata(thresh))
+
+    # Set special color to ND data (bugfix for constantly changing _ND_ color)
+        if '_ND_' in minmap_thr.get_phases():
+            minmap_thr.set_phase_color('_ND_', self._nodata_color)
+
+        return minmap_thr
+    
+
+    def changeClassColor(self, legend_item:QW.QTreeWidgetItem, color:tuple):
+        '''
+        Alter the displayed color of a mineral class. This function propagates 
+        the changes to the mineral map, the map canvas, the mode bar plot and 
+        the legend. The arguments of this function are specifically compatible 
+        with the colorChangeRequested signal emitted by the legend (see Legend 
+        object for more details). 
+
+        Parameters
+        ----------
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested the color change.
+        color : tuple
+            RGB triplet.
+
+        '''
+    # Get mineral map
+        item = self.minmaps_list.currentItem()
+        minmap = item.get('data')
+        
+    # Update the phase color in the mineral map. However, if _ND_ color was 
+    # changed, update the _nodata_color attribute instead
+        class_name = legend_item.text(1)
+        if class_name == '_ND_':
+             self._nodata_color = list(color)
+        else:
+            minmap.set_phase_color(class_name, color)
+
+    # Re-draw mineral map, legend and bar plot
+        self.showMineralMap(item)
+
+
+    def renameClass(self, legend_item:QW.QTreeWidgetItem, new_name:str):
+        '''
+        Rename a mineral class. This function propagates the changes to the 
+        mineral map, the map canvas, the mode bar plot and the legend. The 
+        arguments of this function are specifically compatible with the 
+        itemRenameRequested signal emitted by the legend (see Legend object for
+        more details).
+
+        Parameters
+        ----------
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested to be renamed
+        new_name : str
+            New class name.
+
+        '''
+    # Deny renaming as "_ND_"
+        if new_name == '_ND_':
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           '"_ND_" is a protected name') 
+
+    # Deny renaming the _ND_ class
+        old_name = legend_item.text(1)
+        if old_name == '_ND_':
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           '"_ND_" class cannot be renamed')
+        
+    # Deny renaming if name is already taken
+        item = self.minmaps_list.currentItem()
+        minmap = item.get('data') 
+        if new_name in minmap.get_phases():
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           f'{new_name} is already taken')
+
+    # If we get here, allow renaming. Re-draw mineral map, legend and barplot
+        minmap.rename_phase(old_name, new_name)
+        self.showMineralMap(item)
+
+
+    def highlightClass(self, toggled:bool, legend_item:QW.QTreeWidgetItem):
+        '''
+        Highlight on/off the selected mineral class in the map canvas. The 
+        arguments of this function are specifically compatible with the 
+        itemHighlightRequested signal emitted by the legend (see Legend object 
+        for more details).
+
+        Parameters
+        ----------
+        toggled : bool
+            Highlight on/off
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested to be highlighted.
+
+        '''
+    # Check that a mineral map is currently displayed in the viewer
+        if self.maps_viewer.contains_discretemap():
+
+            if toggled:
+            # We need to operate on the thresholded version of the mineral map
+                item = self.minmaps_list.currentItem()
+                minmap = self._thresholdMineralMap(item.get('data'))
+                phase_id = minmap.as_id(legend_item.text(1))
+                vmin, vmax = phase_id - 0.5, phase_id + 0.5
+            else:
+                vmin, vmax = None, None
+
+            self.maps_viewer.update_clim(vmin, vmax)
+            self.maps_viewer.draw() 
+    
+
+    def _setProgression(self, step_description: str):
         '''
         Update the classification progress bar.
 
@@ -1501,67 +1984,140 @@ class MineralClassifier(DraggableTool):
 
 
     def classify(self):
+        '''
+        Launch a classification process.
+
+        '''
+    # Do not allow multiple classification processes at once
         if self._isBusyClassifying:
             return QW.QMessageBox.critical(self, 'X-Min Learn', 'Cannot run '\
                                            'multiple classifications at once.')
+        
+    # Get checked input maps data and their dispayed names
+        checked_inmaps = self.inmaps_selector.getChecked()
+        inmaps, names = zip(*[i.get('data', 'name') for i in checked_inmaps])
 
-        maps = self._getCheckedInputMaps()
-        maps_names = self._getCheckedInputMapsNames()
-        if not ML_tools.doMapsFit([m.map for m in maps]):
+    # Build the input maps stack
+        input_stack = InputMapStack(inmaps, self._mask)
+    
+    # Check for maps perfect overlapping
+        if not input_stack.maps_fit():
             return QW.QMessageBox.critical(self, 'X-Min Learn', 'Input maps '\
                                            'have different shape/size')
+        
+    # Check that mask (if present) has correct shape
+        if not input_stack.mask_fit():
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 'The selected '\
+                                           'mask has an invalid shape')
 
-        active_tab = self.classifier_panel.currentWidget()
-        # !!! for the moment we are passing a dict of {maps:maps_names} that
-        # allows model-based classifiers to check for required input features.
-        # This is temporary and we should dev a friendly popup window that
-        # allows users to easily link each map to the correct feature name.
-        # Consequently the following func should only pass the maps as first
-        # argument.
-        csf = active_tab.getClassifier(dict(zip(maps, maps_names)), mask=None) # implement mask
+    # Get the classifier and launch the classification thread
+        active_tab = self.classifier_tabwid.currentWidget()
+        csf = active_tab.getClassifier(input_stack, names) 
 
         if csf is not None:
             csf.thread.taskInitialized.connect(self._setProgression)
             csf.thread.workFinished.connect(self._parseClassifierResult)
 
             self.progbar.setRange(0, csf.classification_steps)
-            self._current_worker = csf.thread
+            self._current_classifier = csf
             self._isBusyClassifying = True
+
 
             csf.startThreadedClassification()
 
 
+    def _parseClassifierResult(self, result:tuple, success:bool):
+        '''
+        Parse the result of the classification thread. If the classification 
+        was successfull, this function shows the mineral map in the canvas.
 
+        Parameters
+        ----------
+        result : tuple
+            Classification thread result.
+        success : bool
+            Whether the classification thread succeeded or not.
 
-    def _parseClassifierResult(self, result, success):
-        if success:
-            mmap, pmap = result
-            minmap = MineralMap(mmap, pmap)
-            self.output_maps.append(minmap)
-            # visually add minmap to results listwidget (yet to be done)
-            self.canvas.draw_discretemap(*minmap.get_plotData()) # !!! temp
+        '''
+        if success:            
+            pred, prob = result
+            shape = self._current_classifier.map_shape
+            mask = self._current_classifier.input_stack.mask
+
+        # Reshape mineral map and probability map when mask is absent
+            if mask is None:
+                mmap = pred.reshape(shape)
+                pmap = prob.reshape(shape)
+
+        # Reshape mineral map and probability map when mask is present
+            else:
+                rows, cols = (mask.mask == 0).nonzero()
+                mmap = np.empty(shape, dtype='U8')
+                mmap[:, :] = '_MSK_'
+                mmap[rows, cols] = pred
+                pmap = np.ones(shape)
+                pmap[rows, cols] = prob
+
+        # Create a new item in minmaps list and populate it with a Mineral Map
+            item = cObj.DataObject(MineralMap(mmap, pmap))
+            dt = datetime.now().strftime("%Y%m%d-%H%M%S")
+            item.setText(0, f'{self._current_classifier.name} [{dt}]')
+            self.minmaps_list.addTopLevelItem(item)
+
+        # Force show the output maps tab and display the mineral map
+            self.data_tabwid.setCurrentIndex(2) 
+            self.minmaps_list.setCurrentItem(item)
+            self.showMineralMap(item)
+
         else:
             e = result[0]
             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Classification failed.', detailedText = repr(e))
+                            'Classification failed.', detailedText=repr(e))
 
-        self._endClassification()
+        self._endClassification(success)
 
 
     def stopClassification(self):
-        if self._current_worker is not None:
-            self._current_worker.requestInterruption()
+        '''
+        Interrupt the current classification thread.
+
+        '''
+        if self._current_classifier is not None:
+            self._current_classifier.thread.requestInterruption()
             self._endClassification()
 
 
-    def _endClassification(self):
+    def _endClassification(self, success=False):
+        '''
+        Internally and visually exit from a classification thread session.
+
+        Parameters
+        ----------
+        success : bool, optional
+            Whether the classification thread ended with success. The default 
+            is False.
+
+        '''
         self.progbar.reset()
         self.progdesc.clear()
-        self._current_worker = None
         self._isBusyClassifying = False
+        self._current_classifier = None
 
+        if success:
+            QW.QMessageBox.information(self, 'X-Min Lern', 
+                                       'Classification completed with success')
 
     def closeEvent(self, event):
+        '''
+        Reimplementation of the closeEvent function. Requires exit confirm if
+        a classification thread is currently active.
+
+        Parameters
+        ----------
+        event : QEvent
+            The close event.
+
+        '''
         if self._isBusyClassifying:
             warn_text = 'A classification process is still active. Close '\
                         'Mineral Classifier anyway?'
@@ -1579,13 +2135,16 @@ class MineralClassifier(DraggableTool):
 
 
 
-    class PreTrainedClassifierTab(QW.QWidget):
+    class PreTrainedClassifierTab(QW.QGroupBox):
         def __init__(self, parent=None):
             self.parent = parent
             super().__init__(parent)
 
         # Set main attribute
             self.model = None
+
+        # Set the style-sheet of a group area
+            self.setStyleSheet(pref.SS_grouparea_notitle)
 
             self._init_ui()
             self._connect_slots()
@@ -1622,13 +2181,13 @@ class MineralClassifier(DraggableTool):
                                                      pref.get_dirPath('in'),
                                                      'PyTorch model (*.pth)')
             if path:
-                pref.set_dirPath('in', dirname(path))
+                pref.set_dirPath('in', os.path.dirname(path))
                 self.model = ML_tools.EagerModel.load(path)
                 self.model_path.setPath(path)
                 logpath = self.model.generateLogPath(path)
 
                 # If model log was deleted or moved, ask for rebuilding it
-                if not exists(logpath):
+                if not os.path.exists(logpath):
                     quest_text = 'Unable to find model log file. Rebuild it?'
                     btns = QW.QMessageBox.Yes | QW.QMessageBox.No
                     choice = QW.QMessageBox.question(self, 'X-Min Learn',
@@ -1642,9 +2201,10 @@ class MineralClassifier(DraggableTool):
                 self.model_info.setDoc(logpath)
 
 
-        def getClassifier(self, inmaps_dict, mask):
+        def getClassifier(self, input_stack, maps_names):
             if self.model == None:
-                QW.QMessageBox.critical(self, 'X-Min Learn', 'Model missing.')
+                QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                        'A pre-trained model is required')
                 return None
 
         # Check for missing model variables
@@ -1656,31 +2216,35 @@ class MineralClassifier(DraggableTool):
         # Check if all required input maps are present and order them to fit
         # the correct order
         # add a user-friendly popup to link each map to required feat instead (enhancement)
-            maps, maps_names = zip(*inmaps_dict.items())
             required_features = self.model.inFeat
-            ordered_maps = []
+            ordered_indices = []
             for feat in required_features:
                 if not CF.guessMap(feat, maps_names, caseSens=True):
                     QW.QMessageBox.critical(self, 'X-Min Learn',
                                             f'Unable to identify {feat} map.')
                     return None
                 else:
-                    idx = maps_names.index(feat)
-                    ordered_maps.append(maps[idx])
+                    ordered_indices.append(maps_names.index(feat))
 
-            return ML_tools.ModelBasedClassifier(self.model, ordered_maps)
+            input_stack.reorder(ordered_indices)
 
-
-
+            return ML_tools.ModelBasedClassifier(self.model, input_stack)
 
 
 
 
-    class RoiBasedClassifierTab(QW.QWidget):
+
+
+
+    class RoiBasedClassifierTab(QW.QGroupBox):
         def __init__(self, parent=None):
             self.parent = parent
             super().__init__(parent)
 
+        # Set the style-sheet of a group area
+            self.setStyleSheet(pref.SS_grouparea_notitle)
+
+        # Set main attributes
             self._algorithms = ('K-Nearest Neighbors',)
             self._roimap = None
 
@@ -1694,12 +2258,12 @@ class MineralClassifier(DraggableTool):
                                               'Load ROI map')
             self.load_btn.setToolTip('Load training ROI data')
 
+        # Remove (unload) ROI map (Styled Button)
+            self.unload_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+            self.unload_btn.setToolTip('Remove ROI map')
+            
         # Loaded model path (Path Label)
             self.roimap_path = cObj.PathLabel(full_display=False)
-
-        # Remove (unload) ROI map (Styled Button)
-            self.unload_btn = cObj.StyledButton(QIcon(self.style().standardIcon(QW.QStyle.SP_DialogCloseButton))) # use custom icon
-            self.unload_btn.setToolTip('Remove ROI map')
 
         # Include pixel proximity (Checkbox)
             self.pixprox_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
@@ -1741,15 +2305,15 @@ class MineralClassifier(DraggableTool):
 
         # Adjust main layout
             main_layout = QW.QGridLayout()
-            main_layout.setColumnStretch(0, 1)
             main_layout.addWidget(self.load_btn, 0, 0, 1, -1)
-            main_layout.addWidget(self.roimap_path, 1, 0)
-            main_layout.addWidget(self.unload_btn, 1, 1)
+            main_layout.addWidget(self.unload_btn, 1, 0)
+            main_layout.addWidget(self.roimap_path, 1, 1)
             main_layout.addWidget(self.pixprox_cbox, 2, 0, 1, -1)
             main_layout.addWidget(self.multithread_cbox, 3, 0, 1, -1)
             main_layout.addWidget(QW.QLabel('Select algorithm'), 4, 0, 1, -1)
             main_layout.addWidget(self.algm_combox, 5, 0, 1, -1)
             main_layout.addWidget(self.algm_panel, 6, 0, 1, -1)
+            main_layout.setColumnStretch(1, 2)
             self.setLayout(main_layout)
 
 
@@ -1771,8 +2335,7 @@ class MineralClassifier(DraggableTool):
                                                      pref.get_dirPath('in'),
                                                      'ROI maps (*.rmp)')
             if path:
-
-                pref.set_dirPath('in', dirname(path))
+                pref.set_dirPath('in', os.path.dirname(path))
                 pbar = cObj.PopUpProgBar(self, 4, 'Loading data', cancel=False)
                 pbar.setValue(0)
             else: return
@@ -1799,37 +2362,36 @@ class MineralClassifier(DraggableTool):
             pbar.increase()
 
         # Refresh view
-            self.parent.canvas.draw_idle()
+            self.parent.maps_viewer.draw_idle()
             pbar.increase()
 
 
         def unloadRoiMap(self):
             self.removeRoiMap()
             self.roimap_path.clearPath()
-            self.parent.canvas.draw_idle()
+            self.parent.maps_viewer.draw_idle()
 
 
         def removeRoiMap(self):
             if self._roimap is None: return
         # Remove ROI patches and annotations from canvas
-            for child in self.parent.canvas.ax.get_children():
+            for child in self.parent.maps_viewer.ax.get_children():
                 if isinstance(child, (cObj.RoiPatch, cObj.RoiAnnotation)):
                     child.remove()
-        # Destroy the class attribute
+        # Reset the class attribute
             self._roimap = None
-
 
 
         def addRoiMap(self, roimap):
             if roimap is None: return
-            rois = roimap.rois
-            canvas = self.parent.canvas
+            roilist = roimap.roilist
+            canvas = self.parent.maps_viewer
 
         # Display the ROIs patches and their annotations in canvas
             color = pref.get_setting('class/trAreasCol', (255,0,0), tuple)
             filled = pref.get_setting('class/trAreasFill', False, bool)
 
-            for name, bbox in rois:
+            for name, bbox in roilist:
                 patch = cObj.RoiPatch(bbox, CF.RGB2float([color]), filled)
                 text = cObj.RoiAnnotation(name, patch)
                 canvas.ax.add_patch(patch)
@@ -1844,17 +2406,17 @@ class MineralClassifier(DraggableTool):
             self.algm_panel.setCurrentWidget(idx)
 
 
-        def getClassifier(self, inmaps_dict, mask=None):
-            inmaps = list(inmaps_dict.keys())
+        def getClassifier(self, input_stack, maps_names=None): # maps names is here only for args compatibility with ModelBased Classifier
             roimap = self._roimap
             prox = self.pixprox_cbox.checkState()
             algm = self.algm_combox.currentText()
 
             if roimap is None:
-                QW.QMessageBox.critical(self, 'X-Min Learn', 'ROI map missing')
+                QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                        'A ROI map is required')
                 return None
 
-            if inmaps[0].shape != roimap.shape:
+            if input_stack.maps_shape != roimap.shape:
                 warn_text = 'ROI map extension is different from sample '\
                             'extension. Proceed anyway?'
                 btns = QW.QMessageBox.Yes | QW.QMessageBox.No
@@ -1866,14 +2428,104 @@ class MineralClassifier(DraggableTool):
             if algm == 'K-Nearest Neighbors':
                 nneigh = self.knn_nneigh_spbox.value()
                 weight = self.knn_weight_combox.currentText().lower()
-                njobs = -1 if self.multithread_cbox.checkState() else None
-                args = (inmaps, roimap, nneigh, weight, njobs)
-                kwargs = {'mask': mask, 'pixel_proximity':prox}
+                njobs = -1 if self.multithread_cbox.checkState() else 1
+                args = (input_stack, roimap, nneigh, weight)
+                kwargs = {'n_jobs': njobs, 'pixel_proximity': prox}
                 return ML_tools.KNearestNeighbors(*args, **kwargs)
 
             else:
                 return None
 
+
+
+
+
+    class UnsupervisedClassifierTab(QW.QGroupBox):
+        def __init__(self, parent=None):
+            self.parent = parent
+            super().__init__(parent)
+
+        # Set the style-sheet of a group area
+            self.setStyleSheet(pref.SS_grouparea_notitle)
+
+        # Set main attributes
+            self._algorithms = ('K-Means',)
+
+            self._init_ui()
+            self._connect_slots()
+
+        def _init_ui(self):
+
+        # Seed generator widget
+            self.seed_generator = cObj.RandomSeedGenerator()
+
+        # Include pixel proximity (Checkbox)
+            self.pixprox_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
+            self.pixprox_cbox.setToolTip('Use pixel coords as input features')
+            self.pixprox_cbox.setChecked(False)
+
+        # Use parallel computation (Checkbox)
+            self.multithread_cbox = QW.QCheckBox('Parallel computation')
+            self.multithread_cbox.setToolTip(
+                'Distribute computation across multiple processes')
+            self.multithread_cbox.setChecked(False)
+
+        # Algorithm selection (Styled ComboBox)
+            self.algm_combox = cObj.StyledComboBox()
+            self.algm_combox.addItems(self._algorithms)
+
+        # Algorithms Panel (Stacked Widget)
+            self.algm_panel = QW.QStackedWidget()
+
+
+        #--------------------- K-MEANS ALGORITHM WIDGETS ---------------------#
+        # N. of clusters
+            self.kmeans_nclust_spbox = cObj.StyledSpinBox(min_value=2)
+            self.kmeans_nclust_spbox.setValue(8)
+
+        # Add K-Means widgets to the Algorithm Panel
+            kmeans_layout = QW.QFormLayout()
+            kmeans_layout.addRow('N. of clusters', self.kmeans_nclust_spbox)
+            kmeans_group = cObj.GroupArea(kmeans_layout, 'K-Means')
+            self.algm_panel.addWidget(kmeans_group)
+        #---------------------------------------------------------------------#
+
+        # Adjust main layout
+            main_layout = QW.QVBoxLayout()
+            main_layout.addWidget(self.seed_generator)
+            main_layout.addWidget(self.pixprox_cbox)
+            main_layout.addWidget(self.multithread_cbox)
+            main_layout.addWidget(QW.QLabel('Select algorithm'))
+            main_layout.addWidget(self.algm_combox)
+            main_layout.addWidget(self.algm_panel)
+            self.setLayout(main_layout)
+
+
+
+        def _connect_slots(self):
+        # Select a different ROI-based algorithm
+            self.algm_combox.currentTextChanged.connect(self.switchAlgorithm)
+
+
+        def switchAlgorithm(self, algorithm):
+            idx = self._algorithms.index(algorithm)
+            self.algm_panel.setCurrentWidget(idx)
+
+
+        def getClassifier(self, input_stack, maps_names=None): # maps names is here only for args compatibility with ModelBased Classifier
+            prox = self.pixprox_cbox.checkState()
+            njobs = -1 if self.multithread_cbox.checkState() else 1
+            seed = self.seed_generator.seed
+            algm = self.algm_combox.currentText()
+
+            if algm == 'K-Means':
+                n_clust = self.kmeans_nclust_spbox.value()
+                args = (input_stack, n_clust, seed)
+                kwargs = {'pixel_proximity':prox}
+                return ML_tools.KMeans(*args, **kwargs)
+
+            else:
+                return None
 
 
 
@@ -2257,7 +2909,7 @@ class MineralClassifierOLD(QW.QWidget):
         if not self._extThreadRunning():
             self.minmaps_combox.clear()
             self.minmaps_combox.addItem('None')
-            self.minmaps_combox.addItems([CF.path2fileName(p) for p in self.MinMapsPath])
+            self.minmaps_combox.addItems([CF.path2filename(p) for p in self.MinMapsPath])
 
     def mask_maps(self, phase_name):
         if self.minPhase_combox.currentIndex() != -1:
@@ -2294,12 +2946,12 @@ class MineralClassifierOLD(QW.QWidget):
                                                       pref.get_dirPath('in'),
                                                       'PyTorch Data File (*.pth)')
         if path:
-            pref.set_dirPath('in', dirname(path))
+            pref.set_dirPath('in', os.path.dirname(path))
             self.model_path.set_fullpath(path, predict_display=True)
-            logpath = CF.extendFileName(path, '_log', ext='.txt')
+            logpath = CF.extend_filename(path, '_log', ext='.txt')
 
             # If model log was deleted or moved, ask for rebuilding it
-            if not exists(logpath):
+            if not os.path.exists(logpath):
                 choice = QW.QMessageBox.question(self, 'X-Min Learn',
                                                  'Unable to find model log file. Rebuild it?',
                                                  QW.QMessageBox.Yes | QW.QMessageBox.No,
@@ -2384,7 +3036,7 @@ class MineralClassifierOLD(QW.QWidget):
 
     def update_resultBars(self, mapData):
         lbl, mode = CF.get_mode(mapData, ordered=True)
-        col_dict = CF.orderDictByList(self.resultCanvas.get_colorDict(keys='lbl'), lbl)
+        col_dict = CF.sort_dict_by_list(self.resultCanvas.get_colorDict(keys='lbl'), lbl)
         self.resultBars.update_canvas('Mode', mode, lbl, colors=list(col_dict.values()))
 
     def set_confidence(self, conf, pred, prob):
@@ -2484,8 +3136,8 @@ class MineralClassifierOLD(QW.QWidget):
                                                    ASCII file (*.txt)''')
             if outpath:
                 try:
-                    pref.set_dirPath('out', dirname(outpath))
-                    pMap_path = CF.extendFileName(outpath, '_probMap')
+                    pref.set_dirPath('out', os.path.dirname(outpath))
+                    pMap_path = CF.extend_filename(outpath, '_probMap')
                     np.savetxt(outpath, self.minMap, fmt='%s')
                     np.savetxt(pMap_path, self.probMap, fmt='%.2f')
                     QW.QMessageBox.information(self, 'File saved',
@@ -2537,7 +3189,7 @@ class MineralClassifierOLD(QW.QWidget):
 
     # Reorder the input maps to fit the required maps order
         cboxDict = {c.text() : self.XMapsData[int(c.objectName())] for c in cboxList}
-        orderedMaps = CF.orderDictByList(cboxDict, requiredMaps)
+        orderedMaps = CF.sort_dict_by_list(cboxDict, requiredMaps)
         self.progBar.setValue(3)
 
     # Merge maps into a single 2D array (shape = nPixels x nmaps)
@@ -2739,16 +3391,12 @@ class DatasetBuilder(DraggableTool):
     '''
     def __init__(self, parent=None):
         '''
-        DatasetBuilder class constructor.
+        Constructor.
 
         Parameters
         ----------
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
-
-        Returns
-        -------
-        None.
 
         '''
         super(DatasetBuilder, self).__init__(parent)
@@ -2765,11 +3413,7 @@ class DatasetBuilder(DraggableTool):
 
     def _init_ui(self):
         '''
-        DatasetBuilder class GUI constructor.
-
-        Returns
-        -------
-        None.
+        GUI constructor.
 
         '''
     # Input grid of chemical elements (Grid Layout --> Group scroll area)
@@ -2871,21 +3515,23 @@ class DatasetBuilder(DraggableTool):
     # Dataset preview Area (Text Edit)
         self.previewArea = QW.QTextEdit('')
         self.previewArea.setReadOnly(True)
-        self.previewArea.setHorizontalScrollBar(cObj.StyledScrollBar(Qt.Horizontal))
-        self.previewArea.setVerticalScrollBar(cObj.StyledScrollBar(Qt.Vertical))
+        self.previewArea.setHorizontalScrollBar(
+            cObj.StyledScrollBar(Qt.Horizontal))
+        self.previewArea.setVerticalScrollBar(
+            cObj.StyledScrollBar(Qt.Vertical))
 
     # CSV decimal point selector (Combo Box)
         self.decimal_combox = cObj.DecimalPointSelector()
 
     # CSV separator character selector (Combo Box)
-        self.separator_combox = cObj.CSVSeparatorSelector()
+        self.separator_combox = cObj.SeparatorSymbolSelector()
 
     # Split large dataset option (Checkbox)
         self.splitFile_cbox = QW.QCheckBox('Split dataset')
         self.splitFile_cbox.setChecked(False)
-        self.splitFile_cbox.setToolTip('Split dataset into multiple CSV files if the\n'\
-                                       'number of lines exceeds Microsoft Excel\n'\
-                                       'rows limit (about 1 million)')
+        tip = 'Split dataset into multiple CSV files if the number of lines '\
+              'exceeds Microsoft Excel rows limit (about 1 million)'
+        self.splitFile_cbox.setToolTip(tip)
 
     # Save dataset button
         self.saveCSV_btn = cObj.StyledButton(QIcon('Icons/save.png'),
@@ -2893,8 +3539,7 @@ class DatasetBuilder(DraggableTool):
         self.saveCSV_btn.clicked.connect(self.save_dataset)
         self.saveCSV_btn.setEnabled(False)
 
-
-    # ADJUST LAYOUT
+    # Adjust main layout
     # Input features group
         infeat_vbox = QW.QVBoxLayout()
         infeat_vbox.addWidget(self.customEntry_lbl)
@@ -2930,11 +3575,6 @@ class DatasetBuilder(DraggableTool):
         top_hsplit = cObj.SplitterGroup((infeat_group, designer_group), (1, 2))
         bot_hsplit = cObj.SplitterGroup((refine_group, preview_group,
                                          csvPref_group), (2, 2, 1))
-        # main_vsplit = cObj.SplitterGroup((top_hsplit, bot_hsplit), (2, 1),
-        #                                  Qt.Vertical)
-        # main_layout = QW.QVBoxLayout()
-        # main_layout.addWidget(main_vsplit)
-
         main_layout = cObj.SplitterLayout(Qt.Vertical)
         main_layout.addWidgets((top_hsplit, bot_hsplit), (2, 1))
         self.setLayout(main_layout)
@@ -2943,10 +3583,6 @@ class DatasetBuilder(DraggableTool):
     def add_inputFeature(self):
         '''
         Add a new input feature.
-
-        Returns
-        -------
-        None.
 
         '''
         elem = self.sender().text()
@@ -2959,10 +3595,6 @@ class DatasetBuilder(DraggableTool):
         '''
         Remove selected input features.
 
-        Returns
-        -------
-        None.
-
         '''
         selected = self.featureList.selectedItems()
         for item in selected:
@@ -2974,10 +3606,6 @@ class DatasetBuilder(DraggableTool):
         '''
         Update the list of input features.
 
-        Returns
-        -------
-        None.
-
         '''
         self.featureList.clear()
         self.featureList.addItems(sorted(self._features))
@@ -2987,10 +3615,6 @@ class DatasetBuilder(DraggableTool):
     def refresh_designer(self):
         '''
         Confirm the selected input features and populate the Dataset Designer.
-
-        Returns
-        -------
-        None.
 
         '''
         choice = QW.QMessageBox.question(self, 'X-Min Learn',
@@ -3012,10 +3636,6 @@ class DatasetBuilder(DraggableTool):
         '''
         Add one row to the Dataset Designer.
 
-        Returns
-        -------
-        None.
-
         '''
         self.xfeat_designer.addRow()
         self.ylab_designer.addRow()
@@ -3024,10 +3644,6 @@ class DatasetBuilder(DraggableTool):
     def del_row(self):
         '''
         Remove last row from the Dataset Designer.
-
-        Returns
-        -------
-        None.
 
         '''
         self.xfeat_designer.delRow()
@@ -3038,10 +3654,6 @@ class DatasetBuilder(DraggableTool):
         '''
         Extract the data from the loaded samples and compile the Ground Truth
         Dataset.
-
-        Returns
-        -------
-        None.
 
         '''
         checked_samples = []
@@ -3113,10 +3725,6 @@ class DatasetBuilder(DraggableTool):
         '''
         Update the list of unique classes found in the dataset.
 
-        Returns
-        -------
-        None.
-
         '''
         unq = self.dataset.Class.unique()
         self.refineList.clear()
@@ -3127,10 +3735,6 @@ class DatasetBuilder(DraggableTool):
     def _update_dataset_preview(self):
         '''
         Update the Dataset Preview.
-
-        Returns
-        -------
-        None.
 
         '''
         preview = repr(self.dataset)
@@ -3202,10 +3806,6 @@ class DatasetBuilder(DraggableTool):
         '''
         Remove data with the selected classes from the dataset.
 
-        Returns
-        -------
-        None.
-
         '''
         selected = self.refineList.selectedItems()
         if len(selected) > 0:
@@ -3226,10 +3826,6 @@ class DatasetBuilder(DraggableTool):
     def merge_class(self):
         '''
         Unify two or more classes in the dataset under a new name.
-
-        Returns
-        -------
-        None.
 
         '''
         selected = self.refineList.selectedItems()
@@ -3258,16 +3854,12 @@ class DatasetBuilder(DraggableTool):
         '''
         Save the ground truth dataset as one or multiple CSV file(s).
 
-        Returns
-        -------
-        None.
-
         '''
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save new dataset',
                                                     pref.get_dirPath('out'),
                                                     'CSV file (*.csv)')
         if outpath:
-            pref.set_dirPath('out', dirname(outpath))
+            pref.set_dirPath('out', os.path.dirname(outpath))
             dec = self.decimal_combox.currentText()
             sep = self.separator_combox.currentText()
 
@@ -3281,11 +3873,18 @@ class DatasetBuilder(DraggableTool):
             self.sender().setEnabled(False)
             subsets = np.array_split(self.dataset, nfiles)
             progBar = cObj.PopUpProgBar(self, len(subsets), 'Saving Dataset')
+
             for idx, ss in enumerate(subsets, start=1):
-                if progBar.wasCanceled(): break
-                subpath = splitext(outpath)[0] + f'_{idx}.csv' if (nfiles-1) else outpath
-                ss.to_csv(subpath, sep=sep, index=False, decimal=dec)
+                if progBar.wasCanceled(): 
+                    break
+                elif (nfiles - 1): # if there is more than one file to save
+                    path = CF.extend_filename(outpath, str(idx)) 
+                else:
+                    path = outpath
+
+                ss.to_csv(path, sep=sep, index=False, decimal=dec)
                 progBar.setValue(idx)
+
             self.sender().setEnabled(True)
 
             return QW.QMessageBox.information(self, 'X-Min Learn',
@@ -3293,35 +3892,29 @@ class DatasetBuilder(DraggableTool):
 
 
     class XDatasetDesigner(cObj.StyledTable):
-        '''Table widget for the Dataset Builder tool. It allows the user to import
-        input maps data for the automatic compilation of a ground truth dataset.'''
+        '''
+        Table widget for the Dataset Builder tool. It allows the user to import
+        input maps data for the automatic compilation of ground truth datasets.
+        '''
 
         def __init__(self, parent=None):
             '''
-            XDatasetDesigner class constructor.
+            Constructor.
 
             Parameters
             ----------
             parent : QWidget or None, optional
                 The GUI parent of this widget. The default is None.
 
-            Returns
-            -------
-            None.
-
             '''
         # Call the constructor of the parent class
             self.parent = parent
-            super().__init__(1, 1, self.parent)
+            super().__init__(1, 1, parent=self.parent)
 
         # Initialize the horizontal header
             self.horizontalHeader().setSectionResizeMode(1) # Stretch
             self.col_lbls = ['Input Maps']
             self.setHorizontalHeaderLabels(self.col_lbls)
-
-        # # Use custom scroll bars
-        #     self.setHorizontalScrollBar(cObj.StyledScrollBar(Qt.Horizontal))
-        #     self.setVerticalScrollBar(cObj.StyledScrollBar(Qt.Vertical))
 
 
         def init_firstCol(self, row):
@@ -3333,10 +3926,6 @@ class DatasetBuilder(DraggableTool):
             ----------
             row : int
                 Index of row.
-
-            Returns
-            -------
-            None.
 
             '''
         # Set resize mode to ResizeToContent(3) only for first column(0)
@@ -3360,20 +3949,17 @@ class DatasetBuilder(DraggableTool):
             row : int
                 Index of row.
 
-            Returns
-            -------
-            None.
-
             '''
-        # Initialize the DatasetDesignerWidgets in every column except the first,
-        # because it holds the special "fill row" button (see init_firstCol func.)
+        # Initialize the DatasetDesignerWidgets in every column except the 
+        # first, because it holds the special "fill row" button (for details  
+        # see init_firstCol function)
             for col in range(1, self.columnCount()):
                 col_lbl = self.horizontalHeaderItem(col).text()
                 wid = self.parent.DatasetDesignerWidget('input', col_lbl, self)
                 self.setCellWidget(row, col, wid)
 
         # Set resize mode of vertical header to ResizeToContent(3)
-            self.verticalHeader().setSectionResizeMode(row, 3) # ResizeToContent
+            self.verticalHeader().setSectionResizeMode(row, 3)
 
 
         def refresh(self, columns):
@@ -3384,10 +3970,6 @@ class DatasetBuilder(DraggableTool):
             ----------
             columns : list
                 List of column names.
-
-            Returns
-            -------
-            None.
 
             '''
         # Clear all and set new column names
@@ -3406,10 +3988,6 @@ class DatasetBuilder(DraggableTool):
             '''
             Add a row to the table.
 
-            Returns
-            -------
-            None.
-
             '''
             row = self.rowCount()
             self.insertRow(row)
@@ -3421,10 +3999,6 @@ class DatasetBuilder(DraggableTool):
             '''
             Remove last row from the table.
 
-            Returns
-            -------
-            None.
-
             '''
             row = self.rowCount() - 1
             if row >= 0:
@@ -3433,24 +4007,20 @@ class DatasetBuilder(DraggableTool):
 
         def smart_fillRow(self):
             '''
-            Try to fill an entire row of the table by automatically importing and
-            ordering multiple input maps based on their filename.
-
-            Returns
-            -------
-            None.
+            Try to fill an entire row of the table by automatically importing 
+            and ordering multiple input maps based on their filename.
 
             '''
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
                                                         pref.get_dirPath('in'),
                                                         'ASCII maps (*.txt *.gz)')
             if paths:
-                pref.set_dirPath('in', dirname(paths[0]))
+                pref.set_dirPath('in', os.path.dirname(paths[0]))
                 progBar = cObj.PopUpProgBar(self, len(paths), 'Loading Maps')
                 for n, p in enumerate(paths, start=1):
                     if progBar.wasCanceled(): break
                     try:
-                        name = CF.path2fileName(p)
+                        name = CF.path2filename(p)
                         matching_col = CF.guessMap(name, self.col_lbls) # !!! find a more elegant solution
                     # If a filename matches with a column, then add it
                         if matching_col:
@@ -3493,9 +4063,11 @@ class DatasetBuilder(DraggableTool):
 
 
     class YDatasetDesigner(cObj.StyledTable):
-        '''Table widget for the Dataset Builder tool. It allows the user to import
-        labels in the form of classified maps data for the automatic compilation of
-        a ground truth dataset.'''
+        '''
+        Table widget for the Dataset Builder tool. It allows the user to import
+        labels in the form of already classified mineral maps data in order to
+        automatically compile a ground truth dataset.
+        '''
 
         def __init__(self, parent=None):
             '''
@@ -3506,23 +4078,15 @@ class DatasetBuilder(DraggableTool):
             parent : QWidget or None, optional
                 The GUI parent of the widget. The default is None.
 
-            Returns
-            -------
-            None.
-
             '''
         # Call the constructor of the parent class
             self.parent = parent
-            super().__init__(1, 1, self.parent)
+            super().__init__(1, 1, parent=self.parent)
 
         # Initialize the horizontal header
             self.horizontalHeader().setSectionResizeMode(1) # Stretch
             self.col_lbl = ['Mineral Map']
             self.setHorizontalHeaderLabels(self.col_lbl)
-
-        # # Use custom scroll bars
-        #     self.setHorizontalScrollBar(cObj.StyledScrollBar(Qt.Horizontal))
-        #     self.setVerticalScrollBar(cObj.StyledScrollBar(Qt.Vertical))
 
 
         def init_rowWidget(self, row):
@@ -3534,10 +4098,6 @@ class DatasetBuilder(DraggableTool):
             ----------
             row : int
                 Index of row.
-
-            Returns
-            -------
-            None.
 
             '''
         # Initialize the DatasetDesignerWidget in the one and only cell
@@ -3552,10 +4112,6 @@ class DatasetBuilder(DraggableTool):
             '''
             Reset and re-initialize the table.
 
-            Returns
-            -------
-            None.
-
             '''
             self.clear()
             self.setHorizontalHeaderLabels(self.col_lbl)
@@ -3567,10 +4123,6 @@ class DatasetBuilder(DraggableTool):
             '''
             Add a row to the table.
 
-            Returns
-            -------
-            None.
-
             '''
             row = self.rowCount()
             self.insertRow(row)
@@ -3580,10 +4132,6 @@ class DatasetBuilder(DraggableTool):
         def delRow(self):
             '''
             Remove last row from the table.
-
-            Returns
-            -------
-            None.
 
             '''
             row = self.rowCount() - 1
@@ -3611,12 +4159,14 @@ class DatasetBuilder(DraggableTool):
 
 
     class DatasetDesignerWidget(QW.QWidget):
-        '''Base widget used by the Dataset Designer tool to load and manage map
-        data. See XDatasetDesigner and YDatasetDesigner classes for more details.'''
+        '''
+        Base widget used by the Dataset Designer tool to load and manage map
+        data. See XDatasetDesigner and YDatasetDesigner classes for details.
+        '''
 
         def __init__(self, mapType, mapName, parent=None):
             '''
-            DatasetDesignerWidget class constructor.
+            Constructor.
 
             Parameters
             ----------
@@ -3626,10 +4176,6 @@ class DatasetBuilder(DraggableTool):
                 Name of the map.
             parent : QTableWidget or None, optional
                 The table that holds this widget. The default is None.
-
-            Returns
-            -------
-            None.
 
             '''
         # Raise error if mapType is not valid
@@ -3680,10 +4226,6 @@ class DatasetBuilder(DraggableTool):
                 Map filepath. If None, it can be selected interactively. The
                 default is None.
 
-            Returns
-            -------
-            None.
-
             '''
         # If path is missing, prompt user to load a file, defining the expected
         # file extension based on map role
@@ -3698,7 +4240,7 @@ class DatasetBuilder(DraggableTool):
                                                          filext_filter)
         # If path is valid, load the data
             if path:
-                pref.set_dirPath('in', dirname(path))
+                pref.set_dirPath('in', os.path.dirname(path))
                 try:
                     if self.mapType == 'input':
                         self.data = InputMap.load(path).map
@@ -3716,14 +4258,9 @@ class DatasetBuilder(DraggableTool):
                                                     f'Unexpected file:\n{path}.')
 
 
-
         def delMap(self):
             '''
             Remove loaded map data.
-
-            Returns
-            -------
-            None.
 
             '''
             self.add_btn.setEnabled(True)
@@ -3741,10 +4278,6 @@ class DatasetBuilder(DraggableTool):
             ----------
             show : bool
                 Show/hide the warning.
-
-            Returns
-            -------
-            None.
 
             '''
             color = 'yellow' if show else 'lightgreen'
@@ -3777,7 +4310,7 @@ class PixelEditor(QW.QWidget):
 
         # Edited Pixels Preview Area
         self.editPreview = cObj.HeatMapCanvas(size=(6, 4.5), binary=True, tight=True,
-                                              cbar=False, wheelZoomEnabled=False)
+                                              cbar=False, wheel_zoom=False)
         self.editPreview.setMinimumSize(100, 100)
 
         # Progress bar
@@ -3855,7 +4388,7 @@ class PixelEditor(QW.QWidget):
                                                     '''Compressed ASCII file (*.gz)
                                                        ASCII file (*.txt)''')
         if outpath:
-            pref.set_dirPath('out', dirname(outpath))
+            pref.set_dirPath('out', os.path.dirname(outpath))
             np.savetxt(outpath, editedMap, fmt='%s')
             QW.QMessageBox.information(self, 'X-Min Learn',
                                        'Edited map saved with success.')
@@ -4309,19 +4842,19 @@ class ModelLearner(DraggableTool):
         self.tvt_bar.setMinimumSize(100, 300)
 
     # Train set class visualizer
-        self.trSet_list = cObj.StyledListWidget(extendedSelection=False)
+        self.trSet_list = cObj.StyledListWidget(ext_selection=False)
         self.trSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Train'))
         self.trSet_currCount = QW.QLabel('')
         self.trSet_totCount  = QW.QLabel('Tot = 0')
 
     # Validation set class visualizer
-        self.vdSet_list = cObj.StyledListWidget(extendedSelection=False)
+        self.vdSet_list = cObj.StyledListWidget(ext_selection=False)
         self.vdSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Validation'))
         self.vdSet_currCount = QW.QLabel('')
         self.vdSet_totCount  = QW.QLabel('Tot = 0')
 
     # Test set class visualizer
-        self.tsSet_list = cObj.StyledListWidget(extendedSelection=False)
+        self.tsSet_list = cObj.StyledListWidget(ext_selection=False)
         self.tsSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Test'))
         self.tsSet_currCount = QW.QLabel('')
         self.tsSet_totCount  = QW.QLabel('Tot = 0')
@@ -4731,7 +5264,7 @@ class ModelLearner(DraggableTool):
                                                   pref.get_dirPath('in'),
                                                   'Comma Separated Values (*.csv)')
         if path:
-            pref.set_dirPath('in', dirname(path))
+            pref.set_dirPath('in', os.path.dirname(path))
             if self._splitDatasetPerformed():
                 choice = QW.QMessageBox.question(self, 'X-Min Learn',
                                                  'The entire learning procedure '\
@@ -5183,7 +5716,7 @@ class ModelLearner(DraggableTool):
                                                   pref.get_dirPath('in'),
                                                   'PyTorch Data File (*.pth)')
         if path:
-            pref.set_dirPath('in', dirname(path))
+            pref.set_dirPath('in', os.path.dirname(path))
             pbar = cObj.PopUpProgBar(self, 4, 'Loading Model')
             try:
             # Import parent model variables
@@ -5815,9 +6348,9 @@ class ModelLearner(DraggableTool):
                                                   pref.get_dirPath('out'),
                                                   'PyTorch Data File (*.pth)')
         if path:
-            pref.set_dirPath('out', dirname(path))
+            pref.set_dirPath('out', os.path.dirname(path))
             try:
-                log_path = CF.extendFileName(path, '_log', ext='.txt')
+                log_path = CF.extend_filename(path, '_log', ext='.txt')
                 extendedLog = pref.get_setting('class/extLog', False, bool)
                 ML_tools.saveModel(self.model_vars, path, log_path, extendedLog)
                 QW.QMessageBox.information(self, 'Model saved',
@@ -6042,8 +6575,8 @@ class PhaseRefiner(QW.QWidget):
             lbl, mode = zip(*modeDict.items())
             # Use the current colors of original canvas, which includes always all the classes
             col_dict = dict(zip(self.phases, self.origCanvas.curr_colors))
-            # The orderDictByList func excludes from col_dict the keys not in lbl (see documentation)
-            col_dict = CF.orderDictByList(col_dict, lbl)
+            # The sort_dict_by_list func excludes from col_dict the keys not in lbl (see documentation)
+            col_dict = CF.sort_dict_by_list(col_dict, lbl)
             canvas.update_canvas(f'{plot} Mineral Mode', mode, lbl,
                                  colors=list(col_dict.values()))
 
@@ -6115,7 +6648,7 @@ class PhaseRefiner(QW.QWidget):
                                                         '''Compressed ASCII file (*.gz)
                                                            ASCII file (*.txt)''')
             if outpath:
-                pref.set_dirPath('out', dirname(outpath))
+                pref.set_dirPath('out', os.path.dirname(outpath))
                 np.savetxt(outpath, self.refined, fmt='%s')
                 autoload = QW.QMessageBox.question(self, 'X-Min Learn',
                                                    'Do you want to load the result in the "Mineral Map Tab"?',
@@ -6441,7 +6974,7 @@ class PhaseRefiner(QW.QWidget):
                                                         '''Compressed ASCII file (*.gz)
                                                            ASCII file (*.txt)''')
             if outpath:
-                pref.set_dirPath('out', dirname(outpath))
+                pref.set_dirPath('out', os.path.dirname(outpath))
                 np.savetxt(outpath, self.minmap, fmt='%s')
                 autoload = QW.QMessageBox.question(self, 'X-Min Learn',
                                                    'Do you want to load the result in the "Mineral Map Tab"?',
@@ -6459,15 +6992,9 @@ class DataViewer(QW.QWidget):
     The main tool of X-Min Learn, that allows the visualization of imported
     data. Unlike any other tool, it cannot be moved or closed by users.
     '''
-
-
     def __init__(self):
         '''
-        DataViewer class constructor.
-
-        Returns
-        -------
-        None.
+        Constructor.
 
         '''
         super(DataViewer, self).__init__()
@@ -6485,11 +7012,7 @@ class DataViewer(QW.QWidget):
 
     def _init_ui(self):
         '''
-        DataViewer class GUI constructor.
-
-        Returns
-        -------
-        None.
+        GUI constructor.
 
         '''
     # Maps Canvas
@@ -6528,10 +7051,6 @@ class DataViewer(QW.QWidget):
         ----------
         point : QPoint
             The position of the context menu event that the widget receives.
-
-        Returns
-        -------
-        None.
 
         '''
     # Get context menu from NavTbar actions

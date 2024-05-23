@@ -6,68 +6,173 @@ Created on Wed Apr 28 13:06:51 2021
 """
 
 import numpy as np
-from sklearn.metrics import (confusion_matrix, f1_score,
-                             calinski_harabasz_score, davies_bouldin_score)
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.cluster import KMeans
+import sklearn.cluster
+import sklearn.metrics
+import sklearn.neighbors
+import sklearn.preprocessing
 import torch
 
-from _base import InputMap, MineralMap, RoiMap
-from ExternalThreads import MineralClassificationThread
+from _base import InputMap, RoiMap, InputMapStack
 import conv_functions as CF
+import threads
+
 
 
 
 class SoftMaxRegressor(torch.nn.Module):
-    def __init__(self, in_features, out_classes, seed=None):
+    # Some part of this class should probably be enhanced once the Model Learner tool is overhauled
+    '''
+    Softmax Regressor Neural Network.
+    '''
+    def __init__(self, in_features: int, out_classes: int, seed:int|None=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        in_features : int
+            Number of input features.
+        out_classes : int
+            Number of required output classes.
+        seed : int | None, optional
+            Random seed. If None it will be automatically generated. The 
+            default is None.
+
+        '''
         super(SoftMaxRegressor, self).__init__()
 
-        self._name = 'Softmax Regression'
-        self._loss = 'Cross-Entropy loss'
-
+    # Set random seed
         if seed is not None:
             torch.random.manual_seed(seed)
 
-        self.linear = torch.nn.Linear(in_features, out_classes) #il regressore softmax restituisce
-        #distribuzioni di probabilità, quindi il numero di feature di output coincide con il
-        #numero di classi
+    # Set main attributes
+        self._name = 'Softmax Regression'
+        self._loss = 'Cross-Entropy loss'
+        self.linear = torch.nn.Linear(in_features, out_classes) 
         self.softmax = torch.nn.Softmax(dim=1)
-        self.loss = torch.nn.CrossEntropyLoss() # Set the Cross-Entropy as loss
+        self.loss = torch.nn.CrossEntropyLoss() 
+
 
     def get_weight(self):
+        '''
+        Return model weights.
+
+        Returns
+        -------
+        Tensor
+            Model weights.
+
+        '''
         return self.linear.weight
 
+
     def get_bias(self):
+        '''
+        Return model bias.
+
+        Returns
+        -------
+        Tensor
+            Model bias.
+
+        '''
         return self.linear.bias
 
-    def forward(self, x):
-        """Definisce come processare l'input x"""
+
+    def forward(self, x: torch.Tensor):
+        '''
+        Defines how to process the input x.
+
+        Parameters
+        ----------
+        x : Tensor
+            Input data.
+
+        Returns
+        -------
+        scores : Tensor
+            Linear scores (logits).
+
+        '''
         scores = self.linear(x)
         return scores
 
-    def predict(self, x):
-        '''Definisce come applicare la funzione softmax ai logit (z) ottenuti da self.linear'''
+
+    def predict(self, x: torch.Tensor):
+        '''
+        Defines how to apply the softmax function to the logits (z) obtained
+        from self.linear.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input data.
+
+        Returns
+        -------
+        probs : Tensor
+            Probability scores.
+        classes : Tensor
+            Output classes.
+
+        '''
         self.eval()
         z = self.linear(x)
         probs, classes = self.softmax(z).max(1)
         return probs, classes
 
-    def learn(self, X_train, Y_train, X_test, Y_test, optimizer, device):
-        '''Definisce una singola iterazione di learning'''
 
+    def learn(self, X_train: torch.Tensor, Y_train: torch.Tensor, 
+              X_test: torch.Tensor, Y_test: torch.Tensor, 
+              optimizer: torch.optim.Optimizer, device: str):
+        
+        '''
+        Defines a single learning iteration.
+
+        Parameters
+        ----------
+        X_train : Tensor
+            Train set feature data.   
+        Y_train : Tensor
+            Train set label data.
+        X_test : Tensor
+            Test set feature data.   
+        Y_test : Tensor
+            Test set label data.
+        optimizer : Optimizer
+            Optimizer.
+        device : str
+            Where to compute the learning iteration. Can be either 'cpu' or 
+            'cuda'.
+
+        Returns
+        -------
+        train_loss : Tensor
+            Train set loss.
+        test_loss : Tensor
+            Test set loss.
+        train_preds : Tensor
+            Predictions on train set.
+        test_prefs : Tensor
+            Predictions on test set
+
+        '''
+    # Predict train data and compute train loss
         self.train()
         out = self.forward(X_train.to(device))
         l = self.loss(out, Y_train.long().to(device))
+ 
         l.backward()
         optimizer.step()
-        optimizer.zero_grad()
+        optimizer.zero_grad() # Should this be called before l.backward()?
 
         train_loss = l.cpu().detach().numpy().item()
         train_preds = out.max(1)[1].cpu()
 
+    # Predict test data and compute test loss
         self.eval()
         with torch.set_grad_enabled(False):
+
             out = self.forward(X_test.to(device))
             l = self.loss(out, Y_test.long().to(device))
 
@@ -79,12 +184,24 @@ class SoftMaxRegressor(torch.nn.Module):
 
 
 class EagerModel():
+    '''
+    A class that allows to manage eager ML models and their variables.
+    '''
+    def __init__(self, variables: dict, model_path: str|None=None):
+        '''
+        Constructor.
 
-    def __init__(self, vrb_dict, model_path=None): # variables dict
+        Parameters
+        ----------
+        variables : dict
+            Model variables dictionary.
+        model_path : str | None, optional
+            Model filepath. The default is None.
 
-        self.vrb_dict = vrb_dict
+        '''
+    # Set main attributes
+        self.variables = variables
         self.filepath = model_path
-
         self._base_vrb = ['algm_name', 'loss_name', 'optim_name',
                           'ordered_Xfeat', 'Y_dict', 'device', 'seed',
                           'parentModel_path', 'GT_dataset_path', 'TVT_rateos',
@@ -97,39 +214,62 @@ class EagerModel():
             print(f'Warning, missing variables {mv}')
 
     @classmethod
-    def load(cls, model_path):
-        vrb_dict = torch.load(model_path)
-        return cls(vrb_dict, model_path)
+    def load(cls, model_path: str):
+        '''
+        Load model from filepath.
+
+        Parameters
+        ----------
+        model_path : str
+            Model filepath
+
+        Returns
+        -------
+        EagerModel
+            A new instance of EagerModel.
+
+        '''
+        variables = torch.load(model_path)
+        return cls(variables, model_path)
 
     @property
     def algorithm(self):
-        return self.vrb_dict.get('algm_name')
+        return self.variables.get('algm_name')
 
     @property
     def inFeat(self):
-        return self.vrb_dict.get('ordered_Xfeat')
+        return self.variables.get('ordered_Xfeat')
 
     @property
     def encoder(self):
-        return self.vrb_dict.get('Y_dict')
+        return self.variables.get('Y_dict')
 
     @property
     def xMean(self):
-        return self.vrb_dict.get('standards')[0]
+        return self.variables.get('standards')[0]
 
     @property
     def xStd(self):
-        return self.vrb_dict.get('standards')[1]
+        return self.variables.get('standards')[1]
 
     @property
     def stateDict(self):
-        return self.vrb_dict.get('model_state_dict')
+        return self.variables.get('model_state_dict')
 
     @property
     def regrDegree(self):
-        return self.vrb_dict.get('regressorDegree')
+        return self.variables.get('regressorDegree')
 
     def getTrainedModel(self):
+        '''
+        Return the trained ML model.
+
+        Returns
+        -------
+        model
+            Trained ML network architecture.
+
+        '''
         infeat = self.inFeatPoly() if self.regrDegree > 1 else len(self.inFeat)
         outcls = len(self.encoder)
         model = getNetworkArchitecture(self.algorithm, infeat, outcls)
@@ -146,281 +286,468 @@ class EagerModel():
                                         return_n_features = True)
         return n_poly_feat
 
-    def save(self, outpath, log_path=False, extended_log=False):
-        torch.save(self.vrb_dict, outpath)
-        if log_path:
+    def save(self, outpath: str, log_path: str|None=None, extended_log=False):
+        '''
+        Save model variables to file.
+
+        Parameters
+        ----------
+        outpath : str
+            Output filepath.
+        log_path : str | None, optional
+            Log file output. If None, no log file will be compiled. The default
+            is None.
+        extended_log : bool, optional
+            Whether the log file should include extended information. This is
+            ignored if <log_path> is None. The default is False.
+
+        '''
+        torch.save(self.variables, outpath)
+        if log_path is not None:
             self.saveLog(log_path, extended_log)
 
-    def saveLog(self, outpath, extended=False):
+
+    def saveLog(self, outpath: str, extended=False):
+        '''
+        Save model log file.
+
+        Parameters
+        ----------
+        outpath : str
+            Log filepath.
+        extended : bool, optional
+            Whether the log file should include extended information. The 
+            default is False.
+
+        '''
         with open(outpath, 'w') as log:
-            for k, v in self.vrb_dict.items():
+            for k, v in self.variables.items():
                 if not extended and k in self._extended_vrb:
                     continue
                 log.write(f'{k.upper()}\n{repr(v)}\n\n\n')
 
-    def generateLogPath(self, path):
+
+    def generateLogPath(self, path: str|None):
+        '''
+        Automatically generate a log filepath from the given path.
+
+        Parameters
+        ----------
+        path : str | None
+            Reference path. Usually is the model variables path.
+
+        Returns
+        -------
+        logpath : str
+            Generated log filepath.
+
+        '''
         if path is None: return
-        logpath = CF.extendFileName(path, '_log', ext='.txt')
+        logpath = CF.extend_filename(path, '_log', ext='.txt')
         return logpath
 
+
     def missingVariables(self):
+        '''
+        Check if any model variable is missing.
+
+        Returns
+        -------
+        missing : set
+            Missing variables.
+
+        '''
         required_vrb = self._base_vrb + self._extended_vrb
-        missing = set(required_vrb) - set(self.vrb_dict.keys())
+        missing = set(required_vrb) - set(self.variables.keys())
         return missing
 
 
 
 
-
-
-
-
-
-
-
-
 class ModelBasedClassifier():
+    '''
+    Base class for all ML model based classifiers.
+    '''
+    def __init__(self, model: EagerModel, input_stack: InputMapStack):
+        '''
+        Constuctor.
 
-    def __init__(self, model, inmaps, mask=None): # model = EagerModel
+        Parameters
+        ----------
+        model : EagerModel
+            ML supervised model.
+        input_stack : InputMapStack
+            Stack of input maps.
 
+        '''
+    # Set main attributes
+        self.name = CF.path2filename(model.filepath)
         self.model = model
-        self.inmaps = inmaps
-        self.mask = mask
-        self.map_shape = inmaps[0].map.shape
-
+        self.input_stack = input_stack
+        self.map_shape = input_stack.maps_shape
         self.algorithm = model.getTrainedModel()
         self.classification_steps = 4
-        self.thread = self.ClassificationThread()
+        self.thread = threads.ModelBasedClassificationThread()
 
-    def preProcessInputData(self):
-        in_data = [i.map for i in self.inmaps]
+    def preProcessFeatureData(self):
+        '''
+        Perform several pre-processing operations on input feature data.
 
-    # Apply mask if present
-        if self.mask is not None:
-            in_data = [np.ma.masked_where(self.mask, i) for i in in_data]
+        Returns
+        -------
+        feat_data : Tensor
+            Pre-processed input data.
 
-    # Merge input data in a classifier-friendly reshaped array (npix x nmaps)
-        in_data = mergeMaps(in_data, masked=self.mask is not None)
+        '''
+    # Get a 2D features array suited for classification (n_pix x n_maps)
+        feat_data = self.input_stack.get_feature_array()
 
     # Map features from linear to polynomial if required
         if (regr_degree := self.model.regrDegree) > 1:
-            in_data = map2Polynomial(in_data, regr_degree)
+            feat_data = map2Polynomial(feat_data, regr_degree)
 
     # Standardize data
-        in_data = torch.tensor(in_data)
-        in_data = norm_data(in_data, self.model.xMean, self.model.xStd,
-                            return_standards=False)
+        feat_data = torch.tensor(feat_data)
+        feat_data = norm_data(feat_data, self.model.xMean, self.model.xStd,
+                              return_standards=False)
 
-        return in_data
+        return feat_data
 
-    def encodeLabels(self, array, dtype='int16'):
-        '''From labels to IDs.'''
+
+    def encodeLabels(self, array: np.ndarray, dtype='int16'):
+        '''
+        Encode labels from text names to class IDs.
+
+        Parameters
+        ----------
+        array : np.ndarray
+            Labels array.
+        dtype : str, optional
+            Encoded array dtype. The default is 'int16'.
+
+        Returns
+        -------
+        res : ndarray
+            Encoded labels array.
+
+        '''
         res = np.copy(array)
         for k, v in self.model.encoder.items(): res[array==k] = v
         return res.astype(dtype)
 
-    def decodeLabels(self, array, dtype='U8'):
-        '''From IDs to labels.'''
+    def decodeLabels(self, array: np.ndarray, dtype='U8'):
+        '''
+        Decode labels from class IDs to text names.
+
+        Parameters
+        ----------
+        array : np.ndarray
+            Labels array.
+        dtype : str, optional
+            Decoded array dtype. The default is 'U8'.
+
+        Returns
+        -------
+        res : ndarray
+            Decoded labels array.
+            
+        '''
         res = np.copy(array).astype(dtype)
         for k, v in self.model.encoder.items(): res[array==v] = k
         return res
 
+
     def startThreadedClassification(self):
+        '''
+        Launch the classification external thread.
+
+        '''
         self.thread.set_classifier(self)
         self.thread.start()
 
 
 
-    class ClassificationThread(MineralClassificationThread):
+class RoiBasedClassifier():
+    '''
+    Base class for all ROI based classifiers.
+    '''
+    def __init__(self, input_stack: InputMapStack, roimap: RoiMap, n_jobs=1, 
+                 pixel_proximity=False):
+        '''
+        Constructor.
 
-        def __init__(self):
-            super().__init__()
+        Parameters
+        ----------
+        input_stack : InputMapStack
+            Stack of input maps.
+        roimap : RoiMap
+            ROI map containing training data.
+        n_jobs : int, optional
+            Number of parallel CPU threads. If -1, all processors are used. The
+            default is 1.
+        pixel_proximity : bool, optional
+            Add x,y pixel indices maps to input features. The default is False.
 
-        def run(self):
-            super().run()
-
-            try:
-            # Pre-process input data
-                self.taskInitialized.emit('Pre-processing data')
-                in_data = self.classifier.preProcessInputData()
-
-            # Predict unknown data and calculate probability scores
-                if self.isInterruptionRequested(): return
-                self.taskInitialized.emit('Identifying mineral classes')
-                prob, pred = self.algorithm.predict(in_data.float())
-
-            # Reconstruct the result
-                if self.isInterruptionRequested(): return
-                self.taskInitialized.emit('Reconstructing mineral map')
-                shape = self.classifier.map_shape
-                prob = prob.reshape(shape)
-                pred = self.classifier.decodeLabels(pred).reshape(shape)
-
-            # Send the workFinished signal with success
-                self.workFinished.emit((pred, prob), True)
-
-            except Exception as e:
-            # Send the workFinished signal with error
-                self.workFinished.emit((e,), False)
-
-            finally:
-            # Reset parameters for safety measures
-                self.reset_classifier()
-
-
-
-class _RoiBasedClassifier():
-
-    def __init__(self, inmaps, roimap, mask=None, pixel_proximity=False):
-        self.inmaps = inmaps
+        '''
+    # Set main attributes
+        self.input_stack = input_stack
         self.roimap = roimap
-        self.mask = mask
-        self.map_shape = inmaps[0].shape
+        self.map_shape = input_stack.maps_shape
+        self.n_jobs = n_jobs
         self.proximity = pixel_proximity
-
         self.algorithm = None  # to be reimplemented in each child class
-        self.classification_steps = 6
-        self.thread = self.ClassificationThread()
+        self.classification_steps = 5
+        self.thread = threads.RoiBasedClassificationThread()
+
 
     def getCoordMaps(self):
+        '''
+        Return x, y pixel indices (coordinates) maps.
+
+        Returns
+        -------
+        coord_maps : list of ndarrays
+            X, Y coordinates maps.
+
+        '''
         shape = self.map_shape
         xx, yy = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-        return xx, yy
+        coord_maps = [InputMap(xx), InputMap(yy)]
+        return coord_maps
 
 
     def preProcessFeatureData(self):
+        '''
+        Perform several pre-processing operations on input feature data.
+
+        Returns
+        -------
+        feat_data : ndarray
+            Pre-processed input data.
+
+        '''
     # Include pixel coordinate maps if required
-        feat_data = [i.map for i in self.inmaps]
         if self.proximity:
-            feat_data.extend(self.getCoordMaps())
+            self.input_stack.add_maps(self.getCoordMaps())
 
-    # Apply mask if required:
-        if self.mask is not None:
-            feat_data = [np.ma.masked_where(self.mask, i) for i in feat_data]
-
-    # Merge input data in a classifier-friendly reshaped array (npix x nmaps)
-        feat_data = mergeMaps(feat_data, masked=self.mask is not None)
+    # Get a 2D features array suited for classification (n_pix x n_maps)
+        feat_data = self.input_stack.get_feature_array()
 
     # Normalize the data
-        feat_data = norm_data(feat_data, return_standards=False, engine='numpy')
+        feat_data = norm_data(feat_data, return_standards=False, 
+                              engine='numpy')
 
         return feat_data
 
 
     def preProcessRoiData(self):
-        roimap = self.roimap.map
+        '''
+        Perform several pre-processing operations on ROI training data.
+
+        Returns
+        -------
+        roidata : ndarray
+            Pre-processed ROI training data.
+
+        '''
+        roidata = self.roimap.map
 
     # Apply mask if required and flatten/compress the map array
-        if self.mask is not None:
-            roimap = np.ma.masked_where(self.mask, roimap).compressed()
+        if self.input_stack.mask is None:
+            roidata = roidata.flatten()
         else:
-            roimap = roimap.flatten()
+            mask_arr = self.input_stack.mask.mask
+            roidata = np.ma.masked_where(mask_arr, roidata).compressed()
 
-        return roimap
+        return roidata
 
 
     def getTrainingData(self, return_full_input=True):
+        '''
+        Return training data, splitted into features (X) and labels (Y).
+
+        Parameters
+        ----------
+        return_full_input : bool, optional
+            Whether to also return the full input data. The default is True.
+
+        Returns
+        -------
+        tr_data : list of ndarrays
+            Training data, splitted in feature and label data. The list also
+            includes the full input feature data if <return_full_input> is 
+            True.
+
+        '''
     # Get pre-processed X (feature) and Y (label) data
-        X = self.preProcessFeatureData()
-        Y = self.preProcessRoiData()
+        x = self.preProcessFeatureData()
+        y = self.preProcessRoiData()
 
     # Extract indices where Y (ROI map data) is actually populated with labels
-        labeled_indices = (Y != self.roimap._ND).nonzero()[0]
+        labeled_indices = (y != self.roimap._ND).nonzero()[0]
 
     # Use the indices to extract training data from both features and labels
-        x_train = X[labeled_indices, :]
-        y_train = Y[labeled_indices]
+        x_train = x[labeled_indices, :]
+        y_train = y[labeled_indices]
 
         tr_data = [x_train, y_train]
-        if return_full_input: tr_data.append(X)
+        if return_full_input: tr_data.append(x)
         return tr_data
 
+
     def startThreadedClassification(self):
+        '''
+        Launch the classification external thread.
+
+        '''
         self.thread.set_classifier(self)
         self.thread.start()
 
-    class ClassificationThread(MineralClassificationThread):
 
-        def __init__(self):
-            super().__init__()
+class KNearestNeighbors(RoiBasedClassifier):
+    '''
+    K-Nearest Neighbors classifier.
+    '''
+    def __init__(self, input_stack: InputMapStack, roimap: RoiMap, neigh: int,
+                 weights: str, **kwargs):
+        '''
+        Constructor.
 
-        def run(self):
-            super().run()
+        Parameters
+        ----------
+        input_stack : InputMapStack
+            Stack of input maps.
+        roimap : RoiMap
+            ROI map containing training data.
+        neigh : int
+            Number of neighbors.
+        weights : str
+            Neighbors weight function. Can be either 'uniform' or 'distance'.
+        **kwargs
+            Parent class arguments (see RoiBasedClassifier class).
 
-            try:
-            # Extract training data
-                self.taskInitialized.emit('Collecting training data')
-                x_train, y_train, in_data = self.classifier.getTrainingData()
-
-            # "Train" the classifier
-                if self.isInterruptionRequested(): return
-                self.taskInitialized.emit('Training classifier')
-                self.algorithm.fit(x_train, y_train)
-
-            # Predict unknown data
-                if self.isInterruptionRequested(): return
-                self.taskInitialized.emit('Identifying mineral classes')
-                pred = self.algorithm.predict(in_data)
-
-            # Calculate probability score
-                if self.isInterruptionRequested(): return
-                self.taskInitialized.emit('Calculating probability map')
-                prob = self.algorithm.predict_proba(in_data).max(axis=1)
-
-            # Reconstruct the result
-                if self.isInterruptionRequested(): return
-                self.taskInitialized.emit('Reconstructing mineral map')
-                shape = self.classifier.map_shape
-                pred = pred.reshape(shape)
-                prob = prob.reshape(shape)
-
-            # Send the workFinished signal with success
-                self.workFinished.emit((pred, prob), True)
-
-            except Exception as e:
-            # Send the workFinished signal with error
-                self.workFinished.emit((e,), False)
-
-            finally:
-            # Reset parameters for safety measures
-                self.reset_classifier()
-
-
-
-class KNearestNeighbors(_RoiBasedClassifier):
-    def __init__(self, inmaps, roimap, n_neigh, weights, n_jobs=None,
-                 **kwargs):
-        super(KNearestNeighbors, self).__init__(inmaps, roimap, **kwargs)
-
-        self.n_neigh = n_neigh
+        '''
+        super(KNearestNeighbors, self).__init__(input_stack, roimap, **kwargs)
+    
+    # Set main attributes
+        self.name = 'KNN'
+        self.n_neigh = neigh
         self.weights = weights
+        kw = {'weights': self.weights, 'n_jobs': self.n_jobs}
+        self.algorithm = sklearn.neighbors.KNeighborsClassifier(self.n_neigh,
+                                                                **kw)
+
+
+
+class UnsupervisedClassifier():
+    '''
+    Base class for all unsupervised classifiers.
+    '''
+    def __init__(self, input_stack: InputMapStack, seed: int, n_jobs=1, 
+                 pixel_proximity=False):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        input_stack : InputMapStack
+            Stack of input maps.
+        seed : int
+            Deterministic random state.
+        n_jobs : int, optional
+            Number of parallel CPU threads. If -1, all processors are used. The
+            default is 1.
+        pixel_proximity : bool, optional
+            Add x,y pixel indices maps to input features. The default is False.
+
+        '''
+    # Set main attributes
+        self.input_stack = input_stack
+        self.map_shape = input_stack.maps_shape
+        self.seed = seed
         self.n_jobs = n_jobs
-        self.algorithm = KNeighborsClassifier(self.n_neigh, self.weights,
-                                              n_jobs = self.n_jobs)
+        self.proximity = pixel_proximity
+        self.algorithm = None  # to be reimplemented in each child class
+        self.classification_steps = 4
+        self.thread = threads.UnsupervisedClassificationThread()
+
+
+    def getCoordMaps(self):
+        '''
+        Return x, y pixel indices (coordinates) maps.
+
+        Returns
+        -------
+        coord_maps : list of ndarrays
+            X, Y coordinates maps.
+
+        '''
+        shape = self.map_shape
+        xx, yy = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
+        coord_maps = [InputMap(xx), InputMap(yy)]
+        return coord_maps
+    
+
+    def preProcessFeatureData(self):
+        '''
+        Perform several pre-processing operations on input feature data.
+
+        Returns
+        -------
+        feat_data : ndarray
+            Pre-processed input data.
+
+        '''
+    # Include pixel coordinate maps if required
+        if self.proximity:
+            self.input_stack.add_maps(self.getCoordMaps())
+
+    # Get a 2D features array suited for classification (n_pix x n_maps)
+        feat_data = self.input_stack.get_feature_array()
+
+    # Normalize the data
+        feat_data = norm_data(feat_data, return_standards=False, 
+                              engine='numpy')
+
+        return feat_data
+
+
+    def startThreadedClassification(self):
+        '''
+        Launch the classification external thread.
+
+        '''
+        self.thread.set_classifier(self)
+        self.thread.start()
 
 
 
+class KMeans(UnsupervisedClassifier):
+    '''
+    K-Means classifier.
+    '''
+    def __init__(self, input_stack: InputMapStack, n_clust: int, seed: int,
+                 **kwargs):
+        '''
+        Constructor.
 
+        Parameters
+        ----------
+        input_stack : InputMapStack
+            Stack of input maps.
+        n_clust : int
+            Number of clusters.
+        seed : int
+            Deterministic random state.
 
-
-    # def classify(self):
-    #     knc = KNeighborsClassifier(self.n_neigh, self.weights) # !!!  check for more params
-
-    # # "Train" the KNN classifier
-    #     x_train, y_train, input_data = self.getTrainingData()
-    #     knc.fit(x_train, y_train)
-
-    # # Classify unknown data and calculate probability score
-    #     pred = knc.predict(input_data)
-    #     prob = knc.predict_proba(input_data).max(axis=1)
-
-    # # Reconstruct the result
-    #     pred = pred.reshape(self.map_shape)
-    #     prob = prob.reshape(self.map_shape)
-    #     return pred, prob
-
-
-
+        '''
+        super(KMeans, self).__init__(input_stack, seed, **kwargs)
+    
+    # Set main attributes
+        self.name = 'K-Means'
+        self.n_clust = n_clust
+        self.algorithm = sklearn.cluster.KMeans(self.n_clust, 
+                                                random_state=self.seed)
 
 
 
@@ -435,48 +762,46 @@ def getNetworkArchitecture(network_id, in_feat, out_cls, seed=None):
     return network
 
 
-def doMapsFit(maps):
-    fit = all([m.shape == maps[0].shape for m in maps])
-    return fit
+# !!! deprecated. Moved to _base.InpuMapStack class
+# def doMapsFit(maps:list):
+#     '''
+#     Check if all maps in list have same shape.
+
+#     Parameters
+#     ----------
+#     maps : list
+#         List of maps. Accepts lists of ndarray, InputMap, MineralMap, RoiMap
+
+#     Returns
+#     -------
+#     fit : bool
+#         Whether the maps share the same shape.
+
+#     '''
+#     fit = all([m.shape == maps[0].shape for m in maps])
+#     return fit
+
+# !!! deprecated. Moved to _base.InpuMapStack class
+# def mergeMaps(maps, masked=False): 
+# # Raise error if maps do not share the same shape
+#     if not doMapsFit(maps):
+#         raise ValueError('Input maps do not share the same size.')
+# # If maps are masked, make them 1D with compressed() otherwise use flatten()
+#     if masked:
+#         merged_maps = np.vstack([m.compressed() for m in maps]).T
+#     else:
+#         merged_maps = np.vstack([m.flatten() for m in maps]).T
+
+#     return merged_maps
 
 
-def mergeMaps(maps, masked=False): # !!! change name to smt like prepareMapsforClassifier
-# Raise error if maps do not share the same shape
-    if not doMapsFit(maps):
-        raise ValueError('Input maps do not share the same size.')
-# If maps are masked, make them 1D with compressed() otherwise use flatten()
-    if masked:
-        merged_maps = np.vstack([m.compressed() for m in maps]).T
-    else:
-        merged_maps = np.vstack([m.flatten() for m in maps]).T
 
-    return merged_maps
-
-
-# def KNN(data, x_train, y_train, n_neigh, wgts):
-# # Build KNN classifier
-#     KNC = KNeighborsClassifier(n_neighbors=n_neigh, weights=wgts)
-#     KNC.fit(x_train, y_train)
-# # Predict data classification
-#     pred = KNC.predict(data)
-#     prob = KNC.predict_proba(data).max(axis=1)
-#     return pred, prob
-
-def K_Means(data, k, seed):
-# Build K-Means classifier
-    kmeans = KMeans(n_clusters=k, random_state=seed)
-    kmeans.fit(data)
-# Cluster the data
-    pred = kmeans.predict(data)
-    dist = kmeans.transform(data).min(axis=1)
-    prob = 1 - dist/dist.max()
-    return pred, prob
 
 def CHIscore(data, pred):
-    return calinski_harabasz_score(data, pred)
+    return sklearn.metrics.calinski_harabasz_score(data, pred)
 
 def DBIscore(data, pred):
-    return davies_bouldin_score(data, pred)
+    return sklearn.metrics.davies_bouldin_score(data, pred)
 
 
 def array2Tensor(arr, dtype='float64'):
@@ -495,11 +820,11 @@ def norm_data(data, mean=None, std=None, return_standards=True,
         return data_norm
 
 def map2Polynomial(arr, degree, return_n_features=False):
-    kernel = PolynomialFeatures(degree, include_bias=False)
-    out = kernel.fit_transform(arr)
+    kern = sklearn.preprocessing.PolynomialFeatures(degree, include_bias=False)
+    out = kern.fit_transform(arr)
 # workaround to know how many in_feat there will be after polynomial mapping
     if return_n_features:
-        out = (out, kernel.n_output_features_)
+        out = (out, kern.n_output_features_)
     return out
 
 def cuda_available():
@@ -601,7 +926,8 @@ def splitTrainValidTest(X, Y, trRateo, vdRateo=None, seed=None, axis=0):
     return X_split, Y_split
 
 
-def splitXFeat_YTarget(dataset, split_idx=-1, xtype='int64', ytype='str', spliton='cols'):
+def splitXFeat_YTarget(dataset, split_idx=-1, xtype='int64', ytype='str', 
+                       spliton='cols'):
     '''
     Split X features from Y targets from given dataset.
 
@@ -621,17 +947,17 @@ def splitXFeat_YTarget(dataset, split_idx=-1, xtype='int64', ytype='str', splito
 
     Returns
     -------
-    X : numpy.ndarray
+    x : numpy.ndarray
         X features.
-    Y : numpy.ndarray
+    y : numpy.ndarray
         Y targets.
 
     '''
     if spliton == 'rows':
         dataset = dataset.T
-    X = dataset[:, :split_idx].astype(xtype)
-    Y = dataset[:, split_idx].astype(ytype)
-    return X, Y
+    x = dataset[:, :split_idx].astype(xtype)
+    y = dataset[:, split_idx].astype(ytype)
+    return x, y
 
 
 def balance_TrainSet(X, Y, strategy, over_sampl='SMOTE', under_sampl=None,
@@ -848,7 +1174,7 @@ def getOptimizer(optimizer_key, model, lr, mtm, wd):
     return optimizer
 
 def confusionMatrix(true, preds, IDs, percent=False):
-    cm = confusion_matrix(true, preds, labels=IDs)
+    cm = sklearn.metrics.confusion_matrix(true, preds, labels=IDs)
     if percent:
         perc = np.zeros(cm.shape)   # pre-init a zeroes matrix
         sums = cm.sum(1).reshape(-1, 1)
@@ -858,6 +1184,6 @@ def confusionMatrix(true, preds, IDs, percent=False):
     return cm
 
 def f1score(true, preds, avg):
-    f1 = f1_score(true, preds, average=avg)
+    f1 = sklearn.metrics.f1_score(true, preds, average=avg)
     return f1
 
