@@ -1476,6 +1476,70 @@ class ConfMatCanvas(_CanvasBase):
 
 
 
+class SilhouetteScoreCanvas(_CanvasBase):
+    def __init__(self, **kwargs):
+
+        super(SilhouetteScoreCanvas, self).__init__(**kwargs)
+
+        self.title = 'Silhouette Plot'
+        self.xlab = 'Silhouette Coefficient'
+        self.ylab = 'Cluster'
+        self.y_btm_init = 15
+
+        self._init_ax()
+
+    def _init_ax(self):
+        self.ax.cla()
+        self.ax.set_title(self.title)
+        self.ax.set_xlabel(self.xlab)
+        self.ax.set_ylabel(self.ylab)
+
+
+    def alter_colors(self, colors: dict):
+        col = dict(zip(colors.keys(), self.rgb_to_float(colors.values())))
+        idx = 0
+        for artist in self.ax.get_children():
+            if isinstance(artist, mpl.collections.PolyCollection):
+                lbl = artist.get_label()
+                artist.set(fc = col[lbl])
+                idx += 1
+        self.draw_idle()
+        self.flush_events()
+
+
+    def update_canvas(self, sil_values: dict, sil_avg: float, colors: dict):
+        '''sil_values = dict(i_cluster_class : sil_values_for_class_i)'''
+        self.clear_canvas()
+        y_btm = self.y_btm_init
+        col = dict(zip(colors.keys(), self.rgb_to_float(colors.values())))
+
+        for clust, values in sil_values.items():
+            values.sort()
+            y_top = y_btm + len(values)
+
+            self.ax.fill_betweenx(np.arange(y_btm, y_top), 0, values, lw=0.3,
+                                  fc=col[clust], ec='black', label=clust)
+
+            y_btm = y_top + self.y_btm_init
+
+        # Draw the average value line and set the legend referring to it
+        pe = [mpl.patheffects.withStroke(foreground='k')]
+        avg = self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, 
+                              path_effects=pe)
+        self.ax.legend([avg], [f'Avg score (excl. _ND_)\n{sil_avg}'], 
+                       loc='best')
+
+        self.draw_idle()
+        self.flush_events()
+
+
+    def clear_canvas(self):
+        self._init_ax()
+        self.draw_idle()
+        self.flush_events()
+
+
+
 class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
     '''
     A class to provide a navigation toolbar linked to a canvas object.

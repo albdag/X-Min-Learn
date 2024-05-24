@@ -1014,69 +1014,6 @@ class PieCanvas(FigureCanvasQTAgg):
         self.flush_events()
 
 
-class SilhouetteScoreCanvas(FigureCanvasQTAgg):
-    def __init__(self, parent=None, size=(6.4, 4.8), tight=False):
-        self.fig = Figure(figsize=size, tight_layout=tight)
-        self.fig.patch.set(facecolor='w', edgecolor='#19232D', linewidth=2)
-        self.ax = self.fig.add_subplot(111)
-        super(SilhouetteScoreCanvas, self).__init__(self.fig)
-
-        self.title = 'Silhouette Plot'
-        self.xlab = 'Silhouette Coefficient'
-        self.ylab = 'Cluster'
-        self.y_btm_init = 15
-
-        self.init_ax()
-
-    def init_ax(self):
-        self.ax.cla()
-        self.ax.set_title(self.title)
-        self.ax.set_xlabel(self.xlab)
-        self.ax.set_ylabel(self.ylab)
-
-
-    def alterColors(self, colors):
-        _colors = dict(zip(colors.keys(), CF.RGB2float(colors.values())))
-        idx = 0
-        for artist in self.ax.get_children():
-            if isinstance(artist, mpl.collections.PolyCollection):
-                lbl = artist.get_label()
-                artist.set(fc = _colors[lbl])
-                idx += 1
-        self.draw()
-        self.flush_events()
-
-    def update_canvas(self, sil_values, sil_avg, colors):
-        '''sil_values = dict(i_cluster_class : sil_values_for_class_i)'''
-        self.clear_canvas()
-        y_btm = self.y_btm_init
-        _colors = dict(zip(colors.keys(), CF.RGB2float(colors.values())))
-
-
-        for cluster, values in sil_values.items():
-            values.sort()
-            y_top = y_btm + len(values)
-
-            self.ax.fill_betweenx(np.arange(y_btm, y_top), 0, values, label=cluster,
-                                  fc=_colors[cluster], ec='black', lw=0.3)
-
-            y_btm = y_top + self.y_btm_init
-
-        # Draw the average value line and set the legend referring to it
-        avg_ = self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2,
-                               path_effects=[mpe.withStroke(foreground='k')])
-        self.ax.legend([avg_], [f'Avg score (excl. _ND_)\n{sil_avg}' ], loc='best')
-
-        self.draw()
-        self.flush_events()
-
-    def clear_canvas(self):
-        self.init_ax()
-        self.draw()
-        self.flush_events()
-
-
-
 
 class RGBIcon(QG.QIcon):
     '''
