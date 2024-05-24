@@ -2228,7 +2228,7 @@ class MineralClassifier(DraggableTool):
 
             input_stack.reorder(ordered_indices)
 
-            return ML_tools.ModelBasedClassifier(self.model, input_stack)
+            return ML_tools.ModelBasedClassifier(input_stack, self.model)
 
 
 
@@ -2520,8 +2520,8 @@ class MineralClassifier(DraggableTool):
 
             if algm == 'K-Means':
                 n_clust = self.kmeans_nclust_spbox.value()
-                args = (input_stack, n_clust, seed)
-                kwargs = {'pixel_proximity':prox}
+                args = (input_stack, seed, n_clust)
+                kwargs = {'n_jobs': njobs, 'pixel_proximity':prox}
                 return ML_tools.KMeans(*args, **kwargs)
 
             else:

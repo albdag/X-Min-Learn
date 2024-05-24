@@ -5,6 +5,8 @@ Created on Wed Apr 28 13:06:51 2021
 @author: albdag
 """
 
+from typing import Any
+
 import numpy as np
 import sklearn.cluster
 import sklearn.metrics
@@ -363,31 +365,77 @@ class EagerModel():
 
 
 
+class _ClassifierBase():
+    '''
+    Base class for all types of mineral classifiers.
+    '''
+    def __init__(self, type_: str, name: str, classification_steps: int,
+                 thread: threads.MineralClassificationThread,
+                 input_stack: InputMapStack):
+        '''
+        Constructor.
 
-class ModelBasedClassifier():
+        Parameters
+        ----------
+        type_ : str
+            Description of the type of classifier.
+        name : str
+            Descriptive name of the classifier.
+        classification_steps : int
+            Number of classification steps required.
+        thread : threads.MineralClassificationThread
+            Employed mineral classification worker.
+        input_stack : InputMapStack
+            Stack of input maps.
+
+        '''        
+    # Set main attributes
+        self.type = type_
+        self.name = name
+        self.classification_steps = classification_steps
+        self.thread = thread
+        self.algorithm = None # to be reimplemented in each subclass
+        self.input_stack = input_stack
+        self.map_shape = input_stack.maps_shape
+        
+        
+    def startThreadedClassification(self):
+        '''
+        Launch the classification external thread (worker).
+
+        '''
+        self.thread.set_classifier(self)
+        self.thread.start()
+
+
+
+class ModelBasedClassifier(_ClassifierBase):
     '''
     Base class for all ML model based classifiers.
     '''
-    def __init__(self, model: EagerModel, input_stack: InputMapStack):
+    def __init__(self, input_stack: InputMapStack, model: EagerModel):
         '''
         Constuctor.
 
         Parameters
         ----------
-        model : EagerModel
-            ML supervised model.
         input_stack : InputMapStack
             Stack of input maps.
+        model : EagerModel
+            ML supervised model.
 
         '''
     # Set main attributes
-        self.name = CF.path2filename(model.filepath)
+        kwargs = {'type_': 'Model-based',
+                  'name': CF.path2filename(model.filepath),
+                  'classification_steps': 4,
+                  'thread': threads.ModelBasedClassificationThread(),
+                  'input_stack': input_stack
+                  }
+        super(ModelBasedClassifier, self).__init__(**kwargs)
         self.model = model
-        self.input_stack = input_stack
-        self.map_shape = input_stack.maps_shape
         self.algorithm = model.getTrainedModel()
-        self.classification_steps = 4
-        self.thread = threads.ModelBasedClassificationThread()
+
 
     def preProcessFeatureData(self):
         '''
@@ -435,6 +483,7 @@ class ModelBasedClassifier():
         for k, v in self.model.encoder.items(): res[array==k] = v
         return res.astype(dtype)
 
+
     def decodeLabels(self, array: np.ndarray, dtype='U8'):
         '''
         Decode labels from class IDs to text names.
@@ -457,22 +506,13 @@ class ModelBasedClassifier():
         return res
 
 
-    def startThreadedClassification(self):
-        '''
-        Launch the classification external thread.
 
-        '''
-        self.thread.set_classifier(self)
-        self.thread.start()
-
-
-
-class RoiBasedClassifier():
+class RoiBasedClassifier(_ClassifierBase):
     '''
     Base class for all ROI based classifiers.
     '''
-    def __init__(self, input_stack: InputMapStack, roimap: RoiMap, n_jobs=1, 
-                 pixel_proximity=False):
+    def __init__(self, input_stack: InputMapStack, roimap: RoiMap, 
+                 algorithm_name: str, n_jobs=1, pixel_proximity=False):
         '''
         Constructor.
 
@@ -482,6 +522,8 @@ class RoiBasedClassifier():
             Stack of input maps.
         roimap : RoiMap
             ROI map containing training data.
+        algorithm_name : str
+            Name of the ROI-based algorithm.
         n_jobs : int, optional
             Number of parallel CPU threads. If -1, all processors are used. The
             default is 1.
@@ -490,14 +532,17 @@ class RoiBasedClassifier():
 
         '''
     # Set main attributes
-        self.input_stack = input_stack
+        kwargs = {'type_': 'ROI-based',
+                  'name': algorithm_name,
+                  'classification_steps': 5,
+                  'thread': threads.RoiBasedClassificationThread(),
+                  'input_stack': input_stack
+                  }
+        super(RoiBasedClassifier, self).__init__(**kwargs)
         self.roimap = roimap
-        self.map_shape = input_stack.maps_shape
+        self.algorithm = None # to be reimplemented in each subclass
         self.n_jobs = n_jobs
         self.proximity = pixel_proximity
-        self.algorithm = None  # to be reimplemented in each child class
-        self.classification_steps = 5
-        self.thread = threads.RoiBasedClassificationThread()
 
 
     def getCoordMaps(self):
@@ -595,14 +640,6 @@ class RoiBasedClassifier():
         return tr_data
 
 
-    def startThreadedClassification(self):
-        '''
-        Launch the classification external thread.
-
-        '''
-        self.thread.set_classifier(self)
-        self.thread.start()
-
 
 class KNearestNeighbors(RoiBasedClassifier):
     '''
@@ -624,27 +661,25 @@ class KNearestNeighbors(RoiBasedClassifier):
         weights : str
             Neighbors weight function. Can be either 'uniform' or 'distance'.
         **kwargs
-            Parent class arguments (see RoiBasedClassifier class).
+            Parent class keyword arguments (see RoiBasedClassifier class).
 
         '''
-        super(KNearestNeighbors, self).__init__(input_stack, roimap, **kwargs)
-    
     # Set main attributes
-        self.name = 'KNN'
+        super(KNearestNeighbors, self).__init__(input_stack, roimap, 'KNN',
+                                                **kwargs)
         self.n_neigh = neigh
         self.weights = weights
-        kw = {'weights': self.weights, 'n_jobs': self.n_jobs}
-        self.algorithm = sklearn.neighbors.KNeighborsClassifier(self.n_neigh,
-                                                                **kw)
+        kw = {'weights': weights, 'n_jobs': self.n_jobs}
+        self.algorithm = sklearn.neighbors.KNeighborsClassifier(neigh, **kw)
 
 
 
-class UnsupervisedClassifier():
+class UnsupervisedClassifier(_ClassifierBase):
     '''
     Base class for all unsupervised classifiers.
     '''
-    def __init__(self, input_stack: InputMapStack, seed: int, n_jobs=1, 
-                 pixel_proximity=False):
+    def __init__(self, input_stack: InputMapStack, seed: int, 
+                 algorithm_name: str, n_jobs=1, pixel_proximity=False):
         '''
         Constructor.
 
@@ -654,6 +689,8 @@ class UnsupervisedClassifier():
             Stack of input maps.
         seed : int
             Deterministic random state.
+        algorithm_name : str
+            Name of the unsupervised algorithm.
         n_jobs : int, optional
             Number of parallel CPU threads. If -1, all processors are used. The
             default is 1.
@@ -662,14 +699,17 @@ class UnsupervisedClassifier():
 
         '''
     # Set main attributes
-        self.input_stack = input_stack
-        self.map_shape = input_stack.maps_shape
+        kwargs = {'type_': 'Unsupervised',
+                  'name': algorithm_name,
+                  'classification_steps': 4,
+                  'thread': threads.UnsupervisedClassificationThread(),
+                  'input_stack': input_stack
+                  }
+        super(UnsupervisedClassifier, self).__init__(**kwargs)
         self.seed = seed
+        self.algorithm = None  # to be reimplemented in each child class
         self.n_jobs = n_jobs
         self.proximity = pixel_proximity
-        self.algorithm = None  # to be reimplemented in each child class
-        self.classification_steps = 4
-        self.thread = threads.UnsupervisedClassificationThread()
 
 
     def getCoordMaps(self):
@@ -712,21 +752,12 @@ class UnsupervisedClassifier():
         return feat_data
 
 
-    def startThreadedClassification(self):
-        '''
-        Launch the classification external thread.
-
-        '''
-        self.thread.set_classifier(self)
-        self.thread.start()
-
-
 
 class KMeans(UnsupervisedClassifier):
     '''
     K-Means classifier.
     '''
-    def __init__(self, input_stack: InputMapStack, n_clust: int, seed: int,
+    def __init__(self, input_stack: InputMapStack, seed: int, nclust: int,
                  **kwargs):
         '''
         Constructor.
@@ -735,21 +766,16 @@ class KMeans(UnsupervisedClassifier):
         ----------
         input_stack : InputMapStack
             Stack of input maps.
-        n_clust : int
-            Number of clusters.
         seed : int
             Deterministic random state.
+        nclust : int
+            Number of clusters.
 
         '''
-        super(KMeans, self).__init__(input_stack, seed, **kwargs)
-    
     # Set main attributes
-        self.name = 'K-Means'
-        self.n_clust = n_clust
-        self.algorithm = sklearn.cluster.KMeans(self.n_clust, 
-                                                random_state=self.seed)
-
-
+        super(KMeans, self).__init__(input_stack, seed, 'K-Means', **kwargs)
+        self.n_clust = nclust
+        self.algorithm = sklearn.cluster.KMeans(nclust, random_state=self.seed)
 
 
 

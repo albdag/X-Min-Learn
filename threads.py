@@ -63,8 +63,7 @@ class MineralClassificationThread(MultiTaskThread):
 
         Parameters
         ----------
-        classifier : ModelBasedClassifier | RoiBasedClassifier | 
-                     UnsupervisedClassifier
+        classifier : _ClassifierBase
             Classifier.
         '''
         self.classifier = classifier
