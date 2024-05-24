@@ -58,7 +58,6 @@ class AutoRoiDetector(QW.QDialog):
 
         self._init_ui()
         self._connect_slots()
-        self._set_defaults()
         
 
     def _init_ui(self):
@@ -71,13 +70,16 @@ class AutoRoiDetector(QW.QDialog):
 
     # Number of ROIs selector (SpinBox)
         self.nroi_spbox = cObj.StyledSpinBox(min_value=1, max_value=100)
+        self.nroi_spbox.setValue(15)
 
     # ROI size selector (SpinBox)
         self.size_spbox = cObj.StyledSpinBox(min_value=3, max_value=99, step=2)
+        self.size_spbox.setValue(9)
         self.size_spbox.setToolTip('Define a NxN ROI. N must be an odd number')
 
     # ROI distance selector
         self.distance_spbox = cObj.StyledSpinBox()
+        self.distance_spbox.setValue(10)
         self.distance_spbox.setToolTip('Minimum distance between ROI')
 
     # NPV function types (QButtonLayout)
@@ -99,6 +101,7 @@ class AutoRoiDetector(QW.QDialog):
     # Search ROIs button
         self.search_btn = cObj.StyledButton(QIcon(r'Icons/roi_detection.png'),
                                             'Search ROI')
+        self.search_btn.setEnabled(False)
 
     # Descriptive Progress bar 
         self.progbar = cObj.DescriptiveProgressBar()
@@ -181,19 +184,7 @@ class AutoRoiDetector(QW.QDialog):
             self.size_spbox.setValue(size - 1)
 
 
-    def _set_defaults(self):
-        '''
-        Set the input parameters to default.
-
-        '''
-        self.nroi_spbox.setValue(15)
-        self.size_spbox.setValue(9)
-        self.distance_spbox.setValue(10)
-        self.npv_btns.button(0).setChecked(True)
-        self.search_btn.setEnabled(False)
-
-
-    def set_current_roimap(self, roimap:RoiMap):
+    def set_current_roimap(self, roimap: RoiMap):
         '''
         Set the current roimap. This function is especially useful when called
         by the parent widget (i.e., the ROI Editor pane).
@@ -222,10 +213,6 @@ class AutoRoiDetector(QW.QDialog):
         Change maximum selectable ROI size and ROI distance based on the shape
         of the input maps.
 
-        Returns
-        -------
-        _type_
-            _description_
         '''
     # Get the shape of the first map in the list. If maps have different shapes
     # the dialog will later abort the computation anyway.
@@ -285,7 +272,7 @@ class AutoRoiDetector(QW.QDialog):
         self.npv_thread.start()
 
 
-    def _parse_npv(self, thread_result:tuple, success:bool): 
+    def _parse_npv(self, thread_result: tuple, success: bool): 
         '''
         Parse the result of the NPV computation thread. If the computation was
         successful, this function automatically launches the ROI identification
@@ -317,7 +304,7 @@ class AutoRoiDetector(QW.QDialog):
             self._end_threaded_session()
 
     
-    def launch_roi_detection(self, npv_map:np.ndarray):
+    def launch_roi_detection(self, npv_map: np.ndarray):
         '''
         Launch the thread that automatically identifies the best ROIs. This
         function is meant to be called automatically after the NPV computation
@@ -326,7 +313,7 @@ class AutoRoiDetector(QW.QDialog):
 
         Parameters
         ----------
-        npv_map : numpy.ndarray
+        npv_map : ndarray
             The cumulative Neighborhood Pixel Variance map.
 
         '''
@@ -458,10 +445,10 @@ class AutoRoiDetector(QW.QDialog):
             self._auto_roimap = None
             self.set_current_roimap(None)
             self.maps_selector.clear()
+            self.search_btn.setEnabled(False)
             self.canvas.clear_canvas()
             self._clear_roi_patches()
             self.canvas.figure.legends.clear()
-            self._set_defaults()
             super(AutoRoiDetector, self).show()
         else:
             self.activateWindow()
