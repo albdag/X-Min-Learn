@@ -9,7 +9,7 @@ from weakref import proxy
 from typing import Iterable
 
 from PyQt5.QtCore import QObject, Qt, QSize
-from PyQt5.QtGui import QCursor
+from PyQt5.QtGui import QCursor, QIcon
 from PyQt5.QtWidgets import QAction, QSizePolicy, QWidgetAction
 
 import numpy as np
@@ -106,7 +106,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         '''
     # Define the figure and the ax of the matplotlib canvas
         self.fig = mpl.figure.Figure(figsize=size, facecolor=pref.IVORY,
-                                     edgecolor='#19232D', linewidth=2,
+                                     edgecolor=pref.BLACK_PEARL, linewidth=2,
                                      layout=layout)
         self.ax = self.fig.add_subplot(111, facecolor=pref.IVORY)
         self.ax.axis('off')
@@ -1476,10 +1476,10 @@ class ConfMatCanvas(_CanvasBase):
 
 
 
-class SilhouetteScoreCanvas(_CanvasBase):
+class SilhouetteCanvas(_CanvasBase):
     def __init__(self, **kwargs):
 
-        super(SilhouetteScoreCanvas, self).__init__(**kwargs)
+        super(SilhouetteCanvas, self).__init__(**kwargs)
 
         self.title = 'Silhouette Plot'
         self.xlab = 'Silhouette Coefficient'
@@ -1575,7 +1575,17 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
         self.canvas = canvas
         self.orient = orient
 
-    # Set the icons size
+    # Set custom icons
+        icons_dict = {'Home': QIcon(r'Icons/zoom_home.png'),
+                      'Pan' : QIcon(r'Icons/pan.png'),
+                      'Zoom': QIcon(r'Icons/zoom.png'),
+                      'Save': QIcon(r'Icons/save.png')
+                     }
+        for a in self.actions():
+            if icon := icons_dict.get(a.text()):
+                a.setIcon(icon)
+
+    # Set icons size
         size = pref.get_setting('plots/NTBsize', 28, type=int)
         self.setIconSize(QSize(size, size))
 
@@ -1602,6 +1612,41 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
         if callable(reset_view):
             home = self.findChildren(QAction)[2]
             home.triggered.connect(reset_view)
+
+
+    def insertAction(self, before_idx: int, action: QAction):
+        '''
+        Convenient reimplemented insertAction function. Allows to access the
+        before_action parameters through its position (index) in the toolbar.
+
+        Parameters
+        ----------
+        before_idx : int
+            Before action index.
+        action : QAction
+            Action to insert.
+
+        '''
+        before_action = self.findChildren(QAction)[before_idx]
+        super(NavTbar, self).insertAction(before_action, action)
+
+
+
+    def insertActions(self, before_idx: int, actions: list[QAction]):
+        '''
+        Convenient reimplemented insertActions function. Allows to access the
+        before_action parameters through its position (index) in the toolbar.
+
+        Parameters
+        ----------
+        before_idx : int
+            Before action index.
+        actions : list of QAction
+            Actions to insert.
+
+        '''
+        before_action = self.findChildren(QAction)[before_idx]
+        super(NavTbar, self).insertActions(before_action, actions)
 
 
 

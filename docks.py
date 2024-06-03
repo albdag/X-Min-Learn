@@ -958,23 +958,22 @@ class HistogramViewer(QW.QWidget):
 
     # Toggle log scale [-> NavTbar Action]
     # set a proper icon
-        self.logscale_action = QW.QAction(QIcon('Icons/equalizer.png'),
+        self.logscale_action = QW.QAction(QIcon(r'Icons/logscale.png'),
                                           'Log scale', self.navTbar)
         self.logscale_action.setCheckable(True)
         self.logscale_action.setChecked(True)
-        self.navTbar.insertAction(self.navTbar.findChildren(QW.QAction)[2],
-                                  self.logscale_action)
+        self.navTbar.insertAction(2, self.logscale_action)
 
     # HeatMap scaler toolbar
         self.scaler_tbar = cObj.StyledToolbar('Histogram scaler toolbar')
 
     # Toggle scaler action [-> Heatmap scaler toolbar]
-        self.scaler_action = QW.QAction(QIcon('Icons/range.png'),
+        self.scaler_action = QW.QAction(QIcon(r'Icons/range.png'),
                                         'Enable scaler', self.scaler_tbar)
         self.scaler_action.setCheckable(True)
     
     # Extract mask action [-> Heatmap scaler toolbar]
-        self.mask_action = QW.QAction(QIcon('Icons/add_mask.png'), 
+        self.mask_action = QW.QAction(QIcon(r'Icons/add_mask.png'), 
                                       'Extract mask', self.scaler_tbar)
         self.mask_action.setEnabled(False)
 
@@ -1336,8 +1335,7 @@ class ModeViewer(QW.QTabWidget):
         self.showLabels_action = QW.QAction(QIcon(r'Icons/labelize.png'),
                                             'Show amounts', self.navTbar)
         self.showLabels_action.setCheckable(True)
-        self.navTbar.insertAction(self.navTbar.findChildren(QW.QAction)[10],
-                                  self.showLabels_action)
+        self.navTbar.insertAction(10, self.showLabels_action)
     
     # Wrap canvas and navigation toolbar in a GroupBox
         plot_layout = QW.QVBoxLayout()
@@ -1729,7 +1727,7 @@ class RoiEditor(QW.QWidget):
         self.draw_action.setCheckable(True)
 
     # Add ROI [-> Toolbar Action]
-        self.addroi_action = QW.QAction(QIcon(r'Icons/generic_add.png'),
+        self.addroi_action = QW.QAction(QIcon(r'Icons/add_roi.png'),
                                         'Add ROI', self.toolbar)
         self.addroi_action.setEnabled(False)
 
@@ -1810,8 +1808,7 @@ class RoiEditor(QW.QWidget):
         self.showlabels_action = QW.QAction(QIcon('Icons/labelize.png'),
                                             'Show Amounts', self.navTbar)
         self.showlabels_action.setCheckable(True)
-        self.navTbar.insertAction(self.navTbar.findChildren(QW.QAction)[10],
-                                  self.showlabels_action)
+        self.navTbar.insertAction(10, self.showlabels_action)
         
     # Wrap bar plot and its navigation toolbar in a QGroupArea
         barplot_layout = QW.QVBoxLayout()
