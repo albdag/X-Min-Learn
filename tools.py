@@ -1294,13 +1294,11 @@ class MineralClassifier(DraggableTool):
         self.minmaps_list.setStyleSheet(pref.SS_menu)
 
     # Save mineral map (Styled Button)
-        self.save_minmap_btn = cObj.StyledButton(QIcon(r'Icons/save_as.png'), 
-                                                 'SAVE')
+        self.save_minmap_btn = cObj.StyledButton(QIcon(r'Icons/save_as.png'))
         self.save_minmap_btn.setToolTip('Save mineral map as...')
 
     # Delete mineral map (Styled Button)
-        self.del_minmap_btn = cObj.StyledButton(QIcon(r'Icons/remove.png'), 
-                                                'DELETE')
+        self.del_minmap_btn = cObj.StyledButton(QIcon(r'Icons/remove.png'))
         self.del_minmap_btn.setToolTip('Remove mineral map')
 
     # Mineral maps legend (Legend)
@@ -1315,14 +1313,33 @@ class MineralClassifier(DraggableTool):
     
     # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
         self.barplot_navtbar = plots.NavTbar(self.barplot, self, coords=False)
-        self.barplot_navtbar.removeToolByIndex(list(range(2,10)))
+        self.barplot_navtbar.removeToolByIndex(list(range(2, 10)))
 
     # Show labels percent in bar canvas Navigation Toolbar (Action)
         self.show_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
                                           'Show amounts', self.barplot_navtbar)
         self.show_lbl_action.setCheckable(True)
-        before_action = self.barplot_navtbar.findChildren(QW.QAction)[10]
-        self.barplot_navtbar.insertAction(before_action, self.show_lbl_action)
+        self.barplot_navtbar.insertAction(10, self.show_lbl_action)
+
+    # Silhouette canvas (Silhouette Canvas)
+        self.silscore_canvas = plots.SilhouetteCanvas(layout='constrained')
+
+    # Silhouette canvas navigation toolbar (Navigation Toolbar)
+        self.silscore_navtbar = plots.NavTbar(self.silscore_canvas, self, 
+                                              coords=False)
+        self.silscore_navtbar.removeToolByIndex([3, 4, 8, 9])
+
+    # Refresh silhouette plot in silhouette canvas Navigation Toolbar (Action)
+        self.refresh_silscore_action = QW.QAction(QIcon(r'Icons/refresh.png'),
+                                                  'Refresh scores', 
+                                                  self.silscore_navtbar)
+        self.silscore_navtbar.insertAction(2, self.refresh_silscore_action)
+        
+    # Calinski-Harabasz Index (CHI) score (QLabel)
+        self.chiscore_lbl = cObj.FramedLabel('None')
+
+    # Davies-Bouldin Index (DBI) score (QLabel)
+        self.dbiscore_lbl = cObj.FramedLabel('None')
 
 #  -------------------------------------------------------------------------  #
 #                              CLASSIFIER PANEL 
@@ -1417,22 +1434,35 @@ class MineralClassifier(DraggableTool):
         barplot_vbox = QW.QVBoxLayout()
         barplot_vbox.addWidget(self.barplot_navtbar)
         barplot_vbox.addWidget(self.barplot)
-        barplot_group = cObj.GroupArea(barplot_vbox, tight=True)
+        barplot_group = cObj.GroupArea(barplot_vbox)
 
-        legend_tabwid = QW.QTabWidget()
-        legend_tabwid.setStyleSheet(pref.SS_tabWidget)
-        legend_tabwid.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
-        legend_tabwid.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
-        legend_tabwid.setTabToolTip(0, 'Legend')
-        legend_tabwid.setTabToolTip(1, 'Bar plot')
+        scores_grid = QW.QGridLayout()
+        scores_grid.addWidget(self.silscore_navtbar, 0, 0, 1, -1)
+        scores_grid.addWidget(self.silscore_canvas, 1, 0, 1, -1)
+        scores_grid.addWidget(QW.QLabel('CHI score'), 2, 0)
+        scores_grid.addWidget(self.chiscore_lbl, 2, 1)
+        scores_grid.addWidget(QW.QLabel('DBI score'), 3, 0)
+        scores_grid.addWidget(self.dbiscore_lbl, 3, 1)
+        scores_grid.setRowStretch(1, 1)
+        scores_group = cObj.GroupArea(scores_grid)
+
+        graph_tabwid = QW.QTabWidget()
+        graph_tabwid.setStyleSheet(pref.SS_tabWidget)
+        graph_tabwid.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
+        graph_tabwid.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
+        graph_tabwid.addTab(scores_group, QIcon(), None)
+        graph_tabwid.setTabToolTip(0, 'Legend')
+        graph_tabwid.setTabToolTip(1, 'Bar plot')
+        graph_tabwid.setTabToolTip(2, 'Clustering scores')
 
         output_data_grid = QW.QGridLayout()
         output_data_grid.addWidget(self.minmaps_list, 0, 0, 1, 2)
-        output_data_grid.addWidget(legend_tabwid, 0, 2, -1, 1)
+        output_data_grid.addWidget(graph_tabwid, 0, 2, -1, 1)
         output_data_grid.addWidget(self.save_minmap_btn, 1, 0)
         output_data_grid.addWidget(self.del_minmap_btn, 1, 1)
-        output_data_grid.setRowStretch(0, 1)
-        output_data_grid.setColumnStretch(2, 1)
+        output_data_grid.setColumnStretch(0, 1)
+        output_data_grid.setColumnStretch(1, 1)
+        output_data_grid.setColumnStretch(2, 4)
         output_data_group = cObj.GroupArea(output_data_grid)
         
         # - Panel layout
@@ -1467,12 +1497,10 @@ class MineralClassifier(DraggableTool):
         viewer_group = cObj.GroupArea(viewer_grid, 'Viewer panel')
 
     # Main layout
-        left_vbox = QW.QVBoxLayout()
-        left_vbox.addWidget(data_group)
-        left_vbox.addWidget(cObj.LineSeparator())
-        left_vbox.addWidget(class_group)
-        left_vbox.setSpacing(15)
-        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
+        left_vsplit = cObj.SplitterLayout(Qt.Vertical)
+        left_vsplit.addWidget(data_group)
+        left_vsplit.addWidget(class_group)
+        left_scroll = cObj.GroupScrollArea(left_vsplit, frame=False)
 
         main_layout = cObj.SplitterLayout()
         main_layout.addWidget(left_scroll)
@@ -2459,6 +2487,26 @@ class MineralClassifier(DraggableTool):
         # Seed generator widget
             self.seed_generator = cObj.RandomSeedGenerator()
 
+        # Compute silhouette score (Checkbox)
+            self.silscore_cbox = QW.QCheckBox('Silhouette score')
+            self.silscore_cbox.setChecked(True)
+            self.silscore_cbox.setToolTip('This may take some time')
+
+        # Silhouette score subset ratio (StyledSpinbox)
+            self.silscore_ratio_spbox = cObj.StyledSpinBox()
+            self.silscore_ratio_spbox.setSuffix(' %')
+            self.silscore_ratio_spbox.setValue(25)
+            ratio_ttip = 'Analyze a portion of data to reduce computation time'
+            self.silscore_ratio_spbox.setToolTip(ratio_ttip)
+
+        # Compute Calinski-Harabasz Index (Checkbox)
+            self.chiscore_cbox = QW.QCheckBox('Calinski-Harabasz Index (CHI)')
+            self.chiscore_cbox.setChecked(True)
+
+        # Compute Davies-Bouldin Index (Checkbox)
+            self.dbiscore_cbox = QW.QCheckBox('Davies-Bouldin Index (DBI)')
+            self.dbiscore_cbox.setChecked(True)
+
         # Include pixel proximity (Checkbox)
             self.pixprox_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
             self.pixprox_cbox.setToolTip('Use pixel coords as input features')
@@ -2490,11 +2538,22 @@ class MineralClassifier(DraggableTool):
             self.algm_panel.addWidget(kmeans_group)
         #---------------------------------------------------------------------#
 
-        # Adjust main layout
+        # Adjust layout
+            scores_grid = QW.QGridLayout()
+            scores_grid.addWidget(self.silscore_cbox, 0, 0)
+            scores_grid.addWidget(QW.QLabel('Data ratio'), 0, 1, Qt.AlignRight)
+            scores_grid.addWidget(self.silscore_ratio_spbox, 0, 2)
+            scores_grid.addWidget(self.chiscore_cbox, 1, 0, 1, -1)
+            scores_grid.addWidget(self.dbiscore_cbox, 2, 0, 1, -1)
+            scores_group = cObj.GroupArea(scores_grid, 'Clustering scores',
+                                          checkable=True)
+            scores_group.setChecked(False)
+
             main_layout = QW.QVBoxLayout()
             main_layout.addWidget(self.seed_generator)
             main_layout.addWidget(self.pixprox_cbox)
             main_layout.addWidget(self.multithread_cbox)
+            main_layout.addWidget(scores_group)
             main_layout.addWidget(QW.QLabel('Select algorithm'))
             main_layout.addWidget(self.algm_combox)
             main_layout.addWidget(self.algm_panel)
@@ -2503,6 +2562,9 @@ class MineralClassifier(DraggableTool):
 
 
         def _connect_slots(self):
+        # Disable silhouette data ratio when silhouette score is unchecked
+            self.silscore_cbox.stateChanged.connect(
+                self.silscore_ratio_spbox.setEnabled)
         # Select a different ROI-based algorithm
             self.algm_combox.currentTextChanged.connect(self.switchAlgorithm)
 
@@ -5075,8 +5137,7 @@ class ModelLearner(DraggableTool):
         self.CMtrainPercAction.setCheckable(True)
         self.CMtrainPercAction.setChecked(True)
         self.CMtrainPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Train'))
-        self.CMtrainNTbar.insertAction(self.CMtrainNTbar.findChildren(QW.QAction)[5],
-                                        self.CMtrainPercAction)
+        self.CMtrainNTbar.insertAction(5, self.CMtrainPercAction)
 
     # Train F1 scores labels
         self.trF1Micro_lbl = QW.QLabel('None')
@@ -5101,8 +5162,7 @@ class ModelLearner(DraggableTool):
         self.CMvalidPercAction.setCheckable(True)
         self.CMvalidPercAction.setChecked(True)
         self.CMvalidPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Validation'))
-        self.CMvalidNTbar.insertAction(self.CMvalidNTbar.findChildren(QW.QAction)[5],
-                                      self.CMvalidPercAction)
+        self.CMvalidNTbar.insertAction(5, self.CMvalidPercAction)
 
     # Validation F1 scores label
         self.vdF1Micro_lbl = QW.QLabel('None')
@@ -5169,8 +5229,7 @@ class ModelLearner(DraggableTool):
         self.CMtestPercAction.setCheckable(True)
         self.CMtestPercAction.setChecked(True)
         self.CMtestPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Test'))
-        self.CMtestNTbar.insertAction(self.CMtestNTbar.findChildren(QW.QAction)[5],
-                                      self.CMtestPercAction)
+        self.CMtestNTbar.insertAction(5, self.CMtestPercAction)
 
     # Test score labels
         self.tsLoss_lbl = QW.QLabel('None')
@@ -6743,8 +6802,8 @@ class PhaseRefiner(QW.QWidget):
             self.zoomLockAction.setCheckable(True)
             self.zoomLockAction.triggered.connect(self.lock_zoom)
 
-            self.refNTbar.insertActions(self.refNTbar.findChildren(QW.QAction)[10],
-                                       (self.zoomLockAction, self.roiSelAction))
+            self.refNTbar.insertActions(10, (self.zoomLockAction, 
+                                             self.roiSelAction))
 
         # ROI warning icon
             self.algmWarn = QW.QLabel()
@@ -7001,7 +7060,7 @@ class DataViewer(QW.QWidget):
 
     # Set tool title and icon
         self.setWindowTitle('Data Viewer')
-        self.setWindowIcon(QIcon('Icons/eye_open.png'))
+        self.setWindowIcon(QIcon(r'Icons/data_viewer.png'))
 
     # Set main attributes
         self._displayedObject = None
