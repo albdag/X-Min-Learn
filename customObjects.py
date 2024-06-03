@@ -2130,12 +2130,42 @@ class SplitterGroup(QW.QSplitter):
 
 
 
-class PathLabel(QW.QLabel):
+class FramedLabel(QW.QLabel):
     '''
-    A special type of QLabel that allow easy management and display of file
-    paths.
+    A label decorated with a black squared frame. Its text is user-selectable
+    and its size policy is fixed to avoid visual glitches when using monitors
+    with different resolutions.
     '''
-    def __init__(self, fullpath='', full_display=True, elide=True):
+    def __init__(self, text='', parent: QC.QObject|None=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        text : str, optional
+            Label text. The default is ''.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
+        super(FramedLabel, self).__init__(text, parent)
+    
+    # Set widget attributes
+        self.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
+        self.setTextInteractionFlags(QC.Qt.TextSelectableByMouse)
+
+    # Set stylesheet
+        self.setStyleSheet(pref.SS_menu + 'QLabel {border: 1px solid black;}')
+
+
+
+class PathLabel(FramedLabel):
+    '''
+    A special type of FramedLabel that allow easy management and display of 
+    file paths.
+    '''
+    def __init__(self, fullpath='', full_display=True, elide=True, 
+                 parent: QC.QObject|None=None):
         '''
         Constructor.
 
@@ -2149,20 +2179,22 @@ class PathLabel(QW.QLabel):
         elide : bool, optional
             Whether the label should automatically wrap long text. The default 
             is True.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
 
         '''
-        super(PathLabel, self).__init__()
-    
-    # Set widget attributes
-        self.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignVCenter)
-        self.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
-        self.setTextInteractionFlags(QC.Qt.TextSelectableByMouse)
-        self.setStyleSheet(pref.SS_pathLabel + pref.SS_menu)
+        super(PathLabel, self).__init__(parent=parent)
 
     # Set main attributes
         self.fullpath = fullpath
         self.full_display = full_display
         self.elide = elide
+    
+    # Set widget attributes
+        self.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignVCenter)
+
+    # Set stylesheet
+        self.setStyleSheet(pref.SS_pathLabel + pref.SS_menu)
 
     # Draw the file path
         self.display()
