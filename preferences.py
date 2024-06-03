@@ -307,11 +307,10 @@ SS_pathLabel = (
 
 SS_grouparea_notitle = (   
     '''QGroupBox {
-            background-color: %s;
             border: 1px solid %s;
             border-radius: 3px;
             padding-top: 2px;}'''
-    %(CASPER, BLACK_PEARL))
+    %(BLACK_PEARL))
 
 
 SS_grouparea_title = (SS_grouparea_notitle + 
@@ -349,14 +348,23 @@ SS_toolbar = (SS_menu +
 SS_mainToolbar = (SS_toolbar + 
     '''QToolBar {
             background-color: %s;
-            border: 2px solid %s;
-            border-radius: 3px;
-            border-style: outset;
+            border: 3px groove %s;
+            border-radius: 4px;
             margin: 4px;
             spacing: 16px;}'''
+    '''QToolBar::handle {
+            background-color: %s;
+            border: 1px solid %s;
+            border-radius: 2px;}'''
+    '''QToolBar::handle:top, QToolbar::handle:bottom {
+            image: url(Icons/toolbar_handle_h.png);
+            width: 10px;}'''      
+    '''QToolBar::handle:left, QToolbar::handle:right {
+            image: url(Icons/toolbar_handle_v.png);
+            height: 10px;}'''   
     '''QToolButton {
             padding: 10px;}'''
-    %(CASPER_DARK, BLACK_PEARL))
+    %(CASPER_DARK, SAN_MARINO, SAN_MARINO, BLACK_PEARL))
 
 
 SS_mainWindow = (

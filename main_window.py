@@ -213,6 +213,7 @@ class MainWindow(QW.QMainWindow):
         '''Initialize main toolbars.'''
     # Tools toolbar
         self.tools_toolbar = QW.QToolBar('Tools toolbar')
+        self.tools_toolbar.setFloatable(False)
         self.tools_toolbar.setIconSize(QC.QSize(32, 32))
         self.tools_toolbar.setStyleSheet(pref.SS_mainToolbar)
         # import data actions (button menu), followed by a separator
@@ -225,13 +226,14 @@ class MainWindow(QW.QMainWindow):
     
     # Panes toolbar
         self.panes_toolbar = QW.QToolBar('Panes toolbar')
+        self.panes_toolbar.setFloatable(False)
         self.panes_toolbar.setIconSize(QC.QSize(32, 32))
         self.panes_toolbar.setStyleSheet(pref.SS_mainToolbar)
         self.panes_toolbar.addActions(self.panes_tva)
 
     # Set default toolbars position in the window
         self.addToolBar(QC.Qt.LeftToolBarArea, self.panes_toolbar)
-        self.addToolBar(QC.Qt.RightToolBarArea, self.tools_toolbar)
+        self.addToolBar(QC.Qt.LeftToolBarArea, self.tools_toolbar)
 
 
     def _init_menu(self):
