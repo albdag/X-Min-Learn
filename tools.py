@@ -1292,6 +1292,7 @@ class MineralClassifier(DraggableTool):
         self.minmaps_list.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
         self.minmaps_list.setHeaderHidden(True)
         self.minmaps_list.setStyleSheet(pref.SS_menu)
+        self.minmaps_list.setMinimumHeight(150)
 
     # Save mineral map (Styled Button)
         self.save_minmap_btn = cObj.StyledButton(QIcon(r'Icons/save_as.png'))
@@ -1323,6 +1324,7 @@ class MineralClassifier(DraggableTool):
 
     # Silhouette canvas (Silhouette Canvas)
         self.silscore_canvas = plots.SilhouetteCanvas(layout='constrained')
+        self.silscore_canvas.setMinimumHeight(450)
 
     # Silhouette canvas navigation toolbar (Navigation Toolbar)
         self.silscore_navtbar = plots.NavTbar(self.silscore_canvas, self, 
@@ -1443,7 +1445,6 @@ class MineralClassifier(DraggableTool):
         scores_grid.addWidget(self.chiscore_lbl, 2, 1)
         scores_grid.addWidget(QW.QLabel('DBI score'), 3, 0)
         scores_grid.addWidget(self.dbiscore_lbl, 3, 1)
-        scores_grid.setRowStretch(1, 1)
         scores_group = cObj.GroupArea(scores_grid)
 
         graph_tabwid = QW.QTabWidget()
@@ -1456,13 +1457,13 @@ class MineralClassifier(DraggableTool):
         graph_tabwid.setTabToolTip(2, 'Clustering scores')
 
         output_data_grid = QW.QGridLayout()
-        output_data_grid.addWidget(self.minmaps_list, 0, 0, 1, 2)
-        output_data_grid.addWidget(graph_tabwid, 0, 2, -1, 1)
-        output_data_grid.addWidget(self.save_minmap_btn, 1, 0)
-        output_data_grid.addWidget(self.del_minmap_btn, 1, 1)
-        output_data_grid.setColumnStretch(0, 1)
+        output_data_grid.addWidget(graph_tabwid, 0, 0, 1, -1)
+        output_data_grid.addWidget(self.minmaps_list, 1, 0, 1, -1)
+        output_data_grid.addWidget(self.save_minmap_btn, 2, 1)
+        output_data_grid.addWidget(self.del_minmap_btn, 2, 2)
+        output_data_grid.setColumnStretch(0, 2)
         output_data_grid.setColumnStretch(1, 1)
-        output_data_grid.setColumnStretch(2, 4)
+        output_data_grid.setColumnStretch(2, 1)
         output_data_group = cObj.GroupArea(output_data_grid)
         
         # - Panel layout
@@ -1476,7 +1477,8 @@ class MineralClassifier(DraggableTool):
                                 'Mask')
         self.data_tabwid.addTab(output_data_group, QIcon(r'Icons/minmap.png'), 
                                 'Output maps')
-        data_group = cObj.GroupArea(self.data_tabwid, 'Data panel')
+        data_group = cObj.CollapsibleArea(self.data_tabwid, 'Data panel',
+                                          collapsed=False)
 
     # Classifier panel layout
         class_grid = QW.QGridLayout()
@@ -1485,7 +1487,7 @@ class MineralClassifier(DraggableTool):
         class_grid.addWidget(self.progbar, 2, 0, 1, -1)
         class_grid.addWidget(self.classify_btn, 3, 0)
         class_grid.addWidget(self.stop_btn, 3, 1)
-        class_group = cObj.GroupArea(class_grid, 'Classifier panel')
+        class_group = cObj.CollapsibleArea(class_grid, 'Classifier panel')
 
     # Viewer panel layout
         viewer_grid = QW.QGridLayout()
@@ -1497,10 +1499,11 @@ class MineralClassifier(DraggableTool):
         viewer_group = cObj.GroupArea(viewer_grid, 'Viewer panel')
 
     # Main layout
-        left_vsplit = cObj.SplitterLayout(Qt.Vertical)
-        left_vsplit.addWidget(data_group)
-        left_vsplit.addWidget(class_group)
-        left_scroll = cObj.GroupScrollArea(left_vsplit, frame=False)
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.addWidget(data_group)
+        left_vbox.addWidget(class_group)
+        left_vbox.addStretch(1)
+        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
 
         main_layout = cObj.SplitterLayout()
         main_layout.addWidget(left_scroll)

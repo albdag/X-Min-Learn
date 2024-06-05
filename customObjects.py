@@ -1786,8 +1786,8 @@ class GroupArea(QW.QGroupBox):
     '''
     A convenient class to easily wrap a layout or a widget in a QGroupBox.
     '''
-    def __init__(self, qobject, title=None, checkable=False, tight=False, 
-                 align=QC.Qt.AlignHCenter, parent=None):
+    def __init__(self, qobject, title=None, checkable=False, tight=False,
+                 frame=True, align=QC.Qt.AlignHCenter, parent=None):
         '''
         Constructor.
 
@@ -1802,6 +1802,9 @@ class GroupArea(QW.QGroupBox):
         tight : bool, optional
             Whether the qobject should take all the available space, preventing
             any possible content margin. The default is False.
+        frame : bool, optional
+            Whether the area should show a visible frame. This is ignored if
+            the title is provided. The default is True.
         align : Qt.Alignment, optional
             The alignment of the title. Can be Qt.AlignLeft, Qt.AlignRight or
             Qt.AlignHCenter. The default is Qt.AlignHCenter.
@@ -1822,7 +1825,8 @@ class GroupArea(QW.QGroupBox):
             self.setStyleSheet(ss)
         else:
             super(GroupArea, self).__init__(parent)
-            self.setStyleSheet(pref.SS_grouparea_notitle)
+            frame_ss = 'QGroupBox {border-width: %dpx;}' %(int(frame))
+            self.setStyleSheet(pref.SS_grouparea_notitle + frame_ss)
 
     # Set if the group box is checkable or not
         self.setCheckable(checkable)
@@ -1840,6 +1844,127 @@ class GroupArea(QW.QGroupBox):
     
     # Wrap the qobject in the group box
         self.setLayout(LayoutBox)
+
+
+
+class CollapsibleArea(QW.QWidget):
+    '''
+    A convenient solution to expand/collapse an entire section of the GUI. It
+    includes an arrow button to switch from expanded to collapsed view.
+    '''
+    def __init__(self, qobject: QC.QObject, title: str, collapsed=True, 
+                 parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        qobject : QObject
+            A layout-like or a widget-like object.
+        title : str
+            The title of the section.
+        collapsed : bool, optional
+            Whether the section should be collapsed by default. The default is 
+            True.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
+        super(CollapsibleArea, self).__init__(parent)
+
+    # Set private attributes
+        self._collapsed = collapsed
+        self._section = qobject
+        self._title = title
+
+    # Initialize the UI and connect signals to slots
+        self._init_ui()
+        self._connect_slots()
+
+    # Set default view
+        self.collapse() if collapsed else self.expand()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Arrow button (QToolButton)
+        self.arrow = QW.QToolButton()
+        self.arrow.setStyleSheet(pref.SS_toolbutton)
+        
+    # Section title (QLabel)
+        self.title = QW.QLabel(self._title)
+        font = self.title.font()
+        font.setBold(True)
+        self.title.setFont(font)
+
+    # Section area (GroupArea)
+        self.area = GroupArea(self._section)
+
+    # Set main layout
+        layout = QW.QGridLayout()
+        layout.addWidget(self.arrow, 0, 0)
+        layout.addWidget(self.title, 0, 1)
+        layout.addWidget(LineSeparator(lw=2), 0, 2)
+        layout.addWidget(self.area, 1, 0, 1, -1)
+        layout.setColumnStretch(2, 1)
+        layout.setContentsMargins(0, 0, 0, 20)
+        self.setLayout(layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+    # Expand/collapse section when arrow button is clicked
+        self.arrow.clicked.connect(self.onArrowClicked) 
+
+
+    def collapsed(self):
+        '''
+        Check if the section is currently collapsed or not.
+
+        Returns
+        -------
+        bool
+            Whether the section is collapsed.
+            
+        '''
+        return self._collapsed
+    
+
+    def onArrowClicked(self):
+        '''
+        Slot connected to the button clicked signal from the arrow button. It 
+        determines which action should be performed based on the current state
+        of the section.
+
+        '''
+        self.expand() if self.collapsed() else self.collapse()
+
+
+    def collapse(self):
+        '''
+        Collapse the section and change the arrow type.
+
+        '''
+        self._collapsed = True
+        self.arrow.setArrowType(QC.Qt.RightArrow)
+        self.area.setVisible(False)
+
+    
+    def expand(self):
+        '''
+        Expand the section and change the arrow type.
+
+        '''
+        self._collapsed = False
+        self.arrow.setArrowType(QC.Qt.DownArrow)
+        self.area.setVisible(True)
+        self.area.adjustSize()
 
 
 
@@ -2596,7 +2721,7 @@ class LineSeparator(QW.QFrame):
     '''
     Simple horizontal or vertical line separator.
     '''
-    def __init__(self, orient='horizontal', parent=None):
+    def __init__(self, orient='horizontal', lw=3, parent=None):
         '''
         Constructor.
 
@@ -2604,6 +2729,8 @@ class LineSeparator(QW.QFrame):
         ----------
         orient : str, optional
             Line orientation. The default is 'horizontal'.
+        lw : int, optional
+            Line width. Must be in range (1, 3). The default is 3.
         parent : QObject | None, optional
             The GUI parent of this object. The default is None.
 
@@ -2623,7 +2750,7 @@ class LineSeparator(QW.QFrame):
             raise ValueError(f'{orient} is not a valid orientation.')
         
         self.setFrameShadow(QW.QFrame.Plain)
-        self.setLineWidth(3)
+        self.setLineWidth(lw)
       
 
 

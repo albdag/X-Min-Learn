@@ -235,6 +235,24 @@ SS_button = (
     %(IVORY, BLACK_PEARL, BLOSSOM, BLACK_PEARL, BLOSSOM, BLACK_PEARL))
 
 
+SS_toolbutton = (
+    '''QToolButton {
+            background-color: %s;
+            border: 1px solid %s;
+            border-radius: 4px;}'''
+    '''QToolButton:!enabled {
+            background-color: lightgray;
+            border: 1px solid gray;}'''
+    '''QToolButton:hover {
+            background-color: %s;}'''
+    '''QToolButton:pressed {
+            border: 2px solid %s;}'''
+    '''QToolButton:checked {
+            background-color: %s;
+            border: 2px solid %s;}'''
+    %(IVORY, BLACK_PEARL, BLOSSOM, BLACK_PEARL, BLOSSOM, BLACK_PEARL))
+
+
 SS_radioButton = (
     '''QRadioButton::indicator::checked {
             image: url(Icons/radiobtn_checked.png);}''')

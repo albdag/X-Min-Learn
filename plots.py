@@ -1479,7 +1479,7 @@ class ConfMatCanvas(_CanvasBase):
 class SilhouetteCanvas(_CanvasBase):
     def __init__(self, **kwargs):
 
-        super(SilhouetteCanvas, self).__init__(**kwargs)
+        super(SilhouetteCanvas, self).__init__(size=(4.8, 6.4), **kwargs)
 
         self.title = 'Silhouette Plot'
         self.xlab = 'Silhouette Coefficient'
