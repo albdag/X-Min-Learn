@@ -10,7 +10,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 import numpy as np
 from scipy import ndimage
-from sklearn.metrics import accuracy_score, silhouette_score, silhouette_samples
+import sklearn.metrics
 
 from _base import RoiMap
 
@@ -226,7 +226,7 @@ class UnsupervisedClassificationThread(MineralClassificationThread):
         # Cluster data
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Clustering data')
-            pred = self.algorithm.predict(in_data).astype('U8')
+            pred = self.algorithm.predict(in_data)
 
         # Compute probability score
             if self.isInterruptionRequested(): return
@@ -234,8 +234,43 @@ class UnsupervisedClassificationThread(MineralClassificationThread):
             dist = self.algorithm.transform(in_data).min(axis=1)
             prob = 1 - dist/dist.max()
 
+        # Compute silhouette score (by cluster)
+            if self.isInterruptionRequested(): return
+            self.taskInitialized.emit('Computing silhouette score by cluster')
+            sil_clust = None
+            if self.classifier.do_silhouette_score:
+                sample_size = int(self.classifier.silhouette_ratio * pred.size)
+                rng = np.random.default_rng(self.classifier.seed)
+                subset_idx = rng.permutation(pred.size)[:sample_size]
+                _in_data, _pred = in_data[subset_idx, :], pred[subset_idx]
+                sil_sam = sklearn.metrics.silhouette_samples(_in_data, _pred)
+                unq_val = np.unique(_pred)
+                sil_clust = {u: np.sort(sil_sam[_pred == u]) for u in unq_val}
+
+        # Compute silhouette score (average)
+            if self.isInterruptionRequested(): return
+            self.taskInitialized.emit('Computing average silhouette score')
+            sil_avg = None
+            if sil_clust:
+                sil_avg = np.mean(sil_sam)
+
+        # Compute Calinski-Harabasz Index (CHI) score
+            if self.isInterruptionRequested(): return
+            self.taskInitialized.emit('Computing Calinski-Harabasz Index')
+            chi = None
+            if self.classifier.do_chi_score:
+                chi = sklearn.metrics.calinski_harabasz_score(in_data, pred)
+
+        # Compute Davies-Bouldin Index (DBI) score
+            if self.isInterruptionRequested(): return
+            self.taskInitialized.emit('Computing Davies-Bouldin Index')
+            dbi = None
+            if self.classifier.do_dbi_score:
+                dbi = sklearn.metrics.davies_bouldin_score(in_data, pred)
+
         # Send the workFinished signal with success
-            self.workFinished.emit((pred, prob), True)
+            out = (pred.astype('U8'), prob, sil_avg, sil_clust, chi, dbi)
+            self.workFinished.emit(out, True)
 
         except Exception as e:
         # Send the workFinished signal with error
@@ -263,9 +298,9 @@ class SilhouetteThread(QThread):
 
     def silhouette_metric(data, pred, type):
         if type == 'avg':
-            return silhouette_score(data, pred, metric='euclidean')
+            return sklearn.metrics.silhouette_score(data, pred, metric='euclidean')
         elif type == 'all':
-            return silhouette_samples(data, pred, metric='euclidean')
+            return sklearn.metrics.silhouette_samples(data, pred, metric='euclidean')
         else:
             raise NameError(f'{type} is not a valid silhouette score type.')
 
@@ -546,8 +581,8 @@ class LearningThread(QThread):
                 tr_loss, vd_loss, tr_pred, vd_pred = self.func()
 
             # Compute accuracy
-                tr_acc = accuracy_score(self.Y_tr, tr_pred)
-                vd_acc = accuracy_score(self.Y_vd, vd_pred)
+                tr_acc = sklearn.metrics.accuracy_score(self.Y_tr, tr_pred)
+                vd_acc = sklearn.metrics.accuracy_score(self.Y_vd, vd_pred)
 
             # Update progress bar and scores
                 self.epochCompleted.emit((e, (tr_loss, vd_loss),

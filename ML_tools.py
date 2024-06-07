@@ -14,7 +14,7 @@ import sklearn.neighbors
 import sklearn.preprocessing
 import torch
 
-from _base import InputMap, RoiMap, InputMapStack
+from _base import InputMap, InputMapStack, MineralMap, RoiMap
 import conv_functions as CF
 import threads
 
@@ -679,7 +679,9 @@ class UnsupervisedClassifier(_ClassifierBase):
     Base class for all unsupervised classifiers.
     '''
     def __init__(self, input_stack: InputMapStack, seed: int, 
-                 algorithm_name: str, n_jobs=1, pixel_proximity=False):
+                 algorithm_name: str, n_jobs=1, pixel_proximity=False,
+                 sil_score=False, sil_ratio=0.25, chi_score=False, 
+                 dbi_score=False):
         '''
         Constructor.
 
@@ -696,12 +698,24 @@ class UnsupervisedClassifier(_ClassifierBase):
             default is 1.
         pixel_proximity : bool, optional
             Add x,y pixel indices maps to input features. The default is False.
+        sil_score : bool, optional
+            Whether to compute silhouette score after mineral classification. 
+            The default is False.
+        sil_ratio : float, optional
+            Percentage of random data to process for silhouette score. The
+            default is 0.25.
+        chi_score : bool, optional
+            Whether to compute Calinski-Harabasz Index score after mineral 
+            classification. The default is False.
+        dbi_score : bool, optional
+            Whether to compute Davies-Bouldin Index score after mineral 
+            classification. The default is False.
 
         '''
     # Set main attributes
         kwargs = {'type_': 'Unsupervised',
                   'name': algorithm_name,
-                  'classification_steps': 4,
+                  'classification_steps': 8,
                   'thread': threads.UnsupervisedClassificationThread(),
                   'input_stack': input_stack
                   }
@@ -710,6 +724,12 @@ class UnsupervisedClassifier(_ClassifierBase):
         self.algorithm = None  # to be reimplemented in each child class
         self.n_jobs = n_jobs
         self.proximity = pixel_proximity
+    
+    # Set clustering score related attributes
+        self.do_silhouette_score = sil_score
+        self.silhouette_ratio = sil_ratio
+        self.do_chi_score = chi_score
+        self.do_dbi_score = dbi_score
 
 
     def getCoordMaps(self):
@@ -787,47 +807,6 @@ def getNetworkArchitecture(network_id, in_feat, out_cls, seed=None):
 
     return network
 
-
-# !!! deprecated. Moved to _base.InpuMapStack class
-# def doMapsFit(maps:list):
-#     '''
-#     Check if all maps in list have same shape.
-
-#     Parameters
-#     ----------
-#     maps : list
-#         List of maps. Accepts lists of ndarray, InputMap, MineralMap, RoiMap
-
-#     Returns
-#     -------
-#     fit : bool
-#         Whether the maps share the same shape.
-
-#     '''
-#     fit = all([m.shape == maps[0].shape for m in maps])
-#     return fit
-
-# !!! deprecated. Moved to _base.InpuMapStack class
-# def mergeMaps(maps, masked=False): 
-# # Raise error if maps do not share the same shape
-#     if not doMapsFit(maps):
-#         raise ValueError('Input maps do not share the same size.')
-# # If maps are masked, make them 1D with compressed() otherwise use flatten()
-#     if masked:
-#         merged_maps = np.vstack([m.compressed() for m in maps]).T
-#     else:
-#         merged_maps = np.vstack([m.flatten() for m in maps]).T
-
-#     return merged_maps
-
-
-
-
-def CHIscore(data, pred):
-    return sklearn.metrics.calinski_harabasz_score(data, pred)
-
-def DBIscore(data, pred):
-    return sklearn.metrics.davies_bouldin_score(data, pred)
 
 
 def array2Tensor(arr, dtype='float64'):

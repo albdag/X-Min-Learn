@@ -169,6 +169,12 @@ class MineralMap():
     # Update derived attributes
         self.update_derived_attributes()
 
+    # Optional attributes set only by (unsupervised) classifiers
+        self._silhouette_avg = None
+        self._silhouette_by_cluster = None
+        self._chi_score = None
+        self._dbi_score = None
+
     # Set a random palette if the current is empty
         if self.palette is None:
             self.set_palette(self.rand_colorlist())
@@ -349,6 +355,46 @@ class MineralMap():
         if id_ > len(self.encoder) - 1:
             raise ValueError(f'{id_} is not a valid ID.')
         return self.encoder[id_]
+    
+
+    def get_clustering_scores(self):
+        '''
+        Return clustering scores that are computed after an unsupervised
+        mineral classification routine. This function is currently only 
+        accessed by the Mineral Classifier tool.
+
+        Returns
+        -------
+        tuple
+            Clustering scores (= average silhouette score, silhouette score by
+            cluster, Calinski-Harabasz Index, Davies-Bouldin Index).
+        '''
+        return (self._silhouette_avg, self._silhouette_by_cluster, 
+                self._chi_score, self._dbi_score)
+    
+
+    def set_clustering_scores(self, sil_avg: float, sil_clust: dict, 
+                              chi: float, dbi: float):
+        '''
+        Set clustering scores that are computed after an unsupervised mineral
+        classification routine. This function is currently only accessed by the 
+        Mineral Classifier tool.
+
+        Parameters
+        ----------
+        sil_avg : float
+            Average silhouette score.
+        sil_clust : dict
+            Silhouette score by cluster.
+        chi : float
+            Calinski-Harabasz Index.
+        dbi : float
+            Davies-Bouldin Index.
+        '''
+        self._silhouette_avg = sil_avg
+        self._silhouette_by_cluster = sil_clust
+        self._chi_score = chi
+        self._dbi_score = dbi
 
 
     def get_labeled_mode(self):
@@ -362,9 +408,25 @@ class MineralMap():
             The labeled mode dictionary.
 
         '''
-        IDs, mode = zip(*self.mode.items())
-        labels = map(lambda ID: self.as_phase(ID), IDs)
+        ids, mode = zip(*self.mode.items())
+        labels = map(lambda id_: self.as_phase(id_), ids)
         return dict(zip(labels, mode))
+    
+
+    def get_labeled_palette(self):
+        '''
+        Convenient function to get the palette dictionary with keys expressed 
+        as labels rather than IDs.
+
+        Returns
+        -------
+        dict
+            The labeled palette dictionary.
+
+        '''
+        ids, colors = zip(*self.palette.items())
+        labels = map(lambda id_: self.as_phase(id_), ids)
+        return dict(zip(labels, colors))
 
 
     def edit_minmap(self, new_minmap: np.ndarray, alter_probmap=False):

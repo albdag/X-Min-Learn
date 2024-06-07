@@ -1308,8 +1308,7 @@ class MineralClassifier(DraggableTool):
 
     # Mineral maps bar canvas (BarCanvas)
         self.barplot = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
-                                       layout='constrained', wheel_zoom=False,
-                                       wheel_pan=False)
+                                       wheel_zoom=False, wheel_pan=False)
         self.barplot.setMinimumSize(200, 350)
     
     # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
@@ -1323,7 +1322,8 @@ class MineralClassifier(DraggableTool):
         self.barplot_navtbar.insertAction(10, self.show_lbl_action)
 
     # Silhouette canvas (Silhouette Canvas)
-        self.silscore_canvas = plots.SilhouetteCanvas(layout='constrained')
+        self.silscore_canvas = plots.SilhouetteCanvas(wheel_zoom=False, 
+                                                      wheel_pan=False)
         self.silscore_canvas.setMinimumHeight(450)
 
     # Silhouette canvas navigation toolbar (Navigation Toolbar)
@@ -1331,11 +1331,8 @@ class MineralClassifier(DraggableTool):
                                               coords=False)
         self.silscore_navtbar.removeToolByIndex([3, 4, 8, 9])
 
-    # Refresh silhouette plot in silhouette canvas Navigation Toolbar (Action)
-        self.refresh_silscore_action = QW.QAction(QIcon(r'Icons/refresh.png'),
-                                                  'Refresh scores', 
-                                                  self.silscore_navtbar)
-        self.silscore_navtbar.insertAction(2, self.refresh_silscore_action)
+    # Silhouette average score (QLabel)
+        self.silscore_lbl = cObj.FramedLabel('None')
         
     # Calinski-Harabasz Index (CHI) score (QLabel)
         self.chiscore_lbl = cObj.FramedLabel('None')
@@ -1441,17 +1438,19 @@ class MineralClassifier(DraggableTool):
         scores_grid = QW.QGridLayout()
         scores_grid.addWidget(self.silscore_navtbar, 0, 0, 1, -1)
         scores_grid.addWidget(self.silscore_canvas, 1, 0, 1, -1)
-        scores_grid.addWidget(QW.QLabel('CHI score'), 2, 0)
-        scores_grid.addWidget(self.chiscore_lbl, 2, 1)
-        scores_grid.addWidget(QW.QLabel('DBI score'), 3, 0)
-        scores_grid.addWidget(self.dbiscore_lbl, 3, 1)
+        scores_grid.addWidget(QW.QLabel('Average silhouette score'), 2, 0)
+        scores_grid.addWidget(self.silscore_lbl, 2, 1)
+        scores_grid.addWidget(QW.QLabel('Calinski-Harabasz Index'), 3, 0)
+        scores_grid.addWidget(self.chiscore_lbl, 3, 1)
+        scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 4, 0)
+        scores_grid.addWidget(self.dbiscore_lbl, 4, 1)
         scores_group = cObj.GroupArea(scores_grid)
 
         graph_tabwid = QW.QTabWidget()
         graph_tabwid.setStyleSheet(pref.SS_tabWidget)
         graph_tabwid.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
         graph_tabwid.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
-        graph_tabwid.addTab(scores_group, QIcon(), None)
+        graph_tabwid.addTab(scores_group, QIcon(r'Icons/scores.png'), None)
         graph_tabwid.setTabToolTip(0, 'Legend')
         graph_tabwid.setTabToolTip(1, 'Bar plot')
         graph_tabwid.setTabToolTip(2, 'Clustering scores')
@@ -1765,8 +1764,8 @@ class MineralClassifier(DraggableTool):
 
     def showMineralMap(self, item: cObj.DataObject | None):
         '''
-        Display mineral map item data in the maps viewer and update the legend
-        and the bar plot.
+        Display mineral map item data in the maps viewer and update the legend,
+        the bar plot and the clustering scores.
 
         Parameters
         ----------
@@ -1779,6 +1778,9 @@ class MineralClassifier(DraggableTool):
             self.legend.clear()
             self.barplot.clear_canvas()
             self.maps_viewer.clear_canvas()
+            self.silscore_canvas.clear_canvas()
+            self.chiscore_lbl.setText('None')
+            self.dbiscore_lbl.setText('None')
             return
             
     # Enable confidence spinbox and slider
@@ -1786,21 +1788,34 @@ class MineralClassifier(DraggableTool):
         self.conf_slider.setEnabled(True)
 
     # Alter minmap data with the confidence threshold
-        minmap = self._thresholdMineralMap(item.get('data'))
+        minmap = item.get('data')
+        minmap_thr = self._thresholdMineralMap(minmap)
 
     # Use item name as title
         title = item.get('name')
 
     # Update the legend
-        self.legend.update(minmap)
+        self.legend.update(minmap_thr)
     
     # Update the bar plot
-        lbls, mode = zip(*minmap.get_labeled_mode().items())
-        mode_col = [minmap.get_phase_color(lbl) for lbl in lbls]
+        lbls, mode = zip(*minmap_thr.get_labeled_mode().items())
+        mode_col = [minmap_thr.get_phase_color(lbl) for lbl in lbls]
         self.barplot.update_canvas(mode, lbls, title, mode_col)
 
+    # Update clustering scores using original (non-thresholded) mineral map
+        sil_avg, sil_clust, chi, dbi = minmap.get_clustering_scores()
+        if sil_avg and sil_clust:
+            self.silscore_canvas.update_canvas(sil_clust, sil_avg, title,
+                                               minmap.palette)
+        else:
+            self.silscore_canvas.clear_canvas()
+
+        self.silscore_lbl.setText(str(sil_avg))
+        self.chiscore_lbl.setText(str(chi))
+        self.dbiscore_lbl.setText(str(dbi))
+
     # Update the maps viewer
-        mmap, enc, col = minmap.get_plot_data()
+        mmap, enc, col = minmap_thr.get_plot_data()
         self.maps_viewer.draw_discretemap(mmap, enc, col, title)
 
 
@@ -1898,13 +1913,13 @@ class MineralClassifier(DraggableTool):
         return minmap_thr
     
 
-    def changeClassColor(self, legend_item:QW.QTreeWidgetItem, color:tuple):
+    def changeClassColor(self, legend_item: QW.QTreeWidgetItem, color: tuple):
         '''
         Alter the displayed color of a mineral class. This function propagates 
-        the changes to the mineral map, the map canvas, the mode bar plot and 
-        the legend. The arguments of this function are specifically compatible 
-        with the colorChangeRequested signal emitted by the legend (see Legend 
-        object for more details). 
+        the changes to the mineral map, the map canvas, the mode bar plot, the 
+        legend and the silhouette plot. The arguments of this function are 
+        specifically compatible with the colorChangeRequested signal emitted by 
+        the legend (see Legend object for more details). 
 
         Parameters
         ----------
@@ -1926,7 +1941,7 @@ class MineralClassifier(DraggableTool):
         else:
             minmap.set_phase_color(class_name, color)
 
-    # Re-draw mineral map, legend and bar plot
+    # Re-draw mineral map, legend, bar plot and silhouette plot
         self.showMineralMap(item)
 
 
@@ -1964,7 +1979,8 @@ class MineralClassifier(DraggableTool):
             return QW.QMessageBox.critical(self, 'X-Min Learn',
                                            f'{new_name} is already taken')
 
-    # If we get here, allow renaming. Re-draw mineral map, legend and barplot
+    # If we get here, allow renaming. Re-draw mineral map, legend, barplot and
+    # silhouette plot
         minmap.rename_phase(old_name, new_name)
         self.showMineralMap(item)
 
@@ -2070,8 +2086,13 @@ class MineralClassifier(DraggableTool):
             Whether the classification thread succeeded or not.
 
         '''
-        if success:            
-            pred, prob = result
+        if success:  
+        # Parse the classification result appropriately
+            if self._current_classifier.type == 'Unsupervised':
+                pred, prob, sil_avg, sil_clust, chi, dbi = result
+            else:   
+                pred, prob = result
+                sil_avg, sil_clust, chi, dbi = None, None, None, None
             shape = self._current_classifier.map_shape
             mask = self._current_classifier.input_stack.mask
 
@@ -2090,7 +2111,9 @@ class MineralClassifier(DraggableTool):
                 pmap[rows, cols] = prob
 
         # Create a new item in minmaps list and populate it with a Mineral Map
-            item = cObj.DataObject(MineralMap(mmap, pmap))
+            mineral_map = MineralMap(mmap, pmap)
+            mineral_map.set_clustering_scores(sil_avg, sil_clust, chi, dbi)
+            item = cObj.DataObject(mineral_map)
             dt = datetime.now().strftime("%Y%m%d-%H%M%S")
             item.setText(0, f'{self._current_classifier.name} [{dt}]')
             self.minmaps_list.addTopLevelItem(item)
@@ -2503,11 +2526,11 @@ class MineralClassifier(DraggableTool):
             self.silscore_ratio_spbox.setToolTip(ratio_ttip)
 
         # Compute Calinski-Harabasz Index (Checkbox)
-            self.chiscore_cbox = QW.QCheckBox('Calinski-Harabasz Index (CHI)')
+            self.chiscore_cbox = QW.QCheckBox('Calinski-Harabasz Index')
             self.chiscore_cbox.setChecked(True)
 
         # Compute Davies-Bouldin Index (Checkbox)
-            self.dbiscore_cbox = QW.QCheckBox('Davies-Bouldin Index (DBI)')
+            self.dbiscore_cbox = QW.QCheckBox('Davies-Bouldin Index')
             self.dbiscore_cbox.setChecked(True)
 
         # Include pixel proximity (Checkbox)
@@ -2568,7 +2591,7 @@ class MineralClassifier(DraggableTool):
         # Disable silhouette data ratio when silhouette score is unchecked
             self.silscore_cbox.stateChanged.connect(
                 self.silscore_ratio_spbox.setEnabled)
-        # Select a different ROI-based algorithm
+        # Select a different clustering algorithm
             self.algm_combox.currentTextChanged.connect(self.switchAlgorithm)
 
 
@@ -2578,15 +2601,24 @@ class MineralClassifier(DraggableTool):
 
 
         def getClassifier(self, input_stack, maps_names=None): # maps names is here only for args compatibility with ModelBased Classifier
+        # Common clustering parameters
+            seed = self.seed_generator.seed
             prox = self.pixprox_cbox.checkState()
             njobs = -1 if self.multithread_cbox.checkState() else 1
-            seed = self.seed_generator.seed
+            sil = self.silscore_cbox.isEnabled() & self.silscore_cbox.isChecked()
+            chi = self.chiscore_cbox.isEnabled() & self.chiscore_cbox.isChecked()
+            dbi = self.dbiscore_cbox.isEnabled() & self.dbiscore_cbox.isChecked()
+            ratio = self.silscore_ratio_spbox.value() / 100
+            kwargs = {'n_jobs': njobs, 'pixel_proximity':prox, 
+                      'sil_score': sil, 'chi_score': chi, 'dbi_score': dbi,
+                      'sil_ratio': ratio}
+        
+        # Algorithm-specific parameters
             algm = self.algm_combox.currentText()
 
             if algm == 'K-Means':
                 n_clust = self.kmeans_nclust_spbox.value()
                 args = (input_stack, seed, n_clust)
-                kwargs = {'n_jobs': njobs, 'pixel_proximity':prox}
                 return ML_tools.KMeans(*args, **kwargs)
 
             else:
