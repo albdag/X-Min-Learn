@@ -916,8 +916,7 @@ def splitTrainValidTest(X, Y, trRateo, vdRateo=None, seed=None, axis=0):
     '''
     lenDS = X.shape[axis]
 # Apply permutations to dataset
-    np.random.seed(seed)
-    idx = np.random.permutation(len(X))
+    idx = np.random.default_rng(seed).permutation(len(X))
     X = X[idx]
     Y = Y[idx]
 # Define split index/indices
@@ -1129,8 +1128,7 @@ def balance_TrainSet(X, Y, strategy, over_sampl='SMOTE', under_sampl=None,
         if progressBar:
             progressBar.setValue(progressBar.value() + 1)
 
-    np.random.seed(seed)
-    perm = np.random.permutation(len(X))
+    perm = np.random.default_rng(seed).permutation(len(X))
     X_bal, Y_bal = X[perm], Y[perm]
 
     return X_bal, Y_bal, args

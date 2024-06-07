@@ -1931,7 +1931,7 @@ class CollapsibleArea(QW.QWidget):
         -------
         bool
             Whether the section is collapsed.
-            
+
         '''
         return self._collapsed
     
@@ -3404,7 +3404,7 @@ class RandomSeedGenerator(QW.QWidget):
         Randomize seed.
 
         '''
-        seed = np.random.randint(0, self._max_val)
+        seed = np.random.default_rng().integers(1, self._max_val)
         self.seed_input.setText(str(seed))
 
 

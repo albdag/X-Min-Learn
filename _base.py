@@ -676,12 +676,12 @@ class MineralMap():
 
         if tol is None: tol = 256//n_colors
 
-        _rgb = np.random.randint(256, size=3)
+        _rgb = np.random.default_rng().integers(256, size=3)
         RGB_arr = _rgb.reshape(1,3)
 
         for x in range(n_colors-1):
             while np.any(np.all(abs(_rgb - RGB_arr) <= tol, axis=1)):
-                _rgb = np.random.randint(256, size=3)
+                _rgb = np.random.default_rng().integers(256, size=3)
             RGB_arr = np.r_[RGB_arr, _rgb.reshape(1,3)]
 
         return RGB_arr.tolist()
