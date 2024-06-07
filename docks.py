@@ -1323,8 +1323,7 @@ class ModeViewer(QW.QTabWidget):
 
     # Canvas
         self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
-                                      layout='constrained', wheel_zoom=False,
-                                      wheel_pan=False)
+                                      wheel_zoom=False, wheel_pan=False)
         self.canvas.setMinimumSize(200, 350)
 
     # Navigation Toolbar
@@ -1796,8 +1795,8 @@ class RoiEditor(QW.QWidget):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
 
     # Bar plot canvas
-        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4), layout='constrained',
-                                         wheel_zoom=False, wheel_pan=False)
+        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4), wheel_zoom=False, 
+                                         wheel_pan=False)
         self.barCanvas.setMinimumSize(300, 300)
 
     # Bar plot Navigation toolbar
