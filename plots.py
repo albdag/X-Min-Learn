@@ -319,7 +319,6 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
 
         # Redraw the canvas
             self.draw_idle()
-            # self.flush_events() gets more framy
 
     # Attach the callback
         cid = self.mpl_connect("scroll_event", zoom)
@@ -497,7 +496,6 @@ class ImageCanvas(_CanvasBase):
     # Set the new colormap and render it
         self.image.set_cmap(self.cmap)
         self.draw_idle()
-        # self.flush_events()
 
 
     def contains_masked_data(self):
@@ -667,7 +665,6 @@ class ImageCanvas(_CanvasBase):
 
         # Render the canvas
             self.draw_idle()
-            # self.flush_events()
 
 
     def enable_picking(self, enabled: bool):
@@ -683,7 +680,6 @@ class ImageCanvas(_CanvasBase):
         if not self.is_empty():
             self.image.set_picker(True if enabled else None)
             # self.draw_idle()
-            # self.flush_events()
 
 
     def reset_view(self):
@@ -707,7 +703,6 @@ class ImageCanvas(_CanvasBase):
                 self.fig.tight_layout()
         # Render the canvas
             self.draw_idle()
-            # self.flush_events()
 
 
     def zoom_to(self, x: int, y: int):
@@ -728,7 +723,6 @@ class ImageCanvas(_CanvasBase):
                 self.ax.set_xlim((x - 1, x + 1))
                 self.ax.set_ylim((y + 1, y - 1))
                 self.draw_idle()
-                # self.flush_events()
 
 
     def draw_discretemap(self, data: np.ndarray, encoder: dict, 
@@ -796,11 +790,6 @@ class ImageCanvas(_CanvasBase):
 
     # Redraw canvas
         self.draw_idle()
-        self.flush_events()
-        # # <self.flush_events()> da problemi al rectSel del phase refiner
-        # # (rettangolo che si sposta dopo l'acquisizione dei suoi vertici)
-        # if not self.img.pickable():
-        #     self.flush_events()
 
 
     def draw_heatmap(self, data: np.ndarray, title: str|None=None, 
@@ -859,10 +848,6 @@ class ImageCanvas(_CanvasBase):
 
     # Redraw canvas
         self.draw_idle()
-        self.flush_events()
-
-        # if not self.img.pickable():
-        #     self.flush_events()
 
 
     def get_map(self, return_mask=False):
@@ -958,7 +943,6 @@ class BarCanvas(_CanvasBase):
         self.plot = None
         self.label_amounts.clear()
         self.draw_idle()
-        # self.flush_events()
 
 
     def show_amounts(self, enabled: bool):
@@ -1108,7 +1092,6 @@ class BarCanvas(_CanvasBase):
 
     # Redraw the canvas
         self.draw_idle()
-        self.flush_events()
 
 
 
@@ -1168,7 +1151,6 @@ class HistogramCanvas(_CanvasBase):
         self.hist, self.roi_hist = None, None
         self.hist_data, self.roi_hist_data = None, None
         self.draw_idle()
-        # self.flush_events()
 
 
     def toggle_logscale(self, toggled: bool):
@@ -1262,7 +1244,6 @@ class HistogramCanvas(_CanvasBase):
 
     # Redraw the canvas
         self.draw_idle()
-        # self.flush_events()
 
 
     def reset_view(self):
@@ -1279,7 +1260,7 @@ class HistogramCanvas(_CanvasBase):
                 self.fig.tight_layout()
         # Redraw canvas
             self.draw_idle()
-            # self.flush_events()
+
 
     def update_xylim(self):
         '''
@@ -1391,7 +1372,6 @@ class ConfMatCanvas(_CanvasBase):
 
     # Redraw the canvas
         self.draw_idle()
-        #self.flush_events()
 
 
     def remove_annotations(self):
@@ -1434,7 +1414,6 @@ class ConfMatCanvas(_CanvasBase):
             self.ax.set_yticks(ticks, labels=labels, fontsize='x-small')
 
         self.draw_idle()
-        #self.flush_events()
 
 
     def update_canvas(self, data: np.ndarray):
@@ -1472,71 +1451,118 @@ class ConfMatCanvas(_CanvasBase):
 
     # Redraw the canvas
         self.draw_idle()
-        self.flush_events()
 
 
 
 class SilhouetteCanvas(_CanvasBase):
+    '''
+    Specific canvas object for displaying Silhouette scores.
+    '''
     def __init__(self, **kwargs):
+        '''
+        Constructor.
 
+        Parameters
+        ----------
+        **kwargs
+            Parent class arguments (see _CanvasBase class).
+
+        '''
         super(SilhouetteCanvas, self).__init__(size=(4.8, 6.4), **kwargs)
 
-        self.title = 'Silhouette Plot'
-        self.xlab = 'Silhouette Coefficient'
-        self.ylab = 'Cluster'
         self.y_btm_init = 15
-
         self._init_ax()
 
     def _init_ax(self):
+        '''
+        Reset the ax to default state.
+
+        '''
         self.ax.cla()
-        self.ax.set_title(self.title)
-        self.ax.set_xlabel(self.xlab)
-        self.ax.set_ylabel(self.ylab)
+        self.ax.set_xlabel('Silhouette Coefficient')
+        self.ax.set_ylabel('Cluster')
+        self.ax.set_yticklabels([])
+        self.ax.set_yticks([])
 
 
-    def alter_colors(self, colors: dict):
-        col = dict(zip(colors.keys(), self.rgb_to_float(colors.values())))
-        idx = 0
+    def alter_colors(self, palette: dict):
+        '''
+        Change colors of clusters.
+
+        Parameters
+        ----------
+        palette : dict
+            Palette dictionary (-> cluster_id : RGB_color).
+
+        '''
+    # Format the RGB palette colors as matplotlib compatible floating values
+        pal = dict(zip(palette.keys(), self.rgb_to_float(palette.values())))
+
+    # Iterate through clusters (artists) and use their label as identifier
         for artist in self.ax.get_children():
             if isinstance(artist, mpl.collections.PolyCollection):
-                lbl = artist.get_label()
-                artist.set(fc = col[lbl])
-                idx += 1
+                id_ = int(artist.get_label())
+                artist.set(fc = pal[id_])
+
+    # Redraw the canvas
         self.draw_idle()
-        self.flush_events()
 
 
-    def update_canvas(self, sil_values: dict, sil_avg: float, colors: dict):
-        '''sil_values = dict(i_cluster_class : sil_values_for_class_i)'''
-        self.clear_canvas()
+    def update_canvas(self, sil_values: dict, sil_avg: float, title: str, 
+                      palette: dict):
+        '''
+        Render a new silhouette plot.
+
+        Parameters
+        ----------
+        sil_values : dict
+            Sorted silhouette scores per cluster.
+        sil_avg : float
+            Average silhouette score.
+        title : str
+            Title label for the plot.
+        palette : dict
+            Palette dictionary (-> cluster_id : RGB_color).
+
+        '''
+    # Reset the ax and set the new title
+        self._init_ax()
+        self.ax.set_title(title)
+
+    # Format the RGB palette colors as matplotlib compatible floating values
+        pal = dict(zip(palette.keys(), self.rgb_to_float(palette.values())))
+
+    # Adjust the initial vertical (y) padding
         y_btm = self.y_btm_init
-        col = dict(zip(colors.keys(), self.rgb_to_float(colors.values())))
 
-        for clust, values in sil_values.items():
-            values.sort()
+    # Plot silhouettes, using y padding as a reference
+        for clust_id, values in sil_values.items():
             y_top = y_btm + len(values)
 
             self.ax.fill_betweenx(np.arange(y_btm, y_top), 0, values, lw=0.3,
-                                  fc=col[clust], ec='black', label=clust)
-
+                                  fc=pal[clust_id], ec='black', 
+                                  label=str(clust_id))
+            
             y_btm = y_top + self.y_btm_init
 
-        # Draw the average value line and set the legend referring to it
+    # Draw the average silhouette score as a red vertical dashed line
         pe = [mpl.patheffects.withStroke(foreground='k')]
-        avg = self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, 
-                              path_effects=pe)
-        self.ax.legend([avg], [f'Avg score (excl. _ND_)\n{sil_avg}'], 
-                       loc='best')
+        self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, path_effects=pe)
 
+    # Render the plot
         self.draw_idle()
-        self.flush_events()
 
 
     def clear_canvas(self):
-        self._init_ax()
+        '''
+        Clear out the canvas.
+
+        '''
+    # Call the parent function to run generic cleaning actions
+        super(SilhouetteCanvas, self).clear_canvas(deep_clear=True)
+        
+    # Redraw the canvas
         self.draw_idle()
-        self.flush_events()
 
 
 
