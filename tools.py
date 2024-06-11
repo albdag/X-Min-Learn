@@ -2206,7 +2206,7 @@ class MineralClassifier(DraggableTool):
         def _init_ui(self):
 
         # Load Model (Styled Button)
-            self.load_btn = cObj.StyledButton(QIcon('Icons/load.png'),
+            self.load_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
                                               'Load model')
             self.load_btn.setToolTip('Load a pre-trained ML model')
 

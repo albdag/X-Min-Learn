@@ -1298,7 +1298,7 @@ class HeatmapScaler(mpl.widgets.SpanSelector):
 
         '''
     # Customize the appearence of the span selector and its handles
-        span_props = dict(fc=pref.BLACK_PEARL, ec=pref.BLACK_PEARL, alpha=0.8,
+        span_props = dict(fc=pref.BLOSSOM, ec=pref.BLOSSOM, alpha=0.6,
                           fill=True)
         handle_props = dict(linewidth=2, color=pref.BLOSSOM)
     

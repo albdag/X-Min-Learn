@@ -108,7 +108,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         self.fig = mpl.figure.Figure(figsize=size, facecolor=pref.IVORY,
                                      edgecolor=pref.BLACK_PEARL, linewidth=2,
                                      layout=layout)
-        self.ax = self.fig.add_subplot(111, facecolor=pref.IVORY)
+        self.ax = self.fig.add_subplot(111, facecolor=pref.BLACK_PEARL)
         self.ax.axis('off')
 
     # Call the constructor of the parent class

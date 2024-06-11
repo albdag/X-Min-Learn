@@ -214,7 +214,6 @@ class MainWindow(QW.QMainWindow):
     # Tools toolbar
         self.tools_toolbar = QW.QToolBar('Tools toolbar')
         self.tools_toolbar.setFloatable(False)
-        self.tools_toolbar.setIconSize(QC.QSize(32, 32))
         self.tools_toolbar.setStyleSheet(pref.SS_mainToolbar)
         # import data actions (button menu), followed by a separator
         self.tools_toolbar.addActions((self.ds_builder_action, 
@@ -227,7 +226,6 @@ class MainWindow(QW.QMainWindow):
     # Panes toolbar
         self.panes_toolbar = QW.QToolBar('Panes toolbar')
         self.panes_toolbar.setFloatable(False)
-        self.panes_toolbar.setIconSize(QC.QSize(32, 32))
         self.panes_toolbar.setStyleSheet(pref.SS_mainToolbar)
         self.panes_toolbar.addActions(self.panes_tva)
 
@@ -612,7 +610,7 @@ class MainTabWidget(QW.QTabWidget):
         super(MainTabWidget, self).__init__(parent)
 
     # Set stylesheet
-        self.setStyleSheet(pref.ss_mainTabWidget)
+        self.setStyleSheet(pref.SS_mainTabWidget)
 
     # Set properties
         self.setAcceptDrops(True)
