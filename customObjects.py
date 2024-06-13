@@ -1881,8 +1881,10 @@ class CollapsibleArea(QW.QWidget):
         self._init_ui()
         self._connect_slots()
 
-    # Set default view
-        self.collapse() if collapsed else self.expand()
+    # Set collapsed view if required
+        if collapsed:
+            self.area.setMaximumHeight(0)
+            self.arrow.setArrowType(QC.Qt.RightArrow)
 
 
     def _init_ui(self):
@@ -1893,6 +1895,7 @@ class CollapsibleArea(QW.QWidget):
     # Arrow button (QToolButton)
         self.arrow = QW.QToolButton()
         self.arrow.setStyleSheet(pref.SS_toolbutton)
+        self.arrow.setArrowType(QC.Qt.DownArrow)
         
     # Section title (QLabel)
         self.title = QW.QLabel(self._title)
@@ -1903,14 +1906,18 @@ class CollapsibleArea(QW.QWidget):
     # Section area (GroupArea)
         self.area = GroupArea(self._section)
 
+    # Expand/Collapse animation (QPropertyAnimation)
+        self.animation = QC.QPropertyAnimation(self.area, b'maximumHeight')
+        self.animation.setDuration(90)
+
     # Set main layout
         layout = QW.QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.arrow, 0, 0)
         layout.addWidget(self.title, 0, 1)
         layout.addWidget(LineSeparator(lw=2), 0, 2)
         layout.addWidget(self.area, 1, 0, 1, -1)
         layout.setColumnStretch(2, 1)
-        layout.setContentsMargins(0, 0, 0, 20)
         self.setLayout(layout)
 
 
@@ -1953,7 +1960,9 @@ class CollapsibleArea(QW.QWidget):
         '''
         self._collapsed = True
         self.arrow.setArrowType(QC.Qt.RightArrow)
-        self.area.setVisible(False)
+        self.animation.setStartValue(self.area.height())
+        self.animation.setEndValue(0)
+        self.animation.start()
 
     
     def expand(self):
@@ -1963,8 +1972,9 @@ class CollapsibleArea(QW.QWidget):
         '''
         self._collapsed = False
         self.arrow.setArrowType(QC.Qt.DownArrow)
-        self.area.setVisible(True)
-        self.area.adjustSize()
+        self.animation.setStartValue(0)
+        self.animation.setEndValue(self.area.sizeHint().height())
+        self.animation.start()
 
 
 
