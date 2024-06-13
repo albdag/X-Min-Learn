@@ -264,6 +264,11 @@ SS_radioButton = (
             image: url(Icons/radiobtn_checked.png);}''')
 
 SS_dataManager = (SS_menu +
+    '''QTreeWidget {
+            border: 2px solid %s;
+            border-bottom-left-radius: 2px;
+            border-bottom-right-radius: 2px;
+            padding: 8px;}'''
     '''QTreeWidget::branch:has-children:!has-siblings:closed,
        QTreeWidget::branch:closed:has-children:has-siblings {
             border-image: none;
@@ -271,7 +276,8 @@ SS_dataManager = (SS_menu +
     '''QTreeWidget::branch:open:has-children:!has-siblings,
        QTreeWidget::branch:open:has-children:has-siblings {
             border-image: none;
-            image: url(Icons/arrowDown.png);}''')
+            image: url(Icons/arrowDown.png);}'''
+    %(BLACK_PEARL))
 
 
 SS_tabWidget = (
@@ -288,7 +294,6 @@ SS_tabWidget = (
             padding-bottom: 2px;
             padding-right: 6px;
             padding-left: 6px;
-            margin-left: 4px;
             margin-right: 4px;}'''
     '''QTabBar::tab:!selected {
             margin-top: 3px;}'''
@@ -307,9 +312,7 @@ SS_mainTabWidget = (SS_tabWidget +
             border-top-right-radius: 4px;
             border-bottom-right-radius: 4px;
             border-bottom-left-radius: 4px;
-            margin-right: 4px;
-            margin-bottom: 4px;
-            margin-left: 4px;}'''
+            padding: 1px;}'''
     %(SAN_MARINO, SAN_MARINO))
 
 
@@ -464,7 +467,7 @@ SS_mainWindow = (
             width: 8px;
             height: 8px;
             border-radius: 2px;
-            margin: 3px;}'''
+            margin: 8px;}'''
     '''QMainWindow::separator:hover {
             background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5,
                                         fx: 0.5, fy: 0.5,
@@ -481,7 +484,9 @@ SS_pane = (
     '''QDockWidget::title {
         background: %s;
         border: 2px outset %s;
-        border-radius: 1px;
+        border-bottom-width: 0px;
+        border-top-left-radius: 1px;
+        border-top-right-radius: 1px;
         padding: 8px;}'''
     '''QDockWidget::close-button, QDockWidget::float-button {
         border-radius: 3px;
@@ -498,8 +503,12 @@ SS_pane = (
         border: 1px solid %s;}'''
     '''QDockWidget::close-button:pressed, QDockWidget::float-button:pressed {
         border: 1px solid %s;}'''
-
-    %(SAN_MARINO_LIGHT, BLACK_PEARL, BLOSSOM, BLOSSOM, SAN_MARINO))
+    '''QScrollArea#PaneScrollArea {
+        border: 2px solid %s;
+        border-bottom-left-radius: 2px;
+        border-bottom-right-radius: 2px;
+        padding: 8px;}'''
+    %(SAN_MARINO_LIGHT, BLACK_PEARL, BLOSSOM, BLOSSOM, SAN_MARINO, BLACK_PEARL))
 
 
 

@@ -7,7 +7,7 @@ Created on Tue Mar  26 11:25:14 2024
 
 import os
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QObject, Qt
 from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
 from PyQt5 import QtWidgets as QW
 
@@ -28,7 +28,7 @@ class Pane(QW.QDockWidget):
     of a QDockWidget.
     '''
 
-    def __init__(self, qObject, title='', icon=None, scroll=True):
+    def __init__(self, qObject: QObject, title='', icon=None, scroll=True):
         '''
         Constructor.
 
@@ -46,37 +46,56 @@ class Pane(QW.QDockWidget):
 
         '''
         super(Pane, self).__init__()
-
+    
+    # Set widget properties
         self.setWindowTitle(title)
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+    
+    # Set main attributes
         self.title = title
         self.icon = icon
+        self._scrollable = scroll
 
-    # If the qObject is a layout, build a dummy widget to contain it first
+    # Remove contents margins from qObject
         if isinstance(qObject, QW.QLayout):
-            self.widget = QW.QWidget()
-            self.widget.setLayout(qObject)
+            qObject.setContentsMargins(0, 0, 0, 0)
+            widget = QW.QWidget()
+            widget.setLayout(qObject)
         else:
-            self.widget = qObject
-
-    # If a scrollable pane is required, a QScrollArea is set as main container
+            if lyt := qObject.layout():
+                lyt.setContentsMargins(0, 0, 0, 0)
+            else:
+                qObject.setContentsMargins(0, 0, 0, 0)
+            widget = qObject
+        
+    # Wrap the widget into a scroll area if required
         if scroll:
-            self.scroll = QW.QScrollArea()
-            self.scroll.setWidgetResizable(True)
-            self.scroll.setWidget(self.widget)
-
-        # Set custom scrollbars
-            self.scroll.setHorizontalScrollBar(
-                cObj.StyledScrollBar(Qt.Horizontal))
-            self.scroll.setVerticalScrollBar(
-                cObj.StyledScrollBar(Qt.Vertical))
-
-            self.setWidget(self.scroll)
+            scroll = cObj.GroupScrollArea(widget)
+            scroll.setStyleSheet(None)
+            scroll.setObjectName('PaneScrollArea') # Set name for custom qss
+            self.setWidget(scroll)
         else:
-            self.setWidget(self.widget)
+            self.setWidget(widget)
 
     # Set the style-sheet 
         self.setStyleSheet(pref.SS_pane)
+
+
+    def trueWidget(self):
+        '''
+        Convenient function to return the actual pane widget and not just its
+        scroll area container when invoked by the default 'widget()' function.
+
+        Returns
+        -------
+        QWidget
+            The widget of the pane.
+
+        '''
+        if self._scrollable:
+            return self.widget().widget()
+        else:
+            return self.widget()
 
 
 
@@ -1017,7 +1036,7 @@ class HistogramViewer(QW.QWidget):
         bins_form = QW.QFormLayout()
         bins_form.addRow('Bins', self.bin_slider)
 
-    # Ajust Layout
+    # Adjust Layout
         main_layout = QW.QVBoxLayout()
         main_layout.addWidget(self.navTbar)
         main_layout.addWidget(self.scaler_tbar)

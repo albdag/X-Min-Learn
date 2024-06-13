@@ -132,9 +132,8 @@ class MainWindow(QW.QMainWindow):
         self.tabifyDockWidget(roi_pane, rgba_pane)
 
     # Resize panes
-        p_width = max([p.widget.minimumSizeHint().width() for p in self.panes])
-        self.resizeDocks(self.panes, [p_width] * len(self.panes), 
-                         QC.Qt.Horizontal)
+        w = max([p.trueWidget().minimumSizeHint().width() for p in self.panes])
+        self.resizeDocks(self.panes, [w] * len(self.panes), QC.Qt.Horizontal)
         
     def _init_actions(self):
         '''Initialize actions shared by menu and toolbars.'''
@@ -282,6 +281,11 @@ class MainWindow(QW.QMainWindow):
 
     def _connect_slots(self):
         '''Signal-slot connector.'''
+    # Connect all panes toggle view actions with a custom slot to force showing
+    # them when they are tabified
+        for p, a, in zip(self.panes, self.panes_tva):
+            a.toggled.connect(lambda t, p=p: self.setPaneVisibility(p, t))
+
     # Data Manager pane actions 
         self.dataManager.updateSceneRequested.connect(self.update_scene)
         self.dataManager.clearSceneRequested.connect(self.clear_scene)
@@ -358,6 +362,27 @@ class MainWindow(QW.QMainWindow):
         self.addDockWidget(dockWidgetArea, pane)
         pane.setVisible(visible)
 
+    
+    def setPaneVisibility(self, pane: docks.Pane, visible: bool):
+        '''
+        Set the visibility of a pane. Allows to bring the pane on top if it is 
+        already opened but tabified.
+
+        Parameters
+        ----------
+        pane : docks.Pane
+            The pane.
+        visible : bool
+            Whether the pane should be visible or not.
+
+        '''
+    # Set the pane visiblity
+        if pane.isVisible() != visible:
+            pane.setVisible(visible)
+    # Force showing and raising the pane on top if it is tabified
+        if visible and self.tabifiedDockWidgets(pane):
+            pane.show()
+            pane.raise_()
 
     def createPopupMenu(self):
         popupmenu = super(MainWindow, self).createPopupMenu()
@@ -382,14 +407,15 @@ class MainWindow(QW.QMainWindow):
             mc.show()
 
     def launch(self, toolname, tabbed=True):
-        tools_dict = {'DatasetBuilder': tools.DatasetBuilder}
+        tools_dict = {'DatasetBuilder': tools.DatasetBuilder,
+                      'ModelLearner': tools.ModelLearner}
         tool = tools_dict.get(toolname, None)
 
         if tool is not None:
             if tabbed:
-                self.tabWidget.addTab(tool(self))
+                self.tabWidget.addTab(tool())
             else:
-                tool(self).show()
+                tool().show()
 
         else:
             print(f'{toolname} not implemented.')
@@ -526,11 +552,10 @@ class MainWindow(QW.QMainWindow):
     # holding an Input Map), send its data to the RGBA Composite Maps Viewer
         item = self.dataManager.currentItem()
         if isinstance(item, cObj.DataObject) and item.holdsInputMap():
-             self.rgbaViewer.set_channel(channel, item.get('data'))
+            self.rgbaViewer.set_channel(channel, item.get('data'))
 
-        # If the RGBA Viewer is hidden, let's show it to provide feedback
-             if not self.rgbaViewer.isVisible():
-                 self.panes[5].setVisible(True)
+        # Force show the RGBA pane to provide feedback
+            self.setPaneVisibility(self.panes[5], True)
 
 
 
@@ -632,7 +657,7 @@ class MainTabWidget(QW.QTabWidget):
         self.tabBarDoubleClicked.connect(self.popOut)
 
 
-    def addTab(self, widget):
+    def addTab(self, widget: tools.DraggableTool | QW.QWidget):
         '''
         Reimplementation of the default addTab function. A GroupScrollArea is
         set as the <widget> container. This helps in the visualization of
@@ -640,12 +665,12 @@ class MainTabWidget(QW.QTabWidget):
 
         Parameters
         ----------
-        widget : QWidget
+        widget : DraggableTool | QWidget
             The widget to be added as tab.
 
         '''
         icon, title = widget.windowIcon(), widget.windowTitle()
-        widget = cObj.GroupScrollArea(widget)
+        widget = cObj.GroupScrollArea(widget, frame=False)
         super(MainTabWidget, self).addTab(widget, icon, title)
         self.setCurrentWidget(widget)
 
@@ -709,6 +734,23 @@ class MainTabWidget(QW.QTabWidget):
             scroll_area.deleteLater()
 
 
+    def popIn(self, widget: tools.DraggableTool):
+        '''
+        Re-insert a tab that was displayed as a separate window into the 
+        MainTabWidget.
+
+        Parameters
+        ----------
+        widget : tools.DraggableTool
+            The detached widget.
+            
+        '''
+    # Suppress updates temporarily for better performances
+        self.setUpdatesEnabled(False)
+        self.addTab(widget)
+        self.setUpdatesEnabled(True)
+
+
     def popOut(self, index):
         '''
         Detach the tab from the MainTabWidget and display it as a separate
@@ -757,14 +799,8 @@ class MainTabWidget(QW.QTabWidget):
             The dropEvent triggered by the user's drag & drop action.
 
         '''
-        if isinstance(e.source(), tools.DraggableTool):
+        widget = e.source()
+        if isinstance(widget, tools.DraggableTool):
             e.setDropAction(QC.Qt.MoveAction)
             e.accept()
-
-        # Suppress updates temporarily for better performances
-            wid = e.source()
-            self.setUpdatesEnabled(False)
-            self.addTab(wid)
-            self.setUpdatesEnabled(True)
-
-
+            self.popIn(widget)

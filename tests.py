@@ -6,9 +6,68 @@ from matplotlib.colors import ListedColormap
 import sklearn.cluster
 import sklearn.metrics
 from scipy import ndimage
-import os
+import os, sys
 from _base import *
 
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGroupBox, QVBoxLayout, QPushButton, QWidget
+from PyQt5.QtCore import QPropertyAnimation, QRect
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setGeometry(100, 100, 400, 300)
+        self.setWindowTitle("QPropertyAnimation QGroupBox Example")
+
+        # Creazione di un layout principale e aggiunta alla finestra principale
+        self.central_widget = QWidget(self)
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+
+        # Creazione di un QGroupBox
+        self.group_box = QGroupBox("Group Box", self)
+        self.group_box.setCheckable(True)
+        self.group_box.setChecked(True)
+        self.layout.addWidget(self.group_box)
+
+        # Creazione di un layout per il QGroupBox
+        self.group_box_layout = QVBoxLayout(self.group_box)
+
+        # Aggiungi widget al QGroupBox (esempio)
+        self.group_box_layout.addWidget(QPushButton("Button 1", self.group_box))
+        self.group_box_layout.addWidget(QPushButton("Button 2", self.group_box))
+        self.group_box_layout.addWidget(QPushButton("Button 3", self.group_box))
+
+        # Creazione di un pulsante per mostrare/nascondere il QGroupBox
+        self.toggle_button = QPushButton("Toggle Group Box", self)
+        self.layout.addWidget(self.toggle_button)
+
+        # Creazione dell'animazione per l'altezza massima
+        self.animation = QPropertyAnimation(self.group_box, b"geometry")
+        self.animation.setDuration(500)  # Durata in millisecondi (0.5 secondi)
+
+        # Connessione del pulsante per avviare l'animazione
+        self.toggle_button.clicked.connect(self.toggle_group_box)
+
+    def toggle_group_box(self):
+        start_rect = self.group_box.geometry()
+
+        if self.group_box.isChecked():
+            end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), 0)
+        else:
+            # Calcola l'altezza massima basata sul sizeHint del QGroupBox
+            end_height = self.group_box.sizeHint().height()
+            end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), end_height)
+
+        self.animation.setStartValue(start_rect)
+        self.animation.setEndValue(end_rect)
+        self.animation.start()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
 
 
 
@@ -155,24 +214,35 @@ from _base import *
 
 
 
-cwd = r'Examples\Samples\S32_b\maps'
-paths = filter(lambda f: f.endswith('.gz'), os.listdir(cwd))
-inmaps = [InputMap.load(os.path.join(cwd, p)) for p in paths]
-feat = InputMapStack(inmaps).get_feature_array()
+### ------------------- S I L H O U E T T E  S C O R E -------------------- ###
+###                                    |                                    ### 
+###                                   \ /                                   ###
+###                                    v                                    ###
+
+# cwd = r'Examples\Samples\S32_b\maps'
+# paths = filter(lambda f: f.endswith('.gz'), os.listdir(cwd))
+# inmaps = [InputMap.load(os.path.join(cwd, p)) for p in paths]
+# feat = InputMapStack(inmaps).get_feature_array()
 
 
-seed = 3003
-kmeans = sklearn.cluster.KMeans(7, random_state=seed)
-print('Clustering')
-pred = kmeans.fit_predict(feat)
+# seed = 3003
+# kmeans = sklearn.cluster.KMeans(7, random_state=seed)
+# print('Clustering')
+# pred = kmeans.fit_predict(feat)
 
-print('Silhouette score')
-size = int(0.05 * pred.size)
-subset_idx = np.random.default_rng(seed).permutation(pred.size)[:size]
-feat = feat[subset_idx, :]
-pred = pred[subset_idx]
+# print('Silhouette score')
+# size = int(0.05 * pred.size)
+# subset_idx = np.random.default_rng(seed).permutation(pred.size)[:size]
+# feat = feat[subset_idx, :]
+# pred = pred[subset_idx]
 
-sil_score = sklearn.metrics.silhouette_score(feat, pred)
-print(sil_score)
-sil_sample = sklearn.metrics.silhouette_samples(feat, pred)
-print(sil_sample[np.argmin(sil_sample)])
+# sil_score = sklearn.metrics.silhouette_score(feat, pred)
+# print(sil_score)
+# sil_sample = sklearn.metrics.silhouette_samples(feat, pred)
+# print(sil_sample[np.argmin(sil_sample)])
+
+###                                    ^                                    ### 
+###                                   / \                                   ###
+###                                    |                                    ###        
+### ------------------- S I L H O U E T T E  S C O R E -------------------- ### 
+
