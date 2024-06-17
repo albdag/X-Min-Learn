@@ -7,7 +7,7 @@ Created on Tue Mar  26 11:25:14 2024
 
 import os
 
-from PyQt5.QtCore import pyqtSignal, QObject, Qt
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
 from PyQt5 import QtWidgets as QW
 
@@ -28,14 +28,14 @@ class Pane(QW.QDockWidget):
     of a QDockWidget.
     '''
 
-    def __init__(self, qObject: QObject, title='', icon=None, scroll=True):
+    def __init__(self, widget: QW.QWidget, title='', icon=None, scroll=True):
         '''
         Constructor.
 
         Parameters
         ----------
-        qObject : qWidget or qLayout
-            The central widget/layout to be displayed in the pane.
+        widget : QWidget
+            The widget to be displayed in the pane.
         title : str, optional
             The title of the pane. The default is ''.
         icon : QIcon, optional
@@ -56,26 +56,18 @@ class Pane(QW.QDockWidget):
         self.icon = icon
         self._scrollable = scroll
 
-    # Remove contents margins from qObject
-        if isinstance(qObject, QW.QLayout):
-            qObject.setContentsMargins(0, 0, 0, 0)
-            widget = QW.QWidget()
-            widget.setLayout(qObject)
-        else:
-            if lyt := qObject.layout():
-                lyt.setContentsMargins(0, 0, 0, 0)
-            else:
-                qObject.setContentsMargins(0, 0, 0, 0)
-            widget = qObject
-        
-    # Wrap the widget into a scroll area if required
+    # Wrap the widget into a container widget (scroll area or group area)
         if scroll:
-            scroll = cObj.GroupScrollArea(widget)
-            scroll.setStyleSheet(None)
-            scroll.setObjectName('PaneScrollArea') # Set name for custom qss
-            self.setWidget(scroll)
+            scroll_area = cObj.GroupScrollArea(widget)
+            scroll_area.setStyleSheet(None)
+            scroll_area.setObjectName('PaneScrollArea') # Name for custom qss
+            self.setWidget(scroll_area)
+
         else:
-            self.setWidget(widget)
+            group_area = cObj.GroupArea(widget, tight=True)
+            group_area.setStyleSheet(None)
+            group_area.setObjectName('PaneGroupArea')  # Name for custom qss
+            self.setWidget(group_area)
 
     # Set the style-sheet 
         self.setStyleSheet(pref.SS_pane)
@@ -84,7 +76,8 @@ class Pane(QW.QDockWidget):
     def trueWidget(self):
         '''
         Convenient function to return the actual pane widget and not just its
-        scroll area container when invoked by the default 'widget()' function.
+        container widget, which is returned when invoking the default widget()
+        function.
 
         Returns
         -------
@@ -95,7 +88,8 @@ class Pane(QW.QDockWidget):
         if self._scrollable:
             return self.widget().widget()
         else:
-            return self.widget()
+            return self.widget().layout().itemAt(0).widget()
+
 
 
 
@@ -1294,7 +1288,7 @@ class HistogramViewer(QW.QWidget):
 
 
 
-class ModeViewer(QW.QTabWidget):
+class ModeViewer(cObj.StyledTabWidget):
     '''
     A widget to visualize the modal amounts of the mineral classes occurring in
     the mineral map that is currently displayed in the Data Viewer. It includes
@@ -1317,9 +1311,6 @@ class ModeViewer(QW.QTabWidget):
 
         '''
         super(ModeViewer, self).__init__(parent)
-
-    # Set stylesheey
-        self.setStyleSheet(pref.SS_tabWidget)
 
     # Set principal attributes
         self._current_data_object = None
@@ -1355,15 +1346,14 @@ class ModeViewer(QW.QTabWidget):
         self.showLabels_action.setCheckable(True)
         self.navTbar.insertAction(10, self.showLabels_action)
     
-    # Wrap canvas and navigation toolbar in a GroupBox
-        plot_layout = QW.QVBoxLayout()
-        plot_layout.addWidget(self.navTbar)
-        plot_layout.addWidget(self.canvas)
-        plot_group = cObj.GroupArea(plot_layout)
+    # Wrap canvas and navigation toolbar in a vertical box layout
+        plot_vbox = QW.QVBoxLayout()
+        plot_vbox.addWidget(self.navTbar)
+        plot_vbox.addWidget(self.canvas)
 
     # Add tabs to the Mode Viewer
         self.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
-        self.addTab(plot_group, QIcon(r'Icons/plot.png'), None)
+        self.addTab(plot_vbox, QIcon(r'Icons/plot.png'), None)
         self.setTabToolTip(0, 'Legend')
         self.setTabToolTip(1, 'Bar plot')
 
@@ -1828,17 +1818,15 @@ class RoiEditor(QW.QWidget):
         self.showlabels_action.setCheckable(True)
         self.navTbar.insertAction(10, self.showlabels_action)
         
-    # Wrap bar plot and its navigation toolbar in a QGroupArea
-        barplot_layout = QW.QVBoxLayout()
-        barplot_layout.addWidget(self.navTbar)
-        barplot_layout.addWidget(self.barCanvas)
-        barplot_group = cObj.GroupArea(barplot_layout)
+    # Wrap bar plot and its navigation toolbar in a vbox layout
+        barplot_vbox = QW.QVBoxLayout()
+        barplot_vbox.addWidget(self.navTbar)
+        barplot_vbox.addWidget(self.barCanvas)
 
-    # ROI visualizer (tab widget -> [ROI table | bar plot])
-        roi_visualizer = QW.QTabWidget()
-        roi_visualizer.setStyleSheet(pref.SS_tabWidget)
+    # ROI visualizer (Styled Tab Widget -> [ROI table | bar plot])
+        roi_visualizer = cObj.StyledTabWidget()
         roi_visualizer.addTab(self.table, QIcon(r'Icons/table.png'), None)
-        roi_visualizer.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
+        roi_visualizer.addTab(barplot_vbox, QIcon(r'Icons/plot.png'), None)
         roi_visualizer.setTabToolTip(0, 'Table')
         roi_visualizer.setTabToolTip(1, 'Bar plot')
 

@@ -1019,7 +1019,7 @@ class RGBIcon(QG.QIcon):
     '''
     Convenient class to generate a colored icon useful in legends.
     '''
-    def __init__(self, rgb:tuple, size=(64, 64)):
+    def __init__(self, rgb:tuple, size=(64, 64), edgecolor=pref.IVORY, lw=1):
         '''
         Constructor.
 
@@ -1029,15 +1029,29 @@ class RGBIcon(QG.QIcon):
             RGB triplet.
         size : tuple, optional
             Icon size. The default is (64, 64).
+        edgecolor : str, optional
+            Color of the icon border, expressed as a HEX string. The default is
+            #F9F9F4 (IVORY).
+        lw : int, optional
+            Border line width. The default is 1.
 
         '''
     # Set main attributes
         self.rgb = rgb
-        self.size = size
+        self.height, self.width = size
 
     # Create a pixmap
-        pixmap = QG.QPixmap(*self.size)
+        pixmap = QG.QPixmap(self.height, self.width)
         pixmap.fill(QG.QColor(*self.rgb))
+
+    # Add border
+        painter = QG.QPainter(pixmap)
+        pen = QG.QPen(QG.QColor(edgecolor))
+        pen.setWidth(lw)
+        painter.setPen(pen)
+        # -1 to make the border inside the pixmap
+        painter.drawRect(0, 0, self.width - 1, self.height - 1)  
+        painter.end()
 
     # Create the icon using the pixmap
         super(RGBIcon, self).__init__(pixmap)
@@ -1322,7 +1336,7 @@ class HeatmapScaler(mpl.widgets.SpanSelector):
 
 class StyledButton(QW.QPushButton):
     '''
-    CSS-styled reimplementation of a QPushButton.
+    QSS-styled reimplementation of a QPushButton.
     '''
     def __init__(self, icon=None, text=None, bg_color=None, text_padding=1):
         '''
@@ -1363,7 +1377,7 @@ class StyledButton(QW.QPushButton):
 
 class StyledComboBox(QW.QComboBox):
     '''
-    CSS-styled reimplementation of a QComboBox.
+    QSS-styled reimplementation of a QComboBox.
     '''
     def __init__(self, parent=None):
         '''
@@ -1382,7 +1396,7 @@ class StyledComboBox(QW.QComboBox):
 
 class StyledListWidget(QW.QListWidget):
     '''
-    CSS-styled reimplementation of a QListWidget.
+    QSS-styled reimplementation of a QListWidget.
     '''
     def __init__(self, ext_selection=True, parent=None):
         '''
@@ -1420,7 +1434,7 @@ class StyledListWidget(QW.QListWidget):
 
 class StyledMenu(QW.QMenu):
     '''
-    CSS-styled reimplementation of a QMenu.
+    QSS-styled reimplementation of a QMenu.
     '''
     def __init__(self, parent=None):
         '''
@@ -1439,7 +1453,7 @@ class StyledMenu(QW.QMenu):
 
 class StyledRadioButton(QW.QRadioButton):
     '''
-    CSS-styled reimplementation of a QRadioButton.
+    QSS-styled reimplementation of a QRadioButton.
     '''
     def __init__(self, text='', parent=None):
         '''
@@ -1460,7 +1474,7 @@ class StyledRadioButton(QW.QRadioButton):
 
 class StyledScrollBar(QW.QScrollBar):
     '''
-    CSS-styled reimplementation of a QScrollBar.
+    QSS-styled reimplementation of a QScrollBar.
     '''
     def __init__(self, orientation: QC.Qt.Orientation):
         '''
@@ -1484,7 +1498,7 @@ class StyledScrollBar(QW.QScrollBar):
 
 class StyledSpinBox(QW.QSpinBox):
     '''
-    CSS-styled reimplementation of a QSpinBox.
+    QSS-styled reimplementation of a QSpinBox.
     '''
     def __init__(self, min_value=0, max_value=100, step=1, parent=None):
         '''
@@ -1515,7 +1529,7 @@ class StyledSpinBox(QW.QSpinBox):
 
 class StyledTable(QW.QTableWidget):
     '''
-    CSS-styled reimplementation of a QTableWidget.
+    QSS-styled reimplementation of a QTableWidget.
     '''
     def __init__(self, rows:int, cols:int, ext_selection=True, parent=None):
         '''
@@ -1544,9 +1558,55 @@ class StyledTable(QW.QTableWidget):
         self.setStyleSheet(pref.SS_table + pref.SS_menu)
 
 
+
+class StyledTabWidget(QW.QTabWidget):
+    '''
+    QSS-styled reimplementation of a QTabWidget. Includes a reimplementation of
+    the addTab function to always have a QWidget container for the tab. 
+    '''
+    def __init__(self, parent=None):
+        super(StyledTabWidget, self).__init__(parent)
+
+    # Set stylesheet
+        self.setStyleSheet(pref.SS_tabWidget)
+
+    def addTab(self, qobject: QC.QObject, icon: QG.QIcon|None=None, 
+               title: str|None=None):
+        '''
+        Reimplementation of the addTab function, useful to achive consistent 
+        look of the tabwidget, no matter the type of widget is set as its tab.
+
+        Parameters
+        ----------
+        qobject : QObject
+            Layout or widget to be added as tab. 
+        icon : QG.QIcon | None, optional
+            Tab icon. The default is None.
+        title : str | None, optional
+            Tab name. The default is None.
+
+        '''
+        if isinstance(qobject, QW.QLayout):
+            tab = QW.QWidget()
+            tab.setLayout(qobject)
+
+        elif layout := qobject.layout():
+            tab = qobject
+        
+        else:
+            tab = QW.QWidget()
+            layout = QW.QVBoxLayout(tab)
+            layout.addWidget(qobject)
+
+        if icon:
+            super(StyledTabWidget, self).addTab(tab, icon, title)
+        else:
+            super(StyledTabWidget, self).addTab(tab, title)
+
+
 class StyledToolbar(QW.QToolBar):
     '''
-    CSS-styled reimplementation of a QToolBar.
+    QSS-styled reimplementation of a QToolBar.
     '''
     def __init__(self, title='', parent=None):
         '''
@@ -1800,8 +1860,8 @@ class GroupArea(QW.QGroupBox):
         checkable : bool, optional
             Whether the wrapping group box is checkable. The default is False.
         tight : bool, optional
-            Whether the qobject should take all the available space, preventing
-            any possible content margin. The default is False.
+            Whether the layout of the group box should take all the available 
+            space. The default is False.
         frame : bool, optional
             Whether the area should show a visible frame. This is ignored if
             the title is provided. The default is True.
@@ -1819,14 +1879,15 @@ class GroupArea(QW.QGroupBox):
             align_css = {QC.Qt.AlignLeft: 'top left',
                          QC.Qt.AlignRight: 'top right',
                          QC.Qt.AlignHCenter: 'top center'}
-            title_align = ('QGroupBox::title {subcontrol-position: %s;}' 
-                            %(align_css[align]))
-            ss = pref.SS_grouparea_title + title_align
-            self.setStyleSheet(ss)
+            title_align_ss = ('QGroupBox::title {subcontrol-position: %s;}' 
+                              %(align_css[align]))
+            self.setStyleSheet(pref.SS_grouparea_title + title_align_ss)
         else:
             super(GroupArea, self).__init__(parent)
-            frame_ss = 'QGroupBox {border-width: %dpx;}' %(int(frame))
-            self.setStyleSheet(pref.SS_grouparea_notitle + frame_ss)
+            ss = pref.SS_grouparea_notitle
+            if not frame:
+                ss = ss + 'QGroupBox {border-width: 0px;}' 
+            self.setStyleSheet(ss)
 
     # Set if the group box is checkable or not
         self.setCheckable(checkable)
@@ -1983,7 +2044,7 @@ class GroupScrollArea(QW.QScrollArea):
     A convenient class to easily wrap a layout or a widget in a QScrollArea.
     '''
     def __init__(self, qobject, title=None, hscroll=True, vscroll=True, 
-                 frame=True, parent=None):
+                 tight=False, frame=True, parent=None):
         '''
         Constructor.
 
@@ -1996,9 +2057,12 @@ class GroupScrollArea(QW.QScrollArea):
             this title. However, this paremeter is ignored if the qobject is 
             not a layout-like object. The default is None.
         hscroll : bool, optional
-            Whether the horizontal scrollbar is allowed. The default is True.
+            Whether the horizontal scrollbar is shown. The default is True.
         vscroll : bool, optional
-            Whether the vertical scrollbar is allowed. The default is True.
+            Whether the vertical scrollbar is shown. The default is True.
+        tight : bool, optional
+            Whether the layout of the scroll area should take all the available 
+            space. It is ignored if qObject is a widget. The default is False.
         frame : bool, optional
             Whether the scroll area should have a visible frame. The default is
             True.
@@ -2025,10 +2089,11 @@ class GroupScrollArea(QW.QScrollArea):
     # If the qobject is a layout, wrap it into a QWidget or a GroupArea 
         if isinstance(qobject, QW.QLayout):
             if title is None:
+                if tight: qobject.setContentsMargins(0, 0, 0, 0)
                 wid = QW.QWidget()
                 wid.setLayout(qobject)
             else:
-                wid = GroupArea(qobject, title)
+                wid = GroupArea(qobject, title, tight=tight)
         else:
             wid = qobject
 
@@ -2921,12 +2986,14 @@ class DocumentBrowser(QW.QWidget):
                                           'Zoom out', self.tbar)
 
     # Add Actions to toolbar
-        self.tbar.addActions((self.search_up_action, self.search_down_action,
-                              self.zoom_in_action, self.zoom_out_action))
-        self.tbar.insertSeparator(self.zoom_in_action)
+        self.tbar.addActions((self.search_up_action, self.search_down_action))
+        self.tbar.addSeparator()
+        self.tbar.addActions((self.zoom_in_action, self.zoom_out_action))
 
     # Adjust Main Layout
         layout = QW.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(15)
         layout.addWidget(self.tbar)
         layout.addWidget(self.browser)
         self.setLayout(layout)
@@ -3139,8 +3206,10 @@ class InputMapsSelector(QW.QWidget):
 
     # Set layout
         main_layout = QW.QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(QW.QLabel('Select sample'))
         main_layout.addWidget(self.sample_combox)
+        main_layout.addSpacing(10)
         main_layout.addWidget(self.inmaps_list)
         self.setLayout(main_layout)
 
@@ -3272,12 +3341,14 @@ class DescriptiveProgressBar(QW.QWidget):
 
     # Description label
         self.desc = QW.QLabel()
+        self.desc.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
 
     # Progress bar
         self.pbar = QW.QProgressBar()
     
     # Adjust main layout
         layout = QW.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.desc, alignment=QC.Qt.AlignCenter)
         layout.addWidget(self.pbar)
         self.setLayout(layout)
@@ -3393,6 +3464,7 @@ class RandomSeedGenerator(QW.QWidget):
 
     # Adjust layout
         layout = QW.QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QW.QLabel('Random seed'))
         layout.addWidget(self.seed_input, 1)
         layout.addWidget(self.rand_btn, alignment = QC.Qt.AlignRight)

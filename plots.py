@@ -85,6 +85,8 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
     '''
     A base canvas for any type of plot.
     '''
+    _title_pad = 15
+
     def __init__(self, size=(6.4, 4.8), layout='none', wheel_zoom=True,
                  wheel_pan=True):
         '''
@@ -109,6 +111,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
                                      edgecolor=pref.BLACK_PEARL, linewidth=2,
                                      layout=layout)
         self.ax = self.fig.add_subplot(111, facecolor=pref.BLACK_PEARL)
+        self.ax.patch.set(edgecolor=pref.SAN_MARINO, linewidth=3)
         self.ax.axis('off')
 
     # Call the constructor of the parent class
@@ -750,7 +753,7 @@ class ImageCanvas(_CanvasBase):
 
     # Set image title
         if title is not None: 
-            self.ax.set_title(title)
+            self.ax.set_title(title, pad=self._title_pad)
 
     # Set color map
         self.set_discretemap_cmap(colors)
@@ -817,7 +820,7 @@ class ImageCanvas(_CanvasBase):
 
     # Set image title
         if title is not None: 
-            self.ax.set_title(title)
+            self.ax.set_title(title, pad=self._title_pad)
 
     # Set color map
         self.set_heatmap_cmap(cmap_name)
@@ -1056,7 +1059,7 @@ class BarCanvas(_CanvasBase):
 
     # Set the title
         if title is not None: 
-            self.ax.set_title(title)
+            self.ax.set_title(title, pad=self._title_pad)
 
     # Convert the bar colors to a matplotlib compatible format
         if colors is not None: 
@@ -1076,7 +1079,7 @@ class BarCanvas(_CanvasBase):
         for i in range(n_iter):
             lbl = labels if labels is None else labels[i]
             args = (ticks + shift_step[i], data[i], self.bar_width)
-            kwargs = {'color': colors, 'edgecolor': 'k', 'label': lbl}
+            kwargs = {'color': colors, 'edgecolor': pref.IVORY, 'label': lbl}
 
             if self.orient == 'v':
                 self.plot = self.ax.bar(*args, **kwargs)
@@ -1225,7 +1228,7 @@ class HistogramCanvas(_CanvasBase):
 
     # Set the title
         if title is not None:
-            self.ax.set_title(title)
+            self.ax.set_title(title, pad=self._title_pad)
 
     # Plot the histogram data
         self.hist_data = data.flatten()
@@ -1318,7 +1321,7 @@ class ConfMatCanvas(_CanvasBase):
         Populate the ax with the title and the labels.
 
         '''
-        self.ax.set_title(self.title)
+        self.ax.set_title(self.title, pad=self._title_pad)
         self.ax.set_xlabel(self.xlab)
         self.ax.set_ylabel(self.ylab)
 
@@ -1527,7 +1530,7 @@ class SilhouetteCanvas(_CanvasBase):
         '''
     # Reset the ax and set the new title
         self._init_ax()
-        self.ax.set_title(title)
+        self.ax.set_title(title, pad=self._title_pad)
 
     # Format the RGB palette colors as matplotlib compatible floating values
         pal = dict(zip(palette.keys(), self.rgb_to_float(palette.values())))
@@ -1540,13 +1543,13 @@ class SilhouetteCanvas(_CanvasBase):
             y_top = y_btm + len(values)
 
             self.ax.fill_betweenx(np.arange(y_btm, y_top), 0, values, lw=0.3,
-                                  fc=pal[clust_id], ec='black', 
+                                  fc=pal[clust_id], ec=pref.IVORY, 
                                   label=str(clust_id))
             
             y_btm = y_top + self.y_btm_init
 
     # Draw the average silhouette score as a red vertical dashed line
-        pe = [mpl.patheffects.withStroke(foreground='k')]
+        pe = [mpl.patheffects.withStroke(foreground=pref.IVORY)]
         self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, path_effects=pe)
 
     # Render the plot

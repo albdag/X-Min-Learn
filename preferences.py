@@ -31,7 +31,7 @@ BLOSSOM_LIGHT = '#F8DEDF'
 XML_PETROLEUM = '#005858'       # (0, 88, 88)
 
 # Special button colors
-BTN_GREEN = '#1CA916'           # (28, 169, 22)
+BTN_GREEN = '#4CAF50'        
 BTN_RED = '#A21709'             # (162, 23, 9)
 
 # Histogram mask color
@@ -89,8 +89,10 @@ SS_splitter = (
             border-radius: 2px;
             margin: 10px;}'''
     '''QSplitter::handle:hover {
-            background-color: %s;}'''
-    %(SAN_MARINO, BLACK_PEARL, BLOSSOM))
+            background-color: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5,
+                                              fx: 0.5, fy: 0.5,
+                                              stop: 0 %s, stop: 1 %s);}'''
+    %(SAN_MARINO, BLACK_PEARL, BLOSSOM_LIGHT, BLOSSOM))
 
 
 SS_horizScrollBar = (
@@ -198,21 +200,24 @@ SS_combox = (
             border: 1px solid gray;
             color: darkgray;}'''
     '''QComboBox:hover {
-            border: 2px solid %s;}'''
+            background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 white, stop: 1 %s);}'''
     '''QComboBox::drop-down {
             background-color: %s;
             border-left: 1px solid %s;
             subcontrol-origin: padding;
             subcontrol-position: top right;
-            width: 16px;}'''
+            width: 20px;}'''
     '''QComboBox::drop-down:!enabled {
             background-color: gray;}'''
     '''QComboBox::down-arrow {
             image: url(Icons/arrowDown.png);}'''
+    '''QComboBox::down-arrow:!enabled {
+            image: url(Icons/arrowDown_dark.png);}'''
     '''QComboBox QAbstractItemView {
             background-color: %s;
             border: 1px solid %s;}'''
-    %(IVORY, BLACK_PEARL, BLOSSOM, SAN_MARINO, BLACK_PEARL, BLACK_PEARL,
+    %(IVORY, BLACK_PEARL, BLOSSOM, BLOSSOM, BLACK_PEARL, BLACK_PEARL,
       IVORY, SAN_MARINO))
 
 
@@ -250,7 +255,8 @@ SS_toolbutton = (
             background-color: lightgray;
             border: 1px solid gray;}'''
     '''QToolButton:hover {
-            background-color: %s;}'''
+            background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 white, stop: 1 %s);}'''
     '''QToolButton:pressed {
             border: 2px solid %s;}'''
     '''QToolButton:checked {
@@ -264,11 +270,6 @@ SS_radioButton = (
             image: url(Icons/radiobtn_checked.png);}''')
 
 SS_dataManager = (SS_menu +
-    '''QTreeWidget {
-            border: 2px solid %s;
-            border-bottom-left-radius: 2px;
-            border-bottom-right-radius: 2px;
-            padding: 8px;}'''
     '''QTreeWidget::branch:has-children:!has-siblings:closed,
        QTreeWidget::branch:closed:has-children:has-siblings {
             border-image: none;
@@ -276,14 +277,18 @@ SS_dataManager = (SS_menu +
     '''QTreeWidget::branch:open:has-children:!has-siblings,
        QTreeWidget::branch:open:has-children:has-siblings {
             border-image: none;
-            image: url(Icons/arrowDown.png);}'''
-    %(BLACK_PEARL))
+            image: url(Icons/arrowDown.png);}''')
 
 
 SS_tabWidget = (
     '''QTabWidget::pane {
-            background: %s;
-            border-width: 0px;}'''
+            background-color: %s;
+            border: 2px solid %s;
+            border-top-right-radius: 3px;
+            border-top-left-radius: 0px;
+            border-bottom-right-radius: 3px;
+            border-bottom-left-radius: 3px;
+            padding:1px;}'''
     '''QTabBar::tab {
             background: %s;
             border: 1px solid darkgray;
@@ -302,18 +307,19 @@ SS_tabWidget = (
             border-bottom: 5px solid %s;}'''
     '''QTabBar::tab:hover {
             background: %s;}'''
-    %(CASPER_DARK, IVORY, SAN_MARINO, SAN_MARINO, SAN_MARINO))
+    %(CASPER_LIGHT, SAN_MARINO, IVORY, SAN_MARINO, SAN_MARINO, SAN_MARINO))
 
 
 SS_mainTabWidget = (SS_tabWidget +
     '''QTabWidget::pane {
-            border: 2px solid %s;
-            border-top: 3px solid %s;
+            background-color: %s;
+            border: 3px solid %s;
+            border-top: 4px solid %s;
             border-top-right-radius: 4px;
+            border-top-left-radius: 0px;
             border-bottom-right-radius: 4px;
-            border-bottom-left-radius: 4px;
-            padding: 1px;}'''
-    %(SAN_MARINO, SAN_MARINO))
+            border-bottom-left-radius: 4px;}'''
+    %(CASPER_DARK, SAN_MARINO, SAN_MARINO))
 
 
 SS_table = (
@@ -326,19 +332,24 @@ SS_table = (
 
 SS_pathLabel = (
     '''QLabel {
-            border: 2px solid %s;
+            background-color: %s;
+            border: 3px inset %s;
             border-radius: 3px;
+            color: %s;
             padding: 2px;}'''
-    %(SAN_MARINO))
+    %(BLACK_PEARL, SAN_MARINO, IVORY))
 
 
 SS_grouparea_notitle = (   
     '''QGroupBox {
-            background-color: %s;
-            border: 1px solid %s;
+            border: 2px solid %s;
             border-radius: 3px;
             padding-top: 2px;}'''
-    %(CASPER_LIGHT, BLACK_PEARL))
+'''QGroupBox:enabled {
+            background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                                              stop: 0 %s, stop: 0.25 %s,
+                                              stop: 0.75 %s, stop: 1 %s);}'''
+    %(SAN_MARINO, IVORY, CASPER_LIGHT, CASPER_LIGHT, CASPER))
 
 
 SS_grouparea_title = (SS_grouparea_notitle + 
@@ -348,7 +359,9 @@ SS_grouparea_title = (SS_grouparea_notitle +
     '''QGroupBox::title {
             color: black;
             padding: 2ex;
-            subcontrol-origin: padding;}''')
+            subcontrol-origin: padding;}'''
+    '''QGroupBox::title:!enabled {
+            color: gray;}''')
 
 
 SS_groupScrollArea_frame = (
@@ -503,10 +516,12 @@ SS_pane = (
         border: 1px solid %s;}'''
     '''QDockWidget::close-button:pressed, QDockWidget::float-button:pressed {
         border: 1px solid %s;}'''
-    '''QScrollArea#PaneScrollArea {
+    '''QScrollArea#PaneScrollArea, QGroupBox#PaneGroupArea {
         border: 2px solid %s;
         border-bottom-left-radius: 2px;
         border-bottom-right-radius: 2px;
+        margin-right: 1px;
+        margin-left: 1px;
         padding: 8px;}'''
     %(SAN_MARINO_LIGHT, BLACK_PEARL, BLOSSOM, BLOSSOM, SAN_MARINO, BLACK_PEARL))
 

@@ -122,6 +122,7 @@ class AutoRoiDetector(QW.QDialog):
                                       align=Qt.AlignLeft)
 
         left_vbox = QW.QVBoxLayout()
+        left_vbox.setSpacing(15)
         left_vbox.addWidget(self.maps_selector)
         left_vbox.addLayout(params_form)
         left_vbox.addWidget(radbtn_group)
@@ -138,6 +139,7 @@ class AutoRoiDetector(QW.QDialog):
 
         main_layout = QW.QHBoxLayout()
         main_layout.addWidget(left_scroll)
+        main_layout.addSpacing(20)
         main_layout.addLayout(right_grid)
         self.setLayout(main_layout)
 

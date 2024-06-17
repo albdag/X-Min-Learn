@@ -1230,7 +1230,7 @@ class MineralClassifier(DraggableTool):
 
     # Set tool title and icon
         self.setWindowTitle('Mineral Classifier')
-        self.setWindowIcon(QIcon('Icons/classify.png'))
+        self.setWindowIcon(QIcon(r'Icons/classify.png'))
 
     # Initialize main attributes
         self._mask = None
@@ -1344,20 +1344,19 @@ class MineralClassifier(DraggableTool):
 #                              CLASSIFIER PANEL 
 #  -------------------------------------------------------------------------  #
 
-    # Classifier panel (Tab Widget)
-        self.classifier_tabwid = QW.QTabWidget()
+    # Classifier panel (Styled Tab Widget)
+        self.classifier_tabwid = cObj.StyledTabWidget()
         self.classifier_tabwid.tabBar().setDocumentMode(True)
         self.classifier_tabwid.tabBar().setExpanding(True)
-        self.classifier_tabwid.setStyleSheet(pref.SS_tabWidget)
         self.classifier_tabwid.addTab(self.PreTrainedClassifierTab(self),
-                                      'Pre-trained')
+                                      title='Pre-trained')
         self.classifier_tabwid.addTab(self.RoiBasedClassifierTab(self),
-                                      'ROI-based')
+                                      title='ROI-based')
         self.classifier_tabwid.addTab(self.UnsupervisedClassifierTab(self),
-                                      'Unsupervised')
+                                      title='Unsupervised')
 
-    # Classification progress bar (ProgressBar)
-        self.progbar = QW.QProgressBar()
+    # Classification progress bar (Descriptive ProgressBar)
+        self.progbar = cObj.DescriptiveProgressBar()
 
     # Classify button (Styled Button)
         self.classify_btn = cObj.StyledButton(text='CLASSIFY',
@@ -1366,9 +1365,6 @@ class MineralClassifier(DraggableTool):
 
     # Interrupt classification process button (StyledButton)
         self.stop_btn = cObj.StyledButton(text='STOP', bg_color=pref.BTN_RED)
-
-    # Current classification step description (Label)
-        self.progdesc = QW.QLabel()
 
 #  -------------------------------------------------------------------------  #
 #                                VIEWER PANEL 
@@ -1411,13 +1407,15 @@ class MineralClassifier(DraggableTool):
     # Data panel layout
         
         # - Input data
-        input_data_group = cObj.GroupArea(self.inmaps_selector, tight=True)
+        self.inmaps_selector.setContentsMargins(9, 9, 9, 9)
 
         # - Mask data
         mask_data_grid = QW.QGridLayout()
         mask_data_grid.setAlignment(Qt.Alignment(Qt.AlignLeft | Qt.AlignTop))
+        mask_data_grid.setVerticalSpacing(15)
         mask_data_grid.addWidget(self.del_mask_btn, 0, 0)
         mask_data_grid.addWidget(self.mask_pathlbl, 0, 1)
+        mask_data_grid.setRowMinimumHeight(1, 20)
         mask_data_grid.addWidget(self.mask_radbtn_1, 2, 0, 1, -1)
         mask_data_grid.addWidget(self.load_mask_btn, 3, 1)
         mask_data_grid.addWidget(self.mask_radbtn_2, 4, 0, 1, -1)
@@ -1425,67 +1423,61 @@ class MineralClassifier(DraggableTool):
         mask_data_grid.addWidget(self.minmap_combox, 6, 1)
         mask_data_grid.addWidget(QW.QLabel('Select class'), 7, 1)
         mask_data_grid.addWidget(self.class_combox, 8, 1)
-        mask_data_grid.setRowMinimumHeight(1, 20)
         mask_data_grid.setColumnStretch(1, 2)
-        mask_data_group = cObj.GroupArea(mask_data_grid)
 
         # - Output data
         barplot_vbox = QW.QVBoxLayout()
         barplot_vbox.addWidget(self.barplot_navtbar)
         barplot_vbox.addWidget(self.barplot)
-        barplot_group = cObj.GroupArea(barplot_vbox)
 
         scores_grid = QW.QGridLayout()
+        scores_grid.setVerticalSpacing(10)
         scores_grid.addWidget(self.silscore_navtbar, 0, 0, 1, -1)
         scores_grid.addWidget(self.silscore_canvas, 1, 0, 1, -1)
-        scores_grid.addWidget(QW.QLabel('Average silhouette score'), 2, 0)
-        scores_grid.addWidget(self.silscore_lbl, 2, 1)
-        scores_grid.addWidget(QW.QLabel('Calinski-Harabasz Index'), 3, 0)
-        scores_grid.addWidget(self.chiscore_lbl, 3, 1)
-        scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 4, 0)
-        scores_grid.addWidget(self.dbiscore_lbl, 4, 1)
-        scores_group = cObj.GroupArea(scores_grid)
+        scores_grid.setRowMinimumHeight(2, 10)
+        scores_grid.addWidget(QW.QLabel('Average silhouette score'), 3, 0)
+        scores_grid.addWidget(self.silscore_lbl, 3, 1)
+        scores_grid.addWidget(QW.QLabel('Calinski-Harabasz Index'), 4, 0)
+        scores_grid.addWidget(self.chiscore_lbl, 4, 1)
+        scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 5, 0)
+        scores_grid.addWidget(self.dbiscore_lbl, 5, 1)
 
-        graph_tabwid = QW.QTabWidget()
-        graph_tabwid.setStyleSheet(pref.SS_tabWidget)
+        graph_tabwid = cObj.StyledTabWidget()
         graph_tabwid.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
-        graph_tabwid.addTab(barplot_group, QIcon(r'Icons/plot.png'), None)
-        graph_tabwid.addTab(scores_group, QIcon(r'Icons/scores.png'), None)
+        graph_tabwid.addTab(barplot_vbox, QIcon(r'Icons/plot.png'), None)
+        graph_tabwid.addTab(scores_grid, QIcon(r'Icons/scores.png'), None)
         graph_tabwid.setTabToolTip(0, 'Legend')
         graph_tabwid.setTabToolTip(1, 'Bar plot')
         graph_tabwid.setTabToolTip(2, 'Clustering scores')
 
         output_data_grid = QW.QGridLayout()
-        output_data_grid.addWidget(graph_tabwid, 0, 0, 1, -1)
-        output_data_grid.addWidget(self.minmaps_list, 1, 0, 1, -1)
-        output_data_grid.addWidget(self.save_minmap_btn, 2, 1)
-        output_data_grid.addWidget(self.del_minmap_btn, 2, 2)
+        output_data_grid.addWidget(self.minmaps_list, 0, 0, 1, -1)
+        output_data_grid.addWidget(self.save_minmap_btn, 1, 1)
+        output_data_grid.addWidget(self.del_minmap_btn, 1, 2)
+        output_data_grid.addWidget(graph_tabwid, 2, 0, 1, -1)
         output_data_grid.setColumnStretch(0, 2)
         output_data_grid.setColumnStretch(1, 1)
         output_data_grid.setColumnStretch(2, 1)
-        output_data_group = cObj.GroupArea(output_data_grid)
         
         # - Panel layout
-        self.data_tabwid = QW.QTabWidget()
-        self.data_tabwid.setStyleSheet(pref.SS_tabWidget)
-        self.data_tabwid.tabBar().setDocumentMode(True)
+        self.data_tabwid = cObj.StyledTabWidget()
         self.data_tabwid.tabBar().setExpanding(True)
-        self.data_tabwid.addTab(input_data_group, QIcon(r'Icons/inmap.png'), 
-                                'Input maps')
-        self.data_tabwid.addTab(mask_data_group, QIcon(r'Icons/mask.png'), 
-                                'Mask')
-        self.data_tabwid.addTab(output_data_group, QIcon(r'Icons/minmap.png'), 
-                                'Output maps')
+        self.data_tabwid.tabBar().setDocumentMode(True)
+        self.data_tabwid.addTab(self.inmaps_selector, QIcon(r'Icons/inmap.png'), 
+                                title='Input maps')
+        self.data_tabwid.addTab(mask_data_grid, QIcon(r'Icons/mask.png'), 
+                                title='Mask')
+        self.data_tabwid.addTab(output_data_grid, QIcon(r'Icons/minmap.png'), 
+                                title='Output maps')
         data_group = cObj.CollapsibleArea(self.data_tabwid, 'Data panel',
                                           collapsed=False)
 
     # Classifier panel layout
         class_grid = QW.QGridLayout()
         class_grid.addWidget(self.classifier_tabwid, 0, 0, 1, -1)
-        class_grid.addWidget(self.progdesc, 1, 0, 1, -1, Qt.AlignCenter)
-        class_grid.addWidget(self.progbar, 2, 0, 1, -1)
-        class_grid.addWidget(self.classify_btn, 3, 0)
-        class_grid.addWidget(self.stop_btn, 3, 1)
+        class_grid.addWidget(self.progbar, 1, 0, 1, -1)
+        class_grid.addWidget(self.classify_btn, 2, 0)
+        class_grid.addWidget(self.stop_btn, 2, 1)
         class_group = cObj.CollapsibleArea(class_grid, 'Classifier panel')
 
     # Viewer panel layout
@@ -1499,6 +1491,7 @@ class MineralClassifier(DraggableTool):
 
     # Main layout
         left_vbox = QW.QVBoxLayout()
+        left_vbox.setSpacing(30)
         left_vbox.addWidget(data_group)
         left_vbox.addWidget(class_group)
         left_vbox.addStretch(1)
@@ -2014,20 +2007,6 @@ class MineralClassifier(DraggableTool):
 
             self.maps_viewer.update_clim(vmin, vmax)
             self.maps_viewer.draw() 
-    
-
-    def _setProgression(self, step_description: str):
-        '''
-        Update the classification progress bar.
-
-        Parameters
-        ----------
-        step_description : str
-            Current process description.
-
-        '''
-        self.progbar.setValue(self.progbar.value() + 1)
-        self.progdesc.setText(step_description)
 
 
     def classify(self):
@@ -2062,7 +2041,7 @@ class MineralClassifier(DraggableTool):
         csf = active_tab.getClassifier(input_stack, names) 
 
         if csf is not None:
-            csf.thread.taskInitialized.connect(self._setProgression)
+            csf.thread.taskInitialized.connect(self.progbar.step)
             csf.thread.workFinished.connect(self._parseClassifierResult)
 
             self.progbar.setRange(0, csf.classification_steps)
@@ -2153,7 +2132,6 @@ class MineralClassifier(DraggableTool):
 
         '''
         self.progbar.reset()
-        self.progdesc.clear()
         self._isBusyClassifying = False
         self._current_classifier = None
 
@@ -2188,17 +2166,13 @@ class MineralClassifier(DraggableTool):
             super(MineralClassifier, self).closeEvent(event)
 
 
-
-    class PreTrainedClassifierTab(QW.QGroupBox):
+    class PreTrainedClassifierTab(QW.QWidget):
         def __init__(self, parent=None):
             self.parent = parent
             super().__init__(parent)
 
         # Set main attribute
             self.model = None
-
-        # Set the style-sheet of a group area
-            self.setStyleSheet(pref.SS_grouparea_notitle)
 
             self._init_ui()
             self._connect_slots()
@@ -2222,6 +2196,7 @@ class MineralClassifier(DraggableTool):
             main_layout = QW.QVBoxLayout()
             main_layout.addWidget(self.load_btn)
             main_layout.addWidget(self.model_path)
+            main_layout.addSpacing(20)
             main_layout.addWidget(self.model_info)
             self.setLayout(main_layout)
 
@@ -2285,18 +2260,10 @@ class MineralClassifier(DraggableTool):
             return ML_tools.ModelBasedClassifier(input_stack, self.model)
 
 
-
-
-
-
-
-    class RoiBasedClassifierTab(QW.QGroupBox):
+    class RoiBasedClassifierTab(QW.QWidget):
         def __init__(self, parent=None):
             self.parent = parent
             super().__init__(parent)
-
-        # Set the style-sheet of a group area
-            self.setStyleSheet(pref.SS_grouparea_notitle)
 
         # Set main attributes
             self._algorithms = ('K-Nearest Neighbors',)
@@ -2354,6 +2321,7 @@ class MineralClassifier(DraggableTool):
             knn_layout.addRow('N. of neighbours', self.knn_nneigh_spbox)
             knn_layout.addRow('Neighbors weight', self.knn_weight_combox)
             knn_group = cObj.GroupArea(knn_layout, 'K-Nearest Neighbors')
+            
             self.algm_panel.addWidget(knn_group)
         #---------------------------------------------------------------------#
 
@@ -2362,11 +2330,14 @@ class MineralClassifier(DraggableTool):
             main_layout.addWidget(self.load_btn, 0, 0, 1, -1)
             main_layout.addWidget(self.unload_btn, 1, 0)
             main_layout.addWidget(self.roimap_path, 1, 1)
-            main_layout.addWidget(self.pixprox_cbox, 2, 0, 1, -1)
-            main_layout.addWidget(self.multithread_cbox, 3, 0, 1, -1)
-            main_layout.addWidget(QW.QLabel('Select algorithm'), 4, 0, 1, -1)
-            main_layout.addWidget(self.algm_combox, 5, 0, 1, -1)
-            main_layout.addWidget(self.algm_panel, 6, 0, 1, -1)
+            main_layout.setRowMinimumHeight(2, 20)
+            main_layout.addWidget(self.pixprox_cbox, 3, 0, 1, -1)
+            main_layout.addWidget(self.multithread_cbox, 4, 0, 1, -1)
+            main_layout.setRowMinimumHeight(5, 20)
+            main_layout.addWidget(QW.QLabel('Select algorithm'), 6, 0, 1, -1)
+            main_layout.addWidget(self.algm_combox, 7, 0, 1, -1)
+            main_layout.setRowMinimumHeight(8, 10)
+            main_layout.addWidget(self.algm_panel, 9, 0, 1, -1)
             main_layout.setColumnStretch(1, 2)
             self.setLayout(main_layout)
 
@@ -2491,16 +2462,10 @@ class MineralClassifier(DraggableTool):
                 return None
 
 
-
-
-
-    class UnsupervisedClassifierTab(QW.QGroupBox):
+    class UnsupervisedClassifierTab(QW.QWidget):
         def __init__(self, parent=None):
             self.parent = parent
             super().__init__(parent)
-
-        # Set the style-sheet of a group area
-            self.setStyleSheet(pref.SS_grouparea_notitle)
 
         # Set main attributes
             self._algorithms = ('K-Means',)
@@ -2561,6 +2526,7 @@ class MineralClassifier(DraggableTool):
             kmeans_layout = QW.QFormLayout()
             kmeans_layout.addRow('N. of clusters', self.kmeans_nclust_spbox)
             kmeans_group = cObj.GroupArea(kmeans_layout, 'K-Means')
+
             self.algm_panel.addWidget(kmeans_group)
         #---------------------------------------------------------------------#
 
@@ -2577,14 +2543,17 @@ class MineralClassifier(DraggableTool):
 
             main_layout = QW.QVBoxLayout()
             main_layout.addWidget(self.seed_generator)
+            main_layout.addSpacing(20)
             main_layout.addWidget(self.pixprox_cbox)
             main_layout.addWidget(self.multithread_cbox)
+            main_layout.addSpacing(20)
             main_layout.addWidget(scores_group)
+            main_layout.addSpacing(20)
             main_layout.addWidget(QW.QLabel('Select algorithm'))
             main_layout.addWidget(self.algm_combox)
+            main_layout.addSpacing(10)
             main_layout.addWidget(self.algm_panel)
             self.setLayout(main_layout)
-
 
 
         def _connect_slots(self):
@@ -2630,855 +2599,855 @@ class MineralClassifier(DraggableTool):
 
 
 
-class MineralClassifierOLD(QW.QWidget):
-    def __init__(self, XMapsInfo, MinMapsInfo, parent=None):
-        super(MineralClassifierOLD, self).__init__()
-        self.parent = parent
-
-        self.setWindowTitle('Mineral Classifier')
-        self.setWindowIcon(QIcon('Icons/classify.png'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
-
-        self.XMapsPath, self.XMapsDataOrig = XMapsInfo
-        self.MinMapsPath, self.MinMapsData = MinMapsInfo
-
-        self.maskOn = False
-        self.XMapsData = self.XMapsDataOrig.copy()
-
-        self.algm_rawIn, self.algm_rawOut = None, None
-        self.minMap, self.probMap = None, None
-
-        # Silhouette score external thread
-        self.silhThread = exthr.SilhouetteThread()
-        self.silhThread.setObjectName('Silhouette scoring')
-        self.silhThread.taskFinished.connect(
-            lambda out: self.plot_silhouetteScore(out[0], out[1]))
-
-        self.init_ui()
-        self.adjustSize()
-
-
-    def init_ui(self):
-    # Input Maps Checkboxes
-        self.CboxMaps = cObj.CBoxMapLayout(self.XMapsPath)
-        # If a threading is running, the next line blocks interactions with cboxes
-        self.CboxMaps.cboxPressed.connect(lambda: self._extThreadRunning())
-        maps_scroll = cObj.GroupScrollArea(self.CboxMaps, 'Input Maps')
-
-    # Algorithm combo box
-        self.algm_combox = QW.QComboBox()
-        self.algm_combox.addItems(['Pre-trained Model', 'KNN', 'K-Means'])
-        self.algm_combox.currentIndexChanged.connect(self.onAlgmChanged)
-
-
-    # ==== ALGORITHMS PREFERENCES WIDGETS STACK ==== #
-
-    # Pre-trained algorithm preferences group
-        # (Load model button)
-        self.loadModel_btn = QW.QPushButton('Load model')
-        self.loadModel_btn.setToolTip('Select a pre-trained Machine Learning model.')
-        self.loadModel_btn.clicked.connect(self.loadModel)
-
-        # (Loaded model path)
-        self.model_path = cObj.PathLabel('')
-
-        # (Adjust Pre-Trained model Group Layout)
-        preTrained_vbox = QW.QVBoxLayout()
-        preTrained_vbox.addWidget(self.loadModel_btn)
-        preTrained_vbox.addWidget(self.model_path)
-        preTrained_group = cObj.GroupArea(preTrained_vbox, 'Algorithm Preferences')
-
-    # KNN algorithm preferences group
-        # (Number of neighbours spinbox)
-        self.nNeigh_spbox = QW.QSpinBox()
-        self.nNeigh_spbox.setRange(1, 100)
-        self.nNeigh_spbox.setValue(5)
-
-        # (Weight function combo-box)
-        self.wgtKNN_combox = QW.QComboBox()
-        self.wgtKNN_combox.addItems(['Uniform', 'Distance'])
-        self.wgtKNN_combox.setToolTip('All neighbors are weighted equally [Uniform] '\
-                                      'or closer neighbours have a greater influence [Distance].')
-
-        # (Include pixel proximity checkbox)
-        self.KNNproximity_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
-        self.KNNproximity_cbox.setToolTip('Include pixel coordinates as input feature')
-        self.KNNproximity_cbox.setChecked(False)
-
-        # (Adjust KNN Group Layout)
-        KNN_form = QW.QFormLayout()
-        KNN_form.addRow('N. of Neighbours', self.nNeigh_spbox)
-        KNN_form.addRow('Weigths', self.wgtKNN_combox)
-        KNN_form.addRow(self.KNNproximity_cbox)
-        KNN_group = cObj.GroupArea(KNN_form, 'Algorithm Preferences')
-
-    # K-Means algorithm preferences
-        # (Number of classes spinbox)
-        self.Kclasses_spbox = QW.QSpinBox()
-        self.Kclasses_spbox.setRange(2, 100)
-        self.Kclasses_spbox.setValue(8)
-
-        # (Random Seed input) -> should it be the same repeated widget for other potential seed-requiring algorithms?
-        self.seedInput = QW.QLineEdit()
-        self.seedInput.setValidator(QIntValidator(0, 10**8))
-        self.seedInput.setText(str(np.random.randint(0, 10**8)))
-
-        # (Randomize seed button)
-        self.randseed_btn = cObj.IconButton('Icons/dice.png')
-        self.randseed_btn.clicked.connect(
-            lambda: self.seedInput.setText(str(np.random.randint(0, 10**8))))
-
-        # (Include pixel proximity checkbox)
-        self.kmeansProximity_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
-        self.kmeansProximity_cbox.setToolTip('Include pixel coordinates as input feature')
-        self.kmeansProximity_cbox.setChecked(False)
-
-        # (Adjust KMeans Group Layout)
-        KMeans_grid = QW.QGridLayout()
-        KMeans_grid.addWidget(QW.QLabel('N. of Classes'), 0, 0)
-        KMeans_grid.addWidget(self.Kclasses_spbox, 0, 1, 1, 2)
-        KMeans_grid.addWidget(QW.QLabel('Seed'), 1, 0)
-        KMeans_grid.addWidget(self.seedInput, 1, 1)
-        KMeans_grid.addWidget(self.randseed_btn, 1, 2)
-        KMeans_grid.addWidget(self.kmeansProximity_cbox, 2, 0, 1, 3)
-        KMeans_group = cObj.GroupArea(KMeans_grid, 'Algorithm Preferences')
-
-    # Algorithms Preferences Widget (Stacked Widget)
-        self.algmPrefs = QW.QStackedWidget()
-        self.algmPrefs.addWidget(preTrained_group)
-        self.algmPrefs.addWidget(KNN_group)
-        self.algmPrefs.addWidget(KMeans_group)
-        self.algmPrefs.setCurrentIndex(0)
-
-    # ================================================== #
-
-
-    # Mineral Maps combo-box (for sub-phase identification)
-        self.minmaps_combox = QW.QComboBox()
-        self.refresh_minmaps_combox()
-        self.minmaps_combox.currentIndexChanged.connect(self.onMinmapChanged)
-        # Events handling to avoid problems during multi-threading operations
-        self.minmaps_combox.keyPressEvent = lambda evt: evt.ignore()
-        self.minmaps_combox.wheelEvent = lambda evt: evt.ignore()
-        self.minmaps_combox.highlighted.connect(lambda: self._extThreadRunning())
-
-    # Mineral phase combo-box (mineral phase to use as a mask)
-        self.minPhase_combox = QW.QComboBox()
-        self.minPhase_combox.setEnabled(False)
-        self.minPhase_combox.currentIndexChanged.connect(
-            lambda idx: self.minPhase_combox.setEnabled(idx != -1))
-        self.minPhase_combox.currentTextChanged.connect(self.mask_maps)
-        # Events handling to avoid problems during multi-threading operations
-        self.minPhase_combox.keyPressEvent = lambda evt: evt.ignore()
-        self.minPhase_combox.wheelEvent = lambda evt: evt.ignore()
-        self.minPhase_combox.highlighted.connect(lambda: self._extThreadRunning())
-
-    # Refresh loaded mineral maps button
-        self.refreshMinMap_btn = cObj.IconButton('Icons/refresh.png')
-        self.refreshMinMap_btn.clicked.connect(self.refresh_minmaps_combox)
-
-    # Adjust sub-phase identification group
-        subPhase_form = QW.QFormLayout()
-        subPhase_form.addRow('Mineral Map', self.minmaps_combox)
-        subPhase_form.addRow('Phase', self.minPhase_combox)
-        subPhase_form.addRow('Refresh', self.refreshMinMap_btn)
-        subPhase_group = cObj.GroupArea(subPhase_form, 'Sub-phase Identification')
-
-
-    # ==== ALGORITHMS PANELS WIDGETS STACK ==== #
-
-    # Pre-trained Model Information
-        self.modelInfo = cObj.DocumentBrowser()
-        self.modelInfo.set_defaultPlaceHolderText('Unable to retrieve model information.')
-
-
-    # Training area selector panel
-        self.trAreaPicker = cObj.TrAreasSelector(self.CboxMaps.Cbox_list, self.XMapsData, self)
-
-
-    # CLUSTERING EVALUATION TOOLS
-
-    # Silhouette score canvas
-        self.silhouetteCanvas = cObj.SilhouetteScoreCanvas(self, tight=True)
-        self.silhouetteCanvas.setMinimumSize(100, 100)
-
-    # Silhouette Navigation toobar
-        self.silhouetteNTbar = cObj.NavTbar(self.silhouetteCanvas, self)
-        self.silhouetteNTbar.removeToolByIndex([3, 4, 5, 6, 8, 9, 10, 12])
-
-    # Subset percentage spinbox
-        self.subsetPerc_spbox = QW.QDoubleSpinBox()
-        self.subsetPerc_spbox.setToolTip('Select the percentage of data to be evaluated.')
-        self.subsetPerc_spbox.setRange(0, 1)
-        self.subsetPerc_spbox.setSingleStep(0.01)
-        self.subsetPerc_spbox.setValue(0.3)
-
-    # Random Seed input
-        self.silhouetteSeed = QW.QLineEdit()
-        self.silhouetteSeed.setValidator(QIntValidator(0, 10**8))
-        self.silhouetteSeed.setText(str(np.random.randint(0, 10**8)))
-
-    # Silhouette start button
-        self.startSilhouette_btn = QW.QPushButton('START')
-        self.startSilhouette_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                        font-weight: bold''')
-        self.startSilhouette_btn.clicked.connect(self.start_silhouetteScore)
-
-    # Silhouette progress bar
-        self.silhouette_pbar = QW.QProgressBar()
-
-    # Calinski-Harabasz Index button
-        self.CHIscore_btn = QW.QPushButton('Calinski-Harabasz Index')
-        self.CHIscore_btn.setToolTip('Compute the Calinski-Harabasz Index.')
-        self.CHIscore_btn.clicked.connect(self.compute_CHIscore)
-
-    # Calinski-Harabasz Index label
-        self.CHIscore_label = QW.QLabel('None')
-        self.CHIscore_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
-    # Davies-Bouldin Index button
-        self.DBIscore_btn = QW.QPushButton('Davies-Bouldin Index')
-        self.DBIscore_btn.setToolTip('Compute the Davies-Bouldin Index.')
-        self.DBIscore_btn.clicked.connect(self.compute_DBIscore)
-
-    # Davies-Bouldin Index label
-        self.DBIscore_label = QW.QLabel('None')
-        self.DBIscore_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
-    # Adjust clustering scores group layout
-        SIL_grid = QW.QGridLayout()
-        SIL_grid.addWidget(QW.QLabel('Subset ratio'), 0, 0)
-        SIL_grid.addWidget(self.subsetPerc_spbox, 0, 1)
-        SIL_grid.addWidget(QW.QLabel('Random seed'), 1, 0)
-        SIL_grid.addWidget(self.silhouetteSeed, 1, 1)
-        SIL_grid.addWidget(self.startSilhouette_btn, 2, 0, alignment=Qt.AlignLeft)
-        SIL_grid.addWidget(self.silhouette_pbar, 3, 0, 1, 2)
-        SIL_group = cObj.GroupArea(SIL_grid, 'Silhouette score')
-
-        otherScores_vbox = QW.QVBoxLayout()
-        otherScores_vbox.addWidget(self.CHIscore_btn)
-        otherScores_vbox.addWidget(self.CHIscore_label)
-        otherScores_vbox.addWidget(self.DBIscore_btn)
-        otherScores_vbox.addWidget(self.DBIscore_label)
-        otherScores_group = cObj.GroupArea(otherScores_vbox, 'Other scores')
-
-        clustering_grid = QW.QGridLayout()
-        clustering_grid.setRowStretch(1, 1)
-        clustering_grid.addWidget(self.silhouetteNTbar, 0, 0, 1, 2)
-        clustering_grid.addWidget(self.silhouetteCanvas, 1, 0, 1, 2)
-        clustering_grid.addWidget(cObj.LineSeparator(), 2, 0, 1, 2)
-        clustering_grid.addWidget(SIL_group, 3, 0)
-        clustering_grid.addWidget(otherScores_group, 3, 1)
-        self.clustering_group = QW.QWidget()
-        self.clustering_group.setLayout(clustering_grid)
-
-    # Algorithms Panels Widget (Stacked Widget)
-        self.algmPanels = QW.QStackedWidget()
-        self.algmPanels.addWidget(self.modelInfo)
-        self.algmPanels.addWidget(self.trAreaPicker)
-        self.algmPanels.addWidget(self.clustering_group)
-        self.algmPanels.setCurrentIndex(0)
-        algmPanels_group = cObj.GroupArea(self.algmPanels, 'Algorithm Panel')
-
-    # ================================================== #
-
-
-    # Result shower canvas
-        self.resultCanvas = cObj.DiscreteClassCanvas(self, size=(10, 10), tight=True)
-        self.resultCanvas.setMinimumSize(100,100)
-
-    # Result canvas navigation toolbar
-        self.resultNTbar = cObj.NavTbar(self.resultCanvas, self)
-        self.resultNTbar.removeToolByIndex([3, 4, 8, 9])
-        self.resultNTbar.fixHomeAction()
-
-    # Unclassified pixel shower canvas
-        self.ND_Canvas = cObj.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
-        self.ND_Canvas.setMinimumSize(100, 100)
-        CF.shareAxis(self.ND_Canvas.ax, self.resultCanvas.ax, True)
-
-    # Unclassified pixel navigation toolbar
-        self.ND_NTbar = cObj.NavTbar(self.ND_Canvas, self)
-        self.ND_NTbar.fixHomeAction()
-        self.ND_NTbar.removeToolByIndex([3, 4, 8, 9, 12])
-
-    # Result canvas legend
-        self.resultLegend = cObj.CanvasLegend(self.resultCanvas)
-        self.resultLegend.itemColorChanged.connect(self.recolor_plots)
-
-    # Result bar plot
-        self.resultBars = cObj.BarCanvas(self)
-        self.resultBars.setMinimumSize(100, 100)
-
-    # Adjust Result group
-        result_grid = QW.QGridLayout()
-        result_grid.addWidget(self.resultNTbar, 0, 0, 1, 2)
-        result_grid.addWidget(self.resultCanvas, 1, 0, 1, 2)
-        result_grid.addWidget(self.ND_NTbar, 0, 2, 1, 2)
-        result_grid.addWidget(self.ND_Canvas, 1, 2, 1, 2)
-        result_grid.addWidget(self.resultLegend, 2, 0, alignment=Qt.AlignHCenter)
-        result_grid.addWidget(self.resultBars, 2, 1, 1, 3)
-        result_grid.setRowStretch(1, 2)
-        result_grid.setRowStretch(2, 1)
-        result_group = cObj.GroupArea(result_grid, 'Classification result')
-
-
-    # Classification confidence spinbox
-        self.conf_spbox = QW.QDoubleSpinBox()
-        self.conf_spbox.setToolTip('Set a confidence threshold for the classification.')
-        self.conf_spbox.setRange(0, 1)
-        self.conf_spbox.setSingleStep(0.01)
-        self.conf_spbox.setValue(0.50)
-
-    # Auto load result checkbox
-        self.autoLoad_cbox = QW.QCheckBox('Auto-load Result')
-        self.autoLoad_cbox.setToolTip('Automatically load the classification result in Classified Mineral Maps Tab.')
-        self.autoLoad_cbox.setChecked(True)
-
-    # Start button
-        self.start_btn = QW.QPushButton('START')
-        self.start_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                        font-weight: bold''')
-        self.start_btn.clicked.connect(self.start_classification)
-
-    # Save button
-        self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'SAVE')
-        self.save_btn.setEnabled(False)
-        self.save_btn.clicked.connect(self.save_result)
-
-    # Progress bar
-        self.progBar = QW.QProgressBar()
-
-    # Adjust Preferences group
-        pref_grid = QW.QGridLayout()
-        pref_grid.addWidget(QW.QLabel('Confidence'), 0, 0)
-        pref_grid.addWidget(self.conf_spbox, 0, 1)
-        pref_grid.addWidget(self.autoLoad_cbox, 1, 0, 1, 2)
-        pref_grid.addWidget(self.start_btn, 2, 0)
-        pref_grid.addWidget(self.save_btn, 2, 1)
-        pref_grid.addWidget(self.progBar, 3, 0, 1, 2)
-        pref_group = cObj.GroupArea(pref_grid, 'Preferences')
-
-    # Adjust Main Layout
-        # (Left_vbox)
-        left_vbox = QW.QVBoxLayout()
-        left_vbox.addWidget(maps_scroll, 1)
-        left_vbox.addWidget(QW.QLabel('Classifier'))
-        left_vbox.addWidget(self.algm_combox)
-        left_vbox.addWidget(self.algmPrefs)
-        left_vbox.addWidget(subPhase_group)
-        left_vbox.addWidget(pref_group)
-
-        # (Main Layout)
-        main_hsplit = cObj.SplitterGroup((left_vbox, algmPanels_group, result_group),
-                                         (0, 1, 1))
-        mainLayout = QW.QHBoxLayout()
-        mainLayout.addWidget(main_hsplit)
-        self.setLayout(mainLayout)
-
-
-    def _extThreadRunning(self):
-        threads = [self.silhThread]
-        for t in threads:
-            if t.isRunning():
-                _name = t.objectName()
-                QW.QMessageBox.critical(self, 'X-Min Learn',
-                                        'Cannot perform this action '\
-                                        f'while {_name} operation is running.')
-                return True
-        return False
-
-    def onAlgmChanged(self, idx):
-        self.algmPrefs.setCurrentIndex(idx)
-        self.algmPanels.setCurrentIndex(idx)
-
-    def onMinmapChanged(self, idx):
-        if idx > 0:
-            data = self.MinMapsData[idx - 1]
-            self.minPhase_combox.clear()
-            self.minPhase_combox.addItems(np.unique(data))
-            self.minPhase_combox.setCurrentIndex(0)
-        else:
-            self.minPhase_combox.setCurrentIndex(-1)
-
-    def refresh_minmaps_combox(self):
-        if not self._extThreadRunning():
-            self.minmaps_combox.clear()
-            self.minmaps_combox.addItem('None')
-            self.minmaps_combox.addItems([CF.path2filename(p) for p in self.MinMapsPath])
-
-    def mask_maps(self, phase_name):
-        if self.minPhase_combox.currentIndex() != -1:
-
-        # Compute the condition to be used as mask
-            minmap_idx = self.minmaps_combox.currentIndex() - 1
-            minmap = self.MinMapsData[minmap_idx]
-            mask = minmap != phase_name
-
-        # Mask the maps data
-            masked_maps = []
-            for idx, m in enumerate(self.XMapsDataOrig):
-                try:
-                    masked_maps.append(np.ma.masked_where(mask, m))
-                except IndexError: # raises when xray maps with different shapes are loaded
-                    masked_maps.append(m)
-                    # Uncheck the unfitting maps related checkboxes
-                    self.CboxMaps.Cbox_list[idx].setChecked(False)
-
-            self.maskOn = True
-            self.XMapsData = masked_maps
-
-        else:
-            self.maskOn = False
-            self.XMapsData = self.XMapsDataOrig.copy()
-
-        # Update the training area selector widget
-        self.trAreaPicker.update_mapsData(self.XMapsData)
-
-
-
-    def loadModel(self):
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Import Supervised Model',
-                                                      pref.get_dirPath('in'),
-                                                      'PyTorch Data File (*.pth)')
-        if path:
-            pref.set_dirPath('in', os.path.dirname(path))
-            self.model_path.set_fullpath(path, predict_display=True)
-            logpath = CF.extend_filename(path, '_log', ext='.txt')
-
-            # If model log was deleted or moved, ask for rebuilding it
-            if not os.path.exists(logpath):
-                choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                 'Unable to find model log file. Rebuild it?',
-                                                 QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                 QW.QMessageBox.Yes)
-                if choice == QW.QMessageBox.Yes:
-                    model_vars = ML_tools.loadModel(path)
-                    extendedLog = pref.get_setting('class/extLog', False, bool)
-                    ML_tools.saveModelLog(model_vars, logpath, extendedLog)
-
-            # Try to load the log file anyways, no error will be raised if file still doesn't exist
-            self.modelInfo.setDoc(logpath)
-
-
-    def getSelectedMapsData(self, coord_maps=False):
-        selected_cbox = filter(lambda cbox: cbox.isChecked(), self.CboxMaps.Cbox_list)
-        maps = [self.XMapsData[int(cbox.objectName())] for cbox in selected_cbox]
-        if coord_maps:
-            _shape = maps[0].shape
-            xx, yy = np.meshgrid(np.arange(_shape[1]), np.arange(_shape[0]))
-            if self.maskOn:
-                mask = maps[0].mask
-                xx = np.ma.masked_where(mask, xx)
-                yy = np.ma.masked_where(mask, yy)
-            maps.extend([xx, yy])
-        return maps
-
-
-    def getTrainingData(self, pixel_proximity=False, norm_data=True):
-        trAreas = self.trAreaPicker.get_trAreasData()
-        if not len(trAreas):
-            QW.QMessageBox.critical(self, 'X-Min Learn',
-                                    'Please draw training areas first.')
-            return
-
-    # Merge all selected maps into a single 2D array (nPixels x nMaps).
-    # Also check for same shape. if <pixel_proximity> is True, x and y coords
-    # maps will also be computed.
-        maps = self.getSelectedMapsData(pixel_proximity)
-        X, ok = CF.MergeMaps(maps, mask=self.maskOn)
-        if not ok:
-            QW.QMessageBox.critical(self, 'X-Min Learn',
-                                    'The selected maps have different shapes.')
-            return
-
-    # Standardize feature (X) data if required
-        if norm_data:
-            if pixel_proximity:
-                # Pixel coord data is normalized in [0, 1] to reduce their weight on prediction
-                xmaps, coord = np.split(X, [-2], axis=1)
-                X[:, :-2] = ML_tools.norm_data(xmaps, return_standards=False, engine='numpy')
-                X[:, -2:] = coord/coord.max(0)
-            else:
-                X = ML_tools.norm_data(X, return_standards=False, engine='numpy')
-
-    # Build an empty (dummy) 2D array of targets (maps shape).
-    # Then fill it with training areas data
-        mapShape = maps[0].shape
-        dummy_Y = np.empty(mapShape, dtype='U8')
-        for (r0,r1,c0,c1), value in trAreas:
-            dummy_Y[r0:r1, c0:c1] = value
-
-    # If there is a mask, apply it to the targets array and flatten it
-    # to a 1D array (nPixels x 1), excluding the masked indices. Otherwise just flatten it.
-        if self.maskOn:
-            mask = maps[0].mask
-            Y = np.ma.masked_where(mask, dummy_Y).compressed()
-        else:
-            Y = dummy_Y.flatten()
-
-    # Extract the indices of training pixels from flattened targets array.
-    # Then use that index to get x_train data and y_train data
-        train_idx = (Y != '').nonzero()[0]
-        x_train = X[train_idx, :]
-        y_train = Y[train_idx]
-
-        return x_train, y_train, X
-
-    def recolor_plots(self):
-        self.update_resultBars(self.minMap)
-        if self.algm_rawIn is not None: # last algorithm used was a clustering one
-            self.silhouetteCanvas.alterColors(self.resultCanvas.get_colorDict(keys='lbl'))
-
-    def update_resultBars(self, mapData):
-        lbl, mode = CF.get_mode(mapData, ordered=True)
-        col_dict = CF.sort_dict_by_list(self.resultCanvas.get_colorDict(keys='lbl'), lbl)
-        self.resultBars.update_canvas('Mode', mode, lbl, colors=list(col_dict.values()))
-
-    def set_confidence(self, conf, pred, prob):
-        return np.where(prob>=conf, pred, '_ND_')
-
-    def update_resultPlots(self, minMap):
-        self.resultCanvas.update_canvas('Mineral Map', minMap)
-        self.resultLegend.update()
-        self.ND_Canvas.update_canvas('Unclassified Pixels', minMap=='_ND_')
-        self.update_resultBars(minMap)
-
-    def start_classification(self):
-        if not self._extThreadRunning():
-            selected_cbox = filter(lambda cbox: cbox.isChecked(), self.CboxMaps.Cbox_list)
-            if len(list(selected_cbox)) == 0:
-                return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                               'Please select at least one map.')
-            algm = self.algm_combox.currentText()
-
-            if algm == 'Pre-trained Model':
-                self.run_preTrainedClassifier()
-
-            elif algm == 'KNN':
-                self.run_KNNClassfier()
-
-            elif algm == 'K-Means':
-                self.run_KMeansClassifier()
-
-            else : print(f'{algm} not implemented yet')
-
-
-    def end_classification(self, success, results, clust_rawInput=None):
-        if success:
-            pred, prob = results
-
-        # Apply confidence treshold
-            conf = self.conf_spbox.value()
-            pred = self.set_confidence(conf, pred, prob)
-
-        # Save the algorithm raw output (flattened predictions after confidence treshold) and
-        # raw input (flattened maps stack). This is useful only for clustering results,
-        # which returns also a 'clust_rawInput' arg. Useful for clustering scores analysis
-            self.algm_rawOut = pred
-            self.algm_rawIn = clust_rawInput
-
-        # Reconstruct the result
-            mapsData = self.getSelectedMapsData()
-            outShape = mapsData[0].shape
-
-            # If a sub-phase analysis was requested we need to apply the mask to the output.
-            # This is done by creating an empty <outShape> shaped array of '_No{phaseName}' values.
-            # Then the correct indices (rows, cols) where to insert the classified data are taken
-            # from the mask of one of the input maps (the 1st, since they all share the same mask).
-            # For the probability map, the result is simply reshaped to <outShape> and the mask is applied
-            # to it by using the numpy 'masked_where' function.
-            if self.maskOn:
-                mask = mapsData[0].mask
-                rows, cols = (mask==0).nonzero()
-
-                minmap = np.empty(outShape, dtype='U8')
-                noPhase = f'_No{self.minPhase_combox.currentText()}'
-                minmap[:, :] = noPhase
-                minmap[rows, cols] = pred
-
-                pmap = np.zeros(outShape)
-                pmap[rows, cols] = prob
-                pmap = np.ma.masked_where(mask, pmap)
-
-            else:
-                minmap = pred.reshape(outShape)
-                pmap = prob.reshape(outShape)
-
-        # Save the mineral map and the probability map in memory
-            self.minMap = minmap
-            self.probMap = pmap
-
-        # Update the result widgets
-            self.update_resultPlots(self.minMap)
-
-            self.save_btn.setEnabled(True)
-            QW.QMessageBox.information(self, 'X-Min Learn',
-                                       'Classification completed succesfully.')
-        else:
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                'An error occurred during the classification.',
-                detailedText = repr(results[0]))
-
-        self.progBar.reset()
-
-
-
-    def save_result(self):
-        if not self._extThreadRunning():
-            outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Mineral Map',
-                                                pref.get_dirPath('out'),
-                                                '''Compressed ASCII file (*.gz)
-                                                   ASCII file (*.txt)''')
-            if outpath:
-                try:
-                    pref.set_dirPath('out', os.path.dirname(outpath))
-                    pMap_path = CF.extend_filename(outpath, '_probMap')
-                    np.savetxt(outpath, self.minMap, fmt='%s')
-                    np.savetxt(pMap_path, self.probMap, fmt='%.2f')
-                    QW.QMessageBox.information(self, 'File saved',
-                                               'File saved with success.')
-                except Exception as e:
-                    cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                    'An error occurred while saving the files.',
-                                    detailedText = repr(e))
-            # Load automatically the result in MinMap Tab if required
-                if self.autoLoad_cbox.isChecked():
-                    self.parent._minmaptab.loadMaps([outpath])
-
-                # Also refresh the MinMap combobox in the sub-phase group
-                    # self.MinMapsPath.append(outpath)
-                    # self.MinMapsData.append(self.minMap)
-                    self.refresh_minmaps_combox()
-
-
-
-
-    def run_preTrainedClassifier(self):
-        modelPath = self.model_path.get_fullpath()
-        if modelPath == '':
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'Please load a model first.')
-
-        self.progBar.setRange(0, 6)
-        cboxList = self.CboxMaps.Cbox_list
-
-    # Load model variables
-        modelVars = ML_tools.loadModel(modelPath)
-        missing = ML_tools.missingVariables(modelVars)
-        if len(missing):
-            self.progBar.reset()
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'The following variables are missing:\n{missing}')
-        requiredMaps = modelVars['ordered_Xfeat']
-        Y_dict = modelVars['Y_dict']
-        self.progBar.setValue(1)
-
-    # Check for the presence of all required maps
-        checkedMaps = [c.text() for c in cboxList if c.isChecked()]
-        for m in requiredMaps:
-            if not CF.guessMap(m, checkedMaps, caseSens=True):
-                self.progBar.reset()
-                return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                               f'Unable to identify {m} map.')
-        self.progBar.setValue(2)
-
-    # Reorder the input maps to fit the required maps order
-        cboxDict = {c.text() : self.XMapsData[int(c.objectName())] for c in cboxList}
-        orderedMaps = CF.sort_dict_by_list(cboxDict, requiredMaps)
-        self.progBar.setValue(3)
-
-    # Merge maps into a single 2D array (shape = nPixels x nmaps)
-        maps_data = orderedMaps.values()
-        X, ok = CF.MergeMaps(maps_data, mask=self.maskOn)
-        if not ok:
-            self.progBar.reset()
-            return QW.MessageBox.critical(self, 'Different shapes detected',
-                                          'The selected maps have different shapes.')
-        self.progBar.setValue(4)
-
-
-        try:
-        # Run classification
-            prob, predID = ML_tools.applyModel(modelVars, X)
-            self.progBar.setValue(5)
-
-        # Convert labels IDs to class names
-            pred = CF.decode_labels(predID, Y_dict)
-            self.progBar.setValue(6)
-
-            success = True
-            results = (pred, prob.detach().numpy())
-
-        except Exception as e:
-            success = False
-            results = (e,)
-
-        finally:
-            self.end_classification(success, results)
-
-
-
-    def run_KNNClassfier(self):
-        proximity = self.KNNproximity_cbox.isChecked()
-        train_data = self.getTrainingData(pixel_proximity=proximity)
-        if train_data:
-            self.progBar.setRange(0, 2)
-
-        # Get required inputs
-            x_train, y_train, X = train_data
-            n_neigh = self.nNeigh_spbox.value()
-            weights = self.wgtKNN_combox.currentText().lower()
-            self.progBar.setValue(1)
-
-            try:
-            # Run classification
-                pred, prob = ML_tools.KNN(X, x_train, y_train, n_neigh, weights)
-                self.progBar.setValue(2)
-
-                success = True
-                results = (pred, prob)
-
-            except Exception as e:
-                success = False
-                results = (e,)
-
-            finally:
-                self.end_classification(success, results)
-
-
-    def run_KMeansClassifier(self):
-        self.progBar.setRange(0, 4)
-        proximity = self.kmeansProximity_cbox.isChecked()
-
-    # Merge all selected maps into a single 2D array (nPixels x nMaps).
-    # Also check for same shape.
-        maps = self.getSelectedMapsData(coord_maps=proximity)
-        X, ok = CF.MergeMaps(maps, mask=self.maskOn)
-        self.progBar.setValue(1)
-        if not ok:
-            self.progBar.reset()
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'The selected maps have different shapes.')
-    # Standardize the data
-        if proximity:
-        # Pixel coord data is normalized in [0, 1] to reduce their weight on prediction
-            xmaps, coord = np.split(X, [-2], axis=1)
-            X[:, :-2] = ML_tools.norm_data(xmaps, return_standards=False, engine='numpy')
-            X[:, -2:] = coord/coord.max(0)
-        else:
-            X = ML_tools.norm_data(X, return_standards=False, engine='numpy')
-            self.progBar.setValue(2)
-
-    # Get k-means required parameters
-        n_classes = self.Kclasses_spbox.value()
-        seed = int(self.seedInput.text())
-        self.progBar.setValue(3)
-
-        try:
-        # Run classification
-            pred, prob = ML_tools.K_Means(X, n_classes, seed)
-            self.progBar.setValue(4)
-
-            success = True
-            results = (pred.astype('U8'), prob)
-
-        except Exception as e:
-            success = False
-            results = (e,)
-
-        finally:
-            self.silhouetteCanvas.clear_canvas() # clear the silhouette plot
-            self.end_classification(success, results, clust_rawInput=X)
-
-
-    def start_silhouetteScore(self):
-        X = self.algm_rawIn
-        if X is None: # if it is None, the last algorithm used was not a clustering one
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'Please run a clustering algorithm first')
-
-        self.silhouette_pbar.setRange(0, 5)
-        self.startSilhouette_btn.setEnabled(False)
-
-    # Gathering required input parameters
-        pred = self.algm_rawOut
-        subset_size = int(self.subsetPerc_spbox.value() * len(pred))
-        seed = int(self.silhouetteSeed.text())
-        self.silhouette_pbar.setValue(1)
-
-    # Permute the data and slice it to obtain the subset
-        np.random.seed(seed)
-        subset_idx = np.random.permutation(len(pred))[:subset_size]
-        X = X[subset_idx, :]
-        pred = pred[subset_idx]
-        self.silhouette_pbar.setValue(2)
-
-    # Compute the silhouette score (thread)
-        self.silhThread.subtaskCompleted.connect(
-            lambda: self.silhouette_pbar.setValue(self.silhouette_pbar.value() + 1))
-        self.silhThread.set_params(X, pred)
-        self.silhThread.start()
-
-    # # Compute the overall average silhouette score
-    #     mask = pred != '_ND_' # exclude ND data for the average prediction
-    #     sil_avg = ML_tools.silhouette_metric(X[mask, :], pred[mask], type='avg')
-    #     self.silhouette_pbar.setValue(3)
-
-    # # Compute the silhouette score for each sample
-    #     sil = ML_tools.silhouette_metric(X, pred, type='all')
-    #     self.silhouette_pbar.setValue(4)
-
-
-    def plot_silhouetteScore(self, success, results):
-        if success:
-            sil_avg, sil_sam, pred = results
-        # Plot the result
-            colors = self.resultCanvas.get_colorDict(keys='lbl')
-            sil_by_cluster = {}
-            for cluster_name in np.unique(pred):
-                sil_by_cluster[cluster_name] = sil_sam[pred == cluster_name]
-            self.silhouetteCanvas.update_canvas(sil_by_cluster, sil_avg, colors)
-            self.silhouette_pbar.setValue(5)
-
-        else:
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Silhouette score computation failed',
-                            detailedText = repr(results[0]))
-
-        self.silhouette_pbar.reset()
-        self.startSilhouette_btn.setEnabled(True)
-
-    def compute_CHIscore(self):
-        X = self.algm_rawIn
-        if X is None: # if it is None, the last algorithm used was not a clustering one
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'Please run a clustering algorithm first')
-        pred = self.algm_rawOut
-        mask = pred != '_ND_' # exclude ND data
-        score = ML_tools.CHIscore(X[mask, :], pred[mask])
-        self.CHIscore_label.setText(str(score))
-
-    def compute_DBIscore(self):
-        X = self.algm_rawIn
-        if X is None: # if it is None, the last algorithm used was not a clustering one
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'Please run a clustering algorithm first')
-        pred = self.algm_rawOut
-        mask = pred != '_ND_' # exclude ND data
-        score = ML_tools.DBIscore(X[mask, :], pred[mask])
-        self.DBIscore_label.setText(str(score))
-
-    def closeEvent(self, event):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Do you really want to close the classification window?',
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
-            event.accept()
-        else:
-            event.ignore()
+# class MineralClassifierOLD(QW.QWidget):
+#     def __init__(self, XMapsInfo, MinMapsInfo, parent=None):
+#         super(MineralClassifierOLD, self).__init__()
+#         self.parent = parent
+
+#         self.setWindowTitle('Mineral Classifier')
+#         self.setWindowIcon(QIcon('Icons/classify.png'))
+#         self.setAttribute(Qt.WA_QuitOnClose, False)
+#         self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+#         self.XMapsPath, self.XMapsDataOrig = XMapsInfo
+#         self.MinMapsPath, self.MinMapsData = MinMapsInfo
+
+#         self.maskOn = False
+#         self.XMapsData = self.XMapsDataOrig.copy()
+
+#         self.algm_rawIn, self.algm_rawOut = None, None
+#         self.minMap, self.probMap = None, None
+
+#         # Silhouette score external thread
+#         self.silhThread = exthr.SilhouetteThread()
+#         self.silhThread.setObjectName('Silhouette scoring')
+#         self.silhThread.taskFinished.connect(
+#             lambda out: self.plot_silhouetteScore(out[0], out[1]))
+
+#         self.init_ui()
+#         self.adjustSize()
+
+
+#     def init_ui(self):
+#     # Input Maps Checkboxes
+#         self.CboxMaps = cObj.CBoxMapLayout(self.XMapsPath)
+#         # If a threading is running, the next line blocks interactions with cboxes
+#         self.CboxMaps.cboxPressed.connect(lambda: self._extThreadRunning())
+#         maps_scroll = cObj.GroupScrollArea(self.CboxMaps, 'Input Maps')
+
+#     # Algorithm combo box
+#         self.algm_combox = QW.QComboBox()
+#         self.algm_combox.addItems(['Pre-trained Model', 'KNN', 'K-Means'])
+#         self.algm_combox.currentIndexChanged.connect(self.onAlgmChanged)
+
+
+#     # ==== ALGORITHMS PREFERENCES WIDGETS STACK ==== #
+
+#     # Pre-trained algorithm preferences group
+#         # (Load model button)
+#         self.loadModel_btn = QW.QPushButton('Load model')
+#         self.loadModel_btn.setToolTip('Select a pre-trained Machine Learning model.')
+#         self.loadModel_btn.clicked.connect(self.loadModel)
+
+#         # (Loaded model path)
+#         self.model_path = cObj.PathLabel('')
+
+#         # (Adjust Pre-Trained model Group Layout)
+#         preTrained_vbox = QW.QVBoxLayout()
+#         preTrained_vbox.addWidget(self.loadModel_btn)
+#         preTrained_vbox.addWidget(self.model_path)
+#         preTrained_group = cObj.GroupArea(preTrained_vbox, 'Algorithm Preferences')
+
+#     # KNN algorithm preferences group
+#         # (Number of neighbours spinbox)
+#         self.nNeigh_spbox = QW.QSpinBox()
+#         self.nNeigh_spbox.setRange(1, 100)
+#         self.nNeigh_spbox.setValue(5)
+
+#         # (Weight function combo-box)
+#         self.wgtKNN_combox = QW.QComboBox()
+#         self.wgtKNN_combox.addItems(['Uniform', 'Distance'])
+#         self.wgtKNN_combox.setToolTip('All neighbors are weighted equally [Uniform] '\
+#                                       'or closer neighbours have a greater influence [Distance].')
+
+#         # (Include pixel proximity checkbox)
+#         self.KNNproximity_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
+#         self.KNNproximity_cbox.setToolTip('Include pixel coordinates as input feature')
+#         self.KNNproximity_cbox.setChecked(False)
+
+#         # (Adjust KNN Group Layout)
+#         KNN_form = QW.QFormLayout()
+#         KNN_form.addRow('N. of Neighbours', self.nNeigh_spbox)
+#         KNN_form.addRow('Weigths', self.wgtKNN_combox)
+#         KNN_form.addRow(self.KNNproximity_cbox)
+#         KNN_group = cObj.GroupArea(KNN_form, 'Algorithm Preferences')
+
+#     # K-Means algorithm preferences
+#         # (Number of classes spinbox)
+#         self.Kclasses_spbox = QW.QSpinBox()
+#         self.Kclasses_spbox.setRange(2, 100)
+#         self.Kclasses_spbox.setValue(8)
+
+#         # (Random Seed input) -> should it be the same repeated widget for other potential seed-requiring algorithms?
+#         self.seedInput = QW.QLineEdit()
+#         self.seedInput.setValidator(QIntValidator(0, 10**8))
+#         self.seedInput.setText(str(np.random.randint(0, 10**8)))
+
+#         # (Randomize seed button)
+#         self.randseed_btn = cObj.IconButton('Icons/dice.png')
+#         self.randseed_btn.clicked.connect(
+#             lambda: self.seedInput.setText(str(np.random.randint(0, 10**8))))
+
+#         # (Include pixel proximity checkbox)
+#         self.kmeansProximity_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
+#         self.kmeansProximity_cbox.setToolTip('Include pixel coordinates as input feature')
+#         self.kmeansProximity_cbox.setChecked(False)
+
+#         # (Adjust KMeans Group Layout)
+#         KMeans_grid = QW.QGridLayout()
+#         KMeans_grid.addWidget(QW.QLabel('N. of Classes'), 0, 0)
+#         KMeans_grid.addWidget(self.Kclasses_spbox, 0, 1, 1, 2)
+#         KMeans_grid.addWidget(QW.QLabel('Seed'), 1, 0)
+#         KMeans_grid.addWidget(self.seedInput, 1, 1)
+#         KMeans_grid.addWidget(self.randseed_btn, 1, 2)
+#         KMeans_grid.addWidget(self.kmeansProximity_cbox, 2, 0, 1, 3)
+#         KMeans_group = cObj.GroupArea(KMeans_grid, 'Algorithm Preferences')
+
+#     # Algorithms Preferences Widget (Stacked Widget)
+#         self.algmPrefs = QW.QStackedWidget()
+#         self.algmPrefs.addWidget(preTrained_group)
+#         self.algmPrefs.addWidget(KNN_group)
+#         self.algmPrefs.addWidget(KMeans_group)
+#         self.algmPrefs.setCurrentIndex(0)
+
+#     # ================================================== #
+
+
+#     # Mineral Maps combo-box (for sub-phase identification)
+#         self.minmaps_combox = QW.QComboBox()
+#         self.refresh_minmaps_combox()
+#         self.minmaps_combox.currentIndexChanged.connect(self.onMinmapChanged)
+#         # Events handling to avoid problems during multi-threading operations
+#         self.minmaps_combox.keyPressEvent = lambda evt: evt.ignore()
+#         self.minmaps_combox.wheelEvent = lambda evt: evt.ignore()
+#         self.minmaps_combox.highlighted.connect(lambda: self._extThreadRunning())
+
+#     # Mineral phase combo-box (mineral phase to use as a mask)
+#         self.minPhase_combox = QW.QComboBox()
+#         self.minPhase_combox.setEnabled(False)
+#         self.minPhase_combox.currentIndexChanged.connect(
+#             lambda idx: self.minPhase_combox.setEnabled(idx != -1))
+#         self.minPhase_combox.currentTextChanged.connect(self.mask_maps)
+#         # Events handling to avoid problems during multi-threading operations
+#         self.minPhase_combox.keyPressEvent = lambda evt: evt.ignore()
+#         self.minPhase_combox.wheelEvent = lambda evt: evt.ignore()
+#         self.minPhase_combox.highlighted.connect(lambda: self._extThreadRunning())
+
+#     # Refresh loaded mineral maps button
+#         self.refreshMinMap_btn = cObj.IconButton('Icons/refresh.png')
+#         self.refreshMinMap_btn.clicked.connect(self.refresh_minmaps_combox)
+
+#     # Adjust sub-phase identification group
+#         subPhase_form = QW.QFormLayout()
+#         subPhase_form.addRow('Mineral Map', self.minmaps_combox)
+#         subPhase_form.addRow('Phase', self.minPhase_combox)
+#         subPhase_form.addRow('Refresh', self.refreshMinMap_btn)
+#         subPhase_group = cObj.GroupArea(subPhase_form, 'Sub-phase Identification')
+
+
+#     # ==== ALGORITHMS PANELS WIDGETS STACK ==== #
+
+#     # Pre-trained Model Information
+#         self.modelInfo = cObj.DocumentBrowser()
+#         self.modelInfo.set_defaultPlaceHolderText('Unable to retrieve model information.')
+
+
+#     # Training area selector panel
+#         self.trAreaPicker = cObj.TrAreasSelector(self.CboxMaps.Cbox_list, self.XMapsData, self)
+
+
+#     # CLUSTERING EVALUATION TOOLS
+
+#     # Silhouette score canvas
+#         self.silhouetteCanvas = cObj.SilhouetteScoreCanvas(self, tight=True)
+#         self.silhouetteCanvas.setMinimumSize(100, 100)
+
+#     # Silhouette Navigation toobar
+#         self.silhouetteNTbar = cObj.NavTbar(self.silhouetteCanvas, self)
+#         self.silhouetteNTbar.removeToolByIndex([3, 4, 5, 6, 8, 9, 10, 12])
+
+#     # Subset percentage spinbox
+#         self.subsetPerc_spbox = QW.QDoubleSpinBox()
+#         self.subsetPerc_spbox.setToolTip('Select the percentage of data to be evaluated.')
+#         self.subsetPerc_spbox.setRange(0, 1)
+#         self.subsetPerc_spbox.setSingleStep(0.01)
+#         self.subsetPerc_spbox.setValue(0.3)
+
+#     # Random Seed input
+#         self.silhouetteSeed = QW.QLineEdit()
+#         self.silhouetteSeed.setValidator(QIntValidator(0, 10**8))
+#         self.silhouetteSeed.setText(str(np.random.randint(0, 10**8)))
+
+#     # Silhouette start button
+#         self.startSilhouette_btn = QW.QPushButton('START')
+#         self.startSilhouette_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                         font-weight: bold''')
+#         self.startSilhouette_btn.clicked.connect(self.start_silhouetteScore)
+
+#     # Silhouette progress bar
+#         self.silhouette_pbar = QW.QProgressBar()
+
+#     # Calinski-Harabasz Index button
+#         self.CHIscore_btn = QW.QPushButton('Calinski-Harabasz Index')
+#         self.CHIscore_btn.setToolTip('Compute the Calinski-Harabasz Index.')
+#         self.CHIscore_btn.clicked.connect(self.compute_CHIscore)
+
+#     # Calinski-Harabasz Index label
+#         self.CHIscore_label = QW.QLabel('None')
+#         self.CHIscore_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+#     # Davies-Bouldin Index button
+#         self.DBIscore_btn = QW.QPushButton('Davies-Bouldin Index')
+#         self.DBIscore_btn.setToolTip('Compute the Davies-Bouldin Index.')
+#         self.DBIscore_btn.clicked.connect(self.compute_DBIscore)
+
+#     # Davies-Bouldin Index label
+#         self.DBIscore_label = QW.QLabel('None')
+#         self.DBIscore_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+#     # Adjust clustering scores group layout
+#         SIL_grid = QW.QGridLayout()
+#         SIL_grid.addWidget(QW.QLabel('Subset ratio'), 0, 0)
+#         SIL_grid.addWidget(self.subsetPerc_spbox, 0, 1)
+#         SIL_grid.addWidget(QW.QLabel('Random seed'), 1, 0)
+#         SIL_grid.addWidget(self.silhouetteSeed, 1, 1)
+#         SIL_grid.addWidget(self.startSilhouette_btn, 2, 0, alignment=Qt.AlignLeft)
+#         SIL_grid.addWidget(self.silhouette_pbar, 3, 0, 1, 2)
+#         SIL_group = cObj.GroupArea(SIL_grid, 'Silhouette score')
+
+#         otherScores_vbox = QW.QVBoxLayout()
+#         otherScores_vbox.addWidget(self.CHIscore_btn)
+#         otherScores_vbox.addWidget(self.CHIscore_label)
+#         otherScores_vbox.addWidget(self.DBIscore_btn)
+#         otherScores_vbox.addWidget(self.DBIscore_label)
+#         otherScores_group = cObj.GroupArea(otherScores_vbox, 'Other scores')
+
+#         clustering_grid = QW.QGridLayout()
+#         clustering_grid.setRowStretch(1, 1)
+#         clustering_grid.addWidget(self.silhouetteNTbar, 0, 0, 1, 2)
+#         clustering_grid.addWidget(self.silhouetteCanvas, 1, 0, 1, 2)
+#         clustering_grid.addWidget(cObj.LineSeparator(), 2, 0, 1, 2)
+#         clustering_grid.addWidget(SIL_group, 3, 0)
+#         clustering_grid.addWidget(otherScores_group, 3, 1)
+#         self.clustering_group = QW.QWidget()
+#         self.clustering_group.setLayout(clustering_grid)
+
+#     # Algorithms Panels Widget (Stacked Widget)
+#         self.algmPanels = QW.QStackedWidget()
+#         self.algmPanels.addWidget(self.modelInfo)
+#         self.algmPanels.addWidget(self.trAreaPicker)
+#         self.algmPanels.addWidget(self.clustering_group)
+#         self.algmPanels.setCurrentIndex(0)
+#         algmPanels_group = cObj.GroupArea(self.algmPanels, 'Algorithm Panel')
+
+#     # ================================================== #
+
+
+#     # Result shower canvas
+#         self.resultCanvas = cObj.DiscreteClassCanvas(self, size=(10, 10), tight=True)
+#         self.resultCanvas.setMinimumSize(100,100)
+
+#     # Result canvas navigation toolbar
+#         self.resultNTbar = cObj.NavTbar(self.resultCanvas, self)
+#         self.resultNTbar.removeToolByIndex([3, 4, 8, 9])
+#         self.resultNTbar.fixHomeAction()
+
+#     # Unclassified pixel shower canvas
+#         self.ND_Canvas = cObj.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
+#         self.ND_Canvas.setMinimumSize(100, 100)
+#         CF.shareAxis(self.ND_Canvas.ax, self.resultCanvas.ax, True)
+
+#     # Unclassified pixel navigation toolbar
+#         self.ND_NTbar = cObj.NavTbar(self.ND_Canvas, self)
+#         self.ND_NTbar.fixHomeAction()
+#         self.ND_NTbar.removeToolByIndex([3, 4, 8, 9, 12])
+
+#     # Result canvas legend
+#         self.resultLegend = cObj.CanvasLegend(self.resultCanvas)
+#         self.resultLegend.itemColorChanged.connect(self.recolor_plots)
+
+#     # Result bar plot
+#         self.resultBars = cObj.BarCanvas(self)
+#         self.resultBars.setMinimumSize(100, 100)
+
+#     # Adjust Result group
+#         result_grid = QW.QGridLayout()
+#         result_grid.addWidget(self.resultNTbar, 0, 0, 1, 2)
+#         result_grid.addWidget(self.resultCanvas, 1, 0, 1, 2)
+#         result_grid.addWidget(self.ND_NTbar, 0, 2, 1, 2)
+#         result_grid.addWidget(self.ND_Canvas, 1, 2, 1, 2)
+#         result_grid.addWidget(self.resultLegend, 2, 0, alignment=Qt.AlignHCenter)
+#         result_grid.addWidget(self.resultBars, 2, 1, 1, 3)
+#         result_grid.setRowStretch(1, 2)
+#         result_grid.setRowStretch(2, 1)
+#         result_group = cObj.GroupArea(result_grid, 'Classification result')
+
+
+#     # Classification confidence spinbox
+#         self.conf_spbox = QW.QDoubleSpinBox()
+#         self.conf_spbox.setToolTip('Set a confidence threshold for the classification.')
+#         self.conf_spbox.setRange(0, 1)
+#         self.conf_spbox.setSingleStep(0.01)
+#         self.conf_spbox.setValue(0.50)
+
+#     # Auto load result checkbox
+#         self.autoLoad_cbox = QW.QCheckBox('Auto-load Result')
+#         self.autoLoad_cbox.setToolTip('Automatically load the classification result in Classified Mineral Maps Tab.')
+#         self.autoLoad_cbox.setChecked(True)
+
+#     # Start button
+#         self.start_btn = QW.QPushButton('START')
+#         self.start_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                         font-weight: bold''')
+#         self.start_btn.clicked.connect(self.start_classification)
+
+#     # Save button
+#         self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'SAVE')
+#         self.save_btn.setEnabled(False)
+#         self.save_btn.clicked.connect(self.save_result)
+
+#     # Progress bar
+#         self.progBar = QW.QProgressBar()
+
+#     # Adjust Preferences group
+#         pref_grid = QW.QGridLayout()
+#         pref_grid.addWidget(QW.QLabel('Confidence'), 0, 0)
+#         pref_grid.addWidget(self.conf_spbox, 0, 1)
+#         pref_grid.addWidget(self.autoLoad_cbox, 1, 0, 1, 2)
+#         pref_grid.addWidget(self.start_btn, 2, 0)
+#         pref_grid.addWidget(self.save_btn, 2, 1)
+#         pref_grid.addWidget(self.progBar, 3, 0, 1, 2)
+#         pref_group = cObj.GroupArea(pref_grid, 'Preferences')
+
+#     # Adjust Main Layout
+#         # (Left_vbox)
+#         left_vbox = QW.QVBoxLayout()
+#         left_vbox.addWidget(maps_scroll, 1)
+#         left_vbox.addWidget(QW.QLabel('Classifier'))
+#         left_vbox.addWidget(self.algm_combox)
+#         left_vbox.addWidget(self.algmPrefs)
+#         left_vbox.addWidget(subPhase_group)
+#         left_vbox.addWidget(pref_group)
+
+#         # (Main Layout)
+#         main_hsplit = cObj.SplitterGroup((left_vbox, algmPanels_group, result_group),
+#                                          (0, 1, 1))
+#         mainLayout = QW.QHBoxLayout()
+#         mainLayout.addWidget(main_hsplit)
+#         self.setLayout(mainLayout)
+
+
+#     def _extThreadRunning(self):
+#         threads = [self.silhThread]
+#         for t in threads:
+#             if t.isRunning():
+#                 _name = t.objectName()
+#                 QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                         'Cannot perform this action '\
+#                                         f'while {_name} operation is running.')
+#                 return True
+#         return False
+
+#     def onAlgmChanged(self, idx):
+#         self.algmPrefs.setCurrentIndex(idx)
+#         self.algmPanels.setCurrentIndex(idx)
+
+#     def onMinmapChanged(self, idx):
+#         if idx > 0:
+#             data = self.MinMapsData[idx - 1]
+#             self.minPhase_combox.clear()
+#             self.minPhase_combox.addItems(np.unique(data))
+#             self.minPhase_combox.setCurrentIndex(0)
+#         else:
+#             self.minPhase_combox.setCurrentIndex(-1)
+
+#     def refresh_minmaps_combox(self):
+#         if not self._extThreadRunning():
+#             self.minmaps_combox.clear()
+#             self.minmaps_combox.addItem('None')
+#             self.minmaps_combox.addItems([CF.path2filename(p) for p in self.MinMapsPath])
+
+#     def mask_maps(self, phase_name):
+#         if self.minPhase_combox.currentIndex() != -1:
+
+#         # Compute the condition to be used as mask
+#             minmap_idx = self.minmaps_combox.currentIndex() - 1
+#             minmap = self.MinMapsData[minmap_idx]
+#             mask = minmap != phase_name
+
+#         # Mask the maps data
+#             masked_maps = []
+#             for idx, m in enumerate(self.XMapsDataOrig):
+#                 try:
+#                     masked_maps.append(np.ma.masked_where(mask, m))
+#                 except IndexError: # raises when xray maps with different shapes are loaded
+#                     masked_maps.append(m)
+#                     # Uncheck the unfitting maps related checkboxes
+#                     self.CboxMaps.Cbox_list[idx].setChecked(False)
+
+#             self.maskOn = True
+#             self.XMapsData = masked_maps
+
+#         else:
+#             self.maskOn = False
+#             self.XMapsData = self.XMapsDataOrig.copy()
+
+#         # Update the training area selector widget
+#         self.trAreaPicker.update_mapsData(self.XMapsData)
+
+
+
+#     def loadModel(self):
+#         path, _ = QW.QFileDialog.getOpenFileName(self, 'Import Supervised Model',
+#                                                       pref.get_dirPath('in'),
+#                                                       'PyTorch Data File (*.pth)')
+#         if path:
+#             pref.set_dirPath('in', os.path.dirname(path))
+#             self.model_path.set_fullpath(path, predict_display=True)
+#             logpath = CF.extend_filename(path, '_log', ext='.txt')
+
+#             # If model log was deleted or moved, ask for rebuilding it
+#             if not os.path.exists(logpath):
+#                 choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                                  'Unable to find model log file. Rebuild it?',
+#                                                  QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                                  QW.QMessageBox.Yes)
+#                 if choice == QW.QMessageBox.Yes:
+#                     model_vars = ML_tools.loadModel(path)
+#                     extendedLog = pref.get_setting('class/extLog', False, bool)
+#                     ML_tools.saveModelLog(model_vars, logpath, extendedLog)
+
+#             # Try to load the log file anyways, no error will be raised if file still doesn't exist
+#             self.modelInfo.setDoc(logpath)
+
+
+#     def getSelectedMapsData(self, coord_maps=False):
+#         selected_cbox = filter(lambda cbox: cbox.isChecked(), self.CboxMaps.Cbox_list)
+#         maps = [self.XMapsData[int(cbox.objectName())] for cbox in selected_cbox]
+#         if coord_maps:
+#             _shape = maps[0].shape
+#             xx, yy = np.meshgrid(np.arange(_shape[1]), np.arange(_shape[0]))
+#             if self.maskOn:
+#                 mask = maps[0].mask
+#                 xx = np.ma.masked_where(mask, xx)
+#                 yy = np.ma.masked_where(mask, yy)
+#             maps.extend([xx, yy])
+#         return maps
+
+
+#     def getTrainingData(self, pixel_proximity=False, norm_data=True):
+#         trAreas = self.trAreaPicker.get_trAreasData()
+#         if not len(trAreas):
+#             QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                     'Please draw training areas first.')
+#             return
+
+#     # Merge all selected maps into a single 2D array (nPixels x nMaps).
+#     # Also check for same shape. if <pixel_proximity> is True, x and y coords
+#     # maps will also be computed.
+#         maps = self.getSelectedMapsData(pixel_proximity)
+#         X, ok = CF.MergeMaps(maps, mask=self.maskOn)
+#         if not ok:
+#             QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                     'The selected maps have different shapes.')
+#             return
+
+#     # Standardize feature (X) data if required
+#         if norm_data:
+#             if pixel_proximity:
+#                 # Pixel coord data is normalized in [0, 1] to reduce their weight on prediction
+#                 xmaps, coord = np.split(X, [-2], axis=1)
+#                 X[:, :-2] = ML_tools.norm_data(xmaps, return_standards=False, engine='numpy')
+#                 X[:, -2:] = coord/coord.max(0)
+#             else:
+#                 X = ML_tools.norm_data(X, return_standards=False, engine='numpy')
+
+#     # Build an empty (dummy) 2D array of targets (maps shape).
+#     # Then fill it with training areas data
+#         mapShape = maps[0].shape
+#         dummy_Y = np.empty(mapShape, dtype='U8')
+#         for (r0,r1,c0,c1), value in trAreas:
+#             dummy_Y[r0:r1, c0:c1] = value
+
+#     # If there is a mask, apply it to the targets array and flatten it
+#     # to a 1D array (nPixels x 1), excluding the masked indices. Otherwise just flatten it.
+#         if self.maskOn:
+#             mask = maps[0].mask
+#             Y = np.ma.masked_where(mask, dummy_Y).compressed()
+#         else:
+#             Y = dummy_Y.flatten()
+
+#     # Extract the indices of training pixels from flattened targets array.
+#     # Then use that index to get x_train data and y_train data
+#         train_idx = (Y != '').nonzero()[0]
+#         x_train = X[train_idx, :]
+#         y_train = Y[train_idx]
+
+#         return x_train, y_train, X
+
+#     def recolor_plots(self):
+#         self.update_resultBars(self.minMap)
+#         if self.algm_rawIn is not None: # last algorithm used was a clustering one
+#             self.silhouetteCanvas.alterColors(self.resultCanvas.get_colorDict(keys='lbl'))
+
+#     def update_resultBars(self, mapData):
+#         lbl, mode = CF.get_mode(mapData, ordered=True)
+#         col_dict = CF.sort_dict_by_list(self.resultCanvas.get_colorDict(keys='lbl'), lbl)
+#         self.resultBars.update_canvas('Mode', mode, lbl, colors=list(col_dict.values()))
+
+#     def set_confidence(self, conf, pred, prob):
+#         return np.where(prob>=conf, pred, '_ND_')
+
+#     def update_resultPlots(self, minMap):
+#         self.resultCanvas.update_canvas('Mineral Map', minMap)
+#         self.resultLegend.update()
+#         self.ND_Canvas.update_canvas('Unclassified Pixels', minMap=='_ND_')
+#         self.update_resultBars(minMap)
+
+#     def start_classification(self):
+#         if not self._extThreadRunning():
+#             selected_cbox = filter(lambda cbox: cbox.isChecked(), self.CboxMaps.Cbox_list)
+#             if len(list(selected_cbox)) == 0:
+#                 return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                                'Please select at least one map.')
+#             algm = self.algm_combox.currentText()
+
+#             if algm == 'Pre-trained Model':
+#                 self.run_preTrainedClassifier()
+
+#             elif algm == 'KNN':
+#                 self.run_KNNClassfier()
+
+#             elif algm == 'K-Means':
+#                 self.run_KMeansClassifier()
+
+#             else : print(f'{algm} not implemented yet')
+
+
+#     def end_classification(self, success, results, clust_rawInput=None):
+#         if success:
+#             pred, prob = results
+
+#         # Apply confidence treshold
+#             conf = self.conf_spbox.value()
+#             pred = self.set_confidence(conf, pred, prob)
+
+#         # Save the algorithm raw output (flattened predictions after confidence treshold) and
+#         # raw input (flattened maps stack). This is useful only for clustering results,
+#         # which returns also a 'clust_rawInput' arg. Useful for clustering scores analysis
+#             self.algm_rawOut = pred
+#             self.algm_rawIn = clust_rawInput
+
+#         # Reconstruct the result
+#             mapsData = self.getSelectedMapsData()
+#             outShape = mapsData[0].shape
+
+#             # If a sub-phase analysis was requested we need to apply the mask to the output.
+#             # This is done by creating an empty <outShape> shaped array of '_No{phaseName}' values.
+#             # Then the correct indices (rows, cols) where to insert the classified data are taken
+#             # from the mask of one of the input maps (the 1st, since they all share the same mask).
+#             # For the probability map, the result is simply reshaped to <outShape> and the mask is applied
+#             # to it by using the numpy 'masked_where' function.
+#             if self.maskOn:
+#                 mask = mapsData[0].mask
+#                 rows, cols = (mask==0).nonzero()
+
+#                 minmap = np.empty(outShape, dtype='U8')
+#                 noPhase = f'_No{self.minPhase_combox.currentText()}'
+#                 minmap[:, :] = noPhase
+#                 minmap[rows, cols] = pred
+
+#                 pmap = np.zeros(outShape)
+#                 pmap[rows, cols] = prob
+#                 pmap = np.ma.masked_where(mask, pmap)
+
+#             else:
+#                 minmap = pred.reshape(outShape)
+#                 pmap = prob.reshape(outShape)
+
+#         # Save the mineral map and the probability map in memory
+#             self.minMap = minmap
+#             self.probMap = pmap
+
+#         # Update the result widgets
+#             self.update_resultPlots(self.minMap)
+
+#             self.save_btn.setEnabled(True)
+#             QW.QMessageBox.information(self, 'X-Min Learn',
+#                                        'Classification completed succesfully.')
+#         else:
+#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                 'An error occurred during the classification.',
+#                 detailedText = repr(results[0]))
+
+#         self.progBar.reset()
+
+
+
+#     def save_result(self):
+#         if not self._extThreadRunning():
+#             outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Mineral Map',
+#                                                 pref.get_dirPath('out'),
+#                                                 '''Compressed ASCII file (*.gz)
+#                                                    ASCII file (*.txt)''')
+#             if outpath:
+#                 try:
+#                     pref.set_dirPath('out', os.path.dirname(outpath))
+#                     pMap_path = CF.extend_filename(outpath, '_probMap')
+#                     np.savetxt(outpath, self.minMap, fmt='%s')
+#                     np.savetxt(pMap_path, self.probMap, fmt='%.2f')
+#                     QW.QMessageBox.information(self, 'File saved',
+#                                                'File saved with success.')
+#                 except Exception as e:
+#                     cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                                     'An error occurred while saving the files.',
+#                                     detailedText = repr(e))
+#             # Load automatically the result in MinMap Tab if required
+#                 if self.autoLoad_cbox.isChecked():
+#                     self.parent._minmaptab.loadMaps([outpath])
+
+#                 # Also refresh the MinMap combobox in the sub-phase group
+#                     # self.MinMapsPath.append(outpath)
+#                     # self.MinMapsData.append(self.minMap)
+#                     self.refresh_minmaps_combox()
+
+
+
+
+#     def run_preTrainedClassifier(self):
+#         modelPath = self.model_path.get_fullpath()
+#         if modelPath == '':
+#             return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                            'Please load a model first.')
+
+#         self.progBar.setRange(0, 6)
+#         cboxList = self.CboxMaps.Cbox_list
+
+#     # Load model variables
+#         modelVars = ML_tools.loadModel(modelPath)
+#         missing = ML_tools.missingVariables(modelVars)
+#         if len(missing):
+#             self.progBar.reset()
+#             return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                            f'The following variables are missing:\n{missing}')
+#         requiredMaps = modelVars['ordered_Xfeat']
+#         Y_dict = modelVars['Y_dict']
+#         self.progBar.setValue(1)
+
+#     # Check for the presence of all required maps
+#         checkedMaps = [c.text() for c in cboxList if c.isChecked()]
+#         for m in requiredMaps:
+#             if not CF.guessMap(m, checkedMaps, caseSens=True):
+#                 self.progBar.reset()
+#                 return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                                f'Unable to identify {m} map.')
+#         self.progBar.setValue(2)
+
+#     # Reorder the input maps to fit the required maps order
+#         cboxDict = {c.text() : self.XMapsData[int(c.objectName())] for c in cboxList}
+#         orderedMaps = CF.sort_dict_by_list(cboxDict, requiredMaps)
+#         self.progBar.setValue(3)
+
+#     # Merge maps into a single 2D array (shape = nPixels x nmaps)
+#         maps_data = orderedMaps.values()
+#         X, ok = CF.MergeMaps(maps_data, mask=self.maskOn)
+#         if not ok:
+#             self.progBar.reset()
+#             return QW.MessageBox.critical(self, 'Different shapes detected',
+#                                           'The selected maps have different shapes.')
+#         self.progBar.setValue(4)
+
+
+#         try:
+#         # Run classification
+#             prob, predID = ML_tools.applyModel(modelVars, X)
+#             self.progBar.setValue(5)
+
+#         # Convert labels IDs to class names
+#             pred = CF.decode_labels(predID, Y_dict)
+#             self.progBar.setValue(6)
+
+#             success = True
+#             results = (pred, prob.detach().numpy())
+
+#         except Exception as e:
+#             success = False
+#             results = (e,)
+
+#         finally:
+#             self.end_classification(success, results)
+
+
+
+#     def run_KNNClassfier(self):
+#         proximity = self.KNNproximity_cbox.isChecked()
+#         train_data = self.getTrainingData(pixel_proximity=proximity)
+#         if train_data:
+#             self.progBar.setRange(0, 2)
+
+#         # Get required inputs
+#             x_train, y_train, X = train_data
+#             n_neigh = self.nNeigh_spbox.value()
+#             weights = self.wgtKNN_combox.currentText().lower()
+#             self.progBar.setValue(1)
+
+#             try:
+#             # Run classification
+#                 pred, prob = ML_tools.KNN(X, x_train, y_train, n_neigh, weights)
+#                 self.progBar.setValue(2)
+
+#                 success = True
+#                 results = (pred, prob)
+
+#             except Exception as e:
+#                 success = False
+#                 results = (e,)
+
+#             finally:
+#                 self.end_classification(success, results)
+
+
+#     def run_KMeansClassifier(self):
+#         self.progBar.setRange(0, 4)
+#         proximity = self.kmeansProximity_cbox.isChecked()
+
+#     # Merge all selected maps into a single 2D array (nPixels x nMaps).
+#     # Also check for same shape.
+#         maps = self.getSelectedMapsData(coord_maps=proximity)
+#         X, ok = CF.MergeMaps(maps, mask=self.maskOn)
+#         self.progBar.setValue(1)
+#         if not ok:
+#             self.progBar.reset()
+#             return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                            'The selected maps have different shapes.')
+#     # Standardize the data
+#         if proximity:
+#         # Pixel coord data is normalized in [0, 1] to reduce their weight on prediction
+#             xmaps, coord = np.split(X, [-2], axis=1)
+#             X[:, :-2] = ML_tools.norm_data(xmaps, return_standards=False, engine='numpy')
+#             X[:, -2:] = coord/coord.max(0)
+#         else:
+#             X = ML_tools.norm_data(X, return_standards=False, engine='numpy')
+#             self.progBar.setValue(2)
+
+#     # Get k-means required parameters
+#         n_classes = self.Kclasses_spbox.value()
+#         seed = int(self.seedInput.text())
+#         self.progBar.setValue(3)
+
+#         try:
+#         # Run classification
+#             pred, prob = ML_tools.K_Means(X, n_classes, seed)
+#             self.progBar.setValue(4)
+
+#             success = True
+#             results = (pred.astype('U8'), prob)
+
+#         except Exception as e:
+#             success = False
+#             results = (e,)
+
+#         finally:
+#             self.silhouetteCanvas.clear_canvas() # clear the silhouette plot
+#             self.end_classification(success, results, clust_rawInput=X)
+
+
+#     def start_silhouetteScore(self):
+#         X = self.algm_rawIn
+#         if X is None: # if it is None, the last algorithm used was not a clustering one
+#             return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                            'Please run a clustering algorithm first')
+
+#         self.silhouette_pbar.setRange(0, 5)
+#         self.startSilhouette_btn.setEnabled(False)
+
+#     # Gathering required input parameters
+#         pred = self.algm_rawOut
+#         subset_size = int(self.subsetPerc_spbox.value() * len(pred))
+#         seed = int(self.silhouetteSeed.text())
+#         self.silhouette_pbar.setValue(1)
+
+#     # Permute the data and slice it to obtain the subset
+#         np.random.seed(seed)
+#         subset_idx = np.random.permutation(len(pred))[:subset_size]
+#         X = X[subset_idx, :]
+#         pred = pred[subset_idx]
+#         self.silhouette_pbar.setValue(2)
+
+#     # Compute the silhouette score (thread)
+#         self.silhThread.subtaskCompleted.connect(
+#             lambda: self.silhouette_pbar.setValue(self.silhouette_pbar.value() + 1))
+#         self.silhThread.set_params(X, pred)
+#         self.silhThread.start()
+
+#     # # Compute the overall average silhouette score
+#     #     mask = pred != '_ND_' # exclude ND data for the average prediction
+#     #     sil_avg = ML_tools.silhouette_metric(X[mask, :], pred[mask], type='avg')
+#     #     self.silhouette_pbar.setValue(3)
+
+#     # # Compute the silhouette score for each sample
+#     #     sil = ML_tools.silhouette_metric(X, pred, type='all')
+#     #     self.silhouette_pbar.setValue(4)
+
+
+#     def plot_silhouetteScore(self, success, results):
+#         if success:
+#             sil_avg, sil_sam, pred = results
+#         # Plot the result
+#             colors = self.resultCanvas.get_colorDict(keys='lbl')
+#             sil_by_cluster = {}
+#             for cluster_name in np.unique(pred):
+#                 sil_by_cluster[cluster_name] = sil_sam[pred == cluster_name]
+#             self.silhouetteCanvas.update_canvas(sil_by_cluster, sil_avg, colors)
+#             self.silhouette_pbar.setValue(5)
+
+#         else:
+#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                             'Silhouette score computation failed',
+#                             detailedText = repr(results[0]))
+
+#         self.silhouette_pbar.reset()
+#         self.startSilhouette_btn.setEnabled(True)
+
+#     def compute_CHIscore(self):
+#         X = self.algm_rawIn
+#         if X is None: # if it is None, the last algorithm used was not a clustering one
+#             return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                            'Please run a clustering algorithm first')
+#         pred = self.algm_rawOut
+#         mask = pred != '_ND_' # exclude ND data
+#         score = ML_tools.CHIscore(X[mask, :], pred[mask])
+#         self.CHIscore_label.setText(str(score))
+
+#     def compute_DBIscore(self):
+#         X = self.algm_rawIn
+#         if X is None: # if it is None, the last algorithm used was not a clustering one
+#             return QW.QMessageBox.critical(self, 'X-Min Learn',
+#                                            'Please run a clustering algorithm first')
+#         pred = self.algm_rawOut
+#         mask = pred != '_ND_' # exclude ND data
+#         score = ML_tools.DBIscore(X[mask, :], pred[mask])
+#         self.DBIscore_label.setText(str(score))
+
+#     def closeEvent(self, event):
+#         choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                          'Do you really want to close the classification window?',
+#                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                          QW.QMessageBox.No)
+#         if choice == QW.QMessageBox.Yes:
+#             event.accept()
+#         else:
+#             event.ignore()
 
 
 class DatasetBuilder(DraggableTool):
@@ -3486,22 +3455,18 @@ class DatasetBuilder(DraggableTool):
     One of the main tools of X-Min Learn, that allows the semi-automated
     compilation of human-readable and machine-friendly ground truth datasets.
     '''
-    def __init__(self, parent=None):
+    def __init__(self):
         '''
         Constructor.
 
         Parameters
-        ----------
-        parent : QWidget or None, optional
-            The GUI parent of this widget. The default is None.
 
         '''
-        super(DatasetBuilder, self).__init__(parent)
+        super(DatasetBuilder, self).__init__()
     # Set tool title and icon
         self.setWindowTitle('Dataset Builder')
         self.setWindowIcon(QIcon('Icons/compile_dataset.png'))
     # Set main attributes
-        self.parent = parent
         self._features = set([])
         self.dataset = None
     # Set GUI

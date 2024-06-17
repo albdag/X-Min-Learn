@@ -9,66 +9,43 @@ from scipy import ndimage
 import os, sys
 from _base import *
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGroupBox, QVBoxLayout, QPushButton, QWidget
-from PyQt5.QtCore import QPropertyAnimation, QRect
+
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout
+from PyQt5.QtCore import QObject, QEvent
+
+def expanding_tabs_style_sheet(tw):
+    tw.setStyleSheet(f"QTabBar::tab {{ width: {tw.size().width() // tw.count()}px; }}")
+
+class ResizeFilter(QObject):
+    def __init__(self, target):
+        super().__init__(target)
+        self.target = target
+
+    def eventFilter(self, object, event):
+        if event.type() == QEvent.Resize:
+            expanding_tabs_style_sheet(self.target)
+        return False
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Expanding Tabs Example")
+        self.setGeometry(100, 100, 600, 400)
 
-        self.setGeometry(100, 100, 400, 300)
-        self.setWindowTitle("QPropertyAnimation QGroupBox Example")
+        self.tab_widget = QTabWidget()
+        self.setCentralWidget(self.tab_widget)
 
-        # Creazione di un layout principale e aggiunta alla finestra principale
-        self.central_widget = QWidget(self)
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
+        self.tab_widget.addTab(QWidget(), "Tab1")
+        self.tab_widget.addTab(QWidget(), "Tab2")
+        self.tab_widget.addTab(QWidget(), "Tab3")
 
-        # Creazione di un QGroupBox
-        self.group_box = QGroupBox("Group Box", self)
-        self.group_box.setCheckable(True)
-        self.group_box.setChecked(True)
-        self.layout.addWidget(self.group_box)
+        self.tab_widget.installEventFilter(ResizeFilter(self.tab_widget))
 
-        # Creazione di un layout per il QGroupBox
-        self.group_box_layout = QVBoxLayout(self.group_box)
-
-        # Aggiungi widget al QGroupBox (esempio)
-        self.group_box_layout.addWidget(QPushButton("Button 1", self.group_box))
-        self.group_box_layout.addWidget(QPushButton("Button 2", self.group_box))
-        self.group_box_layout.addWidget(QPushButton("Button 3", self.group_box))
-
-        # Creazione di un pulsante per mostrare/nascondere il QGroupBox
-        self.toggle_button = QPushButton("Toggle Group Box", self)
-        self.layout.addWidget(self.toggle_button)
-
-        # Creazione dell'animazione per l'altezza massima
-        self.animation = QPropertyAnimation(self.group_box, b"geometry")
-        self.animation.setDuration(500)  # Durata in millisecondi (0.5 secondi)
-
-        # Connessione del pulsante per avviare l'animazione
-        self.toggle_button.clicked.connect(self.toggle_group_box)
-
-    def toggle_group_box(self):
-        start_rect = self.group_box.geometry()
-
-        if self.group_box.isChecked():
-            end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), 0)
-        else:
-            # Calcola l'altezza massima basata sul sizeHint del QGroupBox
-            end_height = self.group_box.sizeHint().height()
-            end_rect = QRect(start_rect.x(), start_rect.y(), start_rect.width(), end_height)
-
-        self.animation.setStartValue(start_rect)
-        self.animation.setEndValue(end_rect)
-        self.animation.start()
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
-
+app = QApplication(sys.argv)
+window = MainWindow()
+window.show()
+sys.exit(app.exec_())
 
 
 ### ------------------ A U T O   R O I   D E T E C T O R ------------------ ###
