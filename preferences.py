@@ -307,7 +307,13 @@ SS_tabWidget = (
             border-bottom: 5px solid %s;}'''
     '''QTabBar::tab:hover {
             background: %s;}'''
-    %(CASPER_LIGHT, SAN_MARINO, IVORY, SAN_MARINO, SAN_MARINO, SAN_MARINO))
+    '''QTabBar::close-button {
+            image: url(Icons/close_pane.png);
+            subcontrol-position: right;}'''
+    '''QTabBar::close-button:pressed {
+            border: 1px solid %s;}'''
+    %(CASPER_LIGHT, SAN_MARINO, IVORY, SAN_MARINO, SAN_MARINO, SAN_MARINO,
+      SAN_MARINO))
 
 
 SS_mainTabWidget = (SS_tabWidget +

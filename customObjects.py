@@ -1564,8 +1564,23 @@ class StyledTabWidget(QW.QTabWidget):
     QSS-styled reimplementation of a QTabWidget. Includes a reimplementation of
     the addTab function to always have a QWidget container for the tab. 
     '''
-    def __init__(self, parent=None):
+    def __init__(self, wheel_scroll=False, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        wheel_scroll : bool, optional
+            Whether mouse wheel event should allow to change current tab. The 
+            default is False.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
         super(StyledTabWidget, self).__init__(parent)
+
+        if not wheel_scroll: 
+            self.setTabBar(self.UnscrollableTabBar())
 
     # Set stylesheet
         self.setStyleSheet(pref.SS_tabWidget)
@@ -1602,6 +1617,24 @@ class StyledTabWidget(QW.QTabWidget):
             super(StyledTabWidget, self).addTab(tab, icon, title)
         else:
             super(StyledTabWidget, self).addTab(tab, title)
+
+
+    class UnscrollableTabBar(QW.QTabBar):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+
+
+        def wheelEvent(self, event: QG.QWheelEvent):
+            '''
+            Reimplements the wheelEvent to ignore it.
+
+            Parameters
+            ----------
+            event : QG.QWheelEvent
+                The wheel mouse event.
+
+            '''
+            event.ignore()
 
 
 class StyledToolbar(QW.QToolBar):
