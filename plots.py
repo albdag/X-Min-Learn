@@ -1662,7 +1662,7 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
     def insertAction(self, before_idx: int, action: QAction):
         '''
         Convenient reimplemented insertAction function. Allows to access the
-        before_action parameters through its position (index) in the toolbar.
+        before_action parameter through its position (index) in the toolbar.
 
         Parameters
         ----------
@@ -1680,7 +1680,7 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
     def insertActions(self, before_idx: int, actions: list[QAction]):
         '''
         Convenient reimplemented insertActions function. Allows to access the
-        before_action parameters through its position (index) in the toolbar.
+        before_action parameter through its position (index) in the toolbar.
 
         Parameters
         ----------
@@ -1692,6 +1692,22 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
         '''
         before_action = self.findChildren(QAction)[before_idx]
         super(NavTbar, self).insertActions(before_action, actions)
+
+
+    
+    def insertSeparator(self, before_idx: int):
+        '''
+        Convenient reimplemented insertSeparator function. Allows to access the
+        before_action parameter through its position (index) in the toolbar.
+
+        Parameters
+        ----------
+        before_idx : int
+            Before action index.
+
+        '''
+        before_action = self.findChildren(QAction)[before_idx]
+        super(NavTbar, self).insertSeparator(before_action)
 
 
 
