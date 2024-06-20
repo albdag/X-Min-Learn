@@ -88,7 +88,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
     _title_pad = 15
 
     def __init__(self, size=(6.4, 4.8), layout='none', wheel_zoom=True,
-                 wheel_pan=True):
+                 wheel_pan=True, init_blank=True):
         '''
         Constructor.
 
@@ -101,9 +101,11 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
             'tight' and 'none']. The default is 'none'.
         wheel_zoom : bool, optional
             Whether or not allow zooming with mouse wheel. The default is True.
-        wheel_pan : TYPE, optional
+        wheel_pan : bool, optional
             Whether or not allow drag-pan with mouse buttons. The default is 
             True.
+        init_blank : bool, optional
+            Whether ax should be initialized as blank. The default is True.
 
         '''
     # Define the figure and the ax of the matplotlib canvas
@@ -112,7 +114,10 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
                                      layout=layout)
         self.ax = self.fig.add_subplot(111, facecolor=pref.BLACK_PEARL)
         self.ax.patch.set(edgecolor=pref.SAN_MARINO, linewidth=3)
-        self.ax.axis('off')
+        
+    # Initialize blank ax if required
+        if init_blank:
+            self.ax.axis('off')
 
     # Call the constructor of the parent class
         super(_CanvasBase, self).__init__(self.fig)
@@ -352,7 +357,7 @@ class ImageCanvas(_CanvasBase):
 
         '''
     # Call the constructor of the parent class
-        super(ImageCanvas, self).__init__(size, **kwargs)
+        super(ImageCanvas, self).__init__(size=size, **kwargs)
 
     # Set the pixel coordinate format
         self.ax.format_coord = lambda x, y: f'X : {round(x)}, Y : {round(y)}'
@@ -1112,6 +1117,8 @@ class HistogramCanvas(_CanvasBase):
             Whether to scale y axes to [0, 1]. The default is False.
         logscale : bool, optional
             Whether to use logarithmic scale. The default is False.
+        size : tuple, optional
+            Size of the canvas. The default is (3, 3)
         **kwargs
             Parent class arguments (see _CanvasBase class).
 
@@ -1461,17 +1468,20 @@ class SilhouetteCanvas(_CanvasBase):
     '''
     Specific canvas object for displaying Silhouette scores.
     '''
-    def __init__(self, **kwargs):
+    def __init__(self, size=(4.8, 6.4), **kwargs):
         '''
         Constructor.
 
         Parameters
         ----------
+        size : tuple, optional
+            Size of the canvas. The default is (4.8, 6.4)
         **kwargs
             Parent class arguments (see _CanvasBase class).
 
         '''
-        super(SilhouetteCanvas, self).__init__(size=(4.8, 6.4), **kwargs)
+        super(SilhouetteCanvas, self).__init__(size=size, init_blank=False, 
+                                               **kwargs)
 
         self.y_btm_init = 15
         self._init_ax()
@@ -1481,7 +1491,6 @@ class SilhouetteCanvas(_CanvasBase):
         Reset the ax to default state.
 
         '''
-        self.ax.cla()
         self.ax.set_xlabel('Silhouette Coefficient')
         self.ax.set_ylabel('Cluster')
         self.ax.set_yticklabels([])
@@ -1528,7 +1537,11 @@ class SilhouetteCanvas(_CanvasBase):
             Palette dictionary (-> cluster_id : RGB_color).
 
         '''
+    # Call the parent function to run generic update actions
+        super(SilhouetteCanvas, self).update_canvas()
+
     # Reset the ax and set the new title
+        self.ax.cla()
         self._init_ax()
         self.ax.set_title(title, pad=self._title_pad)
 
@@ -1563,6 +1576,9 @@ class SilhouetteCanvas(_CanvasBase):
         '''
     # Call the parent function to run generic cleaning actions
         super(SilhouetteCanvas, self).clear_canvas(deep_clear=True)
+
+    # Initialize ax
+        self._init_ax()
         
     # Redraw the canvas
         self.draw_idle()
