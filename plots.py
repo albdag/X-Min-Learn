@@ -900,7 +900,8 @@ class BarCanvas(_CanvasBase):
     A canvas object for plotting bar charts, including grouped bar charts with 
     labels.
     '''
-    def __init__(self, orientation='v', size=(6.4, 3.6), **kwargs):
+    def __init__(self, orientation='v', size=(6.4, 3.6), layout='tight',
+                 **kwargs):
         '''
         Constructor of the BarCanvas class.
 
@@ -911,12 +912,15 @@ class BarCanvas(_CanvasBase):
             The default is 'v'.
         size : tuple, optional
             Size of the canvas. The default is (6.4, 3.6)
+        layout : str, optional
+            Layout engine of the figure. One of ['constrained', 'compressed', 
+            'tight' and 'none']. The default is 'tight'.
         **kwargs
             Parent class arguments (see _CanvasBase class).
 
         '''
     # Call the constructor of the parent class
-        super(BarCanvas, self).__init__(size=size, **kwargs)
+        super(BarCanvas, self).__init__(size=size, layout=layout, **kwargs)
 
     # Set main attributes
         self.orient = orientation
@@ -1041,7 +1045,8 @@ class BarCanvas(_CanvasBase):
 
     # Clear the canvas and exit the function if data is empty
         if not len(data): 
-            return self.clear_canvas()
+            self.clear_canvas()
+            return
 
     # Remove the previous plot if there is one
         if self.plot is not None: 
@@ -1049,7 +1054,7 @@ class BarCanvas(_CanvasBase):
 
     # Set the grid on for y or x axis
         gridax = 'y' if self.orient == 'v' else 'x'
-        self.ax.grid(True, axis=gridax)
+        self.ax.grid(True, axis=gridax, ls=':', lw=1, zorder=0)
 
     # Adjust the ticks and tickslabels properties
         if tickslabels is not None:
@@ -1084,7 +1089,8 @@ class BarCanvas(_CanvasBase):
         for i in range(n_iter):
             lbl = labels if labels is None else labels[i]
             args = (ticks + shift_step[i], data[i], self.bar_width)
-            kwargs = {'color': colors, 'edgecolor': pref.IVORY, 'label': lbl}
+            kwargs = {'color': colors, 'ec': pref.IVORY, 'lw': 0.5, 
+                      'label': lbl}
 
             if self.orient == 'v':
                 self.plot = self.ax.bar(*args, **kwargs)
@@ -1093,7 +1099,7 @@ class BarCanvas(_CanvasBase):
 
     # Build the legend
         if labels is not None: 
-            self.ax.legend()
+            self.ax.legend() # this will probably need tweaks. Also requires to be cleared before each plot
 
     # Refresh label amounts if required
         self.show_amounts(self.visible_amounts)
