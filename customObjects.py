@@ -1650,15 +1650,37 @@ class StyledTable(QW.QTableWidget):
 
         '''
         super(StyledTable, self).__init__(rows, cols, parent)
+
     # Set custom scroll bars
         self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
         self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
+
     # Set extended selection mode if requested
         if ext_selection:
             self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
-    # Set stylesheet (corner button and context menu)
-        self.setStyleSheet(pref.SS_table + pref.SS_menu)
 
+    # Customize corner button behaviour
+        self.corner_btn = self.findChild(QW.QAbstractButton, '')
+        if self.corner_btn:
+            self.corner_btn.setToolTip('Select all / deselect all')
+            self.corner_btn.disconnect()
+            self.corner_btn.clicked.connect(self.onCornerButtonClicked)
+
+    # Set stylesheet (context menu)
+        self.setStyleSheet(pref.SS_menu)
+
+    
+    def onCornerButtonClicked(self):
+        '''
+        Select all items when not all items are currently selected. Otherwise
+        deselect them all.
+
+        '''
+        tot_items = self.columnCount() + self.rowCount()
+        if len(self.selectedIndexes()) < tot_items:
+            self.selectAll()
+        else:
+            self.clearSelection()
 
 
 class StyledTabWidget(QW.QTabWidget):
