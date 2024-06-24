@@ -3110,7 +3110,7 @@ class DocumentBrowser(QW.QWidget):
 
         '''
     # Text browser space
-        self.browser = QW.QTextEdit()
+        self.browser = QW.QTextEdit(self.placeholder_text)
         self.browser.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical)) 
         self.browser.setStyleSheet(pref.SS_menu)
         self.browser.setReadOnly(self.read_only)
@@ -3121,6 +3121,7 @@ class DocumentBrowser(QW.QWidget):
     # Edit document checkbox
         self.edit_cbox = QW.QCheckBox('Editing')
         self.edit_cbox.setChecked(not self.read_only)
+        self.edit_cbox.setVisible(not self.read_only)
         self.tbar.addWidget(self.edit_cbox)
 
     # Search box
@@ -3132,8 +3133,8 @@ class DocumentBrowser(QW.QWidget):
         self.tbar.addWidget(self.search_box)
 
     # Search Up Action
-        self.search_up_action = QW.QAction(QG.QIcon(r'Icons/up.png'), 'Search up',
-                                           self.tbar)
+        self.search_up_action = QW.QAction(QG.QIcon(r'Icons/up.png'), 
+                                           'Search up', self.tbar)
 
     # Search Down Action
         self.search_down_action = QW.QAction(QG.QIcon(r'Icons/down.png'),
@@ -3195,14 +3196,35 @@ class DocumentBrowser(QW.QWidget):
                 doc = QG.QTextDocument(log.read(), self.browser)
                 self.browser.setDocument(doc)
         else:
-            self.browser.clear()
-            self.browser.setPlaceholderText(self.placeholder_text)
+            self.clear()
+
+
+    def setText(self, text: str):
+        '''
+        Set a custom text to the browser.
+
+        Parameters
+        ----------
+        text : str
+            Custom text.
+
+        '''
+        self.browser.setText(text)
+
+
+    def clear(self):
+        '''
+        Clear the browser and set the placeholder text.
+
+        '''
+        self.browser.clear()
+        self.browser.setPlaceholderText(self.placeholder_text)
 
 
     def setDefaultPlaceHolderText(self, text: str):
         '''
         Set the default placeholder text of the browser. This text is displayed
-        when no valid document is loaded.
+        when no document is loaded.
 
         Parameters
         ----------
