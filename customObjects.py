@@ -2521,8 +2521,8 @@ class PathLabel(FramedLabel):
     A special type of FramedLabel that allow easy management and display of 
     file paths.
     '''
-    def __init__(self, fullpath='', full_display=True, elide=True, 
-                 parent: QC.QObject|None=None):
+    def __init__(self, fullpath='', full_display=True, elide=True,
+                 placeholder='', parent: QC.QObject|None=None):
         '''
         Constructor.
 
@@ -2536,6 +2536,8 @@ class PathLabel(FramedLabel):
         elide : bool, optional
             Whether the label should automatically wrap long text. The default 
             is True.
+        placeholder : str, optional
+            Text to be set when the label is cleared. The default is ''.
         parent : QObject | None, optional
             The GUI parent of this object. The default is None.
 
@@ -2546,6 +2548,7 @@ class PathLabel(FramedLabel):
         self.fullpath = fullpath
         self.full_display = full_display
         self.elide = elide
+        self.placeholder = placeholder
     
     # Set widget attributes
         self.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignVCenter)
@@ -2571,6 +2574,8 @@ class PathLabel(FramedLabel):
         text = self.fullpath
         if not self.full_display:
             text = CF.path2filename(text, ext=True)
+        if text == '':
+            text = self.placeholder
 
         return text
 
@@ -2623,7 +2628,7 @@ class PathLabel(FramedLabel):
         '''
         Remove the current filepath.
         '''
-        self.clear()
+        self.setText(self.placeholder)
         self.fullpath = ''
         self.setToolTip('')
 
