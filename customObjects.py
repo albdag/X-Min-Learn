@@ -1377,7 +1377,7 @@ class StyledButton(QW.QPushButton):
 
 class StyledComboBox(QW.QComboBox):
     '''
-    QSS-styled reimplementation of a QComboBox.
+    QSS-styled reimplementation of a QComboBox, with auto-generating tooltips.
     '''
     def __init__(self, parent=None):
         '''
@@ -1390,7 +1390,89 @@ class StyledComboBox(QW.QComboBox):
 
         '''
         super(StyledComboBox, self).__init__(parent)
+
+    # Set automatic tooltip update when the combobox text is changed
+        self.setToolTip(self.currentText())
+        self.currentTextChanged.connect(self.setToolTip)
+
+    # Set stylesheet
         self.setStyleSheet(pref.SS_combox)
+
+
+    def wheelEvent(self, event: QG.QWheelEvent):
+        '''
+        Reimplementation of the wheelEvent to better control mouse wheel scroll
+        activation of the combobox. The event will be accepted only if SHIFT is
+        pressed during the scroll.
+
+        Parameters
+        ----------
+        event : QG.QWheelEvent
+            The mouse wheel event.
+
+        '''
+        modifiers = event.modifiers()
+        if modifiers & QC.Qt.ShiftModifier:
+            super(StyledComboBox, self).wheelEvent(event)
+        else:
+            event.ignore()
+
+
+
+class StyledDoubleSpinBox(QW.QDoubleSpinBox):
+    '''
+    QSS-styled reimplementation of a QDoubleSpinBox.
+    '''
+    def __init__(self, min_value=0.0, max_value=1.0, step=0.1, decimals=2, 
+                 parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        min_value : flaot, optional
+            Minimum range value. The default is 0.0.
+        max_value : float, optional
+            Maximum range value. The default is 1.0.
+        step : float, optional
+            Step value. The default is 0.1.
+        decimals : int, optional
+            Number of displayed decimals. The default is 2.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
+        super(StyledDoubleSpinBox, self).__init__(parent)
+
+    # Set range and single step values
+        self.setRange(min_value, max_value)
+        self.setSingleStep(step)
+
+    # Set number of decimal positions
+        self.setDecimals(decimals)
+
+    # Set stylesheet (context menu)
+        self.setStyleSheet(pref.SS_menu)
+
+
+    def wheelEvent(self, event: QG.QWheelEvent):
+        '''
+        Reimplementation of the wheelEvent to better control mouse wheel scroll
+        activation of the spinbox. The event will be accepted only if SHIFT is
+        pressed during the scroll. N.B. By default, if CTRL is also pressed the
+        step is multiplied by 10.
+
+        Parameters
+        ----------
+        event : QG.QWheelEvent
+            The mouse wheel event.
+
+        '''
+        modifiers = event.modifiers()
+        if modifiers & QC.Qt.ShiftModifier:
+            super(StyledDoubleSpinBox, self).wheelEvent(event)
+        else:
+            event.ignore()
 
 
 
@@ -1524,6 +1606,26 @@ class StyledSpinBox(QW.QSpinBox):
 
     # Set stylesheet (context menu)
         self.setStyleSheet(pref.SS_menu)
+
+
+    def wheelEvent(self, event: QG.QWheelEvent):
+        '''
+        Reimplementation of the wheelEvent to better control mouse wheel scroll
+        activation of the spinbox. The event will be accepted only if SHIFT is
+        pressed during the scroll. N.B. By default, if CTRL is also pressed the
+        step is multiplied by 10.
+
+        Parameters
+        ----------
+        event : QG.QWheelEvent
+            The mouse wheel event.
+
+        '''
+        modifiers = event.modifiers()
+        if modifiers & QC.Qt.ShiftModifier:
+            super(StyledSpinBox, self).wheelEvent(event)
+        else:
+            event.ignore()
 
 
 
