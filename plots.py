@@ -6,6 +6,7 @@ Created on Mon Jan 23 09:14:45 2023
 """
 
 from weakref import proxy
+from numpy.typing import ArrayLike
 from typing import Iterable
 
 from PyQt5.QtCore import QObject, Qt, QSize
@@ -1587,6 +1588,290 @@ class SilhouetteCanvas(_CanvasBase):
         self._init_ax()
         
     # Redraw the canvas
+        self.draw_idle()
+
+
+
+class PieCanvas(_CanvasBase):
+    '''
+    A canvas object to display pie charts.
+    '''
+    def __init__(self, perc_fmt: str|None = '%d%%', tridimensional=True, 
+                 size=(5, 5), **kwargs):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        perc_fmt : str | None, optional
+            String format for percentage values. The default is '%d%%'.
+        tridimensional : bool, optional
+            Whether the pie's wedges should pop out for a 3D effect. The 
+            default is True.
+        size : tuple, optional
+             Width and height (in inches) of the canvas. The default is (5, 5).
+        **kwargs
+            Parent class arguments (see _CanvasBase class).
+
+        '''
+        super(PieCanvas, self).__init__(size=size, **kwargs)
+    
+    # Set a fixed size policy to avoid unwanted rescaling of the pie chart
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    # Set main attributes
+        self._3d = tridimensional
+        self.perc_fmt = perc_fmt
+
+
+    def _init_ax(self):
+        '''
+        Reset the ax to default state.
+
+        '''
+        super(PieCanvas, self).clear_canvas(deep_clear=True)
+    # Legend must be cleared to avoid stacking of multiple legend boxes
+        self.fig.legends.clear()
+    # Equal aspect ratio ensures that the pie is drawn as a circle
+        self.ax.axis('equal') 
+
+
+    def update_canvas(self, data: ArrayLike, labels: list[str], title='', 
+                      legend=True):
+        '''
+        Draw a new pie chart.
+
+        Parameters
+        ----------
+        data : ArrayLike
+            Values that populate the pie.
+        labels : list[str]
+            A sequence of strings providing the labels for each wedge.
+        title : str, optional
+            Plot title. The default is ''.
+        legend : bool, optional
+            Whether to include a legend. The default is True.
+
+        '''
+    # Intialize the canvas and the ax
+        super(PieCanvas, self).update_canvas()
+        self._init_ax()
+       
+    # Set title
+        if title:
+            self.ax.set_title(title, pad=self._title_pad)
+        
+    # Adjust wedges and labels layout parameters
+        expl = [0.1] * len(data) if self._3d else None
+        lbldist = 1.1 if self.perc_fmt else 0.4
+
+    # Draw pie chart
+        self.ax.pie(data, explode=expl, autopct=self.perc_fmt, shadow=self._3d,
+                    labels=labels, labeldistance=None if legend else lbldist)
+    
+    # Draw legend
+        if legend:
+            self.fig.subplots_adjust(left=0.2, bottom=0.2)
+            hand, lbls = self.ax.get_legend_handles_labels()
+            self.fig.legend(hand, lbls, loc='lower left', fontsize='small',
+                           bbox_to_anchor=(0, 0))
+        
+    # Render the plot
+        self.draw_idle()
+
+
+    def clear_canvas(self):
+        '''
+        Clear out the canvas.
+
+        '''
+        self._init_ax()
+        self.draw_idle()
+
+
+
+class CurveCanvas(_CanvasBase):
+    '''
+    A canvas object to plot and dynamically update curves.
+    '''
+    def __init__(self, title='', xlab='', ylab='', grid=True, **kwargs):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        title : str, optional
+            Plot title. The default is ''.
+        xlab : str, optional
+            X-axis label. The default is ''.
+        ylab : str, optional
+            Y-axis label. The default ''.
+        grid : bool, optional
+            Whether to render a grid. The default is True.
+        **kwargs
+            Parent class arguments (see _CanvasBase class).
+
+        '''
+        super(CurveCanvas, self).__init__(**kwargs)
+
+    # Set main attributes
+        self.title = title
+        self.xlab = xlab
+        self.ylab = ylab
+        self.grid_on = grid
+
+    # Initialize the ax
+        self._init_ax()
+
+
+    def _init_ax(self):
+        '''
+        Reset the ax to default state.
+
+        '''
+        self.ax.set_title(self.title, pad=self._title_pad)
+        self.ax.set_xlabel(self.xlab)
+        self.ax.set_ylabel(self.ylab)
+        self.ax.grid(self.grid_on, ls=':', lw=0.5, zorder=0)
+
+
+    def add_curve(self, xdata: ArrayLike|float|int, ydata: ArrayLike|float|int,
+                  label='', color: tuple|float|str|None = None):
+        '''
+        Add a new curve. Drawing is not performed by this function.
+
+        Parameters
+        ----------
+        xdata : ArrayLike | float | int
+            X coordinate(s) of the point(s) of the curve.
+        ydata : ArrayLike | float | int
+            Y coordinate(s) of the point(s) of the curve.
+        label : str, optional
+            Curve name. The default is ''.
+        color : tuple | float | str | None, optional
+            A valid matplotlib color. If None, a default color will be selected
+            based on current matplotlib style. The default is None.
+
+        '''
+        self.ax.plot(xdata, ydata, label=label, color=color)
+
+
+    def has_curves(self):
+        '''
+        Check if canvas is populated with curves.
+
+        Returns
+        -------
+        bool
+            Whether curves are currently drawn.
+
+        '''
+        return len(self.ax.lines) > 0
+
+
+    # def update_canvas(self, data: list[tuple]):
+    # # a curve has to be a list of tuple, each one containing xdata and ydata of each curve
+    # # multiple curves are multiple lists...
+    # # example: data = [(x1, y1), (x2, y2), ...],  [(x1, y1), (x2, y2), ...]
+    # #                   curve 1   curve 2
+
+    # # Call the parent function to run generic update actions
+    #     super(CurveCanvas, self).update_canvas()
+
+    #     curves = self.ax.lines # get all the plot instances (Line2D)
+    #     if len(data) != len(curves):
+    #         raise ValueError('Cannot fit data with existent curves')
+
+    #     for n in range(len(curves)):
+    #         curves[n].set_data(data[n])
+
+    #     self.ax.relim()
+    #     self.ax.autoscale_view()
+
+    #     self.ax.legend(loc='best')
+    #     self.draw_idle()
+
+
+    def update_canvas(self, curves: list[tuple], labels: list[str], colors=[]):
+        '''
+        Update existent curves in the plot. If curve is not existent, add it as
+        a new curve. Curve existence is determined via its label.
+
+        Parameters
+        ----------
+        curves : list[tuple]
+            List of (x, y) cooords for each curve.
+        labels : list[str]
+            A sequence of unique strings providing the label for each curve.
+        colors : list, optional
+            List of valid matplotlib colors for each curve. If left empty,  
+            default colors will be selected based on current matplotlib style. 
+            The default is [].
+
+        Raises
+        ------
+        ValueError
+            Labels must be unique names.
+        ValueError
+            Data, labels and colors lists must have same length. This is not 
+            raised for empty list of colors.
+
+        '''
+        super(CurveCanvas, self).update_canvas()
+
+    # Check for unique labels
+        if len(set(labels)) < len(labels):
+            raise ValueError('Labels must be unique names.')
+        
+    # Set colors to a list of None if left empty
+        if not colors:
+            colors = [None] * len(curves)
+
+    # Check that all parameters have same length
+        if not len(curves) == len(labels) == len(colors):
+            raise ValueError('Data, labels and colors must have same length.')
+
+    # Determine existent curves
+        existent_curves = self.ax.lines
+        existent_labels = [ec.get_label() for ec in existent_curves]
+
+    # Add new curves, update existent ones.
+        for cur, lbl, col in zip(curves, labels, colors):
+            if lbl in existent_labels:
+                existent_curves[existent_labels.index(lbl)].set_data(cur)
+            else:
+                self.add_curve(*cur, label=lbl, color=col)
+
+    # Rescale the plot
+        self.ax.relim()
+        self.ax.autoscale_view()
+
+    # Render the legend in the most suitable position
+        self.ax.legend(loc='best', frameon=True, facecolor=pref.IVORY, 
+                       framealpha=1)
+    
+    # Render the plot
+        self.draw_idle()
+
+
+    def reset_view(self):
+        '''
+        Show the original plot view. Fixes issues when clicking home button in
+        the Navigation Toolbar.
+
+        '''
+        self.ax.relim()
+        self.ax.autoscale()
+        self.draw_idle()
+
+
+    def clear_canvas(self):
+        '''
+        Clear out the canvas.
+        
+        '''
+        super(CurveCanvas, self).clear_canvas(deep_clear=True)
+        self._init_ax()
         self.draw_idle()
 
 

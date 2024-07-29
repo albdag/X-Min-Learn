@@ -922,96 +922,60 @@ class Legend(QW.QTreeWidget):
 
 
 
-class CurvePlotCanvas(FigureCanvasQTAgg):
+# class CurvePlotCanvas(FigureCanvasQTAgg):
 
-    def __init__(self, parent=None, size=(6.4, 4.8), tight=False,
-                 title='', xlab='', ylab='', grid=True):
-        self.fig = Figure(figsize=size, tight_layout=tight)
-        self.fig.patch.set(facecolor='w', edgecolor='#19232D', linewidth=2)
-        self.ax = self.fig.add_subplot(111)
-        super(CurvePlotCanvas, self).__init__(self.fig)
+#     def __init__(self, parent=None, size=(6.4, 4.8), tight=False,
+#                  title='', xlab='', ylab='', grid=True):
+#         self.fig = Figure(figsize=size, tight_layout=tight)
+#         self.fig.patch.set(facecolor='w', edgecolor='#19232D', linewidth=2)
+#         self.ax = self.fig.add_subplot(111)
+#         super(CurvePlotCanvas, self).__init__(self.fig)
 
-        self.title = title
-        self.xlab = xlab
-        self.ylab = ylab
-        self.gridOn = grid
+#         self.title = title
+#         self.xlab = xlab
+#         self.ylab = ylab
+#         self.gridOn = grid
 
-        self.init_ax()
+#         self.init_ax()
 
-    def init_ax(self):
-        self.ax.set_title(self.title)
-        self.ax.set_xlabel(self.xlab)
-        self.ax.set_ylabel(self.ylab)
-        self.ax.grid(self.gridOn)
+#     def init_ax(self):
+#         self.ax.set_title(self.title)
+#         self.ax.set_xlabel(self.xlab)
+#         self.ax.set_ylabel(self.ylab)
+#         self.ax.grid(self.gridOn)
 
-    def add_curve(self, xdata, ydata, label='', color='k'):
-        self.ax.plot(xdata, ydata, label = label, color=color)
+#     def add_curve(self, xdata, ydata, label='', color='k'):
+#         self.ax.plot(xdata, ydata, label = label, color=color)
 
-    def has_curves(self):
-        return bool(len(self.ax.lines))
+#     def has_curves(self):
+#         return bool(len(self.ax.lines))
 
-    def update_canvas(self, data=None):
-    # data has to be a list of tuple, each one containing xdata and ydata of a single curve
-    # example: data = [(x1, y1), (x2, y2)]
-        if data is not None:
-            curves = self.ax.lines # get all the plot instances (Line2D)
-            assert len(data) == len(curves)
-            for n in range(len(curves)):
-                curves[n].set_data(data[n])
-            self.ax.relim()
-            self.ax.autoscale_view()
+#     def update_canvas(self, data=None):
+#     # data has to be a list of tuple, each one containing xdata and ydata of a single curve
+#     # example: data = [(x1, y1), (x2, y2)]
+#         if data is not None:
+#             curves = self.ax.lines # get all the plot instances (Line2D)
+#             assert len(data) == len(curves)
+#             for n in range(len(curves)):
+#                 curves[n].set_data(data[n])
+#             self.ax.relim()
+#             self.ax.autoscale_view()
 
-        self.ax.legend(loc='best')
-        self.draw()
-        self.flush_events()
+#         self.ax.legend(loc='best')
+#         self.draw()
+#         self.flush_events()
 
-    def homeAction(self):
-        self.ax.relim()
-        self.ax.autoscale()
-        self.draw()
-        self.flush_events()
+#     def homeAction(self):
+#         self.ax.relim()
+#         self.ax.autoscale()
+#         self.draw()
+#         self.flush_events()
 
-    def clear_canvas(self):
-        self.ax.cla()
-        self.init_ax()
-        self.draw()
-        self.flush_events()
-
-
-class PieCanvas(FigureCanvasQTAgg):
-
-    def __init__(self, parent=None, size=(5,5), tight=False, _3D=True, perc='%d%%'):
-        self.fig = Figure(figsize=size, tight_layout=tight)
-        self.fig.patch.set(facecolor=CF.RGB2float([(169, 185, 188)]),
-                           edgecolor='#19232D', linewidth=2)
-        self.ax = self.fig.add_subplot(111)
-        super(PieCanvas, self).__init__(self.fig)
-
-        self.setSizePolicy(QW.QSizePolicy.Fixed, QW.QSizePolicy.Fixed)
-        self._3D = _3D
-        self.perc_lbl = perc
-        self.pie = None
-
-        self.init_ax()
-
-    def init_ax(self):
-        self.ax.cla()
-        self.ax.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
-        self.ax.axis('off')
-
-    def update_canvas(self, data, labels, title=''):
-        if self.pie is not None:
-            self.init_ax()
-        self.ax.set_title(title)
-        self.pie = self.ax.pie(data, explode=[.1]*len(data) if self._3D else None,
-                               labels=labels, autopct=self.perc_lbl, shadow=self._3D)
-        self.draw()
-        self.flush_events()
-
-    def clear_canvas(self):
-        self.init_ax()
-        self.draw()
-        self.flush_events()
+#     def clear_canvas(self):
+#         self.ax.cla()
+#         self.init_ax()
+#         self.draw()
+#         self.flush_events()
 
 
 
