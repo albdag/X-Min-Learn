@@ -5,9 +5,11 @@ Created on Wed Apr 28 13:06:51 2021
 @author: albdag
 """
 
+import math
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import sklearn.cluster
 import sklearn.metrics
 import sklearn.neighbors
@@ -20,13 +22,423 @@ import threads
 
 
 
+class GroundTruthDataset():
+    '''
+    A base class to process and manipulate ground truth datasets.
+    '''
+    def __init__(self, dataframe: pd.DataFrame, filepath: str|None = None):
+        '''
+        Constructor.
 
-class SoftMaxRegressor(torch.nn.Module):
-    # Some part of this class should probably be enhanced once the Model Learner tool is overhauled
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            Ground truth dataset.
+        filepath : str | None, optional
+            Filepath to the stored dataset file. The default is None.
+
+        '''
+    # Main attributes
+        self.filepath = filepath
+        self.dataframe = dataframe
+
+    # X features and Y targets (as labels) and their encoder -> dict(lbl: id)
+        self.features, self.targets = None, None
+        self.encoder = {}
+
+    # Original data, untouched by possible balancing operations on train set
+        self.orig_subsets_ratios = (None, None, None)
+        self.orig_x_train = None
+        self.orig_y_train = None
+        self.orig_train_counter = {}
+
+    # Current X features and Y targets (as IDs) split into subsets
+        self.x_train, self.x_valid, self.x_test = None, None, None
+        self.y_train, self.y_valid, self.y_test = None, None, None
+
+    # Current subsets counters -> dict(target_labels: count)
+        self.train_counter = {}
+        self.valid_counter = {}
+        self.test_counter = {}
+
+    
+    def reset(self):
+        '''
+        Reset dataset derived attributes.
+
+        '''
+        self.features, self.targets = None, None
+        self.encoder.clear()
+        self.orig_subsets_ratios = (None, None, None)
+        self.orig_x_train = None
+        self.orig_y_train = None
+        self.orig_train_counter.clear()
+        self.x_train, self.x_valid, self.x_test = None, None, None
+        self.y_train, self.y_valid, self.y_test = None, None, None
+        self.train_counter.clear()
+        self.valid_counter.clear()
+        self.test_counter.clear()
+
+
+    def are_subsets_split(self):
+        '''
+        Check if dataset has been split already into train, validation and test
+        subsets.
+
+        Returns
+        -------
+        bool
+            Whether dataset has been split.
+
+        '''
+        return any(self.orig_subsets_ratios)
+
+
+    def split_features_targets(self, split_idx=-1, xtype='int64', ytype='U8',
+                               spliton='columns'):
+        '''
+        Split X features from Y targets.
+
+        Parameters
+        ----------
+        split_idx : int, optional
+            The splitting index. The default is -1.
+        xtype : str, optional
+            X features dtype. The default is 'int64'.
+        ytype : str, optional
+            Y targets dtype. The default is 'U8'.
+        spliton : str, optional
+            Whether to split dataset along columns ('columns') or rows ('rows').
+            The default is 'columns'.
+
+        Returns
+        -------
+        self.features : np.ndarray
+            X features.
+        self.targets : np.ndarray
+            Y targets as labels.
+
+        '''
+        dataset = self.dataframe.to_numpy()
+        if spliton == 'rows':
+            dataset = dataset.T
+
+        self.features = dataset[:, :split_idx].astype(xtype)
+        self.targets = dataset[:, split_idx].astype(ytype)
+        return self.features, self.targets
+    
+
+    def update_encoder(self, parent_encoder={}):
+        '''
+        Refresh the encoder. Can inherit from a parent encoder.
+
+        Parameters
+        ----------
+        parent_encoder : dict, optional
+            Existent encoder. The default is {}.
+
+        Raises
+        ------
+        ValueError
+            Features and targets must be split before calling this function.
+
+        '''
+        if self.targets is None:
+            raise ValueError('Features and targets are not split yet.')
+        
+        self.encoder = parent_encoder
+        for u in np.unique(self.targets):
+            if not u in self.encoder.keys():
+                self.encoder[u] = len(self.encoder)
+
+
+    def split_subsets(self, train_ratio: float, valid_ratio: float, 
+                      test_ratio: float, seed: int|None=None, axis=0):
+        '''
+        Split X features and Y targets into train, (validation) and test sets.
+
+        Parameters
+        ----------
+        train_ratio : float
+            Percentage of data to be included in training set.
+        validation_ratio : float optional
+            Percentage of data to be included in validation set. 
+        test_ratio : float
+            Percentage of data to be included in test set.
+        seed : int, optional
+            Random seed for reproducibility. The default is None.
+        axis : int, optional
+            The array axis along which to split. The default is 0.
+
+        Returns
+        -------
+        feat_split : list
+            Train, validation and test sets of X features.
+        targ_split : list
+            Train, validation and test sets of Y targets.
+
+        Raises
+        ------
+        ValueError
+            Encoder must be populated before calling this function.
+
+        '''
+        if not self.encoder:
+            raise ValueError('Dataset encoder is empty.')
+        
+    # Store the current ratios as the original subsets ratios
+        self.orig_subsets_ratios = (train_ratio, valid_ratio, test_ratio)
+
+    # Encode targets' labels as IDs    
+        targets_ids = np.empty(self.targets.shape, dtype='int16')
+        for lbl, id in self.encoder.items():
+            targets_ids[self.targets==lbl] = id
+
+    # Apply permutations to dataset
+        n_instances = self.features.shape[axis]
+        perm_idx = np.random.default_rng(seed).permutation(n_instances)
+        feat_perm = self.features[perm_idx]
+        targ_perm = targets_ids[perm_idx]
+
+    # Define split indices
+        idx = [int(n_instances * train_ratio), 
+               int(n_instances * (train_ratio + valid_ratio))]
+
+    # Split permuted features and targets into train, validation and test sets
+        feat_split = np.split(feat_perm, idx, axis)
+        targ_split = np.split(targ_perm, idx, axis)
+        self.x_train, self.x_valid, self.x_test = feat_split
+        self.y_train, self.y_valid, self.y_test = targ_split
+
+    # Populate train, validaton and test counters
+        self.update_counters()
+
+    # Store original x_train, y_train and train_counter
+        self.orig_x_train = self.x_train.copy()
+        self.orig_y_train = self.y_train.copy()
+        self.orig_train_counter = self.train_counter.copy()
+
+        return feat_split, targ_split
+    
+
+    def update_counters(self):
+        '''
+        Refresh train, validation and test counters.
+
+        Raises
+        ------
+        ValueError
+            Dataset must be split into subsets before calling this function.
+
+        '''
+        if not self.are_subsets_split():
+            raise ValueError('Dataset is not split in subsets.')
+        
+        for lbl, id in self.encoder.items():
+            self.train_counter[lbl] = np.count_nonzero(self.y_train==id)
+            self.valid_counter[lbl] = np.count_nonzero(self.y_valid==id)
+            self.test_counter[lbl] = np.count_nonzero(self.y_test==id)
+
+
+    def apply_balancing(self, balanced_x: np.ndarray, balanced_y: np.ndarray):
+        '''
+        Update train subset and its counter after having performed balancing
+        operations.
+
+        Parameters
+        ----------
+        balanced_x : np.ndarray
+            Balanced features.
+        balanced_y : np.ndarray
+            Balanced targets ad IDs.
+
+        Raises
+        ------
+        ValueError
+            Dataset must be split into subsets before calling this function.
+
+        '''
+        if not self.are_subsets_split():
+            raise ValueError('Dataset is not split in subsets.')
+
+        self.x_train, self.y_train = balanced_x, balanced_y
+        for lbl, id in self.encoder.items():
+            self.train_counter[lbl] = np.count_nonzero(self.y_train==id)
+
+
+    def discard_balancing(self):
+        '''
+        Discard all balancing operations on train set by restoring original
+        train subset and its counter.
+
+        Raises
+        ------
+        ValueError
+            Dataset must be split into subsets before calling this function.
+
+        '''
+        if not self.are_subsets_split():
+            raise ValueError('Dataset is not split in subsets.')
+        
+        self.x_train = self.orig_x_train.copy()
+        self.y_train = self.orig_y_train.copy()
+        self.train_counter = self.orig_train_counter.copy()
+
+
+    def counters(self):
+        '''
+        Return all counters.
+
+        Returns
+        -------
+        tuple[dict]
+            All counters.
+
+        '''
+        return (self.train_counter, self.valid_counter, self.test_counter)
+    
+
+    def current_subsets_ratios(self):
+        '''
+        Return the current train, validation and test ratios.
+
+        Returns
+        -------
+        tuple[float]
+            Current subset ratios.
+
+        '''
+        tr_size, vd_size, ts_size = [sum(c.values()) for c in self.counters()]
+        tot_size = tr_size + vd_size + ts_size
+        tr_ratio = tr_size / tot_size
+        vd_ratio = vd_size / tot_size
+        ts_ratio = ts_size / tot_size
+        return (tr_ratio, vd_ratio, ts_ratio)
+    
+
+    def features_names(self):
+        '''
+        Return the names of input features. This function can be called when
+        dataset has not been split yet, but assumes that the feature data is
+        stored in all but the last column of the dataframe.
+
+        Returns
+        -------
+        list
+            Input features names
+            
+        '''
+        return self.dataframe.columns.to_list()[:-1]
+    
+
+    def targets_names(self):
+        '''
+        Return the names of output target classes. This function can be called
+        when dataset has not been split yet, but assumes that the target data
+        is stored in the last column of the dataframe.
+
+        Returns
+        -------
+        list
+            List of sorted classes names.
+
+        '''
+        return sorted(self.dataframe.iloc[:, -1].unique().tolist())
+    
+
+
+class NeuralNetwork(torch.nn.Module):
+    '''
+    Base class for neural network architectures developed in X-Min Learn.
+    '''
+    def __init__(self, name='_name', loss='_loss', seed: int|None = None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        name : str, optional
+            Network name. To be defined by each child. The default is '_name'.
+        loss : str, optional
+            Network loss. To be defined by each child. The default is '_loss'.
+        seed : int | None, optional
+            Random seed. If None it will be automatically generated. The 
+            default is None.
+
+        '''
+        super(NeuralNetwork, self).__init__()
+
+    # Set main attributes
+        self._name = name
+        self._loss = loss
+
+    # Set random seed
+        if seed is not None:
+            torch.random.manual_seed(seed)
+
+
+    def get_weight(self):
+        '''
+        Return model weights. To be reimplemented in each child class.
+
+        Returns
+        -------
+        Tensor
+            Model weights.
+
+        '''
+        return torch.Tensor([])
+
+
+    def get_bias(self):
+        '''
+        Return model bias. To be reimplemented in each child class.
+
+        Returns
+        -------
+        Tensor
+            Model bias.
+
+        '''
+        return torch.Tensor([])
+
+
+# This function is depracated, since the same result can be achieved with 
+# load_state_dict() function. This function may be useful when only certain
+# weights / biases need to be retrieved from parent model. A practical example
+# could be if one wants to add new layers/network to an already existent model.
+# However this option is not viable in X-Min Learn and there are no current 
+# plans to enable it.
+    def embedParentNetworkStateDict(self, parent_state_dict: dict):
+    # Get parent weights and biases
+        parent_weights, parent_biases = None, None
+        for k, v in parent_state_dict.items():
+            if 'weight' in k:
+                parent_weights = v
+            elif 'bias' in k:
+                parent_biases = v
+    
+    # Check that parent weights and biases were identified correctly
+        if parent_weights is None or parent_biases is None:
+            raise ValueError('Cannot parse parent weights and/or biases.')
+
+    # Replace parent weights and biases into new network by using the tensor 
+    # size of parent network output (parent_output size)
+        parent_output_size = parent_biases.size(0)
+
+    # The weights tensor is a ixJ (2D) tensor (i=n_class, j=n_Xfeat)
+        self.get_weight().data[:parent_output_size, :] = parent_weights
+
+    # The biases tensor is a j (1D) tensor (j=n_Xfeat)
+        self.get_bias().data[:parent_output_size] = parent_biases
+
+
+
+class SoftMaxRegressor(NeuralNetwork):
     '''
     Softmax Regressor Neural Network.
     '''
-    def __init__(self, in_features: int, out_classes: int, seed:int|None=None):
+    def __init__(self, in_features: int, out_classes: int, **kwargs):
         '''
         Constructor.
 
@@ -36,20 +448,15 @@ class SoftMaxRegressor(torch.nn.Module):
             Number of input features.
         out_classes : int
             Number of required output classes.
-        seed : int | None, optional
-            Random seed. If None it will be automatically generated. The 
-            default is None.
+        **kwargs
+            Parent class keyword arguments (see NeuralNetwork for details).
 
         '''
-        super(SoftMaxRegressor, self).__init__()
-
-    # Set random seed
-        if seed is not None:
-            torch.random.manual_seed(seed)
+        super(SoftMaxRegressor, self).__init__(name='Softmax Regression', 
+                                               loss='Cross-Entropy loss',
+                                               **kwargs)
 
     # Set main attributes
-        self._name = 'Softmax Regression'
-        self._loss = 'Cross-Entropy loss'
         self.linear = torch.nn.Linear(in_features, out_classes) 
         self.softmax = torch.nn.Softmax(dim=1)
         self.loss = torch.nn.CrossEntropyLoss() 
@@ -100,10 +507,10 @@ class SoftMaxRegressor(torch.nn.Module):
         return scores
 
 
-    def predict(self, x: torch.Tensor):
+    def predict(self, x: torch.Tensor): 
         '''
         Defines how to apply the softmax function to the logits (z) obtained
-        from self.linear.
+        from forward function.
 
         Parameters
         ----------
@@ -119,12 +526,12 @@ class SoftMaxRegressor(torch.nn.Module):
 
         '''
         self.eval()
-        z = self.linear(x)
+        z = self.forward(x)
         probs, classes = self.softmax(z).max(1)
         return probs, classes
 
 
-    def learn(self, X_train: torch.Tensor, Y_train: torch.Tensor, 
+    def learn(self, X_train: torch.Tensor, Y_train: torch.Tensor, # maybe could be moved to parent class
               X_test: torch.Tensor, Y_test: torch.Tensor, 
               optimizer: torch.optim.Optimizer, device: str):
         
@@ -149,9 +556,9 @@ class SoftMaxRegressor(torch.nn.Module):
 
         Returns
         -------
-        train_loss : Tensor
+        train_loss : float
             Train set loss.
-        test_loss : Tensor
+        test_loss : float
             Test set loss.
         train_preds : Tensor
             Predictions on train set.
@@ -161,12 +568,14 @@ class SoftMaxRegressor(torch.nn.Module):
         '''
     # Predict train data and compute train loss
         self.train()
+        optimizer.zero_grad()
+
         out = self.forward(X_train.to(device))
         l = self.loss(out, Y_train.long().to(device))
  
         l.backward()
         optimizer.step()
-        optimizer.zero_grad() # Should this be called before l.backward()?
+        # optimizer.zero_grad() # Should this be called before l.backward()?
 
         train_loss = l.cpu().detach().numpy().item()
         train_preds = out.max(1)[1].cpu()
@@ -187,9 +596,37 @@ class SoftMaxRegressor(torch.nn.Module):
 
 class EagerModel():
     '''
-    A class that allows to manage eager ML models and their variables.
+    A base class to manipulate and process eager ML models and their variables.
     '''
-    def __init__(self, variables: dict, model_path: str|None=None):
+    _base_vrb = ['algm_name', 
+                 'loss_name', 
+                 'optim_name',
+                 'ordered_Xfeat', 
+                 'Y_dict', 
+                 'device', 
+                 'seed',
+                 'parentModel_path', 
+                 'GT_dataset_path', 
+                 'TVT_rateos',
+                 'balancing_info', 
+                 'regressorDegree', 
+                 'epochs', 
+                 'lr',
+                 'wd', 
+                 'mtm', 
+                 'accuracy', 
+                 'loss', 
+                 'F1_scores'
+                 ]
+    
+    _extended_vrb = ['accuracy_list', 
+                     'loss_list',
+                     'standards',
+                     'optim_state_dict', 
+                     'model_state_dict'
+                     ]
+
+    def __init__(self, variables: dict, model_path: str|None = None):
         '''
         Constructor.
 
@@ -200,20 +637,35 @@ class EagerModel():
         model_path : str | None, optional
             Model filepath. The default is None.
 
+        Raise
+        -----
+        ValueError
+            Raised when model is missing variables.
+
         '''
     # Set main attributes
         self.variables = variables
-        self.filepath = model_path
-        self._base_vrb = ['algm_name', 'loss_name', 'optim_name',
-                          'ordered_Xfeat', 'Y_dict', 'device', 'seed',
-                          'parentModel_path', 'GT_dataset_path', 'TVT_rateos',
-                          'balancing_info', 'regressorDegree', 'epochs', 'lr',
-                          'wd', 'mtm', 'accuracy', 'loss', 'F1_scores']
-        self._extended_vrb = ['accuracy_list', 'loss_list', 'standards',
-                              'optim_state_dict', 'model_state_dict']
-
         if len(mv := self.missingVariables()):
-            print(f'Warning, missing variables {mv}')
+            raise ValueError(f'Missing model variables: {mv}')
+
+        self.filepath = model_path
+
+
+    @classmethod
+    def initialize_empty(cls):
+        '''
+        Build new model with empty variables.
+
+        Returns
+        -------
+        EagerModel
+            A new instance of EagerModel.
+
+        '''
+        keys = cls._base_vrb + cls._extended_vrb
+        variables = dict().fromkeys(keys)
+        return cls(variables)
+
 
     @classmethod
     def load(cls, model_path: str):
@@ -237,56 +689,133 @@ class EagerModel():
     @property
     def algorithm(self):
         return self.variables.get('algm_name')
+    
+    @property
+    def optimizer(self):
+        return self.variables.get('optim_name')
+    
+    @property
+    def hyperparameters(self):
+        lr = self.variables.get('lr')
+        wd = self.variables.get('wd')
+        mtm = self.variables.get('mtm')
+        epochs = self.variables.get('epochs')
+        return (lr, wd, mtm, epochs)
 
     @property
-    def inFeat(self):
+    def features(self):
         return self.variables.get('ordered_Xfeat')
+    
+    @property
+    def targets(self):
+        return list(self.encoder.keys())
 
     @property
     def encoder(self):
         return self.variables.get('Y_dict')
 
     @property
-    def xMean(self):
+    def x_mean(self):
         return self.variables.get('standards')[0]
 
     @property
-    def xStd(self):
+    def x_stdev(self):
         return self.variables.get('standards')[1]
 
     @property
-    def stateDict(self):
+    def network_state_dict(self):
         return self.variables.get('model_state_dict')
 
     @property
-    def regrDegree(self):
+    def poly_degree(self):
         return self.variables.get('regressorDegree')
+    
+    @property
+    def seed(self):
+        return self.variables.get('seed')
+    
 
-    def getTrainedModel(self):
+    def get_network_architecture(self):
         '''
-        Return the trained ML model.
+        Return the neural network architecture used in this model.
 
         Returns
         -------
-        model
-            Trained ML network architecture.
+        network : NeuralNetwork
+            The neural network associated with this model.
 
         '''
-        infeat = self.inFeatPoly() if self.regrDegree > 1 else len(self.inFeat)
+        infeat = self.true_features_number()
         outcls = len(self.encoder)
-        model = getNetworkArchitecture(self.algorithm, infeat, outcls)
 
-        if model is not None:
-            model.load_state_dict(self.stateDict)
-            return model
+        if self.algorithm == 'Softmax Regression':
+            network = SoftMaxRegressor(infeat, outcls, seed=self.seed)
+        else:
+            network = None
 
-# find a more elegant solution (equation?)
-    def inFeatPoly(self):
-        infeat = len(self.inFeat)
-        dummy_arr = np.arange(infeat).reshape(1, infeat)
-        _, n_poly_feat = map2Polynomial(dummy_arr, self.regrDegree,
-                                        return_n_features = True)
-        return n_poly_feat
+        return network
+
+
+    def get_trained_network(self):
+        '''
+        Return the trained neural network.
+
+        Returns
+        -------
+        network : NeuralNetwork
+            Trained neural network.
+
+        '''
+        network = self.get_network_architecture()
+        if network is not None:
+        # Use map_location arg if a pc tries to use a model trained on gpu but 
+        # has no available gpu. However, maybe this is not even a problem.
+            # network.load_state_dict(self.network_state_dict, map_location=torch.device('cpu'))
+            network.load_state_dict(self.network_state_dict)
+            return network
+        
+
+    def get_optimizer(self, network: NeuralNetwork):
+        '''
+        Return the optimizer used to train a network.
+
+        Parameters
+        ----------
+        network : NeuralNetwork
+            Trained neural network.
+
+        Returns
+        -------
+        optimizer : torch optimizer
+            The adopted optimizer.
+
+        '''
+        lr, wd, mtm, _ = self.hyperparameters
+
+        if self.optimizer == 'SGD':
+            optimizer = torch.optim.SGD(network.parameters(), lr, momentum=mtm,
+                                        weight_decay=wd)
+        else: 
+            optimizer = None
+
+        return optimizer
+        
+
+    def true_features_number(self):
+        '''
+        Calculate the true number of input features, including the result of
+        possible polynomial feature mapping.
+
+        Returns
+        -------
+        int
+            Number of input features.
+
+        '''
+        n = len(self.features)
+        d = self.poly_degree
+        return sum(math.comb(n + i - 1, i) for i in range(1, d + 1))
+
 
     def save(self, outpath: str, log_path: str|None=None, extended_log=False):
         '''
@@ -305,6 +834,7 @@ class EagerModel():
 
         '''
         torch.save(self.variables, outpath)
+        self.filepath = outpath
         if log_path is not None:
             self.saveLog(log_path, extended_log)
 
@@ -799,41 +1329,182 @@ class KMeans(UnsupervisedClassifier):
 
 
 
-def getNetworkArchitecture(network_id, in_feat, out_cls, seed=None):
-    if network_id == 'Softmax Regression':
-        network = SoftMaxRegressor(in_feat, out_cls, seed)
-    else:
-        network = None
-
-    return network
 
 
+def array2tensor(array: np.ndarray, dtype: np.dtype|None = None):
+    '''
+    Convert 
 
-def array2Tensor(arr, dtype='float64'):
-    return torch.Tensor(arr.astype(dtype))
+    Parameters
+    ----------
+    array : ndarray
+        Input numpy array
+    dtype : numpy dtype, optional
+        Output dtype. If None it is inferred from array. The default is None.
 
-def norm_data(data, mean=None, std=None, return_standards=True,
-              engine='pytorch'):
-    if engine == 'pytorch':
-        assert type(data) == torch.Tensor
-    mean = data.mean(0) if mean==None else mean
-    std = data.std(0) if std==None else std
-    data_norm = (data - mean)/std
+    Returns
+    -------
+    Tensor
+        Output torch Tensor.
+
+    '''
+    if dtype:
+        array = array.astype(dtype)
+    return torch.tensor(array)
+
+
+def norm_data(data: np.ndarray|torch.Tensor, 
+              mean: np.ndarray|torch.Tensor|None = None, 
+              stdev: np.ndarray|torch.Tensor|None = None, 
+              return_standards=True):
+    '''
+    Apply standard score data normalization to input array.
+
+    Parameters
+    ----------
+    data : ndarray | Tensor
+        Input data.
+    mean : ndarray | Tensor | None, optional
+        Mean scores per input feature. If None, it is computed. The default is
+        None.
+    stdev : ndarray | Tensor | None, optional
+        Standard deviation scores per input feature. If None, it is computed. 
+        The default is None.
+    return_standards : bool, optional
+        Whether to return means and standard deviations. The default is True.
+
+    Returns
+    -------
+    data_norm : ndarray | Tensor 
+        Normalized input data
+    mean : ndarray | Tensor, optional
+        Mean scores per input features.
+    stdev : ndarray | Tensor, optional
+        Standard deviation scores per input features.
+
+    '''
+    mean = data.mean(0) if mean is None else mean
+    stdev = data.std(0) if stdev is None else stdev
+    data_norm = (data - mean) / stdev
     if return_standards:
-        return (data_norm, mean, std)
+        return (data_norm, mean, stdev)
     else:
         return data_norm
 
-def map2Polynomial(arr, degree, return_n_features=False):
-    kern = sklearn.preprocessing.PolynomialFeatures(degree, include_bias=False)
-    out = kern.fit_transform(arr)
-# workaround to know how many in_feat there will be after polynomial mapping
-    if return_n_features:
-        out = (out, kern.n_output_features_)
-    return out
+
+def map_polinomial_features(array: np.ndarray, degree: int):
+    '''
+    Apply polynomial kernel to input features of array.  
+
+    Parameters
+    ----------
+    array : np.ndarray
+        Input array.
+    degree : int
+        Polynomial degree.
+
+    Returns
+    -------
+    poly_features : np.ndarray
+        Output polynomial features array.
+    
+    '''
+    poly = sklearn.preprocessing.PolynomialFeatures(degree, include_bias=False)
+    poly_features = poly.fit_transform(array)
+    return poly_features
+
 
 def cuda_available():
+    '''
+    Check if a cuda-compatible GPU is available on the local machine.
+
+    Returns
+    -------
+    bool
+        Whether cuda-GPU is available.
+
+    '''
     return torch.cuda.is_available()
+
+
+def confusion_matrix(true: np.ndarray|torch.Tensor, 
+                     preds:np.ndarray|torch.Tensor, ids: list|tuple):
+    '''
+    Compute confusion matrix.
+
+    Parameters
+    ----------
+    true : ndarray | Tensor
+        True classes.
+    preds : ndarray | Tensor
+        Predicted classes.
+    ids : list | tuple
+        List of classes IDs.
+
+    Returns
+    -------
+    cm : ndarray
+        Confusion matrix of shape (n_classes, n_classes).
+
+    '''
+    cm = sklearn.metrics.confusion_matrix(true, preds, labels=ids)
+    return cm
+
+
+def f1_score(true: np.ndarray|torch.Tensor, preds: np.ndarray|torch.Tensor, 
+             avg: str):
+    '''
+    Compute average F1 score.
+
+    Parameters
+    ----------
+    true : ndarray | Tensor
+        True classes.
+    preds : ndarray | Tensor
+        Predicted classes.
+    avg : str
+        Average type. Must be one of ('micro', 'macro', 'weighted').
+
+    Returns
+    -------
+    f1 : float
+        Average F1 score.
+
+    '''
+    f1 = sklearn.metrics.f1_score(true, preds, average=avg)
+    return f1
+
+
+def accuracy_score(true: np.ndarray|torch.Tensor, 
+                   preds:np.ndarray|torch.Tensor):
+    '''
+    Compute accuracy score.
+
+    Parameters
+    ----------
+    true : ndarray | Tensor
+        True classes.
+    preds : ndarray | Tensor
+        Predicted classes.
+
+    Returns
+    -------
+    accuracy : float
+        Accuracy score.
+
+    '''
+    accuracy = sklearn.metrics.accuracy_score(true, preds)
+    return accuracy
+
+
+# def getNetworkArchitecture(network_id, in_feat, out_cls, seed=None): # deprecated. Moved to EagerModel
+#     if network_id == 'Softmax Regression':
+#         network = SoftMaxRegressor(in_feat, out_cls, seed=seed)
+#     else:
+#         network = None
+
+#     return network
+
 
 # def saveModel(var_dict, path, log_path=False, extendedLog=False):
 #     torch.save(var_dict, path)
@@ -866,272 +1537,272 @@ def cuda_available():
 #     # returns an iterable with lenght 0 if all required variables are present
 #     return required - featured
 
-def embed_modelParameters(old_state_dict, new_model):
-# Iterate through parent model state dict to extract weights and biases
-    parent_weights, parent_biases = None, None
-    for k, v in old_state_dict.items():
-        if 'weight' in k:
-            parent_weights = v
-        elif 'bias' in k:
-            parent_biases = v
-# Check that parent weights and biases were identified correctly
-    assert parent_weights != None and parent_biases != None
-# Replace parent weights and biases into new model by using
-# the tensor size of parent model output (parent_output size)
-    parent_output_size = parent_biases.size(0)
-# The weights tensor is a ixJ (2D) tensor (i=n_class, j=n_Xfeat)
-    new_model.get_weight().data[:parent_output_size, :] = parent_weights
-# The biases tensor is a j (1D) tensor (j=n_Xfeat)
-    new_model.get_bias().data[:parent_output_size] = parent_biases
+# def embed_modelParameters(old_state_dict, new_model): # deprecated, moved to new class NeuralNetwork
+# # Iterate through parent model state dict to extract weights and biases
+#     parent_weights, parent_biases = None, None
+#     for k, v in old_state_dict.items():
+#         if 'weight' in k:
+#             parent_weights = v
+#         elif 'bias' in k:
+#             parent_biases = v
+# # Check that parent weights and biases were identified correctly
+#     assert parent_weights != None and parent_biases != None
+# # Replace parent weights and biases into new model by using
+# # the tensor size of parent model output (parent_output size)
+#     parent_output_size = parent_biases.size(0)
+# # The weights tensor is a ixJ (2D) tensor (i=n_class, j=n_Xfeat)
+#     new_model.get_weight().data[:parent_output_size, :] = parent_weights
+# # The biases tensor is a j (1D) tensor (j=n_Xfeat)
+#     new_model.get_bias().data[:parent_output_size] = parent_biases
 
 
 
-def splitTrainValidTest(X, Y, trRateo, vdRateo=None, seed=None, axis=0):
-    '''
-    Split X features and Y targets into train, (validation) and test sets.
+# def splitTrainValidTest(X, Y, trRateo, vdRateo=None, seed=None, axis=0): # deprecated. Moved to GroundTruthDataset
+#     '''
+#     Split X features and Y targets into train, (validation) and test sets.
 
-    Parameters
-    ----------
-    X : numpy.ndarray
-        X features.
-    Y : numpy.ndarray
-        Y targets.
-    trRateo : FLOAT
-        Percentage of data to be included in training set.
-    vdRateo : FLOAT or None, optional
-        Percentage of data to be included in validation set. If None, no
-        validation set will be produced. The default is None.
-    seed : INT, optional
-        Random seed for reproducibility. The default is None.
-    axis : INT, optional
-        The array axis along which to split. The default is 0.
+#     Parameters
+#     ----------
+#     X : numpy.ndarray
+#         X features.
+#     Y : numpy.ndarray
+#         Y targets.
+#     trRateo : FLOAT
+#         Percentage of data to be included in training set.
+#     vdRateo : FLOAT or None, optional
+#         Percentage of data to be included in validation set. If None, no
+#         validation set will be produced. The default is None.
+#     seed : INT, optional
+#         Random seed for reproducibility. The default is None.
+#     axis : INT, optional
+#         The array axis along which to split. The default is 0.
 
-    Returns
-    -------
-    X_split : LIST
-        Train, (validation), test sets of X features.
-    Y_split : LIST
-        Train, (validation), test sets of Y targets.
+#     Returns
+#     -------
+#     X_split : LIST
+#         Train, (validation), test sets of X features.
+#     Y_split : LIST
+#         Train, (validation), test sets of Y targets.
 
-    '''
-    lenDS = X.shape[axis]
-# Apply permutations to dataset
-    idx = np.random.default_rng(seed).permutation(len(X))
-    X = X[idx]
-    Y = Y[idx]
-# Define split index/indices
-    split_idx = [int(lenDS * trRateo)]
-    if vdRateo is not None:
-        split_idx.append(int(lenDS * (trRateo + vdRateo)))
-# Split X and Y into training, (validation) & test sets
-    X_split = np.split(X, split_idx, axis=axis)
-    Y_split = np.split(Y, split_idx, axis=axis)
+#     '''
+#     lenDS = X.shape[axis]
+# # Apply permutations to dataset
+#     idx = np.random.default_rng(seed).permutation(len(X))
+#     X = X[idx]
+#     Y = Y[idx]
+# # Define split index/indices
+#     split_idx = [int(lenDS * trRateo)]
+#     if vdRateo is not None:
+#         split_idx.append(int(lenDS * (trRateo + vdRateo)))
+# # Split X and Y into training, (validation) & test sets
+#     X_split = np.split(X, split_idx, axis=axis)
+#     Y_split = np.split(Y, split_idx, axis=axis)
 
-    return X_split, Y_split
-
-
-def splitXFeat_YTarget(dataset, split_idx=-1, xtype='int64', ytype='str', 
-                       spliton='cols'):
-    '''
-    Split X features from Y targets from given dataset.
-
-    Parameters
-    ----------
-    dataset : numpy.ndarray
-        The ground-truth dataset.
-    split_idx : INT, optional
-        The splitting index. The default is -1.
-    xtype : numpy.dtype -> STR, optional
-        X features dtype. The default is 'int64'.
-    ytype : numpy.dtype -> STR, optional
-        Y targets dtype. The default is 'str'.
-    spliton : STR, optional
-        Whether to split dataset along columns ('cols') or rows ('rows').
-        The default is 'cols'.
-
-    Returns
-    -------
-    x : numpy.ndarray
-        X features.
-    y : numpy.ndarray
-        Y targets.
-
-    '''
-    if spliton == 'rows':
-        dataset = dataset.T
-    x = dataset[:, :split_idx].astype(xtype)
-    y = dataset[:, split_idx].astype(ytype)
-    return x, y
+#     return X_split, Y_split
 
 
-def balance_TrainSet(X, Y, strategy, over_sampl='SMOTE', under_sampl=None,
-                     kOS=5, mOS=10, nUS=3, seed=None, progressBar=False):
-    '''
-    A function to balance training datasets with over-sample and/or under-sample algorithms.
+# def splitXFeat_YTarget(dataset, split_idx=-1, xtype='int64', ytype='str', 
+#                        spliton='cols'): #deprecated moved do GroundTruthDataset
+#     '''
+#     Split X features from Y targets from given dataset.
 
-    Parameters
-    ----------
-    X : array-like
-        Input training features from unbalanced dataset.
-    Y : array-like
-        Output training labels from unbalanced dataset.
-    strategy : int OR str OR dict
-        Data balancing strategy.
-         - int: classes will be resampled to this specific value.
-         - str: a predefined function to resample to a computed value. Accepted keywords are ['Min', 'Max', 'Mean', 'Median'].
-         - dict: a dictionary indicating the exact value of resampling for each class.
-    over_sampl : str, optional
-        Select over-sampling algorithm. Set None to not allow over-sampling. The default is 'SMOTE'.
-    under_sampl : str, optional
-        Select under-sampling algorithm. Set None to not allow under-sampling. The default is None.
-    kOS : int, optional
-        Number of k-neighbours to consider in over-sampling algorithms. The default is 5.
-    mOS : int, optional
-        Number of m-neighbours to consider in over-sampling algorithms. The default is 10.
-    nUS : int, optional
-        Number of n-neighbours to consider in under-sampling algorithms. The default is 3.
-    seed : int, optional
-        Control the randomization of the algorithms. The default is None.
+#     Parameters
+#     ----------
+#     dataset : numpy.ndarray
+#         The ground-truth dataset.
+#     split_idx : INT, optional
+#         The splitting index. The default is -1.
+#     xtype : numpy.dtype -> STR, optional
+#         X features dtype. The default is 'int64'.
+#     ytype : numpy.dtype -> STR, optional
+#         Y targets dtype. The default is 'str'.
+#     spliton : STR, optional
+#         Whether to split dataset along columns ('cols') or rows ('rows').
+#         The default is 'cols'.
 
-    Returns
-    -------
-    X_bal : array-like
-        Balanced training features.
-    Y_bal : array-like
-        Balanced training labels.
-    args : dictionary
-        Convenient dictionary storing all the balancing session information.
+#     Returns
+#     -------
+#     x : numpy.ndarray
+#         X features.
+#     y : numpy.ndarray
+#         Y targets.
 
-    '''
-    args = {'Strategy':strategy, 'OS':over_sampl, 'US':under_sampl,
-            'n-neigh_US':nUS, 'k-neigh_OS':kOS, 'm-neigh_OS':mOS, 'Seed':seed}
-    unq, cnt = np.unique(Y, return_counts=True)
-
-    if type(strategy) == int:
-        num = [strategy] * len(cnt)
-
-    elif type(strategy) == str:
-        if strategy == 'Min':
-            num = [cnt.min()] * len(cnt)
-        elif strategy == 'Max':
-            num = [cnt.max()] * len(cnt)
-        elif strategy == 'Mean':
-            num = [int(np.mean(cnt))] * len(cnt)
-        elif strategy == 'Median':
-            num = [int(np.median(cnt))] * len(cnt)
-        else:
-            raise KeyError(f'Unknown function: {strategy}')
-        args['Strategy'] = num[0]
-
-    elif type(strategy) == dict:
-        num = list(strategy.values())
-
-    else:
-        raise TypeError('sample_num parameter can only be of type int, str or'\
-                       f' dict, not{type(strategy)}')
-
-    # Update strategy in args dictionary
-    args['Strategy'] = dict(zip(unq, [f'{c} -> {n}' for c, n in zip(cnt, num)]))
-
-    # Splitting over-sampling and under-sampling strategies
-    OS_strat, US_strat = {}, {}
-    for u, c, n in zip(unq, cnt, num):
-        if n >= c:
-            OS_strat[u] = n
-        else:
-            US_strat[u] = n
+#     '''
+#     if spliton == 'rows':
+#         dataset = dataset.T
+#     x = dataset[:, :split_idx].astype(xtype)
+#     y = dataset[:, split_idx].astype(ytype)
+#     return x, y
 
 
+# def balance_TrainSet(X, Y, strategy, over_sampl='SMOTE', under_sampl=None, # deprecated. Moved to separate thread
+#                      kOS=5, mOS=10, nUS=3, seed=None, progressBar=False):
+#     '''
+#     A function to balance training datasets with over-sample and/or under-sample algorithms.
+
+#     Parameters
+#     ----------
+#     X : array-like
+#         Input training features from unbalanced dataset.
+#     Y : array-like
+#         Output training labels from unbalanced dataset.
+#     strategy : int OR str OR dict
+#         Data balancing strategy.
+#          - int: classes will be resampled to this specific value.
+#          - str: a predefined function to resample to a computed value. Accepted keywords are ['Min', 'Max', 'Mean', 'Median'].
+#          - dict: a dictionary indicating the exact value of resampling for each class.
+#     over_sampl : str, optional
+#         Select over-sampling algorithm. Set None to not allow over-sampling. The default is 'SMOTE'.
+#     under_sampl : str, optional
+#         Select under-sampling algorithm. Set None to not allow under-sampling. The default is None.
+#     kOS : int, optional
+#         Number of k-neighbours to consider in over-sampling algorithms. The default is 5.
+#     mOS : int, optional
+#         Number of m-neighbours to consider in over-sampling algorithms. The default is 10.
+#     nUS : int, optional
+#         Number of n-neighbours to consider in under-sampling algorithms. The default is 3.
+#     seed : int, optional
+#         Control the randomization of the algorithms. The default is None.
+
+#     Returns
+#     -------
+#     X_bal : array-like
+#         Balanced training features.
+#     Y_bal : array-like
+#         Balanced training labels.
+#     args : dictionary
+#         Convenient dictionary storing all the balancing session information.
+
+#     '''
+#     args = {'Strategy':strategy, 'OS':over_sampl, 'US':under_sampl,
+#             'n-neigh_US':nUS, 'k-neigh_OS':kOS, 'm-neigh_OS':mOS, 'Seed':seed}
+#     unq, cnt = np.unique(Y, return_counts=True)
+
+#     if type(strategy) == int:
+#         num = [strategy] * len(cnt)
+
+#     elif type(strategy) == str:
+#         if strategy == 'Min':
+#             num = [cnt.min()] * len(cnt)
+#         elif strategy == 'Max':
+#             num = [cnt.max()] * len(cnt)
+#         elif strategy == 'Mean':
+#             num = [int(np.mean(cnt))] * len(cnt)
+#         elif strategy == 'Median':
+#             num = [int(np.median(cnt))] * len(cnt)
+#         else:
+#             raise KeyError(f'Unknown function: {strategy}')
+#         args['Strategy'] = num[0]
+
+#     elif type(strategy) == dict:
+#         num = list(strategy.values())
+
+#     else:
+#         raise TypeError('sample_num parameter can only be of type int, str or'\
+#                        f' dict, not{type(strategy)}')
+
+#     # Update strategy in args dictionary
+#     args['Strategy'] = dict(zip(unq, [f'{c} -> {n}' for c, n in zip(cnt, num)]))
+
+#     # Splitting over-sampling and under-sampling strategies
+#     OS_strat, US_strat = {}, {}
+#     for u, c, n in zip(unq, cnt, num):
+#         if n >= c:
+#             OS_strat[u] = n
+#         else:
+#             US_strat[u] = n
 
 
-    # U N D E R - S A M P L I N G
-    if under_sampl is not None:
-        import imblearn.under_sampling as US
-        warn = 'Warning: {0} under-sampling algorithm ignores the sample'\
-               ' numbers required by the user'
 
-        # Setting under-sampling algorithm
-        if under_sampl == 'RandUS':
-            US_method = US.RandomUnderSampler(sampling_strategy = US_strat,
-                                              random_state = seed)
-        elif under_sampl == 'NearMiss':
-            US_method = US.NearMiss(sampling_strategy = US_strat,
-                                    n_neighbors = nUS,
-                                    n_jobs = -2)
-        elif under_sampl == 'ClusterCentroids':
-            US_method = US.ClusterCentroids(sampling_strategy = US_strat,
-                                            random_state = seed)
-        elif under_sampl == 'TomekLinks':
-            US_method = US.TomekLinks(sampling_strategy = list(US_strat.keys()),
-                                      n_jobs = -2)
-            # print(warn.format('TomekLinks'))
-        elif under_sampl in ('ENN-all', 'ENN-mode'):
-            US_method = US.EditedNearestNeighbours(sampling_strategy = list(US_strat.keys()),
-                                                   n_neighbors = nUS,
-                                                   kind_sel = under_sampl.split('-')[-1],
-                                                   n_jobs = -2)
-            # print(warn.format('EditedNearestNeighbours'))
-        elif under_sampl in ('NCR-all', 'NCR-mode'):
-            US_method = US.NeighbourhoodCleaningRule(sampling_strategy = list(US_strat.keys()),
-                                                     n_neighbors = nUS,
-                                                     kind_sel = under_sampl.split('-')[-1],
-                                                     n_jobs = -2)
-            # print(warn.format('NeighbourhoodCleaningRule'))
-        else:
-            accepted_US_methods = ['RandUS', 'NearMiss', 'ClusterCentroids', 'TomekLinks',
-                                   'ENN-all', 'ENN-mode', 'NCR-all', 'NCR-mode']
-            raise KeyError(f'Unknown under-sampling algorithm: {under_sampl}.'\
-                            ' under_sampl keyword must be one of the following:'\
-                           f' {sorted(accepted_US_methods)}. More info at'\
-                            ' https://imbalanced-learn.org/stable/index.html')
 
-        X, Y = US_method.fit_resample(X, Y)
-        if progressBar:
-            progressBar.setValue(progressBar.value() + 1)
+#     # U N D E R - S A M P L I N G
+#     if under_sampl is not None:
+#         import imblearn.under_sampling as US
+#         warn = 'Warning: {0} under-sampling algorithm ignores the sample'\
+#                ' numbers required by the user'
 
-    # O V E R - S A M P L I N G
-    if over_sampl is not None:
-        import imblearn.over_sampling as OS
+#         # Setting under-sampling algorithm
+#         if under_sampl == 'RandUS':
+#             US_method = US.RandomUnderSampler(sampling_strategy = US_strat,
+#                                               random_state = seed)
+#         elif under_sampl == 'NearMiss':
+#             US_method = US.NearMiss(sampling_strategy = US_strat,
+#                                     n_neighbors = nUS,
+#                                     n_jobs = -2)
+#         elif under_sampl == 'ClusterCentroids':
+#             US_method = US.ClusterCentroids(sampling_strategy = US_strat,
+#                                             random_state = seed)
+#         elif under_sampl == 'TomekLinks':
+#             US_method = US.TomekLinks(sampling_strategy = list(US_strat.keys()),
+#                                       n_jobs = -2)
+#             # print(warn.format('TomekLinks'))
+#         elif under_sampl in ('ENN-all', 'ENN-mode'):
+#             US_method = US.EditedNearestNeighbours(sampling_strategy = list(US_strat.keys()),
+#                                                    n_neighbors = nUS,
+#                                                    kind_sel = under_sampl.split('-')[-1],
+#                                                    n_jobs = -2)
+#             # print(warn.format('EditedNearestNeighbours'))
+#         elif under_sampl in ('NCR-all', 'NCR-mode'):
+#             US_method = US.NeighbourhoodCleaningRule(sampling_strategy = list(US_strat.keys()),
+#                                                      n_neighbors = nUS,
+#                                                      kind_sel = under_sampl.split('-')[-1],
+#                                                      n_jobs = -2)
+#             # print(warn.format('NeighbourhoodCleaningRule'))
+#         else:
+#             accepted_US_methods = ['RandUS', 'NearMiss', 'ClusterCentroids', 'TomekLinks',
+#                                    'ENN-all', 'ENN-mode', 'NCR-all', 'NCR-mode']
+#             raise KeyError(f'Unknown under-sampling algorithm: {under_sampl}.'\
+#                             ' under_sampl keyword must be one of the following:'\
+#                            f' {sorted(accepted_US_methods)}. More info at'\
+#                             ' https://imbalanced-learn.org/stable/index.html')
 
-        # Setting over-sampling algorithm
-        if over_sampl == 'SMOTE':
-            OS_method = OS.SMOTE(sampling_strategy = OS_strat,
-                                 random_state = seed,
-                                 k_neighbors = kOS,
-                                 n_jobs = -2)
-        elif over_sampl == 'BorderlineSMOTE':
-            OS_method = OS.BorderlineSMOTE(sampling_strategy = OS_strat,
-                                           random_state = seed,
-                                           k_neighbors = kOS,
-                                           m_neighbors = mOS,
-                                           n_jobs = -2)
-        elif over_sampl == 'SVMSMOTE':
-            OS_method = OS.SVMSMOTE(sampling_strategy = OS_strat,
-                                    random_state = seed,
-                                    k_neighbors = kOS,
-                                    m_neighbors = mOS,
-                                    n_jobs = -2)
-        elif over_sampl == 'ADASYN':
-            OS_method = OS.ADASYN(sampling_strategy = OS_strat,
-                                  random_state = seed,
-                                  n_neighbors = kOS,
-                                  n_jobs = -2)
+#         X, Y = US_method.fit_resample(X, Y)
+#         if progressBar:
+#             progressBar.setValue(progressBar.value() + 1)
 
-        else:
-            accepted_OS_methods = ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', 'ADASYN']
-            raise KeyError(f'Unknown over-sampling algorithm: {over_sampl}.'\
-                            ' over_sampl keyword must be one of the following:'\
-                           f' {sorted(accepted_OS_methods)}. More info at'\
-                            ' https://imbalanced-learn.org/stable/index.html')
+#     # O V E R - S A M P L I N G
+#     if over_sampl is not None:
+#         import imblearn.over_sampling as OS
 
-        X, Y = OS_method.fit_resample(X, Y)
-        if progressBar:
-            progressBar.setValue(progressBar.value() + 1)
+#         # Setting over-sampling algorithm
+#         if over_sampl == 'SMOTE':
+#             OS_method = OS.SMOTE(sampling_strategy = OS_strat,
+#                                  random_state = seed,
+#                                  k_neighbors = kOS,
+#                                  n_jobs = -2)
+#         elif over_sampl == 'BorderlineSMOTE':
+#             OS_method = OS.BorderlineSMOTE(sampling_strategy = OS_strat,
+#                                            random_state = seed,
+#                                            k_neighbors = kOS,
+#                                            m_neighbors = mOS,
+#                                            n_jobs = -2)
+#         elif over_sampl == 'SVMSMOTE':
+#             OS_method = OS.SVMSMOTE(sampling_strategy = OS_strat,
+#                                     random_state = seed,
+#                                     k_neighbors = kOS,
+#                                     m_neighbors = mOS,
+#                                     n_jobs = -2)
+#         elif over_sampl == 'ADASYN':
+#             OS_method = OS.ADASYN(sampling_strategy = OS_strat,
+#                                   random_state = seed,
+#                                   n_neighbors = kOS,
+#                                   n_jobs = -2)
 
-    perm = np.random.default_rng(seed).permutation(len(X))
-    X_bal, Y_bal = X[perm], Y[perm]
+#         else:
+#             accepted_OS_methods = ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', 'ADASYN']
+#             raise KeyError(f'Unknown over-sampling algorithm: {over_sampl}.'\
+#                             ' over_sampl keyword must be one of the following:'\
+#                            f' {sorted(accepted_OS_methods)}. More info at'\
+#                             ' https://imbalanced-learn.org/stable/index.html')
 
-    return X_bal, Y_bal, args
+#         X, Y = OS_method.fit_resample(X, Y)
+#         if progressBar:
+#             progressBar.setValue(progressBar.value() + 1)
+
+#     perm = np.random.default_rng(seed).permutation(len(X))
+#     X_bal, Y_bal = X[perm], Y[perm]
+
+#     return X_bal, Y_bal, args
 
 
 
@@ -1146,7 +1817,7 @@ def balance_TrainSet(X, Y, strategy, over_sampl='SMOTE', under_sampl=None,
 #     loss_dict = {'Cross-Entropy': torch.nn.CrossEntropyLoss()}
 #     return loss_dict[loss_key]
 
-#!!! deprecated. moved to ModelBasedClassifier class
+#!!! deprecated. moved to EagerModel class
 # def applyModel(modelVars, arr):
 # # Get variables from model
 #     algm = modelVars['algm_name']
@@ -1169,24 +1840,9 @@ def balance_TrainSet(X, Y, strategy, over_sampl='SMOTE', under_sampl=None,
 #     prob, lbl = model.predict(data_norm.float())
 #     return (prob, lbl)
 
-def getOptimizer(optimizer_key, model, lr, mtm, wd):
-    if optimizer_key == 'SGD':
-        optimizer = torch.optim.SGD(model.parameters(), lr,
-                                    momentum=mtm, weight_decay=wd)
-    else: raise KeyError(f'Invalid optimizer {optimizer_key}')
-    return optimizer
-
-def confusionMatrix(true, preds, IDs, percent=False):
-    cm = sklearn.metrics.confusion_matrix(true, preds, labels=IDs)
-    if percent:
-        perc = np.zeros(cm.shape)   # pre-init a zeroes matrix
-        sums = cm.sum(1).reshape(-1, 1)
-        # replace the pre-init matrix with the percentages (only where sum is not 0 to avoid NaNs)
-        np.divide(cm, sums, out=perc, where = sums!=0)
-        cm = np.round(perc, 2)
-    return cm
-
-def f1score(true, preds, avg):
-    f1 = sklearn.metrics.f1_score(true, preds, average=avg)
-    return f1
-
+# def getOptimizer(optimizer_key, model, lr, mtm, wd): # deprecated. Moved in EagerModel
+#     if optimizer_key == 'SGD':
+#         optimizer = torch.optim.SGD(model.parameters(), lr,
+#                                     momentum=mtm, weight_decay=wd)
+#     else: raise KeyError(f'Invalid optimizer {optimizer_key}')
+#     return optimizer
