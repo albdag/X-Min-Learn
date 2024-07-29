@@ -1291,25 +1291,25 @@ class HistogramCanvas(_CanvasBase):
 
 class ConfMatCanvas(_CanvasBase):
     '''
-    Canvas object specific for plotting confusion matrices.
+    A canvas object for drawing confusion matrices.
     '''
-    def __init__(self, size=(9, 9), cbar=True, title='', xlab='', ylab='', 
-                 **kwargs):
+    def __init__(self, title='Confusion Matrix', xlab='Predicted classes',
+                 ylab='True classes', cbar=True, size=(9, 9), **kwargs):
         '''
         Constructor.
 
         Parameters
         ----------
-        size : tuple, optional
-            Width and height (in inches) of the canvas. The default is (9, 9).
+        title : str, optional
+            Plot title. The default is 'Confusion Matrix'.
+        xlab : str, optional
+            Name of the x-axis. The default is 'Predicted classes'.
+        ylab : str, optional
+            Name of the y-axis. The default is 'True classes'.
         cbar : bool, optional
             Whether to include a colorbar in the canvas. The default is True.
-        title : str, optional
-            The title of the plot. The default is ''.
-        xlab : str, optional
-            Name of the x-axis. The default is ''.
-        ylab : str, optional
-            Name of the y-axis. The default is ''.
+        size : tuple, optional
+            Size of the canvas. The default is (9, 9).
         **kwargs
             Parent class arguments (see _CanvasBase class).
 
@@ -1318,7 +1318,8 @@ class ConfMatCanvas(_CanvasBase):
         super(ConfMatCanvas, self).__init__(size=size, **kwargs)
 
     # Set main attributes
-        self.mtx = None
+        self.matrix = None
+        self.matplot = None
         self.show_cbar = cbar
         self.cbar = None
         self.cax = None
@@ -1332,7 +1333,7 @@ class ConfMatCanvas(_CanvasBase):
 
     def _init_ax(self):
         '''
-        Populate the ax with the title and the labels.
+        Reset the ax to default state.
 
         '''
         self.ax.set_title(self.title, pad=self._title_pad)
@@ -1340,35 +1341,77 @@ class ConfMatCanvas(_CanvasBase):
         self.ax.set_ylabel(self.ylab)
 
 
-    def _init_cbar(self):
+    def set_cbar(self):
         '''
         Initialize the colorbar ax.
 
         '''
         divider = make_axes_locatable(self.ax)
         self.cax = divider.append_axes("right", size="5%", pad=0.1)
-        self.cbar = self.fig.colorbar(self.mtx, cax=self.cax)
+        self.cbar = self.fig.colorbar(self.matplot, cax=self.cax)
+        self.cbar.ax.set_title('%')
+        
 
 
-    def annotate(self, data: np.ndarray):
+    # def annotate(self, data: np.ndarray):
+    #     '''
+    #     Populate the canvas with the matrix values.
+
+    #     Parameters
+    #     ----------
+    #     data : NumPy ndarray
+    #         Confusion matrix array with squared shape.
+
+    #     '''
+    # # Define a meshgrid from the matrix shape
+    #     n_rows, n_cols = data.shape
+    #     row_ind = np.arange(n_rows)
+    #     col_ind = np.arange(n_cols)
+    #     x_coord, y_coord = np.meshgrid(col_ind, row_ind)
+
+    # # Annotate each node with the corresponding value
+    #     pe = [mpl.patheffects.withStroke(linewidth=2, foreground='k')]
+    #     for t,x,y in zip(data.flatten(), x_coord.flatten(), y_coord.flatten()):
+    #         self.ax.annotate(t, (x, y), va='center', ha='center', color='w',
+    #                          path_effects=pe)
+
+
+    def _compute_percentage(self, matrix: np.ndarray):
+        sums = matrix.sum(1).reshape(-1, 1)
+        perc = (matrix / sums) * 100
+        matrix = np.round(perc, 1)
+        return matrix
+
+
+    def annotate(self, as_percent: bool):
         '''
         Populate the canvas with the matrix values.
 
         Parameters
         ----------
-        data : NumPy ndarray
-            Confusion matrix array with squared shape.
+        as_percent : bool
+            Whether annotations should be displayed as percentages.
 
         '''
+    # Get the matrix data. If the matrix plot is None, exit function
+        if self.matplot:
+            matrix = self.matrix
+        else:
+            return
+        
+    # Compute percentages if required
+        if as_percent:
+            matrix = self._compute_percentage(self.matrix)
+
     # Define a meshgrid from the matrix shape
-        n_rows, n_cols = data.shape
+        n_rows, n_cols = matrix.shape
         row_ind = np.arange(n_rows)
         col_ind = np.arange(n_cols)
-        x_coord, y_coord = np.meshgrid(col_ind, row_ind)
+        xx, yy = np.meshgrid(col_ind, row_ind)
 
     # Annotate each node with the corresponding value
         pe = [mpl.patheffects.withStroke(linewidth=2, foreground='k')]
-        for t,x,y in zip(data.flatten(), x_coord.flatten(), y_coord.flatten()):
+        for t, x, y in zip(matrix.flatten(), xx.flatten(), yy.flatten()):
             self.ax.annotate(t, (x, y), va='center', ha='center', color='w',
                              path_effects=pe)
 
@@ -1381,11 +1424,14 @@ class ConfMatCanvas(_CanvasBase):
     # Call the parent function to run generic cleaning actions
         super(ConfMatCanvas, self).clear_canvas(deep_clear=True)
 
+    # Hide colorbar
+        if self.cbar is not None: 
+            self.cax.set_visible(False)
+
     # Reset some properties
-        self.mtx = None
+        self.matrix = None
+        self.matplot = None
         self._init_ax()
-        if self.cax is not None: 
-            self.cax.clear()
 
     # Redraw the canvas
         self.draw_idle()
@@ -1401,7 +1447,7 @@ class ConfMatCanvas(_CanvasBase):
                 child.remove()
 
 
-    def set_ticks(self, labels: list[str], axis='both'):
+    def set_ticks(self, labels: list[str]|tuple[str], axis='both'):
         '''
         Set the ticks and their labels for the confusion matrix (true/predicted 
         classes).
@@ -1424,16 +1470,16 @@ class ConfMatCanvas(_CanvasBase):
         ticks = np.arange(len(labels))
 
         if axis in ('x', 'both'):
-            self.ax.set_xticks(ticks, labels=labels, fontsize='x-small', 
+            self.ax.set_xticks(ticks, labels=labels, fontsize='small', 
                                rotation=-60)
             self.ax.tick_params(labelbottom=True, labeltop=False)
         if axis in ('y', 'both'):
-            self.ax.set_yticks(ticks, labels=labels, fontsize='x-small')
+            self.ax.set_yticks(ticks, labels=labels, fontsize='small')
 
         self.draw_idle()
 
 
-    def update_canvas(self, data: np.ndarray):
+    def update_canvas(self, data: np.ndarray, percent_annotations=True):
         '''
         Update the canvas with a new matrix.
 
@@ -1441,30 +1487,37 @@ class ConfMatCanvas(_CanvasBase):
         ----------
         data : NumPy ndarray
             Confusion matrix array of squared shape.
+        percent_annotations : bool, optional
+            Whether annotations should be displayed as percentages. The default
+            is True.
 
         '''
     # Call the parent function to run generic update actions
         super(ConfMatCanvas, self).update_canvas()
 
-    # If the matrix is empty, build the matrix and the colorbar (if required)
-        if self.mtx is None:
-            self.mtx = self.ax.matshow(data, cmap='inferno', 
-                                       interpolation='none')
-            if self.show_cbar: 
-                self._init_cbar()
+    # Always compute matrix data percentage for a nicer colormap
+        self.matrix = data
+        data = self._compute_percentage(data)
+
+    # If the plot is empty, build the matrix and the colorbar (if required)
+        if self.matplot is None:
+            self.matplot = self.ax.matshow(data, cmap='cividis', 
+                                           interpolation='none')
+            if self.show_cbar:
+                if self.cbar is None: self.set_cbar()
+                self.cax.set_visible(True)
 
     # If the matrix is not empty, refresh it
         else:
-            self.mtx.set_data(data)
-            self.mtx.set_clim(data.min(), data.max())
-        # Set extent to allow plotting a different shaped matrix without 
-        # calling clear_canvas() before
-            self.mtx.set_extent((-0.5, data.shape[1]-0.5, 
-                                 data.shape[0]-0.5, -0.5))
+            self.matplot.set_data(data)
+            self.matplot.set_clim(data.min(), data.max())
             self.remove_annotations()
+            # Set extent to allow plotting a different shaped matrix
+            extent = (-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5)
+            self.matplot.set_extent(extent)
 
     # Add new annotations
-        self.annotate(data)
+        self.annotate(percent_annotations)
 
     # Redraw the canvas
         self.draw_idle()

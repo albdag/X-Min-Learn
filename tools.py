@@ -5,26 +5,27 @@ Created on Mon Jun 21 17:16:01 2021
 @author: albdag
 """
 import os
-import webbrowser as wb
-from statistics import mode as math_mode
 from datetime import datetime
+from statistics import mode as math_mode
+import webbrowser
 
 import numpy as np
-from scipy import ndimage as nd
 from pandas import DataFrame, concat
+from scipy import ndimage as nd
 
 from PyQt5 import QtWidgets as QW
-from PyQt5.QtGui import QIcon, QIntValidator, QPixmap, QDrag, QRegion, QCursor
-from PyQt5.QtCore import QSize, Qt, QMimeData, QPoint, pyqtSignal
+from PyQt5 import QtCore as QC
+from PyQt5 import QtGui as QG
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
-import preferences as pref
+from _base import InputMap, MineralMap, RoiMap, Mask, InputMapStack
 import conv_functions as CF
 import customObjects as cObj
 import ML_tools
-import threads as exthr
 import plots
-from _base import InputMap, MineralMap, RoiMap, Mask, InputMapStack
-
+import preferences as pref
+import threads
 
 
 class DraggableTool(QW.QWidget):
@@ -93,11 +94,11 @@ class DraggableTool(QW.QWidget):
         if e.buttons() == Qt.LeftButton:
         # Generate mime data and a pixmap for the drag & drop event
             icon = self.windowIcon()
-            pixmap = icon.pixmap(icon.actualSize(QSize(32, 32)))
-            mimeData = QMimeData()
+            pixmap = icon.pixmap(icon.actualSize(QC.QSize(32, 32)))
+            mimeData = QC.QMimeData()
 
         # Generate a drag event and execute it
-            drag = QDrag(self)
+            drag = QG.QDrag(self)
             drag.setMimeData(mimeData)
             drag.setPixmap(pixmap)
             drag.exec_(Qt.MoveAction)
@@ -117,7 +118,7 @@ class DraggableTool(QW.QWidget):
         Returns
         -------
         bool
-            Wether or not the close event is accepted.
+            Whether or not the close event is accepted.
 
         '''
         text = f'Close {self.windowTitle()}? Any unsaved data will be lost'
@@ -348,7 +349,7 @@ class Preferences(QW.QWidget):
         self._NTBsize = self.NTBsize_slider.value()
         for i, ntb in enumerate(cObj.NavTbar.instances):
             try:
-                ntb.setIconSize(QSize(self._NTBsize, self._NTBsize))
+                ntb.setIconSize(QC.QSize(self._NTBsize, self._NTBsize))
             except (ReferenceError, RuntimeError):
                 del cObj.NavTbar.instances[i]
 
@@ -1617,7 +1618,7 @@ class MineralClassifier(DraggableTool):
         self.classify_btn.setEnabled(enabled)
 
 
-    def showMapsViewerContextMenu(self, point:QPoint):
+    def showMapsViewerContextMenu(self, point: QC.QPoint):
         '''
         Shows a context menu with custom actions in the map viewer.
 
@@ -1631,7 +1632,7 @@ class MineralClassifier(DraggableTool):
         menu = self.maps_viewer.get_navigation_context_menu(
             self.viewer_navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(QG.QCursor.pos())
 
 
     def showInputMap(self, item: cObj.DataObject | None):
@@ -4616,1291 +4617,3584 @@ class PixelEditor(QW.QWidget):
 
 
 class ModelLearner(DraggableTool):
+    '''
+    One of the main tools of X-Min Learn, that allows the supported developing 
+    of machine learning eager supervised models.
+    '''
 
-    def __init__(self, parent):
-        self.parent = parent
+    def __init__(self):
+        '''
+        Constructor.
+
+        '''
         super(ModelLearner, self).__init__()
-        self.setWindowTitle('Model Learner')
-        self.setWindowIcon(QIcon('Icons/merge.png'))
 
-    # Overall Random Seed
-        self.seed = None
+    # Set widget attributes
+        self.setWindowTitle('Model Learner')
+        self.setWindowIcon(QIcon(r'Icons/merge.png'))
+
+# Main attributes -------------------------------------------------------------
 
     # Ground-truth dataset
         self.dataset = None
 
-    # Label encoder dict
-        self.Y_dict = dict()
+    # Available over-sampling and under-sampling algorithms
+        self.os_list = ('None', 'SMOTE', 'BorderlineSMOTE', 'ADASYN')
+        self.us_list = ('None', 'RandUS', 'NearMiss', 'TomekLinks', 'ENN-all', 
+                        'ENN-mode', 'NCR')
+        
+    # Balancing strategy list
+        self.balancing_strategies = ('Current', 'Min', 'Max', 'Mean', 'Median',
+                                     'Custom value', 'Custom multi-value')
 
-    # Original Train, Validation & Test rateos (before balancing operations)
-        self.orig_TVTrateos = (None, None, None)
-
-    # Original Train set targets (before balancing operations)
-        self.origY_train = None
-
-    # Train, Validation & Test sets
-        self.X_train, self.X_valid, self.X_test = None, None, None
-        self.Y_train, self.Y_valid, self.Y_test = None, None, None
-
-    # Class counters for Train, Validation & Test sets List_Widgets
-        self.trClassCounter = dict()
-        self.vdClassCounter = dict()
-        self.tsClassCounter = dict()
-
-    # Train set balancing operation tracer
-        self.balanceInfo = False
+    # Train set balancing operation tracker
+        self.balancing_info = []
 
     # Balancing external thread
-        self.balThread = exthr.BalanceThread()
-        self.balThread.setObjectName('Balancing')
-        self.balThread.taskFinished.connect(lambda out: self.finalize_balancing(out))
+        self.balancing_thread = threads.BalancingThread()
+        self.balancing_thread.setObjectName('Balancing')
 
     # Learning external thread
-        self.learnThread = exthr.LearningThread()
-        self.learnThread.setObjectName('Learning')
-        self.learnThread.epochCompleted.connect(lambda out: self.update_learningScores(out))
-        self.learnThread.updateRequested.connect(self.update_learningScoresView)
-        self.learnThread.taskFinished.connect(lambda out: self.finalize_learning(out))
+        self.learning_thread = threads.LearningThread()
+        self.learning_thread.setObjectName('Learning')
 
-    # New model instance and parameters dictionary
-        self.model = None
-        self.model_vars = dict()
+    # Machine learning model, network architecture and optimizer
+        self.model = None 
+        self.network = None 
+        self.optimizer = None 
 
-    # Train, Validation and Test Model predictions
-        self.tr_preds, self.vd_preds, self.ts_preds = None, None, None
+    # Train, validation and test model predictions
+        self.train_pred = None
+        self.valid_pred = None
+        self.test_pred = None
 
-    # Train & Validation loss and accuracy evolutions lists (for graphics)
-        self.tr_losses, self.vd_losses = [], []
-        self.tr_acc, self.vd_acc = [], []
+    # Train and validation loss and accuracy evolution lists
+        self.train_loss_list = []
+        self.valid_loss_list = []
+        self.train_accuracy_list = []
+        self.valid_accuracy_list = []
+
+# End of main attributes ------------------------------------------------------
+
+    # Initialize the GUI
+        self._init_ui()
+
+    # Connect signals to slots
+        self._connect_slots()
 
 
-        self.init_ui()
-        self.randomize_seed()
-        self.adjustSize()
-        self.showMaximized()
+    def _init_ui(self): 
+        '''
+        GUI constructor.
 
+        '''
+#  -------------------------------------------------------------------------  #
+#                       RANDOM SEED GENERATOR WIDGET
+#  -------------------------------------------------------------------------  #
+    # Random seed generator group (Group Area)
+        self.seed_generator = cObj.RandomSeedGenerator()
+        seed_group = cObj.GroupArea(self.seed_generator, 
+                                    'Random seed generator')
 
-    def init_ui(self):
-
-# ==== GROUND TRUTH DATASET WIDGETS ==== #
-
-    # Load dataset button
-        self.loadDS_btn = QW.QPushButton(QIcon('Icons/load.png'), 'Import')
-        self.loadDS_btn.clicked.connect(self.load_dataset)
-
+#  -------------------------------------------------------------------------  #
+#                       GROUND TRUTH DATASET WIDGETS 
+#  -------------------------------------------------------------------------  #
+    # Load dataset button (Styled Button)
+        self.load_dataset_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
+                                                  'Load dataset')
     # CSV decimal character selector
-        self.CSVdec = cObj.DecimalPointSelector()
-        CSVdec_form = QW.QFormLayout()
-        CSVdec_form.addRow('CSV decimal point', self.CSVdec)
+        self.csv_dec_selector = cObj.DecimalPointSelector()
 
-    # Loaded dataset path
-        self.DS_path = cObj.PathLabel('', 'No dataset loaded')
+    # Loaded dataset path (Path Label)
+        self.dataset_path_lbl = cObj.PathLabel(full_display=False,
+                                               placeholder='No dataset loaded')
 
-    # Loaded dataset preview Area
-        self.DS_previewArea = QW.QTextEdit()
-        self.DS_previewArea.setReadOnly(True)
-        self.DS_previewArea.setMinimumHeight(350)
+    # Loaded dataset preview area (Document Browser)
+        self.dataset_preview = cObj.DocumentBrowser(read_only=True)
+        self.dataset_preview.setMinimumHeight(350)
 
-    # Adjust Load GT-dataset group layout
-        loadDS_grid = QW.QGridLayout()
-        loadDS_grid.addWidget(self.loadDS_btn, 0, 0)
-        loadDS_grid.addLayout(CSVdec_form, 0, 1)
-        loadDS_grid.addWidget(self.DS_path, 1, 0, 1, 2)
-        loadDS_grid.addWidget(self.DS_previewArea, 2, 0, 1, 2)
-        loadDS_grid.setRowStretch(2, 1)
-        loadDS_group = cObj.GroupArea(loadDS_grid, 'Ground-truth dataset')
+    # Ground truth dataset group (Group Area)
+        dataset_grid = QW.QGridLayout()
+        dataset_grid.setSpacing(20)
+        dataset_grid.addWidget(self.load_dataset_btn, 0, 0, 1, 2)
+        dataset_grid.addWidget(QW.QLabel('CSV decimal point'), 0, 2)
+        dataset_grid.addWidget(self.csv_dec_selector, 0, 3)
+        dataset_grid.addWidget(self.dataset_path_lbl, 1, 0, 1, -1)
+        dataset_grid.addWidget(self.dataset_preview, 2, 0, 1, -1)
+        dataset_group = cObj.CollapsibleArea(dataset_grid, collapsed=False,
+                                             title='Ground truth dataset')
+        
+#  -------------------------------------------------------------------------  #
+#                            PARENT MODEL WIDGETS 
+#  -------------------------------------------------------------------------  #
 
+    # Load parent model button (Styled Button)
+        self.load_pmodel_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
+                                                 'Load model')
+        self.load_pmodel_btn.setEnabled(False)
 
-# ==== RANDOM SEED GENERATOR WIDGETS==== #
+    # Remove loaded parent model button (Styled Button)
+        self.unload_pmodel_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
 
-    # Random seed line edit
-        self.seedInput = QW.QLineEdit()
-        self.seedInput.setValidator(QIntValidator(0, 10**8))
-        self.seedInput.textChanged.connect(self.change_seed)
+    # Parent model path (Path Label)
+        self.pmodel_path = cObj.PathLabel(full_display=False, 
+                                          placeholder='No model loaded')
 
-    # Randomize seed button
-        self.randseed_btn = cObj.IconButton('Icons/dice.png')
-        self.randseed_btn.clicked.connect(self.randomize_seed)
+    # Parent model group (Group Area)
+        pmodel_grid = QW.QGridLayout()
+        pmodel_grid.setSpacing(20)
+        pmodel_grid.addWidget(self.load_pmodel_btn, 0, 0, 1, -1)
+        pmodel_grid.addWidget(self.unload_pmodel_btn, 1, 0)
+        pmodel_grid.addWidget(self.pmodel_path, 1, 1)
+        pmodel_grid.setColumnStretch(1, 2)
+        pmodel_group = cObj.CollapsibleArea(pmodel_grid, 
+                                            title='Update existent model')
 
-    # Adjust random seed group layout
-        seed_hbox = QW.QHBoxLayout()
-        seed_hbox.addWidget(self.seedInput, 1)
-        seed_hbox.addWidget(self.randseed_btn, alignment = Qt.AlignRight)
-        seed_group = cObj.GroupArea(seed_hbox, 'Random seed generator')
+#  -------------------------------------------------------------------------  #
+#                        HYPERPARAMETERS INPUT WIDGETS 
+#  -------------------------------------------------------------------------  #
 
-
-# ==== PREVIOUS ML MODEL LOADING WIDGETS ==== #
-
-    # Load previous model button
-        self.loadModel_btn = QW.QPushButton('Load')
-        self.loadModel_btn.clicked.connect(self.load_parentModel)
-        self.loadModel_btn.setEnabled(False)
-
-    # Remove loaded model button
-        self.removeModel_btn = QW.QPushButton('Remove')
-        self.removeModel_btn.clicked.connect(self.remove_parentModel)
-
-    # Previous model path
-        self.parentModel_path = cObj.PathLabel('', 'No model loaded')
-
-    # Adjust previous model group
-        parentModel_form = QW.QFormLayout()
-        parentModel_form.addRow('Update model', self.loadModel_btn)
-        parentModel_form.addRow(self.parentModel_path, self.removeModel_btn)
-        parentModel_group = cObj.GroupArea(parentModel_form, 'Load previous model')
-
-
-# ==== HYPER-PARAMETERS INPUT WIDGETS ==== #
-
-    # Learning rate input
-        self.lr_spbox = QW.QDoubleSpinBox()
-        self.lr_spbox.setDecimals(5)
-        self.lr_spbox.setRange(0, 10)
-        self.lr_spbox.setSingleStep(0.01)
+    # Learning rate input (Styled DoubleSpinBox)
+        self.lr_spbox = cObj.StyledDoubleSpinBox(min_value=0.00001, 
+                                                 max_value=10., step=0.01,
+                                                 decimals=5)
         self.lr_spbox.setValue(0.01)
 
-    # Weight decay input
-        self.wd_spbox = QW.QDoubleSpinBox()
-        self.wd_spbox.setDecimals(5)
-        self.wd_spbox.setRange(0, 10)
-        self.wd_spbox.setSingleStep(0.01)
-        self.wd_spbox.setValue(0)
+    # Weight decay input (Styled DoubleSpinBox)
+        self.wd_spbox = cObj.StyledDoubleSpinBox(max_value=10., step=0.01,
+                                                 decimals=5)
+        self.wd_spbox.setValue(0.)
 
-    # Momentum input
-        self.mtm_spbox = QW.QDoubleSpinBox()
-        self.mtm_spbox.setDecimals(5)
-        self.mtm_spbox.setRange(0, 10)
-        self.mtm_spbox.setSingleStep(0.01)
-        self.mtm_spbox.setValue(0)
+    # Momentum input (Styled DoubleSpinBox)
+        self.mtm_spbox = cObj.StyledDoubleSpinBox(max_value=10., step=0.01,
+                                                  decimals=5)
+        self.mtm_spbox.setValue(0.)
 
-    # Epochs input
-        self.epochs_spbox = QW.QSpinBox()
-        self.epochs_spbox.setRange(0, 10**8)
+    # Epochs input (Styled SpinBox)
+        self.epochs_spbox = cObj.StyledSpinBox(max_value=10**8)
         self.epochs_spbox.setValue(100)
-        self.epochs_spbox.valueChanged.connect(
-            lambda x: self.graph_updateRate.setText(str(x//10)))
 
-    # Adjust hyper-parameters group layout
-        hyperparam_form = QW.QFormLayout()
-        hyperparam_form.addRow('Learning Rate', self.lr_spbox)
-        hyperparam_form.addRow('Weight Decay', self.wd_spbox)
-        hyperparam_form.addRow('Momentum', self.mtm_spbox)
-        hyperparam_form.addRow('Epochs', self.epochs_spbox)
-        hyperparam_group = cObj.GroupArea(hyperparam_form, 'Hyperparameters')
+    # Hyperparameters group (Group Area)
+        hparam_form = QW.QFormLayout()
+        hparam_form.setSpacing(10)
+        hparam_form.addRow('Learning Rate', self.lr_spbox)
+        hparam_form.addRow('Weight Decay', self.wd_spbox)
+        hparam_form.addRow('Momentum', self.mtm_spbox)
+        hparam_form.addRow('Epochs', self.epochs_spbox)
+        hparam_group = cObj.CollapsibleArea(hparam_form, 
+                                            title='Hyperparameters')
+        
+#  -------------------------------------------------------------------------  #
+#                      LEARNING PREFERENCES INPUT WIDGETS 
+#  -------------------------------------------------------------------------  #
 
+    # Feature mapping (Checkbox)
+        self.feat_mapping_cbox = QW.QCheckBox('Polynomial feature mapping')
 
-# ==== LEARNING PREFERENCES INPUT WIDGETS ==== #
+    # Polynomial mapping degree (Styled SpinBox)
+        self.poly_deg_spbox = cObj.StyledSpinBox(min_value=2, max_value=5)
+        self.poly_deg_spbox.setValue(2)
+        self.poly_deg_spbox.setEnabled(False)
+        self.poly_deg_spbox.setToolTip('Polynomial degree')
 
-    # Regressor type combo-box
-        self.regrType_combox = QW.QComboBox()
-        self.regrType_combox.addItems(['Linear', 'Polynomial'])
-        self.regrType_combox.currentTextChanged.connect(
-            lambda txt: self.polyDeg_spbox.setEnabled(txt=='Polynomial'))
-        self.regrType_combox.currentTextChanged.connect(
-            lambda txt: self.polyDeg_spbox.setValue(1 + (txt=='Polynomial')))
-
-    # Polynomial degree spin-box
-        self.polyDeg_spbox = QW.QSpinBox()
-        self.polyDeg_spbox.setMinimum(1)
-        self.polyDeg_spbox.setValue(1)
-        self.polyDeg_spbox.setEnabled(False)
-        self.polyDeg_spbox.setToolTip('Select the degree of the polynomial regressor.')
-
-    # Algorithm combo-box
+    # Algorithm (Styled ComboBox)
         algm_list = ['Softmax Regression']
-        self.algm_combox = QW.QComboBox()
+        self.algm_combox = cObj.StyledComboBox()
         self.algm_combox.addItems(algm_list)
 
-    # Optimization function combo-box
+    # Optimization function (Styled ComboBox)
         optim_list = ['SGD']
-        self.optim_combox = QW.QComboBox()
+        self.optim_combox = cObj.StyledComboBox()
         self.optim_combox.addItems(optim_list)
 
-    # Use GPU acceleration checkbox
+    # Learning graphic update rate (Line Edit)
+        self.plots_update_rate = QW.QLineEdit()
+        self.plots_update_rate.setValidator(QG.QIntValidator(1, 10**8))
+        self.plots_update_rate.setText('10')
+        self.plots_update_rate.setStyleSheet(pref.SS_menu)
+
+    # Use GPU acceleration (Checkbox)
         self.cuda_cbox = QW.QCheckBox('Use GPU acceleration')
-        self.cuda_cbox.setChecked(True)
+        self.cuda_cbox.setChecked(ML_tools.cuda_available())
+        self.cuda_cbox.setEnabled(ML_tools.cuda_available())
 
-    # Learning graphic update rate selector
-        self.graph_updateRate = QW.QLineEdit()
-        self.graph_updateRate.setValidator(QIntValidator(1, 10**8))
-        self.graph_updateRate.setToolTip('Graphics update rate during learnign iterations')
-        self.graph_updateRate.setText('10')
+    # Learning preferences group (Group Area)
+        pref_form = QW.QFormLayout()
+        pref_form.setSpacing(10)
+        pref_form.addRow(self.feat_mapping_cbox, self.poly_deg_spbox)
+        pref_form.addRow('Algorithm', self.algm_combox)
+        pref_form.addRow('Optimization function', self.optim_combox)
+        pref_form.addRow('Graphics refresh rate', self.plots_update_rate)
+        pref_form.addRow(self.cuda_cbox)
+        pref_group = cObj.CollapsibleArea(pref_form,
+                                          title='Learning preferences')
 
-    # Adjust learnig preferences group layout
-        preferences_form = QW.QFormLayout()
-        preferences_form.addRow('Regressor type', self.regrType_combox)
-        preferences_form.addRow('Degree', self.polyDeg_spbox)
-        preferences_form.addRow('Algorithm', self.algm_combox)
-        preferences_form.addRow('Optimization function', self.optim_combox)
-        preferences_form.addRow(self.cuda_cbox)
-        preferences_form.addRow('Graphics update rate', self.graph_updateRate)
-        preferences_group = cObj.GroupArea(preferences_form, 'Learning preferences')
+#  -------------------------------------------------------------------------  #
+#                   START, STOP, TEST, SAVE, PROGBAR WIDGETS 
+#  -------------------------------------------------------------------------  #
 
+    # Start learning button (Styled Button)
+        self.start_learn_btn = cObj.StyledButton(text='LEARN', 
+                                                 bg_color=pref.BTN_GREEN)
+        self.start_learn_btn.setToolTip('Start learning session')
+        self.start_learn_btn.setEnabled(False)
 
-# ==== START - STOP - TEST - SAVE - PROGBAR WIDGETS ==== #
+    # Stop learning button (Styled Button)
+        self.stop_learn_btn = cObj.StyledButton(text='STOP', 
+                                                 bg_color=pref.BTN_RED)
+        self.stop_learn_btn.setToolTip('Stop learning session')
+        self.stop_learn_btn.setEnabled(False)
 
-    # Start learning button
-        self.startLearn_btn = QW.QPushButton('START')
-        self.startLearn_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                              font-weight: bold''')
-        self.startLearn_btn.setToolTip('Start learning session')
-        self.startLearn_btn.clicked.connect(self.initialize_learning)
-        self.startLearn_btn.setEnabled(False)
+    # Test model button (Styled Button)
+        self.test_model_btn = cObj.StyledButton(QIcon(r'Icons/test.png'), 
+                                                'TEST MODEL')
+        self.test_model_btn.setEnabled(False)
 
-    # Stop learning button
-        self.stopLearn_btn = QW.QPushButton('STOP')
-        self.stopLearn_btn.setStyleSheet('''background-color: red;
-                                            font-weight: bold''')
-        self.stopLearn_btn.setToolTip('Stop current learning session')
-        self.stopLearn_btn.clicked.connect(self.stop_learning)
-        self.stopLearn_btn.setEnabled(False)
-
-    # Test model button
-        self.testModel_btn = QW.QPushButton(QIcon('Icons/test.png'), 'TEST MODEL')
-        self.testModel_btn.clicked.connect(self.test_model)
-        self.testModel_btn.setEnabled(False)
-
-    # Save model button
-        self.saveModel_btn = QW.QPushButton(QIcon('Icons/save.png'), 'SAVE MODEL')
-        self.saveModel_btn.clicked.connect(self.save_model)
-        self.saveModel_btn.setEnabled(False)
+    # Save model button (Styled Button)
+        self.save_model_btn = cObj.StyledButton(QIcon(r'Icons/save.png'), 
+                                                'SAVE MODEL')
+        self.save_model_btn.setEnabled(False)
 
     # Progress bar
-        self.progBar = QW.QProgressBar()
+        self.learning_pbar = QW.QProgressBar()
 
-    # Adjust start-stop-test-save-pbar layout
-        mainActions_grid = QW.QGridLayout()
-        mainActions_grid.addWidget(self.startLearn_btn, 0, 0)
-        mainActions_grid.addWidget(self.stopLearn_btn, 0, 1)
-        mainActions_grid.addWidget(self.testModel_btn, 1, 0)
-        mainActions_grid.addWidget(self.saveModel_btn, 1, 1)
-        mainActions_grid.addWidget(self.progBar, 2, 0, 1, 2)
+#  -------------------------------------------------------------------------  #
+#                       TRAIN, VALIDATION, TEST WIDGETS 
+#  -------------------------------------------------------------------------  #
 
+    # Train set ratio selector (Styled SpinBox)
+        self.train_ratio_spbox = cObj.StyledSpinBox(1, 98)
+        self.train_ratio_spbox.setSuffix(' %')
+        self.train_ratio_spbox.setValue(50)
 
-# ==== TRAIN - VALIDATION - TEST SPLIT WIDGETS ==== #
+    # Validation set ratio selector (Styled SpinBox)
+        self.valid_ratio_spbox = cObj.StyledSpinBox(1, 98)
+        self.valid_ratio_spbox.setSuffix(' %')
+        self.valid_ratio_spbox.setValue(25)
 
-    # Train, Validation & Test rateo selectors
-        self.trRateo_spbox = QW.QSpinBox()
-        self.vdRateo_spbox = QW.QSpinBox()
-        self.tsRateo_spbox = QW.QSpinBox()
-        for spbox, val in ((self.trRateo_spbox, 50),
-                           (self.vdRateo_spbox, 25),
-                           (self.tsRateo_spbox, 25)):
-            spbox.setRange(1, 98)
-            spbox.setValue(val)
-            spbox.setSuffix(' %')
-            spbox.valueChanged.connect(self.adjust_splitRateos)
+    # Test set ratio selector (Styled SpinBox)
+        self.test_ratio_spbox = cObj.StyledSpinBox(1, 98)
+        self.test_ratio_spbox.setSuffix(' %')
+        self.test_ratio_spbox.setValue(25)
 
-    # Split GT dataset button
-        self.splitDS_btn = QW.QPushButton('SPLIT')
-        self.splitDS_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                          font-weight: bold''')
-        self.splitDS_btn.clicked.connect(self.split_dataset)
-        self.splitDS_btn.setEnabled(False)
+    # Split ground truth dataset button (Styled Button)
+        self.split_dataset_btn = cObj.StyledButton(text='SPLIT', 
+                                                   bg_color=pref.BTN_GREEN)
+        self.split_dataset_btn.setToolTip('Split ground truth dataset into '\
+                                          'train, validation and test sets')
+        self.split_dataset_btn.setEnabled(False)
 
-    # Train, Validation & Test sets PieChart
-        self.tvt_pie = cObj.PieCanvas(self, perc=None)
-        self.tvt_pie.setMinimumSize(150, 150)
+    # Train, Validation and Test sets PieChart (PieCanvas)
+        self.subsets_pie = plots.PieCanvas(wheel_pan=False, wheel_zoom=False)
+        self.subsets_pie.fig.patch.set(facecolor=pref.CASPER_LIGHT, 
+                                       edgecolor=pref.BLACK_PEARL, lw=2)
+        self.subsets_pie.setMinimumSize(200, 200)
 
-    # Train, Validation & Test sets barchart
-        self.tvt_bar =  cObj.BarCanvas(self)
-        self.tvt_bar.fig.patch.set(facecolor=CF.RGB2float([(169, 185, 188)]), linewidth=0)
-        self.tvt_bar.setMinimumSize(100, 300)
+    # Train, Validation & Test sets barchart (BarCanvas)
+        self.subsets_barplot = plots.BarCanvas(wheel_pan=False, 
+                                               wheel_zoom=False)
+        self.subsets_barplot.setMinimumSize(200, 300)
 
-    # Train set class visualizer
-        self.trSet_list = cObj.StyledListWidget(ext_selection=False)
-        self.trSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Train'))
-        self.trSet_currCount = QW.QLabel('')
-        self.trSet_totCount  = QW.QLabel('Tot = 0')
+    # Train set class visualizer (StyledListWidget)
+        self.train_class_list = cObj.StyledListWidget(ext_selection=False)
+        self.train_class_list.setMinimumWidth(100)
 
-    # Validation set class visualizer
-        self.vdSet_list = cObj.StyledListWidget(ext_selection=False)
-        self.vdSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Validation'))
-        self.vdSet_currCount = QW.QLabel('')
-        self.vdSet_totCount  = QW.QLabel('Tot = 0')
+    # Train set per-class current and total counter labels (FramedLabels)
+        self.train_curr_count_lbl = cObj.FramedLabel('')
+        self.train_tot_count_lbl = cObj.FramedLabel('')
 
-    # Test set class visualizer
-        self.tsSet_list = cObj.StyledListWidget(ext_selection=False)
-        self.tsSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Test'))
-        self.tsSet_currCount = QW.QLabel('')
-        self.tsSet_totCount  = QW.QLabel('Tot = 0')
+    # Validation set class visualizer (StyledListWidget)
+        self.valid_class_list = cObj.StyledListWidget(ext_selection=False)
+        self.valid_class_list.setMinimumWidth(100)
 
-    # Adjust Train-Validation-Test split group layout
-        # (Split visualization group)
+    # Validation set per-class current and total counter labels (FramedLabels)
+        self.valid_curr_count_lbl = cObj.FramedLabel('')
+        self.valid_tot_count_lbl = cObj.FramedLabel('')
+
+    # Test set class visualizer (StyledListWidget)
+        self.test_class_list = cObj.StyledListWidget(ext_selection=False)
+        self.test_class_list.setMinimumWidth(100)
+
+    # Test set per-class current and total counter labels (FramedLabels)
+        self.test_curr_count_lbl = cObj.FramedLabel('')
+        self.test_tot_count_lbl = cObj.FramedLabel('')
+
+    # Split Train, validation, test subset widgets group
+        counters_grid = QW.QGridLayout()
+        counters_grid.setContentsMargins(20, 5, 0, 0)
+        counters_grid.setHorizontalSpacing(20)
+        counters_grid.setVerticalSpacing(5)
+        counters_grid.addWidget(QW.QLabel('Train'), 0, 0, Qt.AlignHCenter)
+        counters_grid.addWidget(QW.QLabel('Validation'), 0, 1, Qt.AlignHCenter)
+        counters_grid.addWidget(QW.QLabel('Test'), 0, 2, Qt.AlignHCenter)
+        counters_grid.addWidget(self.train_class_list, 1, 0)
+        counters_grid.addWidget(self.valid_class_list, 1, 1)
+        counters_grid.addWidget(self.test_class_list, 1, 2)
+        counters_grid.addWidget(self.train_curr_count_lbl, 2, 0)
+        counters_grid.addWidget(self.valid_curr_count_lbl, 2, 1)
+        counters_grid.addWidget(self.test_curr_count_lbl, 2, 2)
+        counters_grid.addWidget(self.train_tot_count_lbl, 3, 0)
+        counters_grid.addWidget(self.valid_tot_count_lbl, 3, 1)
+        counters_grid.addWidget(self.test_tot_count_lbl, 3, 2)
+        counters_grid.setRowStretch(1, -1)
+
         split_grid = QW.QGridLayout()
-        for row, (lbl, sb) in enumerate((('Train set', self.trRateo_spbox),
-                                         ('Validation set', self.vdRateo_spbox),
-                                         ('Test set', self.tsRateo_spbox))):
-            split_grid.addWidget(QW.QLabel(lbl), row, 0)
-            split_grid.addWidget(sb, row, 1)
-        split_grid.addWidget(self.splitDS_btn, row+1, 0, 1, 2)
-        split_grid.addWidget(self.tvt_pie, 0, 2, 4, 1)
-        split_grid.addWidget(self.tvt_bar, 4, 0, 1, 3)
-        split_grid.setColumnStretch(2, 1)
+        split_grid.setSpacing(20)
+        split_grid.addWidget(QW.QLabel('Train set'), 0, 0)
+        split_grid.addWidget(self.train_ratio_spbox, 0, 1)
+        split_grid.addWidget(QW.QLabel('Validation set'), 1, 0)
+        split_grid.addWidget(self.valid_ratio_spbox, 1, 1)
+        split_grid.addWidget(QW.QLabel('Test set'), 2, 0)
+        split_grid.addWidget(self.test_ratio_spbox, 2, 1)
+        split_grid.addWidget(self.split_dataset_btn, 3, 0, 1, 2)
+        split_grid.addWidget(self.subsets_pie, 0, 2, 4, 1)
+        split_grid.addWidget(self.subsets_barplot, 4, 0, 1, 3)
+        split_grid.addLayout(counters_grid, 0, 3, -1, 1)
+        split_grid.setColumnStretch(3, -1)
+        split_grid.setRowStretch(4, -1)
+        split_group = cObj.GroupArea(split_grid, 'Split dataset')
 
-        # (Train-Validation-Test lists group)
-        trSet_vbox = QW.QVBoxLayout()
-        trSet_vbox.addWidget(self.trSet_list, 1)
-        trSet_vbox.addWidget(self.trSet_currCount)
-        trSet_vbox.addWidget(self.trSet_totCount)
-        trSet_group = cObj.GroupArea(trSet_vbox, 'Train Set')
+#  -------------------------------------------------------------------------  #
+#                       BALANCING OPERATIONS WIDGETS 
+#  -------------------------------------------------------------------------  #
 
-        vdSet_vbox = QW.QVBoxLayout()
-        vdSet_vbox.addWidget(self.vdSet_list, 1)
-        vdSet_vbox.addWidget(self.vdSet_currCount)
-        vdSet_vbox.addWidget(self.vdSet_totCount)
-        vdSet_group = cObj.GroupArea(vdSet_vbox, 'Validation Set')
+    # Balancing help button (StyledButton)
+        self.balancing_help_btn = cObj.StyledButton(QIcon(r'Icons/info.png'))
+        self.balancing_help_btn.setMaximumSize(30, 30)
+        self.balancing_help_btn.setFlat(True)
+        self.balancing_help_btn.setToolTip('More info about dataset balancing')
 
-        tsSet_vbox = QW.QVBoxLayout()
-        tsSet_vbox.addWidget(self.tsSet_list, 1)
-        tsSet_vbox.addWidget(self.tsSet_currCount)
-        tsSet_vbox.addWidget(self.tsSet_totCount)
-        tsSet_group = cObj.GroupArea(tsSet_vbox, 'Test Set')
+    # Oversampling algorithm selector (Styled ComboBox)
+        self.os_combox = cObj.StyledComboBox()
+        self.os_combox.addItems(self.os_list)
 
-        sets_hbox = QW.QHBoxLayout()
-        sets_hbox.addWidget(trSet_group)
-        sets_hbox.addWidget(vdSet_group)
-        sets_hbox.addWidget(tsSet_group)
+    # Oversampling K-neighbours selector (Styled SpinBox)
+        self.k_neigh_spbox = cObj.StyledSpinBox()
+        self.k_neigh_spbox.setValue(5)
+        self.k_neigh_spbox.setToolTip(
+            'Nearest neighbours to construct synthetic samples')
 
-        # (T-V-T group Layout)
-        tvt_hsplit = cObj.SplitterGroup((split_grid, sets_hbox))
-        tvt_group = cObj.GroupArea(tvt_hsplit, 'Split Dataset')
+    # Oversampling M-neighbours selector (Styled SpinBox)
+        self.m_neigh_spbox = cObj.StyledSpinBox()
+        self.m_neigh_spbox.setValue(10)
+        self.m_neigh_spbox.setToolTip(
+            'Nearest neighbours to determine if a minority sample is in danger')
 
+    # Undersampling algorithm selector (Styled ComboBox)
+        self.us_combox = cObj.StyledComboBox()
+        self.us_combox.addItems(self.us_list)
 
-# ==== BALANCING OPERATIONS WIDGETS ==== #
+    # Undersampling strategy warning icon (QLabel)
+        pixmap = QG.QPixmap(r'Icons/warnIcon.png')
+        self.us_warn_icon = QW.QLabel()
+        self.us_warn_icon.setPixmap(pixmap.scaled(30, 30, Qt.KeepAspectRatio))
+        self.us_warn_icon.setToolTip(
+            'The selected Under-Sampling algorithm yields values that may '\
+            'differ from those requested')
+        self.us_warn_icon.hide()
 
-    # Balancing help button
-        self.balanceHelp_btn = cObj.IconButton('Icons/info.png')
-        self.balanceHelp_btn.setMaximumSize(30, 30)
-        self.balanceHelp_btn.setFlat(True)
-        self.balanceHelp_btn.setToolTip('Click for more info about dataset balancing algorithms')
-        self.balanceHelp_btn.clicked.connect(lambda: wb.open(
-            'https://imbalanced-learn.org/stable/user_guide.html#user-guide'))
+    # Undersampling N-neighbours selector (Styled SpinBox)
+        self.n_neigh_spbox = cObj.StyledSpinBox()
+        self.n_neigh_spbox.setValue(3)
+        self.n_neigh_spbox.setToolTip('Size of the neighbourhood to consider')
 
-    # Over_Sampling algorithm selector
-        OS_list = ['None', 'SMOTE', 'BorderlineSMOTE', 'ADASYN']
-        self.OS_combox = QW.QComboBox()
-        self.OS_combox.addItems(OS_list)
-        self.OS_combox.currentTextChanged.connect(self.enable_mOS)
+    # Strategy selector (Styled ComboBox)
+        self.strategy_combox = cObj.StyledComboBox()
+        self.strategy_combox.addItems(self.balancing_strategies)
 
-    # Over_Sampling K-neighbours selector
-        self.kOS_spbox = QW.QSpinBox()
-        self.kOS_spbox.setValue(5)
-        self.kOS_spbox.setToolTip('Number of nearest neighbours to construct synthetic samples')
+    # Strategy value (LineEdit)
+        self.strategy_value = QW.QLineEdit()
+        regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8}|1000000000)$") # 1 - 10^9
+        self.strategy_value.setValidator(QG.QRegularExpressionValidator(regex))
+        self.strategy_value.setStyleSheet(pref.SS_menu)
 
-    # Over_Sampling M-neighbours selector
-        self.mOS_spbox = QW.QSpinBox()
-        self.mOS_spbox.setValue(10)
-        self.mOS_spbox.setToolTip('Number of nearest neighbours to determine if a minority sample is in danger')
+    # Strategy percentage (Line edit)
+        self.strategy_percent = QW.QLineEdit()
+        regex = QC.QRegularExpression(r"^(?:[1-9]|\d{2,3}|1000)$") # 1 - 1000
+        self.strategy_percent.setValidator(QG.QRegularExpressionValidator(regex))
+        self.strategy_percent.setText('100')
+        self.strategy_percent.setStyleSheet(pref.SS_menu)
 
-    # Under_Sampling algorithm selector
-        US_list = ['None', 'RandUS', 'NearMiss', 'TomekLinks',
-                    'ENN-all', 'ENN-mode', 'NCR-all', 'NCR-mode']
-        self.US_combox = QW.QComboBox()
-        self.US_combox.addItems(US_list)
-        self.US_combox.currentTextChanged.connect(self.update_USwarning)
-        self.US_combox.currentTextChanged.connect(self.enable_nUS)
+    # Use parallel computation (Checkbox)
+        self.balancing_multicore_cbox = QW.QCheckBox('Parallel computation')
+        self.balancing_multicore_cbox.setToolTip(
+            'Distribute computation across multiple processes')
+        self.balancing_multicore_cbox.setChecked(False)
 
-    # Under_Sampling strategy warning icon
-        self.US_warnIcon = QW.QLabel()
-        w_icon = QPixmap('Icons/warnIcon.png').scaled(30, 30, Qt.KeepAspectRatio)
-        self.US_warnIcon.setPixmap(w_icon)
-        self.US_warnIcon.setToolTip('Warning: the selected Under-Sampling algorithm '\
-                                    'ignores the strategy required by the user.')
-        self.US_warnIcon.hide()
+    # Balancing preview table (Styled Table)
+        hl = ('Class', 'Original #', 'Current #', 'After balancing #')
+        self.balancing_table = cObj.StyledTable(0, 4)
+        # ResizeModes: 0=Interactive, 1=Stretch, 2=Fixed, 3=ResizeToContent
+        self.balancing_table.horizontalHeader().setSectionResizeMode(3)
+        self.balancing_table.horizontalHeader().setStretchLastSection(True)
+        self.balancing_table.verticalHeader().setSectionResizeMode(3)
+        self.balancing_table.setHorizontalHeaderLabels(hl)
 
-    # Under_Sampling N-neighbours selector
-        self.nUS_spbox = QW.QSpinBox()
-        self.nUS_spbox.setValue(3)
-        self.nUS_spbox.setToolTip('Size of the neighbourhood to consider')
+    # Start balancing button (Styled Button)
+        self.start_balancing_btn = cObj.StyledButton(text='Start', 
+                                                     bg_color=pref.BTN_GREEN)
+        self.start_balancing_btn.setToolTip('Start balancing session')
 
-    # Strategy selector
-        strat_list = ['Current', 'Min', 'Max', 'Mean', 'Median',
-                      'Custom value', 'Custom multi-value']
-        self.strategy_combox = QW.QComboBox()
-        self.strategy_combox.addItems(strat_list)
-        self.strategy_combox.currentTextChanged.connect(self.update_strategyValue)
+    # Stop balancing button (Styled Button)
+        self.stop_balancing_btn = cObj.StyledButton(text='Stop',
+                                                    bg_color=pref.BTN_RED)
+        self.stop_balancing_btn.setToolTip('Stop balancing session')
 
-    # Strategy value
-        self.strat_value = QW.QLineEdit()
-        self.strat_value.setValidator(QIntValidator(0, 10**10))
-        self.strat_value.textEdited.connect(
-            lambda: self.strategy_combox.setCurrentText('Custom value'))
-        self.strat_value.textChanged.connect(self.autoFill_balanceTable)
+    # Cancel balancing button (Styled Button)
+        self.canc_balancing_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'),
+                                                    'Cancel')
+        self.canc_balancing_btn.setToolTip('Cancel balancing results')
 
-    # Balancing preview table
-        self.balance_table = QW.QTableWidget(0, 4)
-        self.balance_table.horizontalHeader().setSectionResizeMode(1) # Stretch
-        self.balance_table.verticalHeader().setSectionResizeMode(3) # ResizeToContent
-        self.balance_table.setHorizontalHeaderLabels(['Class name', 'Original size',
-                                                      'Current size', 'After balancing'])
+    # Balancing operations progress bar (Descriptive Progress Bar)
+        self.balancing_pbar = cObj.DescriptiveProgressBar()
+        self.balancing_pbar.setMaximum(5)
 
-    # Run balancing button
-        self.runBalance_btn = QW.QPushButton('Start Balancing')
-        self.runBalance_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                          font-weight: bold''')
-        self.runBalance_btn.clicked.connect(self.initialize_balancing)
+    # Balancing group 
+        balancing_grid = QW.QGridLayout()
+        balancing_grid.setSpacing(10)
+        balancing_grid.addWidget(self.balancing_help_btn, 0, 0, Qt.AlignLeft)
+        balancing_grid.addWidget(self.us_warn_icon, 0, 2, Qt.AlignRight)
+        balancing_grid.addWidget(QW.QLabel('Over-Sampling'), 1, 0, 1, 3)
+        balancing_grid.addWidget(cObj.LineSeparator(lw=2), 2, 0, 1, 3)
+        balancing_grid.addWidget(self.os_combox, 3, 0)
+        balancing_grid.addWidget(QW.QLabel('K neigh.'), 3, 1, Qt.AlignRight)
+        balancing_grid.addWidget(self.k_neigh_spbox, 3, 2)
+        balancing_grid.addWidget(QW.QLabel('M neigh.'), 4, 1, Qt.AlignRight)
+        balancing_grid.addWidget(self.m_neigh_spbox, 4, 2)
+        balancing_grid.addWidget(QW.QLabel('Under-Sampling'), 6, 0, 1, 3)
+        balancing_grid.addWidget(cObj.LineSeparator(lw=2), 7, 0, 1, 3)
+        balancing_grid.addWidget(self.us_combox, 8, 0)
+        balancing_grid.addWidget(QW.QLabel('N neigh.'), 8, 1, Qt.AlignRight)
+        balancing_grid.addWidget(self.n_neigh_spbox, 8, 2)
+        balancing_grid.addWidget(QW.QLabel('Strategy'), 10, 0, 1, 3)
+        balancing_grid.addWidget(cObj.LineSeparator(lw=2), 11, 0, 1, 3)
+        balancing_grid.addWidget(self.strategy_combox, 12, 0, 1, 3)
+        balancing_grid.addWidget(QW.QLabel('Unique value'), 13, 0)
+        balancing_grid.addWidget(self.strategy_value, 13, 1, 1, 2)
+        balancing_grid.addWidget(QW.QLabel('Unique percentage'), 14, 0)
+        balancing_grid.addWidget(self.strategy_percent, 14, 1, 1, 2)
+        balancing_grid.addWidget(self.balancing_multicore_cbox, 15, 0, 1, 3)
+        balancing_grid.addWidget(self.balancing_pbar, 16, 0, 1, 3)
+        balancing_grid.addWidget(self.canc_balancing_btn, 17, 0)
+        balancing_grid.addWidget(self.start_balancing_btn, 17, 1)
+        balancing_grid.addWidget(self.stop_balancing_btn, 17, 2)
+        balancing_grid.setColumnMinimumWidth(3, 20)
+        balancing_grid.addWidget(self.balancing_table, 0, 4, -1, 1)
+        balancing_grid.setColumnStretch(3, -1)
 
-    # Cancel balancing button
-        self.cancBalance_btn = QW.QPushButton('Cancel Balancing')
-        self.cancBalance_btn.setStyleSheet('''background-color: red;
-                                              font-weight: bold''')
-        self.cancBalance_btn.clicked.connect(self.canc_balancing)
+        self.balancing_group = cObj.GroupArea(balancing_grid, checkable=True,
+                                              title='Balance train set')
+        self.balancing_group.setChecked(False)
+        self.balancing_group.setEnabled(False)
 
-    # Balancing operations ProgressBar
-        self.balance_pBar = QW.QProgressBar()
-        self.balance_pBar.setMaximum(4)
+#  -------------------------------------------------------------------------  #
+#                         LEARNING PROGRESSION PLOTS 
+#  -------------------------------------------------------------------------  #
 
-    # Adjust Balance group layout
-        # (Start-stop balancing hbox)
-        balActions_hbox = QW.QHBoxLayout()
-        balActions_hbox.setSpacing(5)
-        balActions_hbox.addWidget(self.runBalance_btn)
-        balActions_hbox.addWidget(self.cancBalance_btn)
+    # Loss curves canvas (CurveCanvas)
+        self.loss_plot = plots.CurveCanvas('Loss plot', 'Epochs', 'Loss', 
+                                           layout='tight', wheel_pan=False,
+                                           wheel_zoom=False)
+        self.loss_plot.setMinimumSize(500, 400)
 
-        # (Balancing options)
-        balOptions_grid = QW.QGridLayout()
-        balOptions_grid.setVerticalSpacing(10)
-        balOptions_grid.addWidget(self.balanceHelp_btn, 0, 0, alignment = Qt.AlignLeft)
-        balOptions_grid.addWidget(self.US_warnIcon, 0, 2, alignment = Qt.AlignRight)
-        balOptions_grid.addWidget(QW.QLabel('Over-Sampling algorithm'), 1, 0)
-        balOptions_grid.addWidget(cObj.LineSeparator(), 1, 1, 1, 2)
-        balOptions_grid.addWidget(self.OS_combox, 2, 0)
-        balOptions_grid.addWidget(QW.QLabel('k-neighbours'), 2, 1, alignment = Qt.AlignRight)
-        balOptions_grid.addWidget(self.kOS_spbox, 2, 2)
-        balOptions_grid.addWidget(QW.QLabel('m-neighbours'), 3, 1, alignment = Qt.AlignRight)
-        balOptions_grid.addWidget(self.mOS_spbox, 3, 2)
-        balOptions_grid.addWidget(QW.QLabel('Under-Sampling algorithm'), 4, 0)
-        balOptions_grid.addWidget(cObj.LineSeparator(), 4, 1, 1, 2)
-        balOptions_grid.addWidget(self.US_combox, 5, 0)
-        balOptions_grid.addWidget(QW.QLabel('n-neighbours'), 5, 1, alignment = Qt.AlignRight)
-        balOptions_grid.addWidget(self.nUS_spbox, 5, 2)
-        balOptions_grid.addWidget(cObj.LineSeparator(), 6, 0, 1, 3)
-        balOptions_grid.addWidget(QW.QLabel('Strategy'), 7, 0)
-        balOptions_grid.addWidget(self.strategy_combox, 7, 1, 1, 2)
-        balOptions_grid.addWidget(QW.QLabel('Unique value'), 8, 0)
-        balOptions_grid.addWidget(self.strat_value, 8, 1, 1, 2)
-        balOptions_grid.addWidget(cObj.LineSeparator(), 9, 0, 1, 3)
-        balOptions_grid.addLayout(balActions_hbox, 10, 0, 1, 3)
-        balOptions_grid.addWidget(self.balance_pBar, 11, 0, 1, 3)
+    # Loss curves Navigation Toolbar (NavTbar)
+        self.loss_navtbar = plots.NavTbar(self.loss_plot, self)
+        self.loss_navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.loss_navtbar.fixHomeAction()
 
-        # (Balance group main layout)
-        balance_hsplit = cObj.SplitterGroup((balOptions_grid, self.balance_table), (0, 1))
-        self.balance_group = cObj.GroupArea(balance_hsplit, 'Balance train set',
-                                            checkable=True)
-        self.balance_group.setAlignment(Qt.AlignLeft)
-        self.balance_group.setChecked(False)
-        self.balance_group.setEnabled(False)
+    # Loss info labels (FramedLabels)
+        self.train_loss_lbl = cObj.FramedLabel('')
+        self.valid_loss_lbl = cObj.FramedLabel('')
 
+    # Accuracy curves canvas (CurveCanvas)
+        self.accuracy_plot = plots.CurveCanvas('Accuracy plot', 'Epochs',
+                                               'Accuracy', layout='tight',
+                                               wheel_pan=False,
+                                               wheel_zoom=False)
+        self.accuracy_plot.setMinimumSize(500, 400)
 
-# ==== LEARNING SESSION PLOTS ==== #
+    # Accuracy curves Navigation Toolbar (NavTbar)
+        self.accuracy_navtbar = plots.NavTbar(self.accuracy_plot, self)
+        self.accuracy_navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.accuracy_navtbar.fixHomeAction()
 
-    # Loss curves canvas
-        self.lossView = cObj.CurvePlotCanvas(self, title='Loss curves', tight=True,
-                                             xlab='Epochs', ylab='Loss')
-        self.lossView.setMinimumSize(500, 400)
+    # Accuracy info labels (FramedLabels)
+        self.train_accuracy_lbl = cObj.FramedLabel('')
+        self.valid_accuracy_lbl = cObj.FramedLabel('')
 
-    # Loss curves Navigation Toolbar
-        self.lossNTbar = cObj.NavTbar(self.lossView, self)
-        self.lossNTbar.removeToolByIndex([3, 4, 8, 9])
-        self.lossNTbar.fixHomeAction()
+    # Learning progression plots group
+        loss_grid = QW.QGridLayout()
+        loss_grid.setSpacing(15)
+        loss_grid.addWidget(self.loss_navtbar, 0, 0, 1, -1)
+        loss_grid.addWidget(self.loss_plot, 1, 0, 1, -1)
+        loss_grid.addWidget(QW.QLabel('Train'), 2, 0)
+        loss_grid.addWidget(self.train_loss_lbl, 2, 1)
+        loss_grid.addWidget(QW.QLabel('Validation'), 2, 2)
+        loss_grid.addWidget(self.valid_loss_lbl, 2, 3)
+        loss_grid.setColumnStretch(1, 1)
+        loss_grid.setColumnStretch(3, 1)
 
-    # Loss info labels
-        self.trLoss_lbl = QW.QLabel('None')
-        self.vdLoss_lbl = QW.QLabel('None')
+        accuracy_grid = QW.QGridLayout()
+        accuracy_grid.setSpacing(15)
+        accuracy_grid.addWidget(self.accuracy_navtbar, 0, 0, 1, -1)
+        accuracy_grid.addWidget(self.accuracy_plot, 1, 0, 1, -1)
+        accuracy_grid.addWidget(QW.QLabel('Train'), 2, 0)
+        accuracy_grid.addWidget(self.train_accuracy_lbl, 2, 1)
+        accuracy_grid.addWidget(QW.QLabel('Validation'), 2, 2)
+        accuracy_grid.addWidget(self.valid_accuracy_lbl, 2, 3)
+        accuracy_grid.setColumnStretch(1, 1)
+        accuracy_grid.setColumnStretch(3, 1)
 
-    # Accuracy curves canvas
-        self.accuracyView = cObj.CurvePlotCanvas(self, title='Accuracy curves', tight=True,
-                                                 xlab='Epochs', ylab='Accuracy')
-        self.accuracyView.setMinimumSize(500, 400)
+        learn_plot_tabwid = cObj.StyledTabWidget()
+        learn_plot_tabwid.tabBar().setDocumentMode(True)
+        learn_plot_tabwid.tabBar().setExpanding(True)
+        learn_plot_tabwid.addTab(loss_grid, QIcon(r'Icons/loss.png'),
+                                 'Loss plot')
+        learn_plot_tabwid.addTab(accuracy_grid, QIcon(r'Icons/accuracy.png'),
+                                 'Accuracy plot')
+        learn_group = cObj.GroupArea(learn_plot_tabwid, 'Learning progression')
 
-    # Accuracy curves Navigation Toolbar
-        self.accuracyNTbar = cObj.NavTbar(self.accuracyView, self)
-        self.accuracyNTbar.removeToolByIndex([3, 4, 8, 9])
-        self.accuracyNTbar.fixHomeAction()
+#  -------------------------------------------------------------------------  #
+#                        CONFUSION MATRICES WIDGETS 
+#  -------------------------------------------------------------------------  #
 
-    # Accuracy info labels
-        self.trAcc_lbl = QW.QLabel('None')
-        self.vdAcc_lbl = QW.QLabel('None')
+    # Train Confusion Matrix canvas (ConfMatCanvas)
+        self.train_confmat = plots.ConfMatCanvas('Train set', layout='tight',
+                                                 wheel_pan=False,
+                                                 wheel_zoom=False)
+        self.train_confmat.setMinimumSize(600, 600)
 
-    # Train Confusion Matrix canvas
-        self.CMtrainView = cObj.MatrixCanvas(self,
-                                             title='Train set Confusion Matrix',
-                                             xlab='Predicted classes',
-                                             ylab='True Classes')
-        self.CMtrainView.setMinimumSize(600, 600)
+    # Train Confusion Matrix Navigation Toolbar (NavTbar)
+        self.train_cm_navtbar = plots.NavTbar(self.train_confmat, self,
+                                              coords=False)
+        self.train_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
-    # Train Confusion Matrix Navigation Toolbar
-        self.CMtrainNTbar = cObj.NavTbar(self.CMtrainView, self)
-        self.CMtrainNTbar.removeToolByIndex([3, 4, 8, 9, -1])
-
-    # Show annotation as percentage action [--> Train CM NavTBar]
-        self.CMtrainPercAction = QW.QAction(QIcon('Icons/CM_annotate.png'),
-                                            'Toggle annotations as percentage',
-                                            self.CMtrainNTbar)
-        self.CMtrainPercAction.setCheckable(True)
-        self.CMtrainPercAction.setChecked(True)
-        self.CMtrainPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Train'))
-        self.CMtrainNTbar.insertAction(5, self.CMtrainPercAction)
-
-    # Train F1 scores labels
-        self.trF1Micro_lbl = QW.QLabel('None')
-        self.trF1Macro_lbl = QW.QLabel('None')
-        self.trF1Weight_lbl = QW.QLabel('None')
-
-    # Validation Confusion Matrix area
-        self.CMvalidView = cObj.MatrixCanvas(self,
-                                            title='Validation set Confusion Matrix',
-                                            xlab='Predicted classes',
-                                            ylab='True Classes')
-        self.CMvalidView.setMinimumSize(600, 600)
-
-    # Validation Confusion Matrix Navigation Toolbar
-        self.CMvalidNTbar = cObj.NavTbar(self.CMvalidView, self)
-        self.CMvalidNTbar.removeToolByIndex([3, 4, 8, 9, -1])
-
-    # Show annotation as percentage action [--> Validation CM NavTBar]
-        self.CMvalidPercAction = QW.QAction(QIcon('Icons/CM_annotate.png'),
-                                           'Toggle annotations as percentage',
-                                            self.CMvalidNTbar)
-        self.CMvalidPercAction.setCheckable(True)
-        self.CMvalidPercAction.setChecked(True)
-        self.CMvalidPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Validation'))
-        self.CMvalidNTbar.insertAction(5, self.CMvalidPercAction)
-
-    # Validation F1 scores label
-        self.vdF1Micro_lbl = QW.QLabel('None')
-        self.vdF1Macro_lbl = QW.QLabel('None')
-        self.vdF1Weight_lbl = QW.QLabel('None')
-
-    # Adjust Learning Session plots group layout
-        # (Loss Form Layout)
-        loss_form = QW.QFormLayout()
-        loss_form.addRow('Train loss ', self.trLoss_lbl)
-        loss_form.addRow('Validation loss ', self.vdLoss_lbl)
-
-        # (Accuracy Form Layout)
-        acc_form = QW.QFormLayout()
-        acc_form.addRow('Train accuracy ', self.trAcc_lbl)
-        acc_form.addRow('Validation accuracy ', self.vdAcc_lbl)
-
-        # (Train F1 scores Form Layout)
-        trF1_form = QW.QFormLayout()
-        trF1_form.addRow('Train F1 score (Micro AVG) ', self.trF1Micro_lbl)
-        trF1_form.addRow('Train F1 score (Macro AVG) ', self.trF1Macro_lbl)
-        trF1_form.addRow('Train F1 score (Weighted AVG) ', self.trF1Weight_lbl)
-
-        # (Validation F1 scores Form Layout)
-        vdF1_form = QW.QFormLayout()
-        vdF1_form.addRow('Validation F1 score (Micro AVG) ', self.vdF1Micro_lbl)
-        vdF1_form.addRow('Validation F1 score (Macro AVG) ', self.vdF1Macro_lbl)
-        vdF1_form.addRow('Validation F1 score (Weighted AVG) ', self.vdF1Weight_lbl)
-
-        # (Main group layout)
-        learnPlots_grid = QW.QGridLayout()
-        for row, (l, r) in enumerate(((self.lossNTbar   , self.accuracyNTbar),
-                                      (self.lossView    , self.accuracyView ),
-                                      (loss_form        , acc_form          ),
-                                      (self.CMtrainNTbar, self.CMvalidNTbar ),
-                                      (self.CMtrainView , self.CMvalidView  ),
-                                      (trF1_form        , vdF1_form         ))):
-            if row in (2, 5):
-                learnPlots_grid.addLayout(l, row, 0)
-                learnPlots_grid.addLayout(r, row, 1)
-            else:
-                learnPlots_grid.addWidget(l, row, 0)
-                learnPlots_grid.addWidget(r, row, 1)
-        learnPlots_group = cObj.GroupArea(learnPlots_grid, 'Learning Evaluation')
+    # Annotation as percentage action [--> Train CM Navigation ToolBar]
+        self.train_cm_perc_action = QW.QAction(QIcon(r'Icons/labelize.png'),
+                                               'Annotations as percentage',
+                                               self.train_cm_navtbar)
+        self.train_cm_perc_action.setCheckable(True)
+        self.train_cm_perc_action.setChecked(True)
+        self.train_cm_navtbar.insertAction(2, self.train_cm_perc_action)
+        self.train_cm_navtbar.insertSeparator(2)
 
 
-# ==== FINAL TESTING PLOTS ==== #
+    # Train F1 scores labels (FramedLabels)
+        self.train_f1_macro_lbl = cObj.FramedLabel('')
+        self.train_f1_weight_lbl = cObj.FramedLabel('')
 
-    # Test Confusion Matrix
-        self.CMtestView = cObj.MatrixCanvas(self,
-                                            title='Test set Confusion Matrix',
-                                            xlab='Predicted classes',
-                                            ylab='True Classes')
-        self.CMtestView.setMinimumSize(600, 600)
+    # Validation Confusion Matrix area (ConfMatCanvas)
+        self.valid_confmat = plots.ConfMatCanvas('Validation set',
+                                                 layout='tight',
+                                                 wheel_pan=False,
+                                                 wheel_zoom=False)
+        self.valid_confmat.setMinimumSize(600, 600)
 
-    # Test Confusion Matrix Navigation Toolbar
-        self.CMtestNTbar = cObj.NavTbar(self.CMtestView, self)
-        self.CMtestNTbar.removeToolByIndex([3, 4, 8, 9, -1])
+    # Validation Confusion Matrix Navigation Toolbar (NavTbar)
+        self.valid_cm_navtbar = plots.NavTbar(self.valid_confmat, self,
+                                              coords=False)
+        self.valid_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
-    # Show annotation as percentage action [--> Test CM NavTBar]
-        self.CMtestPercAction = QW.QAction(QIcon('Icons/CM_annotate.png'),
-                                            'Toggle annotations as percentage',
-                                            self.CMtestNTbar)
-        self.CMtestPercAction.setCheckable(True)
-        self.CMtestPercAction.setChecked(True)
-        self.CMtestPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Test'))
-        self.CMtestNTbar.insertAction(5, self.CMtestPercAction)
+    # Annotation as percentage action [--> Validation CM NavigationToolBar]
+        self.valid_cm_perc_action = QW.QAction(QIcon(r'Icons/labelize.png'),
+                                               'Annotations as percentage',
+                                               self.valid_cm_navtbar)
+        self.valid_cm_perc_action.setCheckable(True)
+        self.valid_cm_perc_action.setChecked(True)
+        self.valid_cm_navtbar.insertAction(2, self.valid_cm_perc_action)
+        self.valid_cm_navtbar.insertSeparator(2)
 
-    # Test score labels
-        self.tsLoss_lbl = QW.QLabel('None')
-        self.tsAcc_lbl = QW.QLabel('None')
-        self.tsF1Micro_lbl = QW.QLabel('None')
-        self.tsF1Macro_lbl = QW.QLabel('None')
-        self.tsF1Weight_lbl = QW.QLabel('None')
+    # Validation F1 scores label (FramedLabels)
+        self.valid_f1_macro_lbl = cObj.FramedLabel('')
+        self.valid_f1_weight_lbl = cObj.FramedLabel('')
 
-    # Model info preview area
-        self.modelPreview = QW.QTextEdit()
-        self.modelPreview.setReadOnly(True)
+    # Test Confusion Matrix (ConfMatCanvas)
+        self.test_confmat = plots.ConfMatCanvas('Test set', layout='tight',
+                                                wheel_pan=False, 
+                                                wheel_zoom=False)
+        self.test_confmat.setMinimumSize(600, 600)
 
-    # Adjust final testing group layout
-        # (Test scores form layout)
-        tsScores_form = QW.QFormLayout()
-        # tsScores_form.addRow('Test Loss', self.tsLoss_lbl)
-        tsScores_form.addRow('Test Accuracy ', self.tsAcc_lbl)
-        tsScores_form.addRow('Test F1 score (Micro AVG) ', self.tsF1Micro_lbl)
-        tsScores_form.addRow('Test F1 score (Macro AVG) ', self.tsF1Macro_lbl)
-        tsScores_form.addRow('Test F1 score (Weighted AVG) ', self.tsF1Weight_lbl)
+    # Test Confusion Matrix Navigation Toolbar (NavTbar)
+        self.test_cm_navtbar = plots.NavTbar(self.test_confmat, self, 
+                                             coords=False)
+        self.test_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
-        # (Main group layout)
-        test_grid = QW.QGridLayout()
-        test_grid.addWidget(self.CMtestNTbar, 0, 0)
-        test_grid.addWidget(QW.QLabel('Model Variables Preview'), 0, 1, alignment=Qt.AlignHCenter)
-        test_grid.addWidget(self.CMtestView, 1, 0)
-        test_grid.addWidget(self.modelPreview, 1, 1, 3, 1)
-        test_grid.addLayout(tsScores_form, 2, 0)
-        test_group = cObj.GroupArea(test_grid, 'Model testing')
+    # Annotation as percentage action [--> Test CM NavigationToolBar]
+        self.test_cm_perc_action = QW.QAction(QIcon(r'Icons/labelize.png'),
+                                              'Annotations as percentage',
+                                              self.test_cm_navtbar)
+        self.test_cm_perc_action.setCheckable(True)
+        self.test_cm_perc_action.setChecked(True)
+        self.test_cm_navtbar.insertAction(2, self.test_cm_perc_action)
+        self.test_cm_navtbar.insertSeparator(2)
 
+    # Test score labels (FramedLabels)
+        self.test_accuracy_lbl = cObj.FramedLabel('')
+        self.test_f1_macro_lbl = cObj.FramedLabel('')
+        self.test_f1_weight_lbl = cObj.FramedLabel('')
 
-# ==== ADJUST MAIN LAYOUT ==== #
+    # Confusion matrix group 
+        tr_cm_grid = QW.QGridLayout()
+        tr_cm_grid.setSpacing(15)
+        tr_cm_grid.addWidget(self.train_cm_navtbar, 0, 0, 1, -1)
+        tr_cm_grid.addWidget(self.train_confmat, 1, 0, 1, -1)
+        tr_cm_grid.addWidget(QW.QLabel('F1 score - Average'), 2, 0)
+        tr_cm_grid.addWidget(self.train_f1_macro_lbl, 2, 1)
+        tr_cm_grid.addWidget(QW.QLabel('F1 score - Weighted'), 2, 2)
+        tr_cm_grid.addWidget(self.train_f1_weight_lbl, 2, 3)
+        tr_cm_grid.setColumnStretch(1, 1)
+        tr_cm_grid.setColumnStretch(3, 1)
 
-    # Adjust left area
+        vd_cm_grid = QW.QGridLayout()
+        vd_cm_grid.setSpacing(15)
+        vd_cm_grid.addWidget(self.valid_cm_navtbar, 0, 0, 1, -1)
+        vd_cm_grid.addWidget(self.valid_confmat, 1, 0, 1, -1)
+        vd_cm_grid.addWidget(QW.QLabel('F1 score - Average'), 2, 0)
+        vd_cm_grid.addWidget(self.valid_f1_macro_lbl, 2, 1)
+        vd_cm_grid.addWidget(QW.QLabel('F1 score - Weighted'), 2, 2)
+        vd_cm_grid.addWidget(self.valid_f1_weight_lbl, 2, 3)
+        vd_cm_grid.setColumnStretch(1, 1)
+        vd_cm_grid.setColumnStretch(3, 1)
+
+        ts_cm_grid = QW.QGridLayout()
+        ts_cm_grid.setSpacing(15)
+        ts_cm_grid.addWidget(self.test_cm_navtbar, 0, 0, 1, -1)
+        ts_cm_grid.addWidget(self.test_confmat, 1, 0, 1, -1)
+        ts_cm_grid.addWidget(QW.QLabel('Accuracy'), 2, 0)
+        ts_cm_grid.addWidget(self.test_accuracy_lbl, 2, 1)
+        ts_cm_grid.addWidget(QW.QLabel('F1 score - Average'), 2, 2)
+        ts_cm_grid.addWidget(self.test_f1_macro_lbl, 2, 3)
+        ts_cm_grid.addWidget(QW.QLabel('F1 score - Weighted'), 2, 4)
+        ts_cm_grid.addWidget(self.test_f1_weight_lbl, 2, 5)
+        ts_cm_grid.setColumnStretch(1, 1)
+        ts_cm_grid.setColumnStretch(3, 1)
+        ts_cm_grid.setColumnStretch(5, 1)
+
+        confmat_tabwid = cObj.StyledTabWidget()
+        confmat_tabwid.tabBar().setDocumentMode(True)
+        confmat_tabwid.tabBar().setExpanding(True)
+        confmat_tabwid.addTab(tr_cm_grid, QIcon(r'Icons/train_set.png'), 
+                         'Train set')
+        confmat_tabwid.addTab(vd_cm_grid, QIcon(r'Icons/valid_set.png'), 
+                         'Validation set')
+        confmat_tabwid.addTab(ts_cm_grid, QIcon(r'Icons/test_set.png'), 
+                         'Test set')
+        confmat_group = cObj.GroupArea(confmat_tabwid, 'Model evaluation')
+
+#  -------------------------------------------------------------------------  #
+#                              ADJUST LAYOUT 
+#  -------------------------------------------------------------------------  #
+
+    # Start-stop-test-save buttons and progress bar (Main controls) layout
+        main_ctrl_grid = QW.QGridLayout()
+        main_ctrl_grid.addWidget(self.learning_pbar, 0, 0, 1, -1)
+        main_ctrl_grid.addWidget(self.start_learn_btn, 1, 0)
+        main_ctrl_grid.addWidget(self.stop_learn_btn, 1, 1)
+        main_ctrl_grid.addWidget(self.test_model_btn, 2, 0)
+        main_ctrl_grid.addWidget(self.save_model_btn, 2, 1)
+
+    # Adjust options panel layout (left Group Scroll Area)
         left_vbox = QW.QVBoxLayout()
-        left_vbox.addWidget(loadDS_group, 1)
+        left_vbox.setSpacing(15)
         left_vbox.addWidget(seed_group)
-        left_vbox.addWidget(parentModel_group)
-        left_vbox.addWidget(hyperparam_group)
-        left_vbox.addWidget(preferences_group)
-        left_vbox.addLayout(mainActions_grid)
-        left_scroll = cObj.GroupScrollArea(left_vbox)
-        left_scroll.setStyleSheet('QWidget {""}') # set the default stylesheet
+        left_vbox.addWidget(dataset_group)
+        left_vbox.addWidget(pmodel_group)
+        left_vbox.addWidget(hparam_group)
+        left_vbox.addWidget(pref_group)
+        left_vbox.addLayout(main_ctrl_grid)
+        left_vbox.addStretch(1)
+        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
 
-    # Adjust right area
+    # Adjust learning panels layout (right Group Scroll Area)
         right_vbox = QW.QVBoxLayout()
-        right_vbox.setSpacing(50)
-        right_vbox.addWidget(tvt_group)
-        right_vbox.addWidget(self.balance_group)
-        right_vbox.addWidget(learnPlots_group)
-        right_vbox.addWidget(test_group)
-        right_scroll = cObj.GroupScrollArea(right_vbox)
+        right_vbox.setSpacing(30)
+        right_vbox.addWidget(split_group)
+        right_vbox.addWidget(self.balancing_group)
+        right_vbox.addWidget(learn_group)
+        right_vbox.addWidget(confmat_group)
+        right_scroll = cObj.GroupScrollArea(right_vbox, frame=False)
 
-    # Adjust final layout
-        main_hsplit = cObj.SplitterGroup((left_scroll, right_scroll), (0, 1)) # use SplitterLayout
-        mainLayout = QW.QGridLayout()
-        mainLayout.addWidget(main_hsplit)
-        self.setLayout(mainLayout)
+    # Main Layout
+        main_layout = cObj.SplitterLayout()
+        main_layout.addWidgets((left_scroll, right_scroll))
+        self.setLayout(main_layout)
+        
 
-    def reset_UI(self):
-    # Reset parent model
-        self.remove_parentModel()
-    # Reset split dataset operations
-        self.trSet_list.clear()
-        self.vdSet_list.clear()
-        self.tsSet_list.clear()
-        self.tvt_pie.clear_canvas()
-        self.tvt_bar.clear_canvas()
-    # Reset balancing features
-        self.reset_balanceGroup()
-    # Reset Learning session features
-        self.lossView.clear_canvas()
-        self.accuracyView.clear_canvas()
-        self.CMtrainView.clear_canvas()
-        self.CMvalidView.clear_canvas()
-    # Reset Testing session features
-        self.CMtestView.clear_canvas()
-        self.modelPreview.clear()
-    # Reset all scores labels
-        for metric in ('loss', 'accuracy', 'F1_micro', 'F1_macro', 'F1_weighted'):
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+    # Balancing thread signals
+        self.balancing_thread.taskInitialized.connect(self.balancing_pbar.step)
+        self.balancing_thread.workInterrupted.connect(self._endBalancingSession)
+        self.balancing_thread.workFinished.connect(self._parseBalancingResult)
+
+    # Learning thread signals
+        self.learning_thread.epochCompleted.connect(self._updateLearningScores)
+        self.learning_thread.renderRequested.connect(self._drawLearningScores)
+        self.learning_thread.taskFinished.connect(self._parseLearningResult)
+
+    # Manage seed changes
+        self.seed_generator.seedChanged.connect(self.onSeedChanged)
+
+    # Load ground truth dataset
+        self.load_dataset_btn.clicked.connect(self.loadGroundTruthDataset)
+
+    # Load / unload existent model
+        self.load_pmodel_btn.clicked.connect(self.loadParentModel)
+        self.unload_pmodel_btn.clicked.connect(self.removeParentModel)
+
+    # Update the learning plots refresh rate when the number of epochs changes
+        self.epochs_spbox.valueChanged.connect(
+            lambda value: self.plots_update_rate.setText(str(value // 10)))
+        
+    # Enable poly degree spinbox when polynomial feature mapping is checked
+        self.feat_mapping_cbox.stateChanged.connect(
+            lambda state: self.poly_deg_spbox.setEnabled(state))
+    
+    # Start, stop, test, save model
+        self.start_learn_btn.clicked.connect(self.startLearningSession)
+        self.stop_learn_btn.clicked.connect(self.stopLearningSession)
+        self.test_model_btn.clicked.connect(self.testModel)
+        self.save_model_btn.clicked.connect(self.saveModel)
+    
+    # Adjust subsets ratios so that they always sum to 100 when one changes
+        for spbox in (self.train_ratio_spbox, self.valid_ratio_spbox, 
+                      self.test_ratio_spbox):
+            spbox.valueChanged.connect(self._fixSubsetsRatios)
+
+    # Split ground truth dataset into train, validation and test substes
+        self.split_dataset_btn.clicked.connect(self.splitDataset)
+
+    # Show number of class instances in subsets
+        self.train_class_list.itemClicked.connect(self.countClassInstances) 
+        self.valid_class_list.itemClicked.connect(self.countClassInstances) 
+        self.test_class_list.itemClicked.connect(self.countClassInstances)
+
+    # Balancing info help button links to imbalanced learn official website
+        link = 'https://imbalanced-learn.org/stable/user_guide.html#user-guide'
+        self.balancing_help_btn.clicked.connect(lambda: webbrowser.open(link))
+
+    # Enable m-neighbors spinbox only when OS algorithm is BorderlineSMOTE
+        self.os_combox.currentTextChanged.connect(
+            lambda t: self.m_neigh_spbox.setEnabled(t=='BorderlineSMOTE'))
+    
+    # Hide strategy warning icon when US algorithm is in the following list
+        us_sublist = ('None', 'RandUS', 'NearMiss')
+        self.us_combox.currentTextChanged.connect(
+            lambda t: self.us_warn_icon.setHidden(t in us_sublist))
+        
+    # Enable n-neighbors spinbox when US algorithm is not in the following list
+        us_sublist = ('RandUS', 'TomekLinks')
+        self.us_combox.currentTextChanged.connect(
+            lambda t: self.n_neigh_spbox.setEnabled(t not in us_sublist))
+    
+    # Set strategy based on the selection made in the strategy combobox 
+        self.strategy_combox.currentTextChanged.connect(self.parseStrategy)
+
+    # Set strategy to 'Custom value' if strategy value is user-modified
+        self.strategy_value.textEdited.connect(
+            lambda: self.strategy_combox.setCurrentText('Custom value'))
+        
+    # Set strategy to 'Custom multi-value' if strategy percent is user-modified
+        self.strategy_percent.textEdited.connect(
+            lambda: self.strategy_combox.setCurrentText('Custom multi-value'))
+
+    # Update last column of balancing table if strategy value / percent changes
+        self.strategy_value.textChanged.connect(self.fillAfterBalancingColumn)
+        self.strategy_percent.textChanged.connect(self.fillAfterBalancingColumn)
+
+    # Connect start-stop-cancel balancing buttons functions
+        self.start_balancing_btn.clicked.connect(self.startBalancingSession)
+        self.stop_balancing_btn.clicked.connect(self.stopBalancingSession)
+        self.canc_balancing_btn.clicked.connect(self.cancelBalancingResults)
+    
+    # Toggle on/off percentages values on confusion matrices
+        self.train_cm_perc_action.toggled.connect(self.toggleConfMatPercent) 
+        self.valid_cm_perc_action.toggled.connect(self.toggleConfMatPercent) 
+        self.test_cm_perc_action.toggled.connect(self.toggleConfMatPercent) 
+        
+
+    def _reset(self):
+        '''
+        Restore the Model Learner to its original state. Only the loaded ground
+        truth dataset and the random seed are preserved.
+
+        '''
+    # Reset dataset proterties
+        self.dataset.reset()
+    
+    # Reset model 
+        self.model = None 
+
+    # Reset predictions and accuracy / loss lists
+        self.train_pred, self.valid_pred, self.test_pred = None, None, None
+        self.train_loss_list.clear()
+        self.valid_loss_list.clear()
+        self.train_accuracy_list.clear()
+        self.valid_accuracy_list.clear()
+
+    # Remove parent model
+        self.removeParentModel()
+
+    # Reset split dataset widgets
+        self.train_class_list.clear()
+        self.valid_class_list.clear()
+        self.test_class_list.clear()
+        self.subsets_pie.clear_canvas()
+        self.subsets_barplot.clear_canvas()
+
+    # Reset balancing
+        self.balancing_info.clear()
+        self.resetBalancingGroup()
+        self.balancing_group.setEnabled(False)
+
+    # Reset learning session graphics
+        self.loss_plot.clear_canvas()
+        self.accuracy_plot.clear_canvas()
+        self.train_confmat.clear_canvas()
+        self.valid_confmat.clear_canvas()
+        self.test_confmat.clear_canvas()
+
+    # Reset scores labels
+        for metric in ('loss', 'accuracy', 'F1_macro', 'F1_weighted'):
             for name in ('Train', 'Validation', 'Test'):
-                self.update_scoreLabel(name, metric, None)
-    # Disable "start", "stop", "test" and "save" model operations
-        self.startLearn_btn.setEnabled(False)
-        self.stopLearn_btn.setEnabled(False)
-        self.testModel_btn.setEnabled(False)
-        self.saveModel_btn.setEnabled(False)
+                self.updateScoreLabel(name, metric, None)
 
-    def load_dataset(self, autosplit=True):
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Load Ground-truth dataset',
-                                                  pref.get_dirPath('in'),
-                                                  'Comma Separated Values (*.csv)')
+    # Disable "start", "stop", "test" and "save" buttons
+        self.start_learn_btn.setEnabled(False)
+        self.stop_learn_btn.setEnabled(False)
+        self.test_model_btn.setEnabled(False)
+        self.save_model_btn.setEnabled(False)
+
+
+    def _threadRunning(self):
+        '''
+        Check if an external thread is currently running.
+
+        Returns
+        -------
+        tuple -> (bool, str | None) 
+            (True, thread name) if a thread is running, otherwise (True, None).
+
+        '''
+        for thread in (self.balancing_thread, self.learning_thread):
+            if thread.isRunning():
+                return (True, thread.objectName())
+        else:
+            return (False, None)
+        
+
+    def onSeedChanged(self, old_seed: int, new_seed: int):
+        '''
+        Determine whether or not a random seed change should be allowed based
+        on the current state of the Model Learner. 
+
+        Parameters
+        ----------
+        old_seed : int
+            Random seed before seed change event.
+        new_seed : int
+            Random seed after seed change event.
+
+        '''
+    # Prevent changing seed when a thread is active
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            self.seed_generator.blockSignals(True)
+            self.seed_generator.seed_input.setText(str(old_seed))
+            self.seed_generator.blockSignals(False)
+            text = f'Cannot change seed while a {thr_name} Session is active'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+    
+    # Ask confirmation if a dataset was already processed
+        if self.dataset.are_subsets_split():
+            text = 'Current progress will be lost if seed is changed. Confirm?'
+            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
+                     QW.QMessageBox.Yes | QW.QMessageBox.No,
+                     QW.QMessageBox.No)
+            if choice == QW.QMessageBox.No:
+                self.seed_generator.blockSignals(True)
+                self.seed_generator.seed_input.setText(str(old_seed))
+                self.seed_generator.blockSignals(False)
+                return
+            else:
+                self._reset()
+
+
+    def loadGroundTruthDataset(self):
+        '''
+        Load ground truth dataset from file.
+
+        '''
+    # Prevent loading dataset when a thread is active
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            text = f'Cannot load dataset while a {thr_name} Session is active'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+        
+        path, _ = QW.QFileDialog.getOpenFileName(self, 'Load dataset',
+                                                 pref.get_dirPath('in'),
+                                                 'Comma Separated Values (*.csv)')
         if path:
             pref.set_dirPath('in', os.path.dirname(path))
-            if self._splitDatasetPerformed():
-                choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                 'The entire learning procedure '\
-                                                 'must be performed again. Load a new dataset?.',
-                                                 QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                 QW.QMessageBox.No)
+        
+        # Ask confirmation if a dataset was already processed
+            if self.dataset:
+                text = 'Current progress will be lost. Load a new dataset?'
+                choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
+                                                QW.QMessageBox.Yes | QW.QMessageBox.No,
+                                                QW.QMessageBox.No)
                 if choice == QW.QMessageBox.No:
                     return
                 else:
-                    self.reset_UI()
+                    self._reset()
 
-        # Get decimal point character
-            dec = self.CSVdec.currentText()
-        # Load GT dataset
-            self.dataset = cObj.CsvChunkReader(dec, pBar=True).read(path)
-        # Update GT dataset path
-            self.DS_path.set_fullpath(path, predict_display=True)
+        # Load ground truth dataset
+            dec = self.csv_dec_selector.currentText()
+            dataframe = cObj.CsvChunkReader(dec, pBar=True).read(path)
+            self.dataset = ML_tools.GroundTruthDataset(dataframe, path)
+            self.dataset_path_lbl.setPath(path)
         # Update dataset preview
-            self.DS_previewArea.setText(f'DATASET PREVIEW\n\n{repr(self.dataset)}')
-        # Enable "Split dataset" and "Load previous model"
-            self.loadModel_btn.setEnabled(True)
-            self.splitDS_btn.setEnabled(True)
+            text = f'DATASET PREVIEW\n\n{repr(self.dataset.dataframe)}'
+            self.dataset_preview.setText(text)
+        # Enable "Split dataset" and "Load previous model" buttons
+            self.load_pmodel_btn.setEnabled(True)
+            self.split_dataset_btn.setEnabled(True)
+    
+
+    def _fixSubsetsRatios(self, new_value: int):
+        '''
+        Adjust subsets ratios when one of them is changed, so that they always
+        sum to 100.
+
+        Parameters
+        ----------
+        new_value : int
+            Altered subset value.
+
+        '''
+        altered = self.sender()
+
+    # If train ratio was changed, validation ratio will adapt
+        if altered == self.train_ratio_spbox:
+            adapting, fixed = self.valid_ratio_spbox, self.test_ratio_spbox
+    # If validation ratio was changed, test ratio will adapt
+        elif altered == self.valid_ratio_spbox:
+            adapting, fixed = self.test_ratio_spbox, self.train_ratio_spbox
+    # If test ratio was changed, train ratio will adapt
+        else:
+            adapting, fixed = self.train_ratio_spbox, self.valid_ratio_spbox
+
+    # Adjust adapting subset
+        adapting.blockSignals(True)
+        adapting.setValue(100 - fixed.value() - new_value)
+        adapting.blockSignals(False)
+
+    # If sum is still not 100, it means that the adapting ratio has reached its 
+    # minimum value (=1). So we also change the fixed ratio.
+        if new_value + adapting.value() + fixed.value() != 100:
+            fixed.blockSignals(True)
+            fixed.setValue(100 - adapting.value() - new_value)
+            fixed.blockSignals(False)
 
 
-    def adjust_splitRateos(self, value):
-        spboxes = [self.trRateo_spbox, self.vdRateo_spbox, self.tsRateo_spbox]
-        tot = lambda: sum([spb.value() for spb in spboxes])
-        if tot != 100:
-            # Reverse <spboxes> when the sender is the 2nd element, to achieve a GUI friendlier behaviour
-            curr_idx = spboxes.index(self.sender())
-            if curr_idx == 1: spboxes.reverse()
-            for idx, spb in enumerate(spboxes):
-                if not idx == curr_idx:
-                    # Temporarily block valueChanged signal when changing value (avoid loops).
-                    spb.blockSignals(True)
-                    # Increment/decrement the selected spinbox value
-                    spb.setValue(spb.value() + 100 - tot())
-                    # Unblock valueChanged signal
-                    spb.blockSignals(False)
+    def splitDataset(self):
+        '''
+        Split dataset into train, validation and test sets.
 
-    def _splitDatasetPerformed(self):
-        set_sum = sum([l.count() for l in (self.trSet_list, self.vdSet_list, self.tsSet_list)])
-        return set_sum > 0
+        '''
+    # Prevent splitting dataset when a thread is active
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            text = f'Cannot split dataset while a {thr_name} Session is active'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
 
-    def split_dataset(self):
-        if self._extThreadRunning():
-            return
-
-    # Check if balancing operations have been performed already
-        if self.balanceInfo:
-            choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                             'Any previous balancing operation on '\
-                                             'train set will be discarded. Continue?',
+    # Ask for overwriting previous balancing results
+        if self.balancing_info:
+            text = 'Any existent balancing result will be discarded. Continue?'
+            choice = QW.QMessageBox.question(self, 'X-Min Learn', text,
                                              QW.QMessageBox.Yes | QW.QMessageBox.No,
                                              QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No: return
+            if choice == QW.QMessageBox.No: 
+                return
+            
+    # Reset balancing info
+        self.balancing_info.clear()
 
-    # Split features [X] from targets [Y (as labels)]
-        pbar = cObj.PopUpProgBar(self, 5, 'Splitting dataset', cancel=False)
+    # Reset dataset properties if split was already performed
+        if self.dataset.are_subsets_split():
+            self.dataset.reset()
+
+    # Split features [X] from targets [Y] expressed as labels
+        pbar = cObj.PopUpProgBar(self, 4, 'Splitting dataset', cancel=False)
         try:
-            X, Y_lbl = ML_tools.splitXFeat_YTarget(self.dataset.to_numpy(),
-                                                   xtype='int32', ytype='U8')
+            self.dataset.split_features_targets(xtype='int32')
             pbar.setValue(1)
+
+    # Update encoder. Inherit from parent model encoder if present.    
+            parent_enc = {}
+            if (pmodel_path := self.pmodel_path.fullpath) != '':
+                parent_enc = ML_tools.EagerModel.load(pmodel_path).encoder
+            self.dataset.update_encoder(parent_enc)
+            pbar.setValue(2)
+
+    # Split dataset into train, validation and test sets
+            tr_ratio = self.train_ratio_spbox.value() / 100
+            vd_ratio = self.valid_ratio_spbox.value() / 100
+            ts_ratio = self.test_ratio_spbox.value() / 100
+            seed = self.seed_generator.seed
+            self.dataset.split_subsets(tr_ratio, vd_ratio, ts_ratio, seed) 
+            pbar.setValue(3)
+
         except Exception as e:
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Unexpected data type', detailedText = repr(e))
             pbar.reset()
-            return
+            return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                                   'Unexpected data type', detailedText=repr(e))
 
-    # Update Y_dict and encode Y labels through it
-        self.update_Ydict(Y_lbl)
-        Y = CF.encode_labels(Y_lbl, self.Y_dict)
-        pbar.setValue(2)
-
-    # Store original Train, Validation & Test sets rateos (before balancing operations)
-        trRateo = self.trRateo_spbox.value()/100
-        vdRateo = self.vdRateo_spbox.value()/100
-        tsRateo = self.tsRateo_spbox.value()/100
-        self.orig_TVTrateos = (trRateo, vdRateo, tsRateo)
-        pbar.setValue(3)
-
-    # Split X features and Y targets into Train, Validation & Test sets
-        seed = self.seed
-        X_split, Y_split = ML_tools.splitTrainValidTest(X, Y, trRateo, vdRateo, seed)
-        self.X_train, self.X_valid, self.X_test = X_split
-        self.Y_train, self.Y_valid, self.Y_test = Y_split
+    # Update GUI elements
+        for subset in ('Train', 'Validation', 'Test'):
+            self.updateSubsetCounterWidget(subset)
+        self.updateSubsetsPlots()
+        self.resetBalancingGroup()
+        self._initBalancingTable()
+        self.balancing_group.setEnabled(True)
+        self.start_learn_btn.setEnabled(True)
+        self.test_model_btn.setEnabled(False)
+        self.save_model_btn.setEnabled(False)
         pbar.setValue(4)
 
-    # Store original Train targets (before balancing operations)
-        self.origY_train = self.Y_train.copy()
-        pbar.setValue(5)
 
-    # Update Train, Validation & Test sets class counters and viewers
-        for _set, _Y in (('Train',      self.Y_train),
-                         ('Validation', self.Y_valid),
-                         ('Test',       self.Y_test)):
-            self.update_setClassCounter(_set, _Y)
-            self.update_setClassViewer(_set)
+    def updateSubsetCounterWidget(self, subset: str):
+        '''
+        Update list widget of a subset class counter.
 
-    # Update TVT pie chart & bar chart
-        self.update_tvtPlots()
+        Parameters
+        ----------
+        subset : str
+            Name of the subset. Must be one of ('Train', 'Validation', 'Test').
 
-    # Reset balancing features
-        self.reset_balanceGroup()
-        self.init_balanceTable()
-        self.balance_group.setEnabled(True)
+        '''
+        if subset == 'Train':
+            tr_classes, tr_counts = zip(*self.dataset.train_counter.items())
+            self.train_class_list.clear()
+            self.train_class_list.addItems(sorted(tr_classes))
+            self.train_curr_count_lbl.setText('')
+            self.train_tot_count_lbl.setText(f'Tot = {sum(tr_counts)}')
+        
+        elif subset == 'Validation':
+            vd_classes, vd_counts = zip(*self.dataset.valid_counter.items())
+            self.valid_class_list.clear()
+            self.valid_class_list.addItems(sorted(vd_classes))
+            self.valid_curr_count_lbl.setText('')
+            self.valid_tot_count_lbl.setText(f'Tot = {sum(vd_counts)}')
 
-    # Update Main Actions buttons (START-TEST-LEARN)
-        self.startLearn_btn.setEnabled(True)
-        self.testModel_btn.setEnabled(False)
-        self.saveModel_btn.setEnabled(False)
+        elif subset == 'Test':
+            ts_classes, ts_counts = zip(*self.dataset.test_counter.items())
+            self.test_class_list.clear()
+            self.test_class_list.addItems(sorted(ts_classes))
+            self.test_curr_count_lbl.setText('')
+            self.test_tot_count_lbl.setText(f'Tot = {sum(ts_counts)}')
+
+        else: 
+            return
 
 
-    def update_tvtPlots(self):
+    def updateSubsetsPlots(self):
+        '''
+        Update the pie chart and the bar chart displaying the train, validation 
+        and test subsets.
+
+        '''
     # Update Pie chart
-        trRateo = self.trRateo_spbox.value()
-        vdRateo = self.vdRateo_spbox.value()
-        tsRateo = self.tsRateo_spbox.value()
-        lbls = (f'Train ({trRateo} %)', f'Validation ({vdRateo} %)', f'Test ({tsRateo} %)')
-        self.tvt_pie.update_canvas((trRateo, vdRateo, tsRateo), lbls)
+        tr = self.train_ratio_spbox.value()
+        vd = self.valid_ratio_spbox.value()
+        ts = self.test_ratio_spbox.value()
+        lbls = ('Train', 'Validation', 'Test')
+        self.subsets_pie.update_canvas((tr, vd, ts), labels=lbls)
+
     # Update Bar chart
-        barData = [list(cnt.values()) for cnt in (self.trClassCounter,
-                                                  self.vdClassCounter,
-                                                  self.tsClassCounter)]
-        self.tvt_bar.update_canvas('', barData, list(self.Y_dict.keys()),
-                                   multibars=True)
+        bar_data = [list(cnt.values()) for cnt in self.dataset.counters()]
+        tickslbl = list(self.dataset.encoder.keys())
+        self.subsets_barplot.update_canvas(bar_data, tickslbl, multibars=True)
 
 
-    def update_setClassCounter(self, set_name, Yset):
-        Yset = CF.decode_labels(Yset, self.Y_dict)
-        counter = dict()
-        for k in self.Y_dict.keys():
-            counter[k] = np.count_nonzero(Yset==k)
+    def countClassInstances(self, item: QW.QListWidgetItem):
+        '''
+        Count instances of selected class. The target subset is automatically
+        identified using sender().
 
-        if set_name == 'Train':
-            self.trClassCounter = counter
-        elif set_name == 'Validation':
-            self.vdClassCounter  = counter
-        elif set_name == 'Test':
-            self.tsClassCounter = counter
-        else : return
+        Parameters
+        ----------
+        item : QW.QListWidgetItem
+            Subset list's item containing the class name as text.
 
-    def update_setClassViewer(self, set_name):
-        if set_name == 'Train':
-            listWid = self.trSet_list
-            curr_lbl = self.trSet_currCount
-            tot_lbl = self.trSet_totCount
-            counter = self.trClassCounter
-        elif set_name == 'Validation':
-            listWid = self.vdSet_list
-            curr_lbl = self.vdSet_currCount
-            tot_lbl = self.vdSet_totCount
-            counter = self.vdClassCounter
-        elif set_name == 'Test':
-            listWid = self.tsSet_list
-            curr_lbl = self.tsSet_currCount
-            tot_lbl = self.tsSet_totCount
-            counter = self.tsClassCounter
-        else : return
+        '''
+        subset = self.sender()
 
-        listWid.clear()
-        listWid.addItems(sorted(counter.keys()))
-        curr_lbl.setText('')
-        tot_lbl.setText(f'Tot = {sum(counter.values())}')
+        if subset == self.train_class_list:
+            counter = self.dataset.train_counter
+            label = self.train_curr_count_lbl
 
+        elif subset == self.valid_class_list:
+            counter = self.dataset.valid_counter
+            label = self.valid_curr_count_lbl
 
-    def count_target(self, item, set_name):
-        if set_name == 'Train':
-            counter = self.trClassCounter
-            curr_lbl = self.trSet_currCount
-        elif set_name == 'Validation':
-            counter = self.vdClassCounter
-            curr_lbl = self.vdSet_currCount
-        elif set_name == 'Test':
-            counter = self.tsClassCounter
-            curr_lbl = self.tsSet_currCount
-        else : return
+        elif subset == self.test_class_list:
+            counter = self.dataset.test_counter
+            label = self.test_curr_count_lbl
+
+        else: 
+            return
 
         count = counter[item.text()]
-        curr_lbl.setText(f'{item.text()} = {count}')
+        label.setText(f'{item.text()} = {count}')
 
-    def update_Ydict(self, Y_lbl):
-        # Checking for parent model Y_dict
-        self.Y_dict = {}
-        if self.parentModel_path.get_fullpath() != '':
-            self.Y_dict = ML_tools.loadModel(
-                self.parentModel_path.get_fullpath())['Y_dict']
 
-        # Update Y_dict {label: ID}
-        for u in np.unique(Y_lbl):
-            if not u in self.Y_dict.keys():
-                self.Y_dict[u] = len(self.Y_dict)
+    def cancelBalancingResults(self): 
+        '''
+        Cancel all balancing operation and restore original train, validation
+        and test subsets.
 
-    def randomize_seed(self):
-        seed = np.random.randint(0, 10**8)
-        self.seedInput.setText(str(seed))
-
-    def change_seed(self, text):
-        if self._extThreadRunning():
+        '''
+    # Exit if dataset is not split (safety only, should be impossible) or not 
+    # balanced 
+        if not self.dataset.are_subsets_split() or not self.balancing_info:
             return
-        if self._splitDatasetPerformed():
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn',
-                     'Warning: the entire learnig procedure must be performed '\
-                     'again if the seed is changed now. Confirm?',
-                     QW.QMessageBox.Yes | QW.QMessageBox.No,
-                     QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No:
-                self.seedInput.blockSignals(True)
-                self.seedInput.setText(str(self.seed))
-                self.seedInput.blockSignals(False)
-                return
-            else:
-                self.reset_UI()
-
-        if text != '':
-            self.seed = int(text)
-
-    def _getOrigTrClassCount(self, target_lbl):
-        target_ID = self.Y_dict[target_lbl]
-        count = np.count_nonzero(self.origY_train == target_ID)
-        return count
-
-    def reset_balanceGroup(self):
-        self.balanceInfo = False
-        self.balance_group.setEnabled(False)
-        self.balance_table.clearContents()
-        self.strategy_combox.setCurrentText('Current')
-        self.strat_value.clear()
-
-    def init_balanceTable(self):
-        names, curr_cnt = zip(*self.trClassCounter.items())
-        n_rows = len(names)
-        self.balance_table.setRowCount(n_rows)
-        for row in range(n_rows):
-        # compile and set first three columns items as locked
-            i0 = QW.QTableWidgetItem(names[row])
-            i1 = QW.QTableWidgetItem(str(self._getOrigTrClassCount(names[row])))
-            i2 = QW.QTableWidgetItem(str(curr_cnt[row]))
-            for col, i in enumerate((i0, i1, i2)):
-                i.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                self.balance_table.setItem(row, col, i)
-        # set a lineEdit with integer validator to fourth column
-            i3 = QW.QLineEdit()
-            i3.setValidator(QIntValidator(bottom=0))
-            i3.textEdited.connect(
-                lambda: self.strategy_combox.setCurrentText('Custom multi-value'))
-            self.balance_table.setCellWidget(row, 3, i3)
-        # set current class counts in fourth column
-            self.balance_table.cellWidget(row, 3).setText(str(curr_cnt[row]))
-
-
-    def autoFill_balanceTable(self, value):
-        n_rows = self.balance_table.rowCount()
-        for row in range(n_rows):
-            self.balance_table.cellWidget(row, 3).setText(value)
-
-    def get_balanceTableColumnCells(self, col):
-        n_rows = self.balance_table.rowCount()
-        if col == 3:
-            cells = [self.balance_table.cellWidget(r, col).text() for r in range(n_rows)]
-        else:
-            cells = [self.balance_table.item(r, col).text() for r in range(n_rows)]
-        return cells
-
-    def enable_mOS(self, text):
-        enabled = text == 'BorderlineSMOTE'
-        self.mOS_spbox.setEnabled(enabled)
-
-    def enable_nUS(self, text):
-        enabled = text not in ('RandUS', 'TomekLinks')
-        self.nUS_spbox.setEnabled(enabled)
-
-    def update_USwarning(self, text):
-        if text in ('TomekLinks', 'ENN-all', 'ENN-mode', 'NCR-all', 'NCR-mode'):
-            self.US_warnIcon.show()
-        else:
-            self.US_warnIcon.hide()
-
-    def update_strategyValue(self, text):
-        counts = list(self.trClassCounter.values())
-        num = None
-
-        if text == 'Current':
-            self.init_balanceTable()
-        elif text == 'Min':
-            num = min(counts)
-        elif text == 'Max':
-            num = max(counts)
-        elif text == 'Mean':
-            num = int(np.mean(counts))
-        elif text == 'Median':
-            num = int(np.median(counts))
-
-        if num is not None:
-            self.strat_value.setText(str(num))
-
-
-    def _extThreadRunning(self):
-        threads = [self.balThread, self.learnThread]
-        for t in threads:
-            if t.isRunning():
-                _name = t.objectName()
-                QW.QMessageBox.critical(self, 'Error', 'Cannot perform this action '\
-                                        f'while {_name} operation is running.')
-                return True
-        return False
-
-    def initialize_balancing(self):
-        if self._extThreadRunning():
+        
+    # Ask for user confirm
+        text = 'Any existent balancing result will be discarded. Continue?'
+        choice = QW.QMessageBox.question(self, 'X-Min Learn', text,
+                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
+                                         QW.QMessageBox.No)
+        if choice == QW.QMessageBox.No: 
             return
-    # Ask user confirm + balance note
-        note = "Note: The number of samples won't be actually over-sampled/"\
-                "under-sampled if no over-sample/under-sample algorithm has been selected."
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                  f'Do you want to run the train set balancing operation?\n\n{note}',
-                  QW.QMessageBox.Yes | QW.QMessageBox.No, QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        
+    # Discard balancing results
+        self.dataset.discard_balancing()
+        self.balancing_info.clear()
 
-        # Check for empty cells under the "After balancing" column
-            cells = self.get_balanceTableColumnCells(3)
-            if '' in cells:
-                QW.QMessageBox.critical(self, 'X-Min Learn',
-                'Some cells under the "Balanced" column are empty.')
-                return
+    # Set ratios of subsets spin-boxes to original values 
+        train_ratio, valid_ratio, test_ratio = self.dataset.orig_subsets_ratios
+        self.train_ratio_spbox.setValue(round(train_ratio * 100))
+        self.valid_ratio_spbox.setValue(round(valid_ratio * 100))
+        self.test_ratio_spbox.setValue(round(test_ratio * 100))
 
-        # Retreive input parameters for the balancing function
-            seed = self.seed
-            OS = self.OS_combox.currentText()
-            US = self.US_combox.currentText()
-            if OS == 'None': OS = None
-            if US == 'None': US = None
-            if OS == US == None: # check for algorithms absence
-                QW.QMessageBox.critical(self, 'X-Min Learn',
-                'Please select at least one sampling algorithm')
-                return
-            kOS = self.kOS_spbox.value()
-            mOS = self.mOS_spbox.value()
-            nUS = self.nUS_spbox.value()
-            strategy = self.strategy_combox.currentText()
-            if strategy == 'Custom value':
-                strategy = int(self.strat_value.text())
-            elif strategy in ('Custom multi-value', 'Current'):
-                class_names = self.get_balanceTableColumnCells(0)
-                custom_values = [int(c) for c in cells]
-                strategy = dict(zip(class_names, custom_values))
+    # Update only the train subset counter, as balancing only affects train set
+        self.updateSubsetCounterWidget('Train')
 
-        # Disable Start and Cancel balancing buttons
-            self.runBalance_btn.setEnabled(False)
-            self.cancBalance_btn.setEnabled(False)
+    # Update other GUI elements
+        self.updateSubsetsPlots()
+        self.resetBalancingGroup()
+        self._initBalancingTable()
 
-        # Run the balancing thread
-            self.balance_pBar.setRange(0, 0)
-            task = lambda: ML_tools.balance_TrainSet(self.X_train, self.Y_train,
-                                                      strategy, OS, US, kOS, mOS,
-                                                      nUS, seed)
-            self.balThread.set_func(task)
-            self.balThread.start()
+    
+    def stopBalancingSession(self):
+        '''
+        Interrupt balancing session. This is visually shown by setting the 
+        balancing progress bar to an undetermined state.
+
+        '''
+        if self.balancing_thread.isRunning():
+            self.balancing_pbar.setUndetermined()
+            self.balancing_pbar.step('Interrupting session')
+            self.balancing_thread.requestInterruption()
 
 
-    def finalize_balancing(self, thread_out):
-        self.balance_pBar.setRange(0, 4)
+    def startBalancingSession(self):
+        '''
+        Start a new Balancing Session. This function launches the balancing 
+        external thread.
 
-    # Check the result from the balance external thread
-        if len(thread_out) == 1: # it means that the balancing operation has raised an exception
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Balancing failed.', detailedText=repr(thread_out[0]))
+        '''
+    # Prevent starting a new balancing session when a thread is active
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            text = f'Cannot start a new Balancing Session while a {thr_name} '\
+                    'Session is active'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+        
+    # Get cell (widgets) data from balancing table 
+        classes = [c.text() for c in self.getBalancingTableCellsByColumn(0)]
+        values = [cw.value() for cw in self.getBalancingTableCellsByColumn(3)]
+        ratios = [cw.ratio(1) for cw in self.getBalancingTableCellsByColumn(3)]
+        strategy = dict(zip(classes, values))
 
-        else: # it means that the balancing operation was completed succesfully
-            self.X_train, self.Y_train, balInfo = thread_out
+    # Get over-sampling and under-sampling algorithms
+        over_sampler = self.os_combox.currentText()
+        under_sampler = self.us_combox.currentText()
 
-        # Add new balancing info to the balancing operation tracer
-            if not self.balanceInfo:
-                self.balanceInfo = []
-            self.balanceInfo.append(balInfo)
-            self.balance_pBar.setValue(1)
+    # Ask for user confirm
+        i = []
+        if over_sampler == 'None':
+            over_sampler = None
+            i.append('Over-Sampling not selected. Increased classes ignored.')
+        elif max(ratios) > 5:
+            i.append('High after-balancing value(s) detected (>500 %). '\
+                     'Aggressive over-sampling can cause model overfitting!')
+        if under_sampler == 'None':
+            under_sampler = None
+            i.append('Under-Sampling not selected. Decreased classes ignored.')
+        elif min(ratios) < 0.2:
+            i.append('Low after-balancing value(s) detected (<20 %). '\
+                     'Aggressive under-sampling can cause information loss!')
 
-        # Update Train set class counter and viewer
-            self.update_setClassCounter('Train', self.Y_train)
-            self.update_setClassViewer('Train')
-            self.balance_pBar.setValue(2)
+        icon = QW.QMessageBox.Warning if i else QW.QMessageBox.NoIcon
+        note = '\n\n'.join(i) if i else 'No additional info.'
+        text = f'You have {len(i)} warning(s). Click "Show Details" for more '\
+                'info. Launch Balancing Session?'
+        msg = cObj.RichMsgBox(self, icon, 'X-Min Learn', text,
+                              QW.QMessageBox.Yes | QW.QMessageBox.No, 
+                              QW.QMessageBox.No, detailedText=note)
+        
+    # Run the balancing session
+        if msg.clickedButton().text() == '&Yes':
+            self.canc_balancing_btn.setEnabled(False)
+            self.balancing_pbar.reset()
+            self.balancing_pbar.setUndetermined()
+            params = {'x': self.dataset.x_train, 
+                      'y': self.dataset.y_train,
+                      'strategy': strategy,
+                      'seed': self.seed_generator.seed,
+                      'osa': over_sampler,
+                      'usa': under_sampler,
+                      'kos': self.k_neigh_spbox.value(),
+                      'mos': self.m_neigh_spbox.value(),
+                      'nus': self.n_neigh_spbox.value(),
+                      'njobs': (-1)**self.balancing_multicore_cbox.isChecked()
+                      }
+            self.balancing_thread.set_params(**params)
+            self.balancing_thread.start()
 
-        # Recalc Train, Validation and Test sets rateos
-            tr_size = sum(self.trClassCounter.values())
-            vd_size = sum(self.vdClassCounter.values())
-            ts_size = sum(self.tsClassCounter.values())
-            tot_size = tr_size + vd_size + ts_size
-            trRateo = tr_size/tot_size
-            vdRateo = vd_size/tot_size
-            tsRateo = ts_size/tot_size
 
-        # Update Train, Validation & Test spin-boxes
-            self.trRateo_spbox.setValue(round(trRateo*100))
-            self.vdRateo_spbox.setValue(round(vdRateo*100))
-            self.tsRateo_spbox.setValue(round(tsRateo*100))
+    def _parseBalancingResult(self, result: tuple, success: bool):
+        '''
+        Parse the result of the balancing thread. If the Balancing Session was
+        successful, this function applies the balancing to the train set.
+
+        Parameters
+        ----------
+        result : tuple
+            Balancing thread result.
+        success : bool
+            Whether the balancing thread succeeded or not.
+
+        '''
+    # Use a determined state for the balancing progress bar
+        self.balancing_pbar.reset()
+        self.balancing_pbar.setRange(0, 4)
+
+        if success:
+        # Parse the result if balancing operations succeded
+            x_bal, y_bal, info = result
+            self.dataset.apply_balancing(x_bal, y_bal)
+
+        # Update train, validation and test sets ratios spin boxes
+            self.balancing_pbar.step('Updating subsets')
+            tr_ratio, vd_ratio, ts_ratio = self.dataset.current_subsets_ratios()
+            self.train_ratio_spbox.setValue(round(tr_ratio * 100))
+            self.valid_ratio_spbox.setValue(round(vd_ratio * 100))
+            self.test_ratio_spbox.setValue(round(ts_ratio * 100))
+        
+        # Update only the train counter widget, as balancing only affects train
+            self.updateSubsetCounterWidget('Train')
+
+        # Add new balancing info to the balancing operation tracker
+            self.balancing_pbar.step('Tracking balancing info')
+            info['New TVT rateos'] = (round(tr_ratio, 2), # rename to 'New TVT ratios'
+                                      round(vd_ratio, 2), 
+                                      round(ts_ratio, 2))
+            self.balancing_info.append(info)
 
         # Update pie chart and bar chart plots
-            self.update_tvtPlots()
-            self.balance_pBar.setValue(3)
+            self.balancing_pbar.step('Updating plots')
+            self.updateSubsetsPlots()
 
-        # Add new rateos info into self.balaceInfo dictionary
-            self.balanceInfo[-1]['New TVT rateos'] = (round(trRateo, 2),
-                                                      round(vdRateo, 2),
-                                                      round(tsRateo, 2))
-
-        # Re-initialize the balance table
-            self.init_balanceTable()
-            self.balance_pBar.setValue(4)
-
-        # Exit balancing operations with success
-            QW.QMessageBox.information(self, 'X-Min Learn',
-                                        'Balancing operations concluded succesfully')
-
-    # Reset pbar and enable Start and Cancel buttons in any case
-        self.balance_pBar.reset()
-        self.runBalance_btn.setEnabled(True)
-        self.cancBalance_btn.setEnabled(True)
+        # Re-initialize the balancing table
+            self.balancing_pbar.step('Updating table')
+            self._initBalancingTable()
+        
+        else:
+        # Forward error if balancing operations failed
+            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                            'Balancing failed', detailedText=repr(result[0]))
+            
+    # End balancing session in any case
+        self._endBalancingSession(success)
 
 
-    def canc_balancing(self):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-        'Warning: Any previous balancing operation on the train set will be discarded.',
-                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                          QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
-        # Delete all balancing info (to avoid MessageBox at the beginning of self.split_dataset())
-            self.balanceInfo = False
-        # Set Train, Validation & Test spin-boxes values with original rateos
-            trRateo, vdRateo, tsRateo = self.orig_TVTrateos
-            self.trRateo_spbox.setValue(round(trRateo*100))
-            self.vdRateo_spbox.setValue(round(vdRateo*100))
-            self.tsRateo_spbox.setValue(round(tsRateo*100))
-        # Re-launch split dataset function
-            self.split_dataset()
+    def _endBalancingSession(self, success=False):
+        '''
+        Internally and visually exit from a balancing thread session.
 
-    def load_parentModel(self):
-        if self._extThreadRunning():
+        Parameters
+        ----------
+        success : bool, optional
+            Whether the balancing thread ended with success. The default is
+            False.
+
+        '''
+        self.canc_balancing_btn.setEnabled(True)
+        self.balancing_pbar.reset()
+    # If pbar is left undetermined, it visually seems that process hasn't stop
+        if self.balancing_pbar.undetermined():
+            self.balancing_pbar.setMaximum(4)
+        
+        if success:
+            text = 'Balancing session concluded succesfully'
+            QW.QMessageBox.information(self, 'X-Min Learn', text)
+
+
+    def _initBalancingTable(self):
+        '''
+        Initialize the balancing table by populating it with current train set 
+        data. 
+
+        '''
+    # Get train set data and set the appropriate number of rows in the table
+        names, curr_counts = zip(*self.dataset.train_counter.items())
+        n_rows = len(names)
+        self.balancing_table.setRowCount(n_rows)
+
+        for row in range(n_rows):
+        # 1st col item: class name 
+            name = names[row]
+            i0 = QW.QTableWidgetItem(name)
+        # 2nd col item: original class count before any balancing operation
+            orig_count = self.dataset.orig_train_counter[name]
+            i1 = QW.QTableWidgetItem(str(orig_count)) 
+        # 3rd col item: current class count 
+            curr_count = curr_counts[row]
+            i2 = QW.QTableWidgetItem(str(curr_count))
+        # Set such items as not editable (only selectable and enabled)
+            for col, i in enumerate((i0, i1, i2)):
+                i.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                self.balancing_table.setItem(row, col, i)
+        # 4th col item: expected class count after next balancing operation.
+        # This item is a PercentLineEdit connected with a function that sets 
+        # the strategy value to 'Custom multi-value' when the item is edited. 
+        # The starting value of this item is initialized as the current class 
+        # count (= 3rd column value).
+            i3 = cObj.PercentLineEdit(curr_count, min_perc=1, max_perc=1000)
+            i3.valueEdited.connect(
+                lambda: self.strategy_combox.setCurrentText('Custom multi-value'))
+            self.balancing_table.setCellWidget(row, 3, i3)
+
+
+    def resetBalancingGroup(self):
+        '''
+        Reset balancing group widgets.
+
+        '''
+        self.balancing_table.clearContents()
+        self.balancing_table.setRowCount(0)
+        self.strategy_combox.blockSignals(True)
+        self.strategy_combox.setCurrentText('Current')
+        self.strategy_combox.blockSignals(False)
+        self.strategy_value.clear()
+        self.strategy_percent.setText('100')
+
+
+    def getBalancingTableCellsByColumn(self, column: int):
+        '''
+        Convenient function to get all cells in a given column of the balancing
+        table. 
+
+        Parameters
+        ----------
+        column : int
+            Column index.
+
+        '''
+        rrange = range(self.balancing_table.rowCount())
+    # "After Balancing" column
+        if column == 3:
+            return [self.balancing_table.cellWidget(r, column) for r in rrange]
+    # All other columns
+        else:
+            return [self.balancing_table.item(r, column) for r in rrange]
+
+
+    def parseStrategy(self, strategy: str):
+        '''
+        Apply different visual modification to the widgets of the balancing
+        group depending on the strategy that has been selected. This is mainly
+        done to provide feedback and/or information about the choosen strategy.
+
+        Parameters
+        ----------
+        strategy : str
+            Selected balancing strategy.
+
+        '''
+    # Set the strategy percent to 100 % if strategy is 'Current'
+        if strategy == 'Current':
+            self.strategy_percent.setText('100')
+            self.strategy_value.clear()
+
+    # Set the strategy value to minimum counter value if strategy is 'Min'
+        elif strategy == 'Min':
+            n = min(self.dataset.train_counter.values())
+            self.strategy_value.setText(str(n))
+            self.strategy_percent.clear()
+
+    # Set the strategy value to maximum counter value if strategy is 'Max'
+        elif strategy == 'Max':
+            n = max(self.dataset.train_counter.values())
+            self.strategy_value.setText(str(n))
+            self.strategy_percent.clear()
+
+    # Set the strategy value to average counter value if strategy is 'Mean'
+        elif strategy == 'Mean':
+            n = np.mean(list(self.dataset.train_counter.values()))
+            self.strategy_value.setText(str(round(n)))
+            self.strategy_percent.clear()
+
+    # Set the strategy value to median counter value if strategy is 'Median'
+        elif strategy == 'Median':
+            n = np.median(list(self.dataset.train_counter.values()))
+            self.strategy_value.setText(str(round(n)))
+            self.strategy_percent.clear()
+        
+    # Clear out strategy percent if strategy is 'Custom value'
+        elif strategy == 'Custom value':
+            self.strategy_percent.clear()
+    
+    # Clear out strategy value if strategy is 'Custom multi-value'
+        elif strategy == 'Custom multi-value':
+            self.strategy_value.clear()
+
+        else:
             return
-        if self._splitDatasetPerformed():
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', 'Warning: '\
-                     'The entire learnig procedure must be performed again. Continue?',
-                     QW.QMessageBox.Yes | QW.QMessageBox.No,
-                     QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No:
-                return
-            else:
-                self.reset_UI()
+        
 
+    def fillAfterBalancingColumn(self, value: str|None):
+        '''
+        Fill the last column ('After Balancing') of the balancing table with
+        a unique balancing strategy custom value or percentage. 
+
+        Parameters
+        ----------
+        value : str | None
+            The balancing strategy value or percentage. If None this function 
+            does nothing.
+
+        '''
+        if not value:
+            return
+    # Determine how to fill column based on which widget is the sender
+        if self.sender() == self.strategy_value:
+            for row in range(self.balancing_table.rowCount()):
+                self.balancing_table.cellWidget(row, 3).setValue(int(value))
+        else:
+            for row in range(self.balancing_table.rowCount()):
+                self.balancing_table.cellWidget(row, 3).setPercent(int(value))
+
+
+    def loadParentModel(self):
+        '''
+        Load parent ML model, allowing users to train a new model starting from
+        its pre-trained parameters.
+
+        '''
+    # Prevent loading parent model when a thread is active
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            text = f'Cannot load model while a {thr_name} Session is active'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+
+    # Load parent model
         path, _  = QW.QFileDialog.getOpenFileName(self, 'Load parent model',
                                                   pref.get_dirPath('in'),
                                                   'PyTorch Data File (*.pth)')
         if path:
             pref.set_dirPath('in', os.path.dirname(path))
-            pbar = cObj.PopUpProgBar(self, 4, 'Loading Model')
+
+        # Ask confirmation if a dataset was already processed
+            if self.dataset.are_subsets_split():
+                text = 'Current progress will be lost if model is loaded. Confirm?'
+                choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
+                                                QW.QMessageBox.Yes | QW.QMessageBox.No,
+                                                QW.QMessageBox.No)
+                if choice == QW.QMessageBox.No:
+                    return
+                else:
+                    self._reset()
+           
+            pbar = cObj.PopUpProgBar(self, 3, 'Loading Model')
+            
             try:
-            # Import parent model variables
-                modelVars = ML_tools.loadModel(path)
+            # Import parent model
+                pmodel = ML_tools.EagerModel.load(path)
                 pbar.setValue(1)
 
-            # Check parent model variables
-                missing = ML_tools.missingVariables(modelVars)
-                if len(missing):
-                    raise KeyError(f'Missing required variables: {missing}')
+            # Check if parent model shares the same features of loaded dataset
+                if pmodel.features != self.dataset.features_names():
+                    raise ValueError('The model and the loaded dataset do '\
+                                     'not share the same features.')
+                
+            # Check if parent model shares the same targets of loaded dataset
+                if pmodel.targets != self.dataset.targets_names():
+                    raise ValueError('The model and the loaded dataset do '\
+                                     'not share the same target classes.')
                 pbar.setValue(2)
 
-            # Check that parent model shares the same X features of loaded GT dataset
-                parent_xF = modelVars['ordered_Xfeat']
-                dataset_xF = self.dataset.columns.to_list()[:-1]
-                if parent_xF != dataset_xF:
-                    raise ValueError('The model and the ground-truth dataset '\
-                                     'do not share the same features.')
+            # Update GUI
+                lr, wd, mtm, _ = pmodel.hyperparameters
+                poly_degree = pmodel.poly_degree
+                self.pmodel_path.setPath(path)
+                self.seed_generator.seed_input.setText(str(pmodel.seed))
+                self.lr_spbox.setValue(lr)
+                self.wd_spbox.setValue(wd)
+                self.mtm_spbox.setValue(mtm)
+                self.feat_mapping_cbox.setChecked(poly_degree > 1)
+                self.feat_mapping_cbox.setEnabled(False)
+                self.poly_deg_spbox.setValue(poly_degree) # if 1, is ignored
+                self.poly_deg_spbox.setEnabled(False)
+                self.algm_combox.setCurrentText(pmodel.algorithm)
+                self.algm_combox.setEnabled(False)
+                self.optim_combox.setCurrentText(pmodel.optimizer)
                 pbar.setValue(3)
-
-            # Update hyper-parameters and preferences
-                self.parentModel_path.set_fullpath(path, predict_display=True)
-                self.seedInput.setText(str(modelVars['seed']))
-                self.lr_spbox.setValue(modelVars['lr'])
-                self.wd_spbox.setValue(modelVars['wd'])
-                self.mtm_spbox.setValue(modelVars['mtm'])
-                self.regrType_combox.setCurrentText('Polynomial' if modelVars['regressorDegree']>1 else 'Linear')
-                self.polyDeg_spbox.setValue(modelVars['regressorDegree']) # if it is 1, this will be ignored(?)
-                # User must not change the regressor type and degree in update mode
-                self.regrType_combox.setEnabled(False)
-                self.polyDeg_spbox.setEnabled(False)
-                self.algm_combox.setCurrentText(modelVars['algm_name'])
-                self.optim_combox.setCurrentText(modelVars['optim_name'])
-                pbar.setValue(4)
-                QW.QMessageBox.information(self, 'X-Min Learn',
-                                           'Model loaded with success.')
+                QW.QMessageBox.information(self, 'X-Min Learn', 'Model loaded.')
+            
             except Exception as e:
                 pbar.reset()
+                self.removeParentModel()
                 cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                 'The selected model produced an error.',
-                                detailedText = repr(e))
-                self.remove_parentModel()
+                                detailedText=repr(e))
 
-    def remove_parentModel(self):
-        self.parentModel_path.set_fullpath('')
-        self.parentModel_path.set_displayName('No model loaded')
-        # Allow the user to interact with the regressor type and degree when update mode is off
-        self.regrType_combox.setEnabled(True)
-        self.regrType_combox.setCurrentText('Linear')
-        self.polyDeg_spbox.setEnabled(False)
-        self.polyDeg_spbox.setValue(1)
 
-    def update_curve(self, graph, y_data):
-        y_train, y_valid = y_data
+    def removeParentModel(self):
+        '''
+        Remove loaded parent model, allowing users to train a new model without
+        pre-trained model parameters.
+
+        '''
+        self.pmodel_path.clearPath()
+        # User can select again polynomial feature mapping and algorithm
+        self.feat_mapping_cbox.setEnabled(True)
+        self.feat_mapping_cbox.setChecked(False)
+        self.algm_combox.setEnabled(True)
+
+
+    def updateScoreLabel(self, subset: str, metric: str, score: float|None):
+        '''
+        Update a label that displays a specific learning score.
+
+        Parameters
+        ----------
+        subset : str
+            Name of the subset. Must be one of ('Train', 'Validation', 'Test').
+        metric : str
+            Name of the score. Must be one of ('loss', 'accuracy', 'F1_macro', 
+            'F1_weighted').
+        score : float | None
+            Value of the score. If None the label is cleared.
+
+        '''
+        names = ('Train', 'Validation', 'Test')
+        metrics = ('loss', 'accuracy', 'F1_macro', 'F1_weighted')
+
+        labels = (
+            (self.train_loss_lbl, self.valid_loss_lbl, None),                             # loss
+            (self.train_accuracy_lbl, self.valid_accuracy_lbl, self.test_accuracy_lbl),   # accuracy
+            (self.train_f1_macro_lbl, self.valid_f1_macro_lbl, self.test_f1_macro_lbl),   # f1 macro
+            (self.train_f1_weight_lbl, self.valid_f1_weight_lbl, self.test_f1_weight_lbl) # f1 weighted
+            )
+        col = names.index(subset)
+        row = metrics.index(metric)
+        widget = labels[row][col]
+
+        if widget:
+            text = '' if score is None else '{:.9f}'.format(score)
+            widget.setText(text)
+
+    
+    def stopLearningSession(self):
+        '''
+        Interrupt learning session. This is visually shown by setting the 
+        learning progress bar to an undetermined state.
+
+        '''
+        if self.learning_thread.isRunning():
+            self.learning_pbar.setRange(0, 0)
+            self.learning_thread.requestInterruption()
+
+
+    def startLearningSession(self):
+        '''
+        Start a new Learning Session. This function launches the learning 
+        external thread.
+
+        '''
+    # Prevent starting a new learning session when a thread is active
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            text = f'Cannot start a new Learning Session while a {thr_name} '\
+                    'Session is active'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+        
+    # Check that subsets contain at least one instance of each target class
+        tr_cls = {k for k, v in self.dataset.train_counter.items() if v}
+        vd_cls = {k for k, v in self.dataset.valid_counter.items() if v}
+        ts_cls = {k for k, v in self.dataset.test_counter.items() if v}
+
+        if xor := ((tr_cls ^ vd_cls) | (tr_cls ^ ts_cls) | (vd_cls ^ ts_cls)): 
+            err = 'Some classes have 0 instances in one or more subsets.'
+            return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                                   err, detailedText=', '.join(xor))
+
+    # Update GUI
+        self.learning_pbar.setRange(0, 4)
+        self.learning_pbar.setTextVisible(False)
+        self.start_learn_btn.setEnabled(False)
+        self.stop_learn_btn.setEnabled(True)
+        self.test_model_btn.setEnabled(False)
+        self.save_model_btn.setEnabled(False)
+
+    # Get learning hyperparameters and preferences
+        parent_path = self.pmodel_path.fullpath
+        lr = self.lr_spbox.value()
+        wd = self.wd_spbox.value()
+        mtm = self.mtm_spbox.value()
+        epochs = self.epochs_spbox.value()
+        poly_feat_mapping = self.feat_mapping_cbox.isChecked()
+        poly_deg = self.poly_deg_spbox.value() if poly_feat_mapping else 1
+        algm_name = self.algm_combox.currentText()
+        optim_name = self.optim_combox.currentText()
+        uprate = int(self.plots_update_rate.text())
+        device = 'cuda' if self.cuda_cbox.isChecked() else 'cpu'
+
+    # If a parent model is provided, update only some of its variables
+        if parent_path:
+            self.model = ML_tools.EagerModel.load(parent_path)
+            var_dict = self.model.variables
+            var_dict['optim_name'] = optim_name
+            var_dict['device'] = device
+            var_dict['parentModel_path'] = parent_path
+            var_dict['GT_dataset_path'] = self.dataset.filepath
+            var_dict['TVT_rateos'] = self.dataset.orig_subsets_ratios
+            var_dict['balancing_info'] = self.balancing_info
+            var_dict['lr'] = lr
+            var_dict['wd'] = wd
+            var_dict['mtm'] = mtm
+
+    # If a parent model is not provided, initialize a new model from scratch
+        else:
+            self.model = ML_tools.EagerModel.initialize_empty()
+            var_dict = self.model.variables
+            var_dict['algm_name'] = algm_name
+            var_dict['optim_name'] = optim_name
+            var_dict['ordered_Xfeat'] = self.dataset.features_names()
+            var_dict['Y_dict'] = self.dataset.encoder
+            var_dict['device'] = device
+            var_dict['seed'] = self.seed_generator.seed
+            var_dict['parentModel_path'] = parent_path
+            var_dict['GT_dataset_path'] = self.dataset.filepath
+            var_dict['TVT_rateos'] = self.dataset.orig_subsets_ratios
+            var_dict['balancing_info'] = self.balancing_info
+            var_dict['regressorDegree'] = poly_deg
+            var_dict['lr'] = lr
+            var_dict['wd'] = wd
+            var_dict['mtm'] = mtm
+            var_dict['accuracy_list'] = ([], [])
+            var_dict['loss_list'] = ([], [])
+       
+        self.learning_pbar.setValue(1)
+
+    # Map features from linear to polynomial (get original data if degree=1)
+        x_train, x_valid = self.dataset.x_train, self.dataset.x_valid
+        degree = self.model.poly_degree
+        x_train = ML_tools.map_polinomial_features(x_train, degree)
+        x_valid = ML_tools.map_polinomial_features(x_valid, degree)
+
+        self.learning_pbar.setValue(2)
+
+    # Convert train and validation features and targets to torch Tensors
+        x_train = ML_tools.array2tensor(x_train, 'float32')
+        y_train = ML_tools.array2tensor(self.dataset.y_train, 'uint8')
+        x_valid = ML_tools.array2tensor(x_valid, 'float32')
+        y_valid = ML_tools.array2tensor(self.dataset.y_valid, 'uint8')
+
+    # Normalize feature data. If standards exist in model variables it means
+    # that they are derived from a parent model and therefore they must not be
+    # changed. Otherwise, a new model is being constructed and standards must
+    # be calculated.
+        if standards := var_dict['standards']:
+            x_mean, x_stdev = standards
+            x_train_norm = ML_tools.norm_data(x_train, x_mean, x_stdev,
+                                              return_standards=False)
+        else:
+            x_train_norm, x_mean, x_stdev = ML_tools.norm_data(x_train)
+            var_dict['standards'] = (x_mean, x_stdev)
+
+        x_valid_norm = ML_tools.norm_data(x_valid, x_mean, x_stdev,
+                                          return_standards=False)
+        
+        self.learning_pbar.setValue(3)
+
+    # Prepare network and optimizer. If a parent model is provided, load its 
+    # network and optimizer state dicts
+        self.network = self.model.get_network_architecture()
+        self.network.to(device)
+        self.optimizer = self.model.get_optimizer(self.network)
+        var_dict['loss_name'] = self.network._loss
+
+        if parent_network_state_dict := var_dict['model_state_dict']:
+            self.network.load_state_dict(parent_network_state_dict)
+        if parent_optimizer_state_dict := var_dict['optim_state_dict']:
+            self.optimizer.load_state_dict(parent_optimizer_state_dict)
+
+        self.learning_pbar.setValue(4)
+
+    # Reset progress bar range
+        parent_epochs = var_dict['epochs']
+        e_min = parent_epochs if parent_epochs else 0
+        e_max = e_min + epochs
+        self.learning_pbar.reset()
+        self.learning_pbar.setRange(e_min, e_max)
+        self.learning_pbar.setTextVisible(True)
+
+    # Adjust graphics update rate
+        if uprate == 0:
+            uprate = e_max # prevent ZeroDivisionError when update graphics
+        elif uprate / epochs < 0.02:
+            uprate = epochs * 0.02 # prevent too fast updates that crashes the thread(?)
+
+    # Initialize loss and accuracy lists and plots
+        self.train_accuracy_list, self.valid_accuracy_list = var_dict['accuracy_list']
+        self.train_loss_list, self.valid_loss_list = var_dict['loss_list']
+        for plot in (self.loss_plot, self.accuracy_plot):
+            plot.clear_canvas()
+
+    # Start the learning thread
+        task_args = (x_train_norm, y_train, x_valid_norm, y_valid, 
+                     self.optimizer, device)
+        task = lambda: self.network.learn(*task_args)
+
+        args = (task, y_train.numpy(), y_valid.numpy(), (e_min, e_max), uprate)
+        self.learning_thread.setParameters(*args)
+        self.learning_thread.start()
+
+
+    def _parseLearningResult(self, result: tuple, success: bool):
+        '''
+        Parse the result of the learning thread. If the Learning Session was
+        successful, this function populates the train and validation confusion
+        matrices.
+
+        Parameters
+        ----------
+        result : tuple
+            Learning thread result.
+        success : bool
+            Whether the learning thread succeeded or not.
+
+        '''
+        self.learning_pbar.reset()
+        
+    # Parse thread result if learning session succeded
+        if success: 
+            self.train_pred, self.valid_pred = result
+            self.learning_pbar.setRange(0, 2)
+            self.learning_pbar.setTextVisible(False)
+
+        # Update train and validation F1 scores
+            #                  macro  |  weighted
+            # F1 train                |
+            # F1 validation           |
+            # F1 test                 |
+            f1_scores = np.empty((3, 2))
+            for n, avg in enumerate(('macro', 'weighted')):
+                tr_args = (self.dataset.y_train, self.train_pred, avg)
+                vd_args = (self.dataset.y_valid, self.valid_pred, avg)
+                f1_tr = f1_scores[0, n] = ML_tools.f1_score(*tr_args)
+                f1_vd = f1_scores[1, n] = ML_tools.f1_score(*vd_args)
+                self.updateScoreLabel('Train', f'F1_{avg}', f1_tr)
+                self.updateScoreLabel('Validation', f'F1_{avg}', f1_vd)
+
+            self.learning_pbar.setValue(1)
+
+        # Complete populating model variables
+            tr_loss, vd_loss = self.train_loss_list, self.valid_loss_list
+            tr_acc, vd_acc = self.train_accuracy_list, self.valid_accuracy_list
+            var_dict = self.model.variables
+            var_dict['epochs'] = len(self.train_loss_list)
+            var_dict['optim_state_dict'] = self.optimizer.state_dict()
+            var_dict['model_state_dict'] = self.network.state_dict()
+            var_dict['accuracy_list'] = (tr_acc, vd_acc)
+            var_dict['loss_list'] = (tr_loss, vd_loss)
+            var_dict['accuracy'] = [tr_acc[-1], vd_acc[-1], None]
+            var_dict['loss'] = [tr_loss[-1], vd_loss[-1], None]
+            var_dict['F1_scores'] = f1_scores
+
+        # Update Confusion Matrices
+            self.updateConfusionMatrix('Train')
+            self.updateConfusionMatrix('Validation')
+
+            self.learning_pbar.setValue(2)
+
+        # Update GUI
+            self.test_model_btn.setEnabled(True)
+            self.learning_pbar.reset()
+            self.learning_pbar.setTextVisible(True)
+            text = 'Learning Session completed.'
+            QW.QMessageBox.information(self, 'X-Min Learn', text)
+
+    # Forward error if learning session failed
+        else:
+            e = result[0]
+            text = 'Learning Session failed.'
+            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn', text,
+                            detailedText=repr(e))
+
+    # Update Start-Stop-Learn buttons on exit in any case
+        self.start_learn_btn.setEnabled(True)
+        self.stop_learn_btn.setEnabled(False)
+        self.save_model_btn.setEnabled(False)
+
+
+
+    def _updateLearningScores(self, scores: tuple):
+        '''
+        Update the loss and accuracy list with new values. This function should
+        be called every time a new learning epoch is completed.
+
+        Parameters
+        ----------
+        scores : tuple
+            Learning scores. In order: epoch, train and validation losses,
+            train and validation accuracies.
+
+        '''
+        e, (tr_loss, vd_loss), (tr_acc, vd_acc) = scores
+    # Store new loss and accuracy values
+        self.train_loss_list.append(tr_loss)
+        self.valid_loss_list.append(vd_loss)
+        self.train_accuracy_list.append(tr_acc)
+        self.valid_accuracy_list.append(vd_acc)
+    # Update progress bar
+        self.learning_pbar.setValue(e)
+
+
+    def _drawLearningScores(self):
+        '''
+        Update loss and accuracy curves, as well as score labels, with the last
+        train and validation accuracy and loss values.
+
+        '''
+        tr_loss, tr_acc = self.train_loss_list, self.train_accuracy_list
+        vd_loss, vd_acc = self.valid_loss_list, self.valid_accuracy_list
+
+    # Update the loss and accuracy curves
+        self.updateLearningCurve('loss', tr_loss, vd_loss)
+        self.updateLearningCurve('accuracy', tr_acc, vd_acc)
+
+    # Update score labels widgets
+        self.updateScoreLabel('Train', 'loss', tr_loss[-1])
+        self.updateScoreLabel('Validation', 'loss', vd_loss[-1])
+        self.updateScoreLabel('Train', 'accuracy', tr_acc[-1])
+        self.updateScoreLabel('Validation', 'accuracy', vd_acc[-1])
+
+
+    def updateLearningCurve(self, plot: str, y_train: list, y_valid: list):
+        '''
+        Update loss or accuracy plot.
+
+        Parameters
+        ----------
+        plot : str
+            Plot to update. Must be 'loss' or 'accuracy'.
+        y_train : list
+            Loss/accuracy values for train set.
+        y_valid : list
+            Loss/accuracy values for validation set.
+
+        Raises
+        ------
+        ValueError
+            plot is not 'loss' or 'accuracy'.
+
+        '''
+        if plot == 'loss':
+            canvas = self.loss_plot
+        elif plot == 'accuracy':
+            canvas = self.accuracy_plot
+        else:
+            raise ValueError(f'{plot} is not a valid key argument for plot.')
+        
         x_data = range(len(y_train))
+        curves = [(x_data, y_train), (x_data, y_valid)]  
+        canvas.update_canvas(curves, [f'Train {plot}', f'Validation {plot}'])
 
-        if graph == 'loss':
-            canvas = self.lossView
-        elif graph == 'accuracy':
-            canvas = self.accuracyView
-        else:
-            raise ValueError(f'{graph} is not a valid key argument for graph')
 
-        if canvas.has_curves():
-            canvas.update_canvas([(x_data, y_train),
-                                  (x_data, y_valid)])
-        else:
-            canvas.add_curve(x_data, y_train, f'Train {graph}', 'b')
-            canvas.add_curve(x_data, y_valid, f'Validation {graph}', 'r')
-            canvas.update_canvas()
+    def updateConfusionMatrix(self, subset: str):
+        '''
+        Populate confusion matrix of the given subset.
 
-    def update_ConfusionMatrix(self, set_name):
-        if set_name == 'Train':
-            true = self.Y_train
-            preds = self.tr_preds
-            asPerc = self.CMtrainPercAction.isChecked()
-            canvas = self.CMtrainView
-        elif set_name == 'Validation':
-            true = self.Y_valid
-            preds = self.vd_preds
-            asPerc = self.CMvalidPercAction.isChecked()
-            canvas = self.CMvalidView
-        elif set_name == 'Test':
-            true = self.Y_test
-            preds = self.ts_preds
-            asPerc = self.CMtestPercAction.isChecked()
-            canvas = self.CMtestView
-        else: return
+        Parameters
+        ----------
+        subset : str
+            Name of the subset. Must be one of ('Train', 'Validation', 'Test').
 
-        if preds is None:
+        '''
+        if subset == 'Train':
+            true = self.dataset.y_train
+            preds = self.train_pred
+            perc = self.train_cm_perc_action.isChecked()
+            canvas = self.train_confmat
+
+        elif subset == 'Validation':
+            true = self.dataset.y_valid
+            preds = self.valid_pred
+            perc = self.valid_cm_perc_action.isChecked()
+            canvas = self.valid_confmat
+
+        elif subset == 'Test':
+            true = self.dataset.y_test
+            preds = self.test_pred
+            perc = self.test_cm_perc_action.isChecked()
+            canvas = self.test_confmat
+
+        else: 
             return
 
-        lbls, IDs = zip(*self.Y_dict.items())
-        CM = ML_tools.confusionMatrix(true, preds, IDs, percent=asPerc)
-        canvas.update_canvas(CM)
-        canvas.set_ticks(lbls)
+        if preds is not None:
+            lbls, ids = zip(*self.dataset.encoder.items())
+            confmat = ML_tools.confusion_matrix(true, preds, ids)
+            canvas.update_canvas(confmat, perc)
+            canvas.set_ticks(lbls)
 
 
-    def update_scoreLabel(self, set_name, metric, score):
-        names = ('Train', 'Validation', 'Test')
-        metrics = ('loss', 'accuracy', 'F1_micro', 'F1_macro', 'F1_weighted')
-        labels = np.array([[self.trLoss_lbl    , self.vdLoss_lbl    , None               ],
-                           [self.trAcc_lbl     , self.vdAcc_lbl     , self.tsAcc_lbl     ],
-                           [self.trF1Micro_lbl , self.vdF1Micro_lbl , self.tsF1Micro_lbl ],
-                           [self.trF1Macro_lbl , self.vdF1Macro_lbl , self.tsF1Macro_lbl ],
-                           [self.trF1Weight_lbl, self.vdF1Weight_lbl, self.tsF1Weight_lbl]])
-        col = names.index(set_name)
-        row = metrics.index(metric)
-        lbl = labels[row, col]
-        if lbl is not None:
-            labels[row, col].setText(str(score))
+    def toggleConfMatPercent(self, toggled: bool):
+        '''
+        Toggle on/off confusion matrix values as percentages. The matrix canvas
+        is automatically identified using sender().
 
-#     def start_learning(self):
+        Parameters
+        ----------
+        toggled : bool
+            Whether to show values as percentages.
+
+        '''
+    # Get the matrix canvas from the NavTbar whose action called this function
+        canvas = self.sender().parent().canvas
+        if canvas.matplot:
+            canvas.remove_annotations()
+            canvas.annotate(toggled)
+            canvas.draw_idle()
+
+
+    def testModel(self):
+        '''
+        Test the trained model on test set.
+
+        '''
+    # Fixing potential bug were save model button is active when it should not (? - legacy fix, test)
+        if self.model is None:
+            self.save_model_btn.setEnabled(False)
+            return
+
+    # Ask for user confirmation
+        text = 'After testing, models should not be further trained on the '\
+               'same train set. Proceed?' 
+        choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
+                                        QW.QMessageBox.Yes | QW.QMessageBox.No,
+                                        QW.QMessageBox.No)
+        if choice == QW.QMessageBox.Yes:
+            self.learning_pbar.setRange(0, 4)
+
+        # Predict targets on test set
+            x_test, y_test = self.dataset.x_test, self.dataset.y_test
+            var_dict = self.model.variables
+            degree = self.model.poly_degree
+            device = var_dict['device']
+            x_mean, x_stdev = var_dict['standards']
+
+            x_test = ML_tools.map_polinomial_features(x_test, degree)
+            x_test = ML_tools.array2tensor(x_test, 'float32')
+            x_test = ML_tools.norm_data(x_test, x_mean, x_stdev, False)
+            self.test_pred = self.network.predict(x_test.to(device))[1].cpu()
+
+            self.learning_pbar.setValue(1)
+
+        # Compute test accuracy
+            test_acc = ML_tools.accuracy_score(y_test, self.test_pred)
+            var_dict['accuracy'][2] = test_acc
+            self.updateScoreLabel('Test', 'accuracy', test_acc)
+            
+            self.learning_pbar.setValue(2)
+
+        # Compute test F1 scores 
+            for n, avg in enumerate(('macro', 'weighted')):
+                f1_ts = ML_tools.f1_score(y_test, self.test_pred, avg)
+                self.updateScoreLabel('Test', f'F1_{avg}', f1_ts)
+                var_dict['F1_scores'][2, n] = f1_ts
+            
+            self.learning_pbar.setValue(3)
+
+        # Update test Confusion Matrix 
+            self.updateConfusionMatrix('Test')
+            self.learning_pbar.setValue(4)
+
+        # Update GUI
+            self.save_model_btn.setEnabled(True)
+            
+        # Reset progress bar and end testing session with success
+            self.learning_pbar.reset()
+            text = 'Your model has been tested succesfully.'
+            QW.QMessageBox.information(self, 'X-Min Learn', text)
+
+
+    def saveModel(self):
+        '''
+        Save model to file. Also saves a model log.
+
+        '''
+        path, _  = QW.QFileDialog.getSaveFileName(self, 'Save model',
+                                                  pref.get_dirPath('out'),
+                                                  'PyTorch Data File (*.pth)')
+        if path:
+            pref.set_dirPath('out', os.path.dirname(path))
+            try:
+                log_path = self.model.generateLogPath(path)
+                extended_log = pref.get_setting('class/extLog', False, bool)
+                self.model.save(path, log_path, extended_log)
+                QW.QMessageBox.information(self, 'X-Min Learn', 'Model saved.')
+            except Exception as e:
+                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                                'An error occurred while saving the model.',
+                                 detailedText=repr(e))
+                
+
+    def closeEvent(self, event: QG.QCloseEvent):
+        '''
+        Reimplementation of the closeEvent function. Requires exit confirm if
+        a learning thread or a balancing thread is currently active.
+
+        Parameters
+        ----------
+        event : QCloseEvent
+            The close event.
+
+        '''
+        thr_active, thr_name = self._threadRunning()
+        if thr_active:
+            text = f'A {thr_name} Session is still active. Close anyway?'
+            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
+                                            QW.QMessageBox.Yes | QW.QMessageBox.No,
+                                            QW.QMessageBox.No)
+            if choice == QW.QMessageBox.Yes:
+                self.stopBalancingSession()
+                self.stopLearningSession()
+                event.accept()
+            else:
+                event.ignore()
+
+        else:
+            super(ModelLearner, self).closeEvent(event)
+
+
+
+# class ModelLearner_OLD(DraggableTool):
+
+#     def __init__(self, parent):
+#         self.parent = parent
+#         super(ModelLearner_OLD, self).__init__()
+#         self.setWindowTitle('Model Learner')
+#         self.setWindowIcon(QIcon('Icons/merge.png'))
+
+#     # Overall Random Seed
+#         self.seed = None
+
+#     # Ground-truth dataset
+#         self.dataset = None
+
+#     # Label encoder dict
+#         self.Y_dict = dict()
+
+#     # Original Train, Validation & Test rateos (before balancing operations)
+#         self.orig_TVTrateos = (None, None, None)
+
+#     # Original Train set targets (before balancing operations)
+#         self.origY_train = None
+
+#     # Train, Validation & Test sets
+#         self.X_train, self.X_valid, self.X_test = None, None, None
+#         self.Y_train, self.Y_valid, self.Y_test = None, None, None
+
+#     # Class counters for Train, Validation & Test sets List_Widgets
+#         self.trClassCounter = dict()
+#         self.vdClassCounter = dict()
+#         self.tsClassCounter = dict()
+
+#     # Train set balancing operation tracer
+#         self.balanceInfo = False
+
+#     # Balancing external thread
+#         self.balThread = threads.BalanceThread()
+#         self.balThread.setObjectName('Balancing')
+#         self.balThread.taskFinished.connect(lambda out: self.finalize_balancing(out))
+
+#     # Learning external thread
+#         self.learnThread = threads.LearningThread()
+#         self.learnThread.setObjectName('Learning')
+#         self.learnThread.epochCompleted.connect(lambda out: self.update_learningScores(out))
+#         self.learnThread.updateRequested.connect(self.update_learningScoresView)
+#         self.learnThread.taskFinished.connect(lambda out: self.finalize_learning(out))
+
+#     # New model instance and parameters dictionary
+#         self.model = None
+#         self.model_vars = dict()
+
+#     # Train, Validation and Test Model predictions
+#         self.tr_preds, self.vd_preds, self.ts_preds = None, None, None
+
+#     # Train & Validation loss and accuracy evolutions lists (for graphics)
+#         self.tr_losses, self.vd_losses = [], []
+#         self.tr_acc, self.vd_acc = [], []
+
+
+#         self.init_ui()
+#         self.randomize_seed()
+#         self.adjustSize()
+#         self.showMaximized()
+
+
+#     def init_ui(self):
+
+# # ==== GROUND TRUTH DATASET WIDGETS ==== #
+
+#     # Load dataset button
+#         self.loadDS_btn = QW.QPushButton(QIcon('Icons/load.png'), 'Import')
+#         self.loadDS_btn.clicked.connect(self.load_dataset)
+
+#     # CSV decimal character selector
+#         self.CSVdec = cObj.DecimalPointSelector()
+#         CSVdec_form = QW.QFormLayout()
+#         CSVdec_form.addRow('CSV decimal point', self.CSVdec)
+
+#     # Loaded dataset path
+#         self.DS_path = cObj.PathLabel('', 'No dataset loaded')
+
+#     # Loaded dataset preview Area
+#         self.DS_previewArea = QW.QTextEdit()
+#         self.DS_previewArea.setReadOnly(True)
+#         self.DS_previewArea.setMinimumHeight(350)
+
+#     # Adjust Load GT-dataset group layout
+#         loadDS_grid = QW.QGridLayout()
+#         loadDS_grid.addWidget(self.loadDS_btn, 0, 0)
+#         loadDS_grid.addLayout(CSVdec_form, 0, 1)
+#         loadDS_grid.addWidget(self.DS_path, 1, 0, 1, 2)
+#         loadDS_grid.addWidget(self.DS_previewArea, 2, 0, 1, 2)
+#         loadDS_grid.setRowStretch(2, 1)
+#         loadDS_group = cObj.GroupArea(loadDS_grid, 'Ground-truth dataset')
+
+
+# # ==== RANDOM SEED GENERATOR WIDGETS==== #
+
+#     # Random seed line edit
+#         self.seedInput = QW.QLineEdit()
+#         self.seedInput.setValidator(QG.QIntValidator(0, 10**8))
+#         self.seedInput.textChanged.connect(self.change_seed)
+
+#     # Randomize seed button
+#         self.randseed_btn = cObj.IconButton('Icons/dice.png')
+#         self.randseed_btn.clicked.connect(self.randomize_seed)
+
+#     # Adjust random seed group layout
+#         seed_hbox = QW.QHBoxLayout()
+#         seed_hbox.addWidget(self.seedInput, 1)
+#         seed_hbox.addWidget(self.randseed_btn, alignment = Qt.AlignRight)
+#         seed_group = cObj.GroupArea(seed_hbox, 'Random seed generator')
+
+
+# # ==== PREVIOUS ML MODEL LOADING WIDGETS ==== #
+
+#     # Load previous model button
+#         self.loadModel_btn = QW.QPushButton('Load')
+#         self.loadModel_btn.clicked.connect(self.load_parentModel)
+#         self.loadModel_btn.setEnabled(False)
+
+#     # Remove loaded model button
+#         self.removeModel_btn = QW.QPushButton('Remove')
+#         self.removeModel_btn.clicked.connect(self.remove_parentModel)
+
+#     # Previous model path
+#         self.parentModel_path = cObj.PathLabel('', 'No model loaded')
+
+#     # Adjust previous model group
+#         parentModel_form = QW.QFormLayout()
+#         parentModel_form.addRow('Update model', self.loadModel_btn)
+#         parentModel_form.addRow(self.parentModel_path, self.removeModel_btn)
+#         parentModel_group = cObj.GroupArea(parentModel_form, 'Load previous model')
+
+
+# # ==== HYPER-PARAMETERS INPUT WIDGETS ==== #
+
+#     # Learning rate input
+#         self.lr_spbox = QW.QDoubleSpinBox()
+#         self.lr_spbox.setDecimals(5)
+#         self.lr_spbox.setRange(0, 10)
+#         self.lr_spbox.setSingleStep(0.01)
+#         self.lr_spbox.setValue(0.01)
+
+#     # Weight decay input
+#         self.wd_spbox = QW.QDoubleSpinBox()
+#         self.wd_spbox.setDecimals(5)
+#         self.wd_spbox.setRange(0, 10)
+#         self.wd_spbox.setSingleStep(0.01)
+#         self.wd_spbox.setValue(0)
+
+#     # Momentum input
+#         self.mtm_spbox = QW.QDoubleSpinBox()
+#         self.mtm_spbox.setDecimals(5)
+#         self.mtm_spbox.setRange(0, 10)
+#         self.mtm_spbox.setSingleStep(0.01)
+#         self.mtm_spbox.setValue(0)
+
+#     # Epochs input
+#         self.epochs_spbox = QW.QSpinBox()
+#         self.epochs_spbox.setRange(0, 10**8)
+#         self.epochs_spbox.setValue(100)
+#         self.epochs_spbox.valueChanged.connect(
+#             lambda x: self.graph_updateRate.setText(str(x//10)))
+
+#     # Adjust hyper-parameters group layout
+#         hyperparam_form = QW.QFormLayout()
+#         hyperparam_form.addRow('Learning Rate', self.lr_spbox)
+#         hyperparam_form.addRow('Weight Decay', self.wd_spbox)
+#         hyperparam_form.addRow('Momentum', self.mtm_spbox)
+#         hyperparam_form.addRow('Epochs', self.epochs_spbox)
+#         hyperparam_group = cObj.GroupArea(hyperparam_form, 'Hyperparameters')
+
+
+# # ==== LEARNING PREFERENCES INPUT WIDGETS ==== #
+
+#     # Regressor type combo-box
+#         self.regrType_combox = QW.QComboBox()
+#         self.regrType_combox.addItems(['Linear', 'Polynomial'])
+#         self.regrType_combox.currentTextChanged.connect(
+#             lambda txt: self.polyDeg_spbox.setEnabled(txt=='Polynomial'))
+#         self.regrType_combox.currentTextChanged.connect(
+#             lambda txt: self.polyDeg_spbox.setValue(1 + (txt=='Polynomial')))
+
+#     # Polynomial degree spin-box
+#         self.polyDeg_spbox = QW.QSpinBox()
+#         self.polyDeg_spbox.setMinimum(1)
+#         self.polyDeg_spbox.setValue(1)
+#         self.polyDeg_spbox.setEnabled(False)
+#         self.polyDeg_spbox.setToolTip('Select the degree of the polynomial regressor.')
+
+#     # Algorithm combo-box
+#         algm_list = ['Softmax Regression']
+#         self.algm_combox = QW.QComboBox()
+#         self.algm_combox.addItems(algm_list)
+
+#     # Optimization function combo-box
+#         optim_list = ['SGD']
+#         self.optim_combox = QW.QComboBox()
+#         self.optim_combox.addItems(optim_list)
+
+#     # Use GPU acceleration checkbox
+#         self.cuda_cbox = QW.QCheckBox('Use GPU acceleration')
+#         self.cuda_cbox.setChecked(True)
+
+#     # Learning graphic update rate selector
+#         self.graph_updateRate = QW.QLineEdit()
+#         self.graph_updateRate.setValidator(QG.QIntValidator(1, 10**8))
+#         self.graph_updateRate.setToolTip('Graphics update rate during learnign iterations')
+#         self.graph_updateRate.setText('10')
+
+#     # Adjust learnig preferences group layout
+#         preferences_form = QW.QFormLayout()
+#         preferences_form.addRow('Regressor type', self.regrType_combox)
+#         preferences_form.addRow('Degree', self.polyDeg_spbox)
+#         preferences_form.addRow('Algorithm', self.algm_combox)
+#         preferences_form.addRow('Optimization function', self.optim_combox)
+#         preferences_form.addRow(self.cuda_cbox)
+#         preferences_form.addRow('Graphics update rate', self.graph_updateRate)
+#         preferences_group = cObj.GroupArea(preferences_form, 'Learning preferences')
+
+
+# # ==== START - STOP - TEST - SAVE - PROGBAR WIDGETS ==== #
+
+#     # Start learning button
+#         self.startLearn_btn = QW.QPushButton('START')
+#         self.startLearn_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                               font-weight: bold''')
+#         self.startLearn_btn.setToolTip('Start learning session')
+#         self.startLearn_btn.clicked.connect(self.initialize_learning)
+#         self.startLearn_btn.setEnabled(False)
+
+#     # Stop learning button
+#         self.stopLearn_btn = QW.QPushButton('STOP')
+#         self.stopLearn_btn.setStyleSheet('''background-color: red;
+#                                             font-weight: bold''')
+#         self.stopLearn_btn.setToolTip('Stop current learning session')
+#         self.stopLearn_btn.clicked.connect(self.stop_learning)
+#         self.stopLearn_btn.setEnabled(False)
+
+#     # Test model button
+#         self.testModel_btn = QW.QPushButton(QIcon('Icons/test.png'), 'TEST MODEL')
+#         self.testModel_btn.clicked.connect(self.test_model)
+#         self.testModel_btn.setEnabled(False)
+
+#     # Save model button
+#         self.saveModel_btn = QW.QPushButton(QIcon('Icons/save.png'), 'SAVE MODEL')
+#         self.saveModel_btn.clicked.connect(self.save_model)
+#         self.saveModel_btn.setEnabled(False)
+
+#     # Progress bar
+#         self.progBar = QW.QProgressBar()
+
+#     # Adjust start-stop-test-save-pbar layout
+#         mainActions_grid = QW.QGridLayout()
+#         mainActions_grid.addWidget(self.startLearn_btn, 0, 0)
+#         mainActions_grid.addWidget(self.stopLearn_btn, 0, 1)
+#         mainActions_grid.addWidget(self.testModel_btn, 1, 0)
+#         mainActions_grid.addWidget(self.saveModel_btn, 1, 1)
+#         mainActions_grid.addWidget(self.progBar, 2, 0, 1, 2)
+
+
+# # ==== TRAIN - VALIDATION - TEST SPLIT WIDGETS ==== #
+
+#     # Train, Validation & Test rateo selectors
+#         self.trRateo_spbox = QW.QSpinBox()
+#         self.vdRateo_spbox = QW.QSpinBox()
+#         self.tsRateo_spbox = QW.QSpinBox()
+#         for spbox, val in ((self.trRateo_spbox, 50),
+#                            (self.vdRateo_spbox, 25),
+#                            (self.tsRateo_spbox, 25)):
+#             spbox.setRange(1, 98)
+#             spbox.setValue(val)
+#             spbox.setSuffix(' %')
+#             spbox.valueChanged.connect(self.adjust_splitRateos)
+
+#     # Split GT dataset button
+#         self.splitDS_btn = QW.QPushButton('SPLIT')
+#         self.splitDS_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                           font-weight: bold''')
+#         self.splitDS_btn.clicked.connect(self.split_dataset)
+#         self.splitDS_btn.setEnabled(False)
+
+#     # Train, Validation & Test sets PieChart
+#         self.tvt_pie = cObj.PieCanvas(self, perc=None)
+#         self.tvt_pie.setMinimumSize(150, 150)
+
+#     # Train, Validation & Test sets barchart
+#         self.tvt_bar =  cObj.BarCanvas(self)
+#         self.tvt_bar.fig.patch.set(facecolor=CF.RGB2float([(169, 185, 188)]), linewidth=0)
+#         self.tvt_bar.setMinimumSize(100, 300)
+
+#     # Train set class visualizer
+#         self.trSet_list = cObj.StyledListWidget(ext_selection=False)
+#         self.trSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Train'))
+#         self.trSet_currCount = QW.QLabel('')
+#         self.trSet_totCount  = QW.QLabel('Tot = 0')
+
+#     # Validation set class visualizer
+#         self.vdSet_list = cObj.StyledListWidget(ext_selection=False)
+#         self.vdSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Validation'))
+#         self.vdSet_currCount = QW.QLabel('')
+#         self.vdSet_totCount  = QW.QLabel('Tot = 0')
+
+#     # Test set class visualizer
+#         self.tsSet_list = cObj.StyledListWidget(ext_selection=False)
+#         self.tsSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Test'))
+#         self.tsSet_currCount = QW.QLabel('')
+#         self.tsSet_totCount  = QW.QLabel('Tot = 0')
+
+#     # Adjust Train-Validation-Test split group layout
+#         # (Split visualization group)
+#         split_grid = QW.QGridLayout()
+#         for row, (lbl, sb) in enumerate((('Train set', self.trRateo_spbox),
+#                                          ('Validation set', self.vdRateo_spbox),
+#                                          ('Test set', self.tsRateo_spbox))):
+#             split_grid.addWidget(QW.QLabel(lbl), row, 0)
+#             split_grid.addWidget(sb, row, 1)
+#         split_grid.addWidget(self.splitDS_btn, row+1, 0, 1, 2)
+#         split_grid.addWidget(self.tvt_pie, 0, 2, 4, 1)
+#         split_grid.addWidget(self.tvt_bar, 4, 0, 1, 3)
+#         split_grid.setColumnStretch(2, 1)
+
+#         # (Train-Validation-Test lists group)
+#         trSet_vbox = QW.QVBoxLayout()
+#         trSet_vbox.addWidget(self.trSet_list, 1)
+#         trSet_vbox.addWidget(self.trSet_currCount)
+#         trSet_vbox.addWidget(self.trSet_totCount)
+#         trSet_group = cObj.GroupArea(trSet_vbox, 'Train Set')
+
+#         vdSet_vbox = QW.QVBoxLayout()
+#         vdSet_vbox.addWidget(self.vdSet_list, 1)
+#         vdSet_vbox.addWidget(self.vdSet_currCount)
+#         vdSet_vbox.addWidget(self.vdSet_totCount)
+#         vdSet_group = cObj.GroupArea(vdSet_vbox, 'Validation Set')
+
+#         tsSet_vbox = QW.QVBoxLayout()
+#         tsSet_vbox.addWidget(self.tsSet_list, 1)
+#         tsSet_vbox.addWidget(self.tsSet_currCount)
+#         tsSet_vbox.addWidget(self.tsSet_totCount)
+#         tsSet_group = cObj.GroupArea(tsSet_vbox, 'Test Set')
+
+#         sets_hbox = QW.QHBoxLayout()
+#         sets_hbox.addWidget(trSet_group)
+#         sets_hbox.addWidget(vdSet_group)
+#         sets_hbox.addWidget(tsSet_group)
+
+#         # (T-V-T group Layout)
+#         tvt_hsplit = cObj.SplitterGroup((split_grid, sets_hbox))
+#         tvt_group = cObj.GroupArea(tvt_hsplit, 'Split Dataset')
+
+
+# # ==== BALANCING OPERATIONS WIDGETS ==== #
+
+#     # Balancing help button
+#         self.balanceHelp_btn = cObj.IconButton('Icons/info.png')
+#         self.balanceHelp_btn.setMaximumSize(30, 30)
+#         self.balanceHelp_btn.setFlat(True)
+#         self.balanceHelp_btn.setToolTip('Click for more info about dataset balancing algorithms')
+#         self.balanceHelp_btn.clicked.connect(lambda: webbrowser.open(
+#             'https://imbalanced-learn.org/stable/user_guide.html#user-guide'))
+
+#     # Over_Sampling algorithm selector
+#         OS_list = ['None', 'SMOTE', 'BorderlineSMOTE', 'ADASYN']
+#         self.OS_combox = QW.QComboBox()
+#         self.OS_combox.addItems(OS_list)
+#         self.OS_combox.currentTextChanged.connect(self.enable_mOS)
+
+#     # Over_Sampling K-neighbours selector
+#         self.kOS_spbox = QW.QSpinBox()
+#         self.kOS_spbox.setValue(5)
+#         self.kOS_spbox.setToolTip('Number of nearest neighbours to construct synthetic samples')
+
+#     # Over_Sampling M-neighbours selector
+#         self.mOS_spbox = QW.QSpinBox()
+#         self.mOS_spbox.setValue(10)
+#         self.mOS_spbox.setToolTip('Number of nearest neighbours to determine if a minority sample is in danger')
+
+#     # Under_Sampling algorithm selector
+#         US_list = ['None', 'RandUS', 'NearMiss', 'TomekLinks',
+#                     'ENN-all', 'ENN-mode', 'NCR-all', 'NCR-mode']
+#         self.US_combox = QW.QComboBox()
+#         self.US_combox.addItems(US_list)
+#         self.US_combox.currentTextChanged.connect(self.update_USwarning)
+#         self.US_combox.currentTextChanged.connect(self.enable_nUS)
+
+#     # Under_Sampling strategy warning icon
+#         self.US_warnIcon = QW.QLabel()
+#         w_icon = QG.QPixmap('Icons/warnIcon.png').scaled(30, 30, Qt.KeepAspectRatio)
+#         self.US_warnIcon.setPixmap(w_icon)
+#         self.US_warnIcon.setToolTip('Warning: the selected Under-Sampling algorithm '\
+#                                     'ignores the strategy required by the user.')
+#         self.US_warnIcon.hide()
+
+#     # Under_Sampling N-neighbours selector
+#         self.nUS_spbox = QW.QSpinBox()
+#         self.nUS_spbox.setValue(3)
+#         self.nUS_spbox.setToolTip('Size of the neighbourhood to consider')
+
+#     # Strategy selector
+#         strat_list = ['Current', 'Min', 'Max', 'Mean', 'Median',
+#                       'Custom value', 'Custom multi-value']
+#         self.strategy_combox = QW.QComboBox()
+#         self.strategy_combox.addItems(strat_list)
+#         self.strategy_combox.currentTextChanged.connect(self.update_strategyValue)
+
+#     # Strategy value
+#         self.strat_value = QW.QLineEdit()
+#         self.strat_value.setValidator(QG.QIntValidator(0, 10**10))
+#         self.strat_value.textEdited.connect(
+#             lambda: self.strategy_combox.setCurrentText('Custom value'))
+#         self.strat_value.textChanged.connect(self.autoFill_balanceTable)
+
+#     # Balancing preview table
+#         self.balance_table = QW.QTableWidget(0, 4)
+#         self.balance_table.horizontalHeader().setSectionResizeMode(1) # Stretch
+#         self.balance_table.verticalHeader().setSectionResizeMode(3) # ResizeToContent
+#         self.balance_table.setHorizontalHeaderLabels(['Class name', 'Original size',
+#                                                       'Current size', 'After balancing'])
+
+#     # Run balancing button
+#         self.runBalance_btn = QW.QPushButton('Start Balancing')
+#         self.runBalance_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                           font-weight: bold''')
+#         self.runBalance_btn.clicked.connect(self.initialize_balancing)
+
+#     # Cancel balancing button
+#         self.cancBalance_btn = QW.QPushButton('Cancel Balancing')
+#         self.cancBalance_btn.setStyleSheet('''background-color: red;
+#                                               font-weight: bold''')
+#         self.cancBalance_btn.clicked.connect(self.canc_balancing)
+
+#     # Balancing operations ProgressBar
+#         self.balance_pBar = QW.QProgressBar()
+#         self.balance_pBar.setMaximum(4)
+
+#     # Adjust Balance group layout
+#         # (Start-stop balancing hbox)
+#         balActions_hbox = QW.QHBoxLayout()
+#         balActions_hbox.setSpacing(5)
+#         balActions_hbox.addWidget(self.runBalance_btn)
+#         balActions_hbox.addWidget(self.cancBalance_btn)
+
+#         # (Balancing options)
+#         balOptions_grid = QW.QGridLayout()
+#         balOptions_grid.setVerticalSpacing(10)
+#         balOptions_grid.addWidget(self.balanceHelp_btn, 0, 0, alignment = Qt.AlignLeft)
+#         balOptions_grid.addWidget(self.US_warnIcon, 0, 2, alignment = Qt.AlignRight)
+#         balOptions_grid.addWidget(QW.QLabel('Over-Sampling algorithm'), 1, 0)
+#         balOptions_grid.addWidget(cObj.LineSeparator(), 1, 1, 1, 2)
+#         balOptions_grid.addWidget(self.OS_combox, 2, 0)
+#         balOptions_grid.addWidget(QW.QLabel('k-neighbours'), 2, 1, alignment = Qt.AlignRight)
+#         balOptions_grid.addWidget(self.kOS_spbox, 2, 2)
+#         balOptions_grid.addWidget(QW.QLabel('m-neighbours'), 3, 1, alignment = Qt.AlignRight)
+#         balOptions_grid.addWidget(self.mOS_spbox, 3, 2)
+#         balOptions_grid.addWidget(QW.QLabel('Under-Sampling algorithm'), 4, 0)
+#         balOptions_grid.addWidget(cObj.LineSeparator(), 4, 1, 1, 2)
+#         balOptions_grid.addWidget(self.US_combox, 5, 0)
+#         balOptions_grid.addWidget(QW.QLabel('n-neighbours'), 5, 1, alignment = Qt.AlignRight)
+#         balOptions_grid.addWidget(self.nUS_spbox, 5, 2)
+#         balOptions_grid.addWidget(cObj.LineSeparator(), 6, 0, 1, 3)
+#         balOptions_grid.addWidget(QW.QLabel('Strategy'), 7, 0)
+#         balOptions_grid.addWidget(self.strategy_combox, 7, 1, 1, 2)
+#         balOptions_grid.addWidget(QW.QLabel('Unique value'), 8, 0)
+#         balOptions_grid.addWidget(self.strat_value, 8, 1, 1, 2)
+#         balOptions_grid.addWidget(cObj.LineSeparator(), 9, 0, 1, 3)
+#         balOptions_grid.addLayout(balActions_hbox, 10, 0, 1, 3)
+#         balOptions_grid.addWidget(self.balance_pBar, 11, 0, 1, 3)
+
+#         # (Balance group main layout)
+#         balance_hsplit = cObj.SplitterGroup((balOptions_grid, self.balance_table), (0, 1))
+#         self.balance_group = cObj.GroupArea(balance_hsplit, 'Balance train set',
+#                                             checkable=True)
+#         self.balance_group.setAlignment(Qt.AlignLeft)
+#         self.balance_group.setChecked(False)
+#         self.balance_group.setEnabled(False)
+
+
+# # ==== LEARNING SESSION PLOTS ==== #
+
+#     # Loss curves canvas
+#         self.lossView = cObj.CurvePlotCanvas(self, title='Loss curves', tight=True,
+#                                              xlab='Epochs', ylab='Loss')
+#         self.lossView.setMinimumSize(500, 400)
+
+#     # Loss curves Navigation Toolbar
+#         self.lossNTbar = cObj.NavTbar(self.lossView, self)
+#         self.lossNTbar.removeToolByIndex([3, 4, 8, 9])
+#         self.lossNTbar.fixHomeAction()
+
+#     # Loss info labels
+#         self.trLoss_lbl = QW.QLabel('None')
+#         self.vdLoss_lbl = QW.QLabel('None')
+
+#     # Accuracy curves canvas
+#         self.accuracyView = cObj.CurvePlotCanvas(self, title='Accuracy curves', tight=True,
+#                                                  xlab='Epochs', ylab='Accuracy')
+#         self.accuracyView.setMinimumSize(500, 400)
+
+#     # Accuracy curves Navigation Toolbar
+#         self.accuracyNTbar = cObj.NavTbar(self.accuracyView, self)
+#         self.accuracyNTbar.removeToolByIndex([3, 4, 8, 9])
+#         self.accuracyNTbar.fixHomeAction()
+
+#     # Accuracy info labels
+#         self.trAcc_lbl = QW.QLabel('None')
+#         self.vdAcc_lbl = QW.QLabel('None')
+
+#     # Train Confusion Matrix canvas
+#         self.CMtrainView = cObj.MatrixCanvas(self,
+#                                              title='Train set Confusion Matrix',
+#                                              xlab='Predicted classes',
+#                                              ylab='True Classes')
+#         self.CMtrainView.setMinimumSize(600, 600)
+
+#     # Train Confusion Matrix Navigation Toolbar
+#         self.CMtrainNTbar = cObj.NavTbar(self.CMtrainView, self)
+#         self.CMtrainNTbar.removeToolByIndex([3, 4, 8, 9, -1])
+
+#     # Show annotation as percentage action [--> Train CM NavTBar]
+#         self.CMtrainPercAction = QW.QAction(QIcon('Icons/CM_annotate.png'),
+#                                             'Toggle annotations as percentage',
+#                                             self.CMtrainNTbar)
+#         self.CMtrainPercAction.setCheckable(True)
+#         self.CMtrainPercAction.setChecked(True)
+#         self.CMtrainPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Train'))
+#         self.CMtrainNTbar.insertAction(5, self.CMtrainPercAction)
+
+#     # Train F1 scores labels
+#         self.trF1Micro_lbl = QW.QLabel('None')
+#         self.trF1Macro_lbl = QW.QLabel('None')
+#         self.trF1Weight_lbl = QW.QLabel('None')
+
+#     # Validation Confusion Matrix area
+#         self.CMvalidView = cObj.MatrixCanvas(self,
+#                                             title='Validation set Confusion Matrix',
+#                                             xlab='Predicted classes',
+#                                             ylab='True Classes')
+#         self.CMvalidView.setMinimumSize(600, 600)
+
+#     # Validation Confusion Matrix Navigation Toolbar
+#         self.CMvalidNTbar = cObj.NavTbar(self.CMvalidView, self)
+#         self.CMvalidNTbar.removeToolByIndex([3, 4, 8, 9, -1])
+
+#     # Show annotation as percentage action [--> Validation CM NavTBar]
+#         self.CMvalidPercAction = QW.QAction(QIcon('Icons/CM_annotate.png'),
+#                                            'Toggle annotations as percentage',
+#                                             self.CMvalidNTbar)
+#         self.CMvalidPercAction.setCheckable(True)
+#         self.CMvalidPercAction.setChecked(True)
+#         self.CMvalidPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Validation'))
+#         self.CMvalidNTbar.insertAction(5, self.CMvalidPercAction)
+
+#     # Validation F1 scores label
+#         self.vdF1Micro_lbl = QW.QLabel('None')
+#         self.vdF1Macro_lbl = QW.QLabel('None')
+#         self.vdF1Weight_lbl = QW.QLabel('None')
+
+#     # Adjust Learning Session plots group layout
+#         # (Loss Form Layout)
+#         loss_form = QW.QFormLayout()
+#         loss_form.addRow('Train loss ', self.trLoss_lbl)
+#         loss_form.addRow('Validation loss ', self.vdLoss_lbl)
+
+#         # (Accuracy Form Layout)
+#         acc_form = QW.QFormLayout()
+#         acc_form.addRow('Train accuracy ', self.trAcc_lbl)
+#         acc_form.addRow('Validation accuracy ', self.vdAcc_lbl)
+
+#         # (Train F1 scores Form Layout)
+#         trF1_form = QW.QFormLayout()
+#         trF1_form.addRow('Train F1 score (Micro AVG) ', self.trF1Micro_lbl)
+#         trF1_form.addRow('Train F1 score (Macro AVG) ', self.trF1Macro_lbl)
+#         trF1_form.addRow('Train F1 score (Weighted AVG) ', self.trF1Weight_lbl)
+
+#         # (Validation F1 scores Form Layout)
+#         vdF1_form = QW.QFormLayout()
+#         vdF1_form.addRow('Validation F1 score (Micro AVG) ', self.vdF1Micro_lbl)
+#         vdF1_form.addRow('Validation F1 score (Macro AVG) ', self.vdF1Macro_lbl)
+#         vdF1_form.addRow('Validation F1 score (Weighted AVG) ', self.vdF1Weight_lbl)
+
+#         # (Main group layout)
+#         learnPlots_grid = QW.QGridLayout()
+#         for row, (l, r) in enumerate(((self.lossNTbar   , self.accuracyNTbar),
+#                                       (self.lossView    , self.accuracyView ),
+#                                       (loss_form        , acc_form          ),
+#                                       (self.CMtrainNTbar, self.CMvalidNTbar ),
+#                                       (self.CMtrainView , self.CMvalidView  ),
+#                                       (trF1_form        , vdF1_form         ))):
+#             if row in (2, 5):
+#                 learnPlots_grid.addLayout(l, row, 0)
+#                 learnPlots_grid.addLayout(r, row, 1)
+#             else:
+#                 learnPlots_grid.addWidget(l, row, 0)
+#                 learnPlots_grid.addWidget(r, row, 1)
+#         learnPlots_group = cObj.GroupArea(learnPlots_grid, 'Learning Evaluation')
+
+
+# # ==== FINAL TESTING PLOTS ==== #
+
+#     # Test Confusion Matrix
+#         self.CMtestView = cObj.MatrixCanvas(self,
+#                                             title='Test set Confusion Matrix',
+#                                             xlab='Predicted classes',
+#                                             ylab='True Classes')
+#         self.CMtestView.setMinimumSize(600, 600)
+
+#     # Test Confusion Matrix Navigation Toolbar
+#         self.CMtestNTbar = cObj.NavTbar(self.CMtestView, self)
+#         self.CMtestNTbar.removeToolByIndex([3, 4, 8, 9, -1])
+
+#     # Show annotation as percentage action [--> Test CM NavTBar]
+#         self.CMtestPercAction = QW.QAction(QIcon('Icons/CM_annotate.png'),
+#                                             'Toggle annotations as percentage',
+#                                             self.CMtestNTbar)
+#         self.CMtestPercAction.setCheckable(True)
+#         self.CMtestPercAction.setChecked(True)
+#         self.CMtestPercAction.triggered.connect(lambda: self.update_ConfusionMatrix('Test'))
+#         self.CMtestNTbar.insertAction(5, self.CMtestPercAction)
+
+#     # Test score labels
+#         self.tsLoss_lbl = QW.QLabel('None')
+#         self.tsAcc_lbl = QW.QLabel('None')
+#         self.tsF1Micro_lbl = QW.QLabel('None')
+#         self.tsF1Macro_lbl = QW.QLabel('None')
+#         self.tsF1Weight_lbl = QW.QLabel('None')
+
+#     # Model info preview area
+#         self.modelPreview = QW.QTextEdit()
+#         self.modelPreview.setReadOnly(True)
+
+#     # Adjust final testing group layout
+#         # (Test scores form layout)
+#         tsScores_form = QW.QFormLayout()
+#         # tsScores_form.addRow('Test Loss', self.tsLoss_lbl)
+#         tsScores_form.addRow('Test Accuracy ', self.tsAcc_lbl)
+#         tsScores_form.addRow('Test F1 score (Micro AVG) ', self.tsF1Micro_lbl)
+#         tsScores_form.addRow('Test F1 score (Macro AVG) ', self.tsF1Macro_lbl)
+#         tsScores_form.addRow('Test F1 score (Weighted AVG) ', self.tsF1Weight_lbl)
+
+#         # (Main group layout)
+#         test_grid = QW.QGridLayout()
+#         test_grid.addWidget(self.CMtestNTbar, 0, 0)
+#         test_grid.addWidget(QW.QLabel('Model Variables Preview'), 0, 1, alignment=Qt.AlignHCenter)
+#         test_grid.addWidget(self.CMtestView, 1, 0)
+#         test_grid.addWidget(self.modelPreview, 1, 1, 3, 1)
+#         test_grid.addLayout(tsScores_form, 2, 0)
+#         test_group = cObj.GroupArea(test_grid, 'Model testing')
+
+
+# # ==== ADJUST MAIN LAYOUT ==== #
+
+#     # Adjust left area
+#         left_vbox = QW.QVBoxLayout()
+#         left_vbox.addWidget(loadDS_group, 1)
+#         left_vbox.addWidget(seed_group)
+#         left_vbox.addWidget(parentModel_group)
+#         left_vbox.addWidget(hyperparam_group)
+#         left_vbox.addWidget(preferences_group)
+#         left_vbox.addLayout(mainActions_grid)
+#         left_scroll = cObj.GroupScrollArea(left_vbox)
+#         left_scroll.setStyleSheet('QWidget {""}') # set the default stylesheet
+
+#     # Adjust right area
+#         right_vbox = QW.QVBoxLayout()
+#         right_vbox.setSpacing(50)
+#         right_vbox.addWidget(tvt_group)
+#         right_vbox.addWidget(self.balance_group)
+#         right_vbox.addWidget(learnPlots_group)
+#         right_vbox.addWidget(test_group)
+#         right_scroll = cObj.GroupScrollArea(right_vbox)
+
+#     # Adjust final layout
+#         main_hsplit = cObj.SplitterGroup((left_scroll, right_scroll), (0, 1)) # use SplitterLayout
+#         mainLayout = QW.QGridLayout()
+#         mainLayout.addWidget(main_hsplit)
+#         self.setLayout(mainLayout)
+
+#     def reset_UI(self):
+#     # Reset parent model
+#         self.remove_parentModel()
+#     # Reset split dataset operations
+#         self.trSet_list.clear()
+#         self.vdSet_list.clear()
+#         self.tsSet_list.clear()
+#         self.tvt_pie.clear_canvas()
+#         self.tvt_bar.clear_canvas()
+#     # Reset balancing features
+#         self.reset_balanceGroup()
+#     # Reset Learning session features
+#         self.lossView.clear_canvas()
+#         self.accuracyView.clear_canvas()
+#         self.CMtrainView.clear_canvas()
+#         self.CMvalidView.clear_canvas()
+#     # Reset Testing session features
+#         self.CMtestView.clear_canvas()
+#         self.modelPreview.clear()
+#     # Reset all scores labels
+#         for metric in ('loss', 'accuracy', 'F1_micro', 'F1_macro', 'F1_weighted'):
+#             for name in ('Train', 'Validation', 'Test'):
+#                 self.update_scoreLabel(name, metric, None)
+#     # Disable "start", "stop", "test" and "save" model operations
+#         self.startLearn_btn.setEnabled(False)
+#         self.stopLearn_btn.setEnabled(False)
+#         self.testModel_btn.setEnabled(False)
+#         self.saveModel_btn.setEnabled(False)
+
+#     def load_dataset(self, autosplit=True):
+#         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load Ground-truth dataset',
+#                                                   pref.get_dirPath('in'),
+#                                                   'Comma Separated Values (*.csv)')
+#         if path:
+#             pref.set_dirPath('in', os.path.dirname(path))
+#             if self._splitDatasetPerformed():
+#                 choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                                  'The entire learning procedure '\
+#                                                  'must be performed again. Load a new dataset?.',
+#                                                  QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                                  QW.QMessageBox.No)
+#                 if choice == QW.QMessageBox.No:
+#                     return
+#                 else:
+#                     self.reset_UI()
+
+#         # Get decimal point character
+#             dec = self.CSVdec.currentText()
+#         # Load GT dataset
+#             self.dataset = cObj.CsvChunkReader(dec, pBar=True).read(path)
+#         # Update GT dataset path
+#             self.DS_path.set_fullpath(path, predict_display=True)
+#         # Update dataset preview
+#             self.DS_previewArea.setText(f'DATASET PREVIEW\n\n{repr(self.dataset)}')
+#         # Enable "Split dataset" and "Load previous model"
+#             self.loadModel_btn.setEnabled(True)
+#             self.splitDS_btn.setEnabled(True)
+
+
+#     def adjust_splitRateos(self, value):
+#         spboxes = [self.trRateo_spbox, self.vdRateo_spbox, self.tsRateo_spbox]
+#         tot = lambda: sum([spb.value() for spb in spboxes])
+#         if tot != 100:
+#             # Reverse <spboxes> when the sender is the 2nd element, to achieve a GUI friendlier behaviour
+#             curr_idx = spboxes.index(self.sender())
+#             if curr_idx == 1: spboxes.reverse()
+#             for idx, spb in enumerate(spboxes):
+#                 if not idx == curr_idx:
+#                     # Temporarily block valueChanged signal when changing value (avoid loops).
+#                     spb.blockSignals(True)
+#                     # Increment/decrement the selected spinbox value
+#                     spb.setValue(spb.value() + 100 - tot())
+#                     # Unblock valueChanged signal
+#                     spb.blockSignals(False)
+
+#     def _splitDatasetPerformed(self):
+#         set_sum = sum([l.count() for l in (self.trSet_list, self.vdSet_list, self.tsSet_list)])
+#         return set_sum > 0
+
+#     def split_dataset(self):
+#         if self._extThreadRunning():
+#             return
+
+#     # Check if balancing operations have been performed already
+#         if self.balanceInfo:
+#             choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                              'Any previous balancing operation on '\
+#                                              'train set will be discarded. Continue?',
+#                                              QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                              QW.QMessageBox.No)
+#             if choice == QW.QMessageBox.No: return
+
+#     # Split features [X] from targets [Y (as labels)]
+#         pbar = cObj.PopUpProgBar(self, 5, 'Splitting dataset', cancel=False)
+#         try:
+#             X, Y_lbl = ML_tools.splitXFeat_YTarget(self.dataset.to_numpy(),
+#                                                    xtype='int32', ytype='U8')
+#             pbar.setValue(1)
+#         except Exception as e:
+#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                             'Unexpected data type', detailedText = repr(e))
+#             pbar.reset()
+#             return
+
+#     # Update Y_dict and encode Y labels through it
+#         self.update_Ydict(Y_lbl)
+#         Y = CF.encode_labels(Y_lbl, self.Y_dict)
+#         pbar.setValue(2)
+
+#     # Store original Train, Validation & Test sets rateos (before balancing operations)
+#         trRateo = self.trRateo_spbox.value()/100
+#         vdRateo = self.vdRateo_spbox.value()/100
+#         tsRateo = self.tsRateo_spbox.value()/100
+#         self.orig_TVTrateos = (trRateo, vdRateo, tsRateo)
+#         pbar.setValue(3)
+
+#     # Split X features and Y targets into Train, Validation & Test sets
+#         seed = self.seed
+#         X_split, Y_split = ML_tools.splitTrainValidTest(X, Y, trRateo, vdRateo, seed)
+#         self.X_train, self.X_valid, self.X_test = X_split
+#         self.Y_train, self.Y_valid, self.Y_test = Y_split
+#         pbar.setValue(4)
+
+#     # Store original Train targets (before balancing operations)
+#         self.origY_train = self.Y_train.copy()
+#         pbar.setValue(5)
+
+#     # Update Train, Validation & Test sets class counters and viewers
+#         for _set, _Y in (('Train',      self.Y_train),
+#                          ('Validation', self.Y_valid),
+#                          ('Test',       self.Y_test)):
+#             self.update_setClassCounter(_set, _Y)
+#             self.update_setClassViewer(_set)
+
+#     # Update TVT pie chart & bar chart
+#         self.update_tvtPlots()
+
+#     # Reset balancing features
+#         self.reset_balanceGroup()
+#         self.init_balanceTable()
+#         self.balance_group.setEnabled(True)
+
+#     # Update Main Actions buttons (START-TEST-LEARN)
+#         self.startLearn_btn.setEnabled(True)
+#         self.testModel_btn.setEnabled(False)
+#         self.saveModel_btn.setEnabled(False)
+
+
+#     def update_tvtPlots(self):
+#     # Update Pie chart
+#         trRateo = self.trRateo_spbox.value()
+#         vdRateo = self.vdRateo_spbox.value()
+#         tsRateo = self.tsRateo_spbox.value()
+#         lbls = (f'Train ({trRateo} %)', f'Validation ({vdRateo} %)', f'Test ({tsRateo} %)')
+#         self.tvt_pie.update_canvas((trRateo, vdRateo, tsRateo), lbls)
+#     # Update Bar chart
+#         barData = [list(cnt.values()) for cnt in (self.trClassCounter,
+#                                                   self.vdClassCounter,
+#                                                   self.tsClassCounter)]
+#         self.tvt_bar.update_canvas('', barData, list(self.Y_dict.keys()),
+#                                    multibars=True)
+
+
+#     def update_setClassCounter(self, set_name, Yset):
+#         Yset = CF.decode_labels(Yset, self.Y_dict)
+#         counter = dict()
+#         for k in self.Y_dict.keys():
+#             counter[k] = np.count_nonzero(Yset==k)
+
+#         if set_name == 'Train':
+#             self.trClassCounter = counter
+#         elif set_name == 'Validation':
+#             self.vdClassCounter  = counter
+#         elif set_name == 'Test':
+#             self.tsClassCounter = counter
+#         else : return
+
+#     def update_setClassViewer(self, set_name):
+#         if set_name == 'Train':
+#             listWid = self.trSet_list
+#             curr_lbl = self.trSet_currCount
+#             tot_lbl = self.trSet_totCount
+#             counter = self.trClassCounter
+#         elif set_name == 'Validation':
+#             listWid = self.vdSet_list
+#             curr_lbl = self.vdSet_currCount
+#             tot_lbl = self.vdSet_totCount
+#             counter = self.vdClassCounter
+#         elif set_name == 'Test':
+#             listWid = self.tsSet_list
+#             curr_lbl = self.tsSet_currCount
+#             tot_lbl = self.tsSet_totCount
+#             counter = self.tsClassCounter
+#         else : return
+
+#         listWid.clear()
+#         listWid.addItems(sorted(counter.keys()))
+#         curr_lbl.setText('')
+#         tot_lbl.setText(f'Tot = {sum(counter.values())}')
+
+
+#     def count_target(self, item, set_name):
+#         if set_name == 'Train':
+#             counter = self.trClassCounter
+#             curr_lbl = self.trSet_currCount
+#         elif set_name == 'Validation':
+#             counter = self.vdClassCounter
+#             curr_lbl = self.vdSet_currCount
+#         elif set_name == 'Test':
+#             counter = self.tsClassCounter
+#             curr_lbl = self.tsSet_currCount
+#         else : return
+
+#         count = counter[item.text()]
+#         curr_lbl.setText(f'{item.text()} = {count}')
+
+#     def update_Ydict(self, Y_lbl):
+#         # Checking for parent model Y_dict
+#         self.Y_dict = {}
+#         if self.parentModel_path.get_fullpath() != '':
+#             self.Y_dict = ML_tools.loadModel(
+#                 self.parentModel_path.get_fullpath())['Y_dict']
+
+#         # Update Y_dict {label: ID}
+#         for u in np.unique(Y_lbl):
+#             if not u in self.Y_dict.keys():
+#                 self.Y_dict[u] = len(self.Y_dict)
+
+#     def randomize_seed(self):
+#         seed = np.random.randint(0, 10**8)
+#         self.seedInput.setText(str(seed))
+
+#     def change_seed(self, text):
+#         if self._extThreadRunning():
+#             return
+#         if self._splitDatasetPerformed():
+#             choice = QW.QMessageBox.warning(self, 'X-Min Learn',
+#                      'Warning: the entire learnig procedure must be performed '\
+#                      'again if the seed is changed now. Confirm?',
+#                      QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                      QW.QMessageBox.No)
+#             if choice == QW.QMessageBox.No:
+#                 self.seedInput.blockSignals(True)
+#                 self.seedInput.setText(str(self.seed))
+#                 self.seedInput.blockSignals(False)
+#                 return
+#             else:
+#                 self.reset_UI()
+
+#         if text != '':
+#             self.seed = int(text)
+
+#     def _getOrigTrClassCount(self, target_lbl):
+#         target_ID = self.Y_dict[target_lbl]
+#         count = np.count_nonzero(self.origY_train == target_ID)
+#         return count
+
+#     def reset_balanceGroup(self):
+#         self.balanceInfo = False
+#         self.balance_group.setEnabled(False)
+#         self.balance_table.clearContents()
+#         self.strategy_combox.setCurrentText('Current')
+#         self.strat_value.clear()
+
+#     def init_balanceTable(self):
+#         names, curr_cnt = zip(*self.trClassCounter.items())
+#         n_rows = len(names)
+#         self.balance_table.setRowCount(n_rows)
+#         for row in range(n_rows):
+#         # compile and set first three columns items as locked
+#             i0 = QW.QTableWidgetItem(names[row])
+#             i1 = QW.QTableWidgetItem(str(self._getOrigTrClassCount(names[row])))
+#             i2 = QW.QTableWidgetItem(str(curr_cnt[row]))
+#             for col, i in enumerate((i0, i1, i2)):
+#                 i.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+#                 self.balance_table.setItem(row, col, i)
+#         # set a lineEdit with integer validator to fourth column
+#             i3 = QW.QLineEdit()
+#             i3.setValidator(QG.QIntValidator(bottom=0))
+#             i3.textEdited.connect(
+#                 lambda: self.strategy_combox.setCurrentText('Custom multi-value'))
+#             self.balance_table.setCellWidget(row, 3, i3)
+#         # set current class counts in fourth column
+#             self.balance_table.cellWidget(row, 3).setText(str(curr_cnt[row]))
+
+
+#     def autoFill_balanceTable(self, value):
+#         n_rows = self.balance_table.rowCount()
+#         for row in range(n_rows):
+#             self.balance_table.cellWidget(row, 3).setText(value)
+
+#     def get_balanceTableColumnCells(self, col):
+#         n_rows = self.balance_table.rowCount()
+#         if col == 3:
+#             cells = [self.balance_table.cellWidget(r, col).text() for r in range(n_rows)]
+#         else:
+#             cells = [self.balance_table.item(r, col).text() for r in range(n_rows)]
+#         return cells
+
+#     def enable_mOS(self, text):
+#         enabled = text == 'BorderlineSMOTE'
+#         self.mOS_spbox.setEnabled(enabled)
+
+#     def enable_nUS(self, text):
+#         enabled = text not in ('RandUS', 'TomekLinks')
+#         self.nUS_spbox.setEnabled(enabled)
+
+#     def update_USwarning(self, text):
+#         if text in ('TomekLinks', 'ENN-all', 'ENN-mode', 'NCR-all', 'NCR-mode'):
+#             self.US_warnIcon.show()
+#         else:
+#             self.US_warnIcon.hide()
+
+#     def update_strategyValue(self, text):
+#         counts = list(self.trClassCounter.values())
+#         num = None
+
+#         if text == 'Current':
+#             self.init_balanceTable()
+#         elif text == 'Min':
+#             num = min(counts)
+#         elif text == 'Max':
+#             num = max(counts)
+#         elif text == 'Mean':
+#             num = int(np.mean(counts))
+#         elif text == 'Median':
+#             num = int(np.median(counts))
+
+#         if num is not None:
+#             self.strat_value.setText(str(num))
+
+
+#     def _extThreadRunning(self):
+#         threads = [self.balThread, self.learnThread]
+#         for t in threads:
+#             if t.isRunning():
+#                 _name = t.objectName()
+#                 QW.QMessageBox.critical(self, 'Error', 'Cannot perform this action '\
+#                                         f'while {_name} operation is running.')
+#                 return True
+#         return False
+
+#     def initialize_balancing(self):
+#         if self._extThreadRunning():
+#             return
+#     # Ask user confirm + balance note
+#         note = "Note: The number of samples won't be actually over-sampled/"\
+#                 "under-sampled if no over-sample/under-sample algorithm has been selected."
+#         choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                   f'Do you want to run the train set balancing operation?\n\n{note}',
+#                   QW.QMessageBox.Yes | QW.QMessageBox.No, QW.QMessageBox.No)
+#         if choice == QW.QMessageBox.Yes:
+
+#         # Check for empty cells under the "After balancing" column
+#             cells = self.get_balanceTableColumnCells(3)
+#             if '' in cells:
+#                 QW.QMessageBox.critical(self, 'X-Min Learn',
+#                 'Some cells under the "Balanced" column are empty.')
+#                 return
+
+#         # Retreive input parameters for the balancing function
+#             seed = self.seed
+#             OS = self.OS_combox.currentText()
+#             US = self.US_combox.currentText()
+#             if OS == 'None': OS = None
+#             if US == 'None': US = None
+#             if OS == US == None: # check for algorithms absence
+#                 QW.QMessageBox.critical(self, 'X-Min Learn',
+#                 'Please select at least one sampling algorithm')
+#                 return
+#             kOS = self.kOS_spbox.value()
+#             mOS = self.mOS_spbox.value()
+#             nUS = self.nUS_spbox.value()
+#             strategy = self.strategy_combox.currentText()
+#             if strategy == 'Custom value':
+#                 strategy = int(self.strat_value.text())
+#             elif strategy in ('Custom multi-value', 'Current'):
+#                 class_names = self.get_balanceTableColumnCells(0)
+#                 custom_values = [int(c) for c in cells]
+#                 strategy = dict(zip(class_names, custom_values))
+
+#         # Disable Start and Cancel balancing buttons
+#             self.runBalance_btn.setEnabled(False)
+#             self.cancBalance_btn.setEnabled(False)
+
+#         # Run the balancing thread
+#             self.balance_pBar.setRange(0, 0)
+#             task = lambda: ML_tools.balance_TrainSet(self.X_train, self.Y_train,
+#                                                       strategy, OS, US, kOS, mOS,
+#                                                       nUS, seed)
+#             self.balThread.set_func(task)
+#             self.balThread.start()
+
+
+#     def finalize_balancing(self, thread_out):
+#         self.balance_pBar.setRange(0, 4)
+
+#     # Check the result from the balance external thread
+#         if len(thread_out) == 1: # it means that the balancing operation has raised an exception
+#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                             'Balancing failed.', detailedText=repr(thread_out[0]))
+
+#         else: # it means that the balancing operation was completed succesfully
+#             self.X_train, self.Y_train, balInfo = thread_out
+
+#         # Add new balancing info to the balancing operation tracer
+#             if not self.balanceInfo:
+#                 self.balanceInfo = []
+#             self.balanceInfo.append(balInfo)
+#             self.balance_pBar.setValue(1)
+
+#         # Update Train set class counter and viewer
+#             self.update_setClassCounter('Train', self.Y_train)
+#             self.update_setClassViewer('Train')
+#             self.balance_pBar.setValue(2)
+
+#         # Recalc Train, Validation and Test sets rateos
+#             tr_size = sum(self.trClassCounter.values())
+#             vd_size = sum(self.vdClassCounter.values())
+#             ts_size = sum(self.tsClassCounter.values())
+#             tot_size = tr_size + vd_size + ts_size
+#             trRateo = tr_size/tot_size
+#             vdRateo = vd_size/tot_size
+#             tsRateo = ts_size/tot_size
+
+#         # Update Train, Validation & Test spin-boxes
+#             self.trRateo_spbox.setValue(round(trRateo*100))
+#             self.vdRateo_spbox.setValue(round(vdRateo*100))
+#             self.tsRateo_spbox.setValue(round(tsRateo*100))
+
+#         # Update pie chart and bar chart plots
+#             self.update_tvtPlots()
+#             self.balance_pBar.setValue(3)
+
+#         # Add new rateos info into self.balaceInfo dictionary
+#             self.balanceInfo[-1]['New TVT rateos'] = (round(trRateo, 2),
+#                                                       round(vdRateo, 2),
+#                                                       round(tsRateo, 2))
+
+#         # Re-initialize the balance table
+#             self.init_balanceTable()
+#             self.balance_pBar.setValue(4)
+
+#         # Exit balancing operations with success
+#             QW.QMessageBox.information(self, 'X-Min Learn',
+#                                         'Balancing operations concluded succesfully')
+
+#     # Reset pbar and enable Start and Cancel buttons in any case
+#         self.balance_pBar.reset()
+#         self.runBalance_btn.setEnabled(True)
+#         self.cancBalance_btn.setEnabled(True)
+
+
+#     def canc_balancing(self):
+#         choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#         'Warning: Any previous balancing operation on the train set will be discarded.',
+#                                           QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                           QW.QMessageBox.No)
+#         if choice == QW.QMessageBox.Yes:
+#         # Delete all balancing info (to avoid MessageBox at the beginning of self.split_dataset())
+#             self.balanceInfo = False
+#         # Set Train, Validation & Test spin-boxes values with original rateos
+#             trRateo, vdRateo, tsRateo = self.orig_TVTrateos
+#             self.trRateo_spbox.setValue(round(trRateo*100))
+#             self.vdRateo_spbox.setValue(round(vdRateo*100))
+#             self.tsRateo_spbox.setValue(round(tsRateo*100))
+#         # Re-launch split dataset function
+#             self.split_dataset()
+
+#     def load_parentModel(self):
+#         if self._extThreadRunning():
+#             return
+#         if self._splitDatasetPerformed():
+#             choice = QW.QMessageBox.warning(self, 'X-Min Learn', 'Warning: '\
+#                      'The entire learnig procedure must be performed again. Continue?',
+#                      QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                      QW.QMessageBox.No)
+#             if choice == QW.QMessageBox.No:
+#                 return
+#             else:
+#                 self.reset_UI()
+
+#         path, _  = QW.QFileDialog.getOpenFileName(self, 'Load parent model',
+#                                                   pref.get_dirPath('in'),
+#                                                   'PyTorch Data File (*.pth)')
+#         if path:
+#             pref.set_dirPath('in', os.path.dirname(path))
+#             pbar = cObj.PopUpProgBar(self, 4, 'Loading Model')
+#             try:
+#             # Import parent model variables
+#                 modelVars = ML_tools.loadModel(path)
+#                 pbar.setValue(1)
+
+#             # Check parent model variables
+#                 missing = ML_tools.missingVariables(modelVars)
+#                 if len(missing):
+#                     raise KeyError(f'Missing required variables: {missing}')
+#                 pbar.setValue(2)
+
+#             # Check that parent model shares the same X features of loaded GT dataset
+#                 parent_xF = modelVars['ordered_Xfeat']
+#                 dataset_xF = self.dataset.columns.to_list()[:-1]
+#                 if parent_xF != dataset_xF:
+#                     raise ValueError('The model and the ground-truth dataset '\
+#                                      'do not share the same features.')
+                
+#                 ## add check for same y classes
+#                 pbar.setValue(3)
+
+#             # Update hyper-parameters and preferences
+#                 self.parentModel_path.set_fullpath(path, predict_display=True)
+#                 self.seedInput.setText(str(modelVars['seed']))
+#                 self.lr_spbox.setValue(modelVars['lr'])
+#                 self.wd_spbox.setValue(modelVars['wd'])
+#                 self.mtm_spbox.setValue(modelVars['mtm'])
+#                 self.regrType_combox.setCurrentText('Polynomial' if modelVars['regressorDegree']>1 else 'Linear')
+#                 self.polyDeg_spbox.setValue(modelVars['regressorDegree']) # if it is 1, this will be ignored(?)
+#                 # User must not change the regressor type and degree in update mode
+#                 self.regrType_combox.setEnabled(False)
+#                 self.polyDeg_spbox.setEnabled(False)
+#                 self.algm_combox.setCurrentText(modelVars['algm_name'])
+#                 self.optim_combox.setCurrentText(modelVars['optim_name'])
+#                 pbar.setValue(4)
+#                 QW.QMessageBox.information(self, 'X-Min Learn',
+#                                            'Model loaded with success.')
+#             except Exception as e:
+#                 pbar.reset()
+#                 cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                                 'The selected model produced an error.',
+#                                 detailedText = repr(e))
+#                 self.remove_parentModel()
+
+#     def remove_parentModel(self):
+#         self.parentModel_path.set_fullpath('')
+#         self.parentModel_path.set_displayName('No model loaded')
+#         # Allow the user to interact with the regressor type and degree when update mode is off
+#         self.regrType_combox.setEnabled(True)
+#         self.regrType_combox.setCurrentText('Linear')
+#         self.polyDeg_spbox.setEnabled(False)
+#         self.polyDeg_spbox.setValue(1)
+
+#     def update_curve(self, graph, y_data):
+#         y_train, y_valid = y_data
+#         x_data = range(len(y_train))
+
+#         if graph == 'loss':
+#             canvas = self.lossView
+#         elif graph == 'accuracy':
+#             canvas = self.accuracyView
+#         else:
+#             raise ValueError(f'{graph} is not a valid key argument for graph')
+
+#         if canvas.has_curves():
+#             canvas.update_canvas([(x_data, y_train),
+#                                   (x_data, y_valid)])
+#         else:
+#             canvas.add_curve(x_data, y_train, f'Train {graph}', 'b')
+#             canvas.add_curve(x_data, y_valid, f'Validation {graph}', 'r')
+#             canvas.update_canvas()
+
+#     def update_ConfusionMatrix(self, set_name):
+#         if set_name == 'Train':
+#             true = self.Y_train
+#             preds = self.tr_preds
+#             asPerc = self.CMtrainPercAction.isChecked()
+#             canvas = self.CMtrainView
+#         elif set_name == 'Validation':
+#             true = self.Y_valid
+#             preds = self.vd_preds
+#             asPerc = self.CMvalidPercAction.isChecked()
+#             canvas = self.CMvalidView
+#         elif set_name == 'Test':
+#             true = self.Y_test
+#             preds = self.ts_preds
+#             asPerc = self.CMtestPercAction.isChecked()
+#             canvas = self.CMtestView
+#         else: return
+
+#         if preds is None:
+#             return
+
+#         lbls, IDs = zip(*self.Y_dict.items())
+#         CM = ML_tools.confusionMatrix(true, preds, IDs, percent=asPerc)
+#         canvas.update_canvas(CM)
+#         canvas.set_ticks(lbls)
+
+
+#     def update_scoreLabel(self, set_name, metric, score):
+#         names = ('Train', 'Validation', 'Test')
+#         metrics = ('loss', 'accuracy', 'F1_micro', 'F1_macro', 'F1_weighted')
+#         labels = np.array([[self.trLoss_lbl    , self.vdLoss_lbl    , None               ],
+#                            [self.trAcc_lbl     , self.vdAcc_lbl     , self.tsAcc_lbl     ],
+#                            [self.trF1Micro_lbl , self.vdF1Micro_lbl , self.tsF1Micro_lbl ],
+#                            [self.trF1Macro_lbl , self.vdF1Macro_lbl , self.tsF1Macro_lbl ],
+#                            [self.trF1Weight_lbl, self.vdF1Weight_lbl, self.tsF1Weight_lbl]])
+#         col = names.index(set_name)
+#         row = metrics.index(metric)
+#         lbl = labels[row, col]
+#         if lbl is not None:
+#             labels[row, col].setText(str(score))
+
+# #     def start_learning(self):
+# #         if self._extThreadRunning():
+# #             return
+# #     # Check that Train, Validation and Test sets share the same unique classes
+# #         tr_unq, vd_unq, ts_unq = [np.unique(arr) for arr in (self.Y_train, self.Y_valid, self.Y_test)]
+# #         if not np.array_equal(tr_unq, vd_unq) or not np.array_equal(tr_unq, ts_unq):
+# #             QW.QMessageBox.critical(self, 'Datasets inconsistency',
+# #                                     "Train, validation and test sets do not share the same classes.")
+# #             return
+
+# #     # Update Main Actions buttons (START-STOP-TEST-LEARN)
+# #         self.startLearn_btn.setEnabled(False)
+# #         self.stopLearn_btn.setEnabled(True)
+# #         self.testModel_btn.setEnabled(False)
+# #         self.saveModel_btn.setEnabled(False)
+
+# #     # Check if it is required to update a previous model
+# #         parent_path = self.parentModel_path.get_fullpath()
+# #         update_model = parent_path != ''
+# #         if update_model:
+# #             parent_vars = ML_tools.loadModel(parent_path)
+# #         else: parent_vars = None
+
+# #     # Convert Train and Validation features and targets to torch Tensors
+# #         X_train = ML_tools.array2Tensor(self.X_train)
+# #         Y_train = ML_tools.array2Tensor(self.Y_train, 'uint8')
+# #         X_valid = ML_tools.array2Tensor(self.X_valid)
+# #         Y_valid = ML_tools.array2Tensor(self.Y_valid, 'uint8')
+
+# #     # Normalize feature data
+# #         if update_model:
+# #             X_mean, X_std = parent_vars['standards']
+# #             X_train_norm = ML_tools.norm_data(X_train, X_mean, X_std,
+# #                                               return_standards=False)
+# #         else:
+# #             X_train_norm, X_mean, X_std = ML_tools.norm_data(X_train)
+
+# #         X_valid_norm = ML_tools.norm_data(X_valid, X_mean, X_std,
+# #                                           return_standards=False)
+
+# #     # Get Hyper-parameters and seed
+# #         seed = self.seed
+# #         lr = self.lr_spbox.value()
+# #         wd = self.wd_spbox.value()
+# #         mtm = self.mtm_spbox.value()
+# #         epochs = self.epochs_spbox.value()
+
+# #     # Get learning preferences
+# #         algm_name = self.algm_combox.currentText()
+# #         optm_name = self.optim_combox.currentText()
+
+# #     # Initialize model
+# #         self.model = ML_tools.getModel(algm_name,
+# #                                        self.X_train.shape[1],
+# #                                        len(self.Y_dict), # Y_dict includes parent model classes
+# #                                        seed=seed)
+# #         if update_model:
+# #             ML_tools.embed_modelParameters(parent_vars['model_state_dict'], self.model)
+
+# #     # Set device
+# #         useGPU = self.cuda_cbox.isChecked()
+# #         device = "cuda" if (useGPU & ML_tools.cuda_available()) else "cpu"
+# #         self.model.to(device)
+
+# #     # Set optimizer function
+# #         optimizer = ML_tools.getOptimizer(optm_name, self.model, lr, mtm, wd)
+# #         # PROBABLY NOT NEEDED BECAUSE GETS THE PARAMETERS FROM MODEL (already updated),
+# #         # AND HYPER-PARAMETERS CAN BE CHANGED BY USER
+# #         # if update_model:
+# #         #     optimizer.load_state_dict(parent_vars['optim_state_dict'])
+# #         #     # after loading the parent state dict refresh the hyper-parameters
+# #         #     for g in optimizer.param_groups:
+# #         #         g['lr'] = lr
+# #         #         g['momentum'] = mtm
+# #         #         g['weight_decay'] = wd
+
+
+# #     # Set progress bar range
+# #         e_min = parent_vars['epochs'] if update_model else 0
+# #         e_max = e_min + epochs
+# #         self.progBar.setRange(e_min, e_max)
+
+# # # ---------------------- START LEARNING SESSION ---------------------- #
+
+# #     # Initialize losses and accuracy lists
+# #         if update_model:
+# #             self.tr_losses, self.vd_losses = parent_vars['loss_list']
+# #             self.tr_acc, self.vd_acc = parent_vars['accuracy_list']
+# #         else:
+# #             self.tr_losses, self.vd_losses = [], []
+# #             self.tr_acc, self.vd_acc = [], []
+
+# #     # Adjust graphics update rate
+# #         upRate = int(self.graph_updateRate.text())
+# #         if upRate == 0: upRate = e_max #prevent ZeroDivisionError when update graphics
+
+# #     # Clear curve plots
+# #         for plot in (self.lossView, self.accuracyView):
+# #             plot.clear_canvas()
+
+# #     # Start iterating through epochs
+# #         for e in range(e_min, e_max):
+
+# #             # (Check for user cancel request)
+# #             if self.cancel_learning:
+# #                 self.cancel_learning = False
+# #                 e -= 1
+# #                 break
+
+# #             # (Learn)
+# #             (train_loss,
+# #              valid_loss,
+# #              tr_preds,
+# #              vd_preds) = self.model.learn(X_train_norm, Y_train,
+# #                                           X_valid_norm, Y_valid,
+# #                                           optimizer, device)
+
+# #             # (Compute accuracy)
+# #             train_acc = ML_tools.accuracy(self.Y_train, tr_preds)
+# #             valid_acc = ML_tools.accuracy(self.Y_valid, vd_preds)
+
+# #             # (Store new loss and accuracy values)
+# #             self.tr_losses.append(train_loss)
+# #             self.vd_losses.append(valid_loss)
+# #             self.tr_acc.append(train_acc)
+# #             self.vd_acc.append(valid_acc)
+
+# #             # (Update loss and accuracy plots and labels)
+# #             if (e+1) % upRate == 0:
+# #                 self.update_curve('loss', e+1, (self.tr_losses, self.vd_losses))
+# #                 self.update_curve('accuracy', e+1, (self.tr_losses, self.vd_losses))
+# #                 self.update_scoreLabel('Train', 'loss', self.tr_losses[-1])
+# #                 self.update_scoreLabel('Validation', 'loss', self.vd_losses[-1])
+# #                 self.update_scoreLabel('Train', 'accuracy', self.tr_acc[-1])
+# #                 self.update_scoreLabel('Validation', 'accuracy', self.vd_acc[-1])
+
+# #             # (Update progress bar)
+# #             self.progBar.setValue(e)
+
+# #     # Update loss and accuracy plots and labels on exit
+# #         self.update_curve('loss', e+1, (self.tr_losses, self.vd_losses))
+# #         self.update_curve('accuracy', e+1, (self.tr_losses, self.vd_losses))
+# #         self.update_scoreLabel('Train', 'loss', self.tr_losses[-1])
+# #         self.update_scoreLabel('Validation', 'loss', self.vd_losses[-1])
+# #         self.update_scoreLabel('Train', 'accuracy', self.tr_acc[-1])
+# #         self.update_scoreLabel('Validation', 'accuracy', self.vd_acc[-1])
+
+# #     # Update Confusion Matrices
+# #         self.tr_preds = self.model.predict(X_train_norm.to(device))[1].cpu()
+# #         self.vd_preds = self.model.predict(X_valid_norm.to(device))[1].cpu()
+# #         self.update_ConfusionMatrix('Train')
+# #         self.update_ConfusionMatrix('Validation')
+
+# #     # Update Train and Validation F1 scores
+
+# #         #               micro  |  macro  |  weighted
+# #         # F1 train             |         |
+# #         # F1 validation        |         |
+# #         # F1 test              |         |
+
+# #         f1_scores = np.empty((3,3))
+# #         for n, avg in enumerate(('micro', 'macro', 'weighted')):
+# #             f1_scores[0, n] = _tr = ML_tools.f1score(self.Y_train, self.tr_preds, avg)
+# #             f1_scores[1, n] = _vd = ML_tools.f1score(self.Y_valid,  self.vd_preds, avg)
+# #             self.update_scoreLabel('Train', f'F1_{avg}', _tr)
+# #             self.update_scoreLabel('Validation', f'F1_{avg}', _vd)
+
+# #     # Save model variables in memory
+# #         self.model_vars = {'algm_name'        : self.model._name,
+# #                            'loss_name'        : self.model._loss,
+# #                            'optim_name'       : optm_name,
+# #                            'optim_state_dict' : optimizer.state_dict(),
+# #                            'model_state_dict' : self.model.state_dict(),
+# #                            'standards'        : (X_mean, X_std),
+# #                            'parentModel_path' : parent_path,
+# #                            'seed'             : seed,
+# #                            'epochs'           : len(self.tr_losses),
+# #                            'lr'               : lr,
+# #                            'wd'               : wd,
+# #                            'mtm'              : mtm,
+# #                            'GT_dataset_path'  : self.DS_path.get_fullpath(),
+# #                            'TVT_rateos'       : self.orig_TVTrateos,
+# #                            'balancing_info'   : self.balanceInfo,
+# #                            'ordered_Xfeat'    : self.dataset.columns.to_list()[:-1],
+# #                            'Y_dict'           : self.Y_dict,
+# #                            'F1_scores'        : f1_scores,
+# #                            'accuracy'         : [train_acc, valid_acc],
+# #                            'loss'             : [train_loss, valid_loss],
+# #                            'accuracy_list'    : (self.tr_acc, self.vd_acc),
+# #                            'loss_list'        : (self.tr_losses, self.vd_losses)}
+
+# #     # Update Main Actions buttons (START-STOP-TEST-LEARN) on exit
+# #         self.startLearn_btn.setEnabled(True)
+# #         self.stopLearn_btn.setEnabled(False)
+# #         self.testModel_btn.setEnabled(True)
+# #         self.saveModel_btn.setEnabled(False)
+
+# #     # Reset progress bar and end learning session with success
+# #         self.progBar.reset()
+# #         QW.QMessageBox.information(self, 'Learning completed',
+# #                                     'Learning session completed succesfully.')
+
+# #     def stop_learning(self):
+# #         self.cancel_learning = True
+
+#     def initialize_learning(self):
 #         if self._extThreadRunning():
 #             return
 #     # Check that Train, Validation and Test sets share the same unique classes
 #         tr_unq, vd_unq, ts_unq = [np.unique(arr) for arr in (self.Y_train, self.Y_valid, self.Y_test)]
 #         if not np.array_equal(tr_unq, vd_unq) or not np.array_equal(tr_unq, ts_unq):
-#             QW.QMessageBox.critical(self, 'Datasets inconsistency',
+#             QW.QMessageBox.critical(self, 'X-Min Learn',
 #                                     "Train, validation and test sets do not share the same classes.")
 #             return
+
+#     # Set the progress bar temporarily
+#         self.progBar.setRange(0, 4)
+#         self.progBar.setTextVisible(False)
 
 #     # Update Main Actions buttons (START-STOP-TEST-LEARN)
 #         self.startLearn_btn.setEnabled(False)
@@ -5911,15 +8205,25 @@ class ModelLearner(DraggableTool):
 #     # Check if it is required to update a previous model
 #         parent_path = self.parentModel_path.get_fullpath()
 #         update_model = parent_path != ''
-#         if update_model:
-#             parent_vars = ML_tools.loadModel(parent_path)
-#         else: parent_vars = None
+#         parent_vars = ML_tools.loadModel(parent_path) if update_model else None # EagerModel.load(parent_path)
+#         self.progBar.setValue(1)
+
+#     # Map features from linear to polynomial if required
+#         regrDegree = self.polyDeg_spbox.value()
+#         if regrDegree > 1:
+#             X_train = ML_tools.map_polinomial_features(self.X_train, regrDegree)
+#             X_valid = ML_tools.map_polinomial_features(self.X_valid, regrDegree)
+#         else:
+#             X_train = self.X_train.copy()
+#             X_valid = self.X_valid.copy()
+#         self.progBar.setValue(2)
 
 #     # Convert Train and Validation features and targets to torch Tensors
-#         X_train = ML_tools.array2Tensor(self.X_train)
-#         Y_train = ML_tools.array2Tensor(self.Y_train, 'uint8')
-#         X_valid = ML_tools.array2Tensor(self.X_valid)
-#         Y_valid = ML_tools.array2Tensor(self.Y_valid, 'uint8')
+#         X_train = ML_tools.array2tensor(X_train, 'float32')
+#         Y_train = ML_tools.array2tensor(self.Y_train, 'uint8')
+#         X_valid = ML_tools.array2tensor(X_valid, 'float32')
+#         Y_valid = ML_tools.array2tensor(self.Y_valid, 'uint8')
+#         self.progBar.setValue(3)
 
 #     # Normalize feature data
 #         if update_model:
@@ -5931,6 +8235,8 @@ class ModelLearner(DraggableTool):
 
 #         X_valid_norm = ML_tools.norm_data(X_valid, X_mean, X_std,
 #                                           return_standards=False)
+#         self.progBar.setValue(4)
+
 
 #     # Get Hyper-parameters and seed
 #         seed = self.seed
@@ -5945,7 +8251,7 @@ class ModelLearner(DraggableTool):
 
 #     # Initialize model
 #         self.model = ML_tools.getModel(algm_name,
-#                                        self.X_train.shape[1],
+#                                        X_train.shape[1],
 #                                        len(self.Y_dict), # Y_dict includes parent model classes
 #                                        seed=seed)
 #         if update_model:
@@ -5957,7 +8263,8 @@ class ModelLearner(DraggableTool):
 #         self.model.to(device)
 
 #     # Set optimizer function
-#         optimizer = ML_tools.getOptimizer(optm_name, self.model, lr, mtm, wd)
+#         self.optimizer = ML_tools.getOptimizer(optm_name, self.model, lr, mtm, wd)
+
 #         # PROBABLY NOT NEEDED BECAUSE GETS THE PARAMETERS FROM MODEL (already updated),
 #         # AND HYPER-PARAMETERS CAN BE CHANGED BY USER
 #         # if update_model:
@@ -5969,12 +8276,12 @@ class ModelLearner(DraggableTool):
 #         #         g['weight_decay'] = wd
 
 
-#     # Set progress bar range
+#     # Reset progress bar range
 #         e_min = parent_vars['epochs'] if update_model else 0
 #         e_max = e_min + epochs
+#         self.progBar.reset()
 #         self.progBar.setRange(e_min, e_max)
-
-# # ---------------------- START LEARNING SESSION ---------------------- #
+#         self.progBar.setTextVisible(True)
 
 #     # Initialize losses and accuracy lists
 #         if update_model:
@@ -5986,464 +8293,231 @@ class ModelLearner(DraggableTool):
 
 #     # Adjust graphics update rate
 #         upRate = int(self.graph_updateRate.text())
-#         if upRate == 0: upRate = e_max #prevent ZeroDivisionError when update graphics
+#         if upRate == 0:
+#             upRate = e_max # prevent ZeroDivisionError when update graphics
+#         elif upRate / epochs < 0.02:
+#             upRate = epochs * 0.02 # prevent too fast updates that crashes the thread(?)
 
 #     # Clear curve plots
 #         for plot in (self.lossView, self.accuracyView):
 #             plot.clear_canvas()
 
-#     # Start iterating through epochs
-#         for e in range(e_min, e_max):
+#     # Initialize model variables in order. Some variables will be provided in finalize_learning() func
+#         self.model_vars = {'algm_name'        : self.model._name,
+#                            'loss_name'        : self.model._loss,
+#                            'optim_name'       : optm_name,
+#                            'optim_state_dict' : None,
+#                            'model_state_dict' : None,
+#                            'regressorDegree'  : regrDegree,
+#                            'standards'        : (X_mean, X_std),
+#                            'parentModel_path' : parent_path,
+#                            'GT_dataset_path'  : self.DS_path.get_fullpath(),
+#                            'TVT_rateos'       : self.orig_TVTrateos,
+#                            'balancing_info'   : self.balanceInfo,
+#                            'device'           : device,
+#                            'seed'             : seed,
+#                            'epochs'           : None,
+#                            'lr'               : lr,
+#                            'wd'               : wd,
+#                            'mtm'              : mtm,
+#                            'accuracy_list'    : None,
+#                            'loss_list'        : None,
+#                            'accuracy'         : None,
+#                            'loss'             : None,
+#                            'F1_scores'        : None,
+#                            'ordered_Xfeat'    : self.dataset.columns.to_list()[:-1],
+#                            'Y_dict'           : self.Y_dict}
 
-#             # (Check for user cancel request)
-#             if self.cancel_learning:
-#                 self.cancel_learning = False
-#                 e -= 1
-#                 break
+#     # Start the learning thread
+#         task = lambda: self.model.learn(X_train_norm, Y_train,
+#                                         X_valid_norm, Y_valid,
+#                                         self.optimizer, device)
+#         self.learnThread.setParameters(task, (self.Y_train, self.Y_valid),
+#                                        (e_min, e_max), upRate)
+#         self.learnThread.start()
 
-#             # (Learn)
-#             (train_loss,
-#              valid_loss,
-#              tr_preds,
-#              vd_preds) = self.model.learn(X_train_norm, Y_train,
-#                                           X_valid_norm, Y_valid,
-#                                           optimizer, device)
 
-#             # (Compute accuracy)
-#             train_acc = ML_tools.accuracy(self.Y_train, tr_preds)
-#             valid_acc = ML_tools.accuracy(self.Y_valid, vd_preds)
 
-#             # (Store new loss and accuracy values)
-#             self.tr_losses.append(train_loss)
-#             self.vd_losses.append(valid_loss)
-#             self.tr_acc.append(train_acc)
-#             self.vd_acc.append(valid_acc)
+#     def update_learningScores(self, thread_out):
+#     # Extract objects from thread output
+#         e, (tr_loss, vd_loss), (tr_acc, vd_acc) = thread_out
+#     # Store new loss and accuracy values
+#         self.tr_losses.append(tr_loss)
+#         self.vd_losses.append(vd_loss)
+#         self.tr_acc.append(tr_acc)
+#         self.vd_acc.append(vd_acc)
+#     # Update progress bar
+#         self.progBar.setValue(e)
 
-#             # (Update loss and accuracy plots and labels)
-#             if (e+1) % upRate == 0:
-#                 self.update_curve('loss', e+1, (self.tr_losses, self.vd_losses))
-#                 self.update_curve('accuracy', e+1, (self.tr_losses, self.vd_losses))
-#                 self.update_scoreLabel('Train', 'loss', self.tr_losses[-1])
-#                 self.update_scoreLabel('Validation', 'loss', self.vd_losses[-1])
-#                 self.update_scoreLabel('Train', 'accuracy', self.tr_acc[-1])
-#                 self.update_scoreLabel('Validation', 'accuracy', self.vd_acc[-1])
-
-#             # (Update progress bar)
-#             self.progBar.setValue(e)
-
-#     # Update loss and accuracy plots and labels on exit
-#         self.update_curve('loss', e+1, (self.tr_losses, self.vd_losses))
-#         self.update_curve('accuracy', e+1, (self.tr_losses, self.vd_losses))
+#     def update_learningScoresView(self):
+#         self.update_curve('loss', (self.tr_losses, self.vd_losses))
+#         self.update_curve('accuracy', (self.tr_acc, self.vd_acc))
 #         self.update_scoreLabel('Train', 'loss', self.tr_losses[-1])
 #         self.update_scoreLabel('Validation', 'loss', self.vd_losses[-1])
 #         self.update_scoreLabel('Train', 'accuracy', self.tr_acc[-1])
 #         self.update_scoreLabel('Validation', 'accuracy', self.vd_acc[-1])
 
-#     # Update Confusion Matrices
-#         self.tr_preds = self.model.predict(X_train_norm.to(device))[1].cpu()
-#         self.vd_preds = self.model.predict(X_valid_norm.to(device))[1].cpu()
-#         self.update_ConfusionMatrix('Train')
-#         self.update_ConfusionMatrix('Validation')
+#     def finalize_learning(self, thread_out):
+#     # Reset the progress bar
+#         self.progBar.reset()
 
-#     # Update Train and Validation F1 scores
+#     # Check the result from the learning external thread:
+#         completed, e = thread_out
+#         if not completed: # it means that the learning operation has raised an exception
+#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                             'Learning failed.', detailedText=repr(e))
 
-#         #               micro  |  macro  |  weighted
-#         # F1 train             |         |
-#         # F1 validation        |         |
-#         # F1 test              |         |
+#         else:
+#         # Set the Progress Bar temporarily
+#             self.progBar.setRange(0, 4)
+#             self.progBar.setTextVisible(False)
 
-#         f1_scores = np.empty((3,3))
-#         for n, avg in enumerate(('micro', 'macro', 'weighted')):
-#             f1_scores[0, n] = _tr = ML_tools.f1score(self.Y_train, self.tr_preds, avg)
-#             f1_scores[1, n] = _vd = ML_tools.f1score(self.Y_valid,  self.vd_preds, avg)
-#             self.update_scoreLabel('Train', f'F1_{avg}', _tr)
-#             self.update_scoreLabel('Validation', f'F1_{avg}', _vd)
+#         # Update loss and accuracy plots and labels on exit
+#             self.update_learningScoresView()
+#             self.progBar.setValue(1)
 
-#     # Save model variables in memory
-#         self.model_vars = {'algm_name'        : self.model._name,
-#                            'loss_name'        : self.model._loss,
-#                            'optim_name'       : optm_name,
-#                            'optim_state_dict' : optimizer.state_dict(),
-#                            'model_state_dict' : self.model.state_dict(),
-#                            'standards'        : (X_mean, X_std),
-#                            'parentModel_path' : parent_path,
-#                            'seed'             : seed,
-#                            'epochs'           : len(self.tr_losses),
-#                            'lr'               : lr,
-#                            'wd'               : wd,
-#                            'mtm'              : mtm,
-#                            'GT_dataset_path'  : self.DS_path.get_fullpath(),
-#                            'TVT_rateos'       : self.orig_TVTrateos,
-#                            'balancing_info'   : self.balanceInfo,
-#                            'ordered_Xfeat'    : self.dataset.columns.to_list()[:-1],
-#                            'Y_dict'           : self.Y_dict,
-#                            'F1_scores'        : f1_scores,
-#                            'accuracy'         : [train_acc, valid_acc],
-#                            'loss'             : [train_loss, valid_loss],
-#                            'accuracy_list'    : (self.tr_acc, self.vd_acc),
-#                            'loss_list'        : (self.tr_losses, self.vd_losses)}
+#         # Populate missing model variables in memory (except F1 scores)
+#             self.model_vars['epochs']           = len(self.tr_losses)
+#             self.model_vars['optim_state_dict'] = self.optimizer.state_dict()
+#             self.model_vars['model_state_dict'] = self.model.state_dict()
+#             self.model_vars['accuracy_list']    = (self.tr_acc, self.vd_acc)
+#             self.model_vars['loss_list']        = (self.tr_losses, self.vd_losses)
+#             self.model_vars['accuracy']         = [self.tr_acc[-1], self.vd_acc[-1]]
+#             self.model_vars['loss']             = [self.tr_losses[-1], self.vd_losses[-1]]
+#             self.progBar.setValue(2)
 
-#     # Update Main Actions buttons (START-STOP-TEST-LEARN) on exit
+#         # Apply the model one more time to get final predictions
+#         # Also we apply the predict function of the model in order to compute the softmax function
+#         # This is better than using the predictions from forward() because they're based on 'pure' linear outputs
+#             # regrDegree = self.model_vars['regressorDegree']
+#             # if regrDegree > 1:
+#             #     X_train = ML_tools.map2Polynomial(self.X_train, regrDegree)
+
+#             # X_train_norm = ML_tools.norm_data(ML_tools.array2Tensor(self.X_train),
+#             #                                   *self.model_vars['standards'], False)
+#             # X_valid_norm = ML_tools.norm_data(ML_tools.array2Tensor(self.X_valid),
+#             #                                   *self.model_vars['standards'], False)
+#             # self.tr_preds = self.model.predict(X_train_norm.to(self.model_vars['device']))[1].cpu()
+#             # self.vd_preds = self.model.predict(X_valid_norm.to(self.model_vars['device']))[1].cpu()
+#             self.tr_preds = ML_tools.applyModel(self.model_vars, self.X_train)[1]
+#             self.vd_preds = ML_tools.applyModel(self.model_vars, self.X_valid)[1]
+#             self.progBar.setValue(3)
+
+#         # Update Train and Validation F1 scores and save them in memory
+
+#             #               micro  |  macro  |  weighted
+#             # F1 train             |         |
+#             # F1 validation        |         |
+#             # F1 test              |         |
+
+#             f1_scores = np.empty((3,3))
+#             for n, avg in enumerate(('micro', 'macro', 'weighted')):
+#                 f1_scores[0, n] = _tr = ML_tools.f1score(self.Y_train, self.tr_preds, avg)
+#                 f1_scores[1, n] = _vd = ML_tools.f1score(self.Y_valid, self.vd_preds, avg)
+#                 self.update_scoreLabel('Train', f'F1_{avg}', _tr)
+#                 self.update_scoreLabel('Validation', f'F1_{avg}', _vd)
+#             self.model_vars['F1_scores'] = f1_scores
+#             self.progBar.setValue(4)
+
+#         # Update Confusion Matrices
+#             self.update_ConfusionMatrix('Train')
+#             self.update_ConfusionMatrix('Validation')
+
+#         # Enable testing and end learning session with success
+#             self.testModel_btn.setEnabled(True)
+#             self.progBar.reset()
+#             self.progBar.setTextVisible(True)
+#             QW.QMessageBox.information(self, 'X-Min Learn',
+#                                        'Learning session completed succesfully.')
+
+#     # Update Main Actions buttons (START-STOP-LEARN) on exit
 #         self.startLearn_btn.setEnabled(True)
 #         self.stopLearn_btn.setEnabled(False)
-#         self.testModel_btn.setEnabled(True)
 #         self.saveModel_btn.setEnabled(False)
 
-#     # Reset progress bar and end learning session with success
-#         self.progBar.reset()
-#         QW.QMessageBox.information(self, 'Learning completed',
-#                                     'Learning session completed succesfully.')
 
 #     def stop_learning(self):
-#         self.cancel_learning = True
-
-    def initialize_learning(self):
-        if self._extThreadRunning():
-            return
-    # Check that Train, Validation and Test sets share the same unique classes
-        tr_unq, vd_unq, ts_unq = [np.unique(arr) for arr in (self.Y_train, self.Y_valid, self.Y_test)]
-        if not np.array_equal(tr_unq, vd_unq) or not np.array_equal(tr_unq, ts_unq):
-            QW.QMessageBox.critical(self, 'X-Min Learn',
-                                    "Train, validation and test sets do not share the same classes.")
-            return
-
-    # Set the progress bar temporarily
-        self.progBar.setRange(0, 4)
-        self.progBar.setTextVisible(False)
-
-    # Update Main Actions buttons (START-STOP-TEST-LEARN)
-        self.startLearn_btn.setEnabled(False)
-        self.stopLearn_btn.setEnabled(True)
-        self.testModel_btn.setEnabled(False)
-        self.saveModel_btn.setEnabled(False)
-
-    # Check if it is required to update a previous model
-        parent_path = self.parentModel_path.get_fullpath()
-        update_model = parent_path != ''
-        parent_vars = ML_tools.loadModel(parent_path) if update_model else None
-        self.progBar.setValue(1)
-
-    # Map features from linear to polynomial if required
-        regrDegree = self.polyDeg_spbox.value()
-        if regrDegree > 1:
-            X_train = ML_tools.map2Polynomial(self.X_train, regrDegree)
-            X_valid = ML_tools.map2Polynomial(self.X_valid, regrDegree)
-        else:
-            X_train = self.X_train.copy()
-            X_valid = self.X_valid.copy()
-        self.progBar.setValue(2)
-
-    # Convert Train and Validation features and targets to torch Tensors
-        X_train = ML_tools.array2Tensor(X_train)
-        Y_train = ML_tools.array2Tensor(self.Y_train, 'uint8')
-        X_valid = ML_tools.array2Tensor(X_valid)
-        Y_valid = ML_tools.array2Tensor(self.Y_valid, 'uint8')
-        self.progBar.setValue(3)
-
-    # Normalize feature data
-        if update_model:
-            X_mean, X_std = parent_vars['standards']
-            X_train_norm = ML_tools.norm_data(X_train, X_mean, X_std,
-                                              return_standards=False)
-        else:
-            X_train_norm, X_mean, X_std = ML_tools.norm_data(X_train)
-
-        X_valid_norm = ML_tools.norm_data(X_valid, X_mean, X_std,
-                                          return_standards=False)
-        self.progBar.setValue(4)
-
-
-    # Get Hyper-parameters and seed
-        seed = self.seed
-        lr = self.lr_spbox.value()
-        wd = self.wd_spbox.value()
-        mtm = self.mtm_spbox.value()
-        epochs = self.epochs_spbox.value()
-
-    # Get learning preferences
-        algm_name = self.algm_combox.currentText()
-        optm_name = self.optim_combox.currentText()
-
-    # Initialize model
-        self.model = ML_tools.getModel(algm_name,
-                                       X_train.shape[1],
-                                       len(self.Y_dict), # Y_dict includes parent model classes
-                                       seed=seed)
-        if update_model:
-            ML_tools.embed_modelParameters(parent_vars['model_state_dict'], self.model)
-
-    # Set device
-        useGPU = self.cuda_cbox.isChecked()
-        device = "cuda" if (useGPU & ML_tools.cuda_available()) else "cpu"
-        self.model.to(device)
-
-    # Set optimizer function
-        self.optimizer = ML_tools.getOptimizer(optm_name, self.model, lr, mtm, wd)
-
-        # PROBABLY NOT NEEDED BECAUSE GETS THE PARAMETERS FROM MODEL (already updated),
-        # AND HYPER-PARAMETERS CAN BE CHANGED BY USER
-        # if update_model:
-        #     optimizer.load_state_dict(parent_vars['optim_state_dict'])
-        #     # after loading the parent state dict refresh the hyper-parameters
-        #     for g in optimizer.param_groups:
-        #         g['lr'] = lr
-        #         g['momentum'] = mtm
-        #         g['weight_decay'] = wd
-
-
-    # Reset progress bar range
-        e_min = parent_vars['epochs'] if update_model else 0
-        e_max = e_min + epochs
-        self.progBar.reset()
-        self.progBar.setRange(e_min, e_max)
-        self.progBar.setTextVisible(True)
-
-    # Initialize losses and accuracy lists
-        if update_model:
-            self.tr_losses, self.vd_losses = parent_vars['loss_list']
-            self.tr_acc, self.vd_acc = parent_vars['accuracy_list']
-        else:
-            self.tr_losses, self.vd_losses = [], []
-            self.tr_acc, self.vd_acc = [], []
-
-    # Adjust graphics update rate
-        upRate = int(self.graph_updateRate.text())
-        if upRate == 0:
-            upRate = e_max # prevent ZeroDivisionError when update graphics
-        elif upRate / epochs < 0.02:
-            upRate = epochs * 0.02 # prevent too fast updates that crashes the thread(?)
-
-    # Clear curve plots
-        for plot in (self.lossView, self.accuracyView):
-            plot.clear_canvas()
-
-    # Initialize model variables in order. Some variables will be provided in finalize_learning() func
-        self.model_vars = {'algm_name'        : self.model._name,
-                           'loss_name'        : self.model._loss,
-                           'optim_name'       : optm_name,
-                           'optim_state_dict' : None,
-                           'model_state_dict' : None,
-                           'regressorDegree'  : regrDegree,
-                           'standards'        : (X_mean, X_std),
-                           'parentModel_path' : parent_path,
-                           'GT_dataset_path'  : self.DS_path.get_fullpath(),
-                           'TVT_rateos'       : self.orig_TVTrateos,
-                           'balancing_info'   : self.balanceInfo,
-                           'device'           : device,
-                           'seed'             : seed,
-                           'epochs'           : None,
-                           'lr'               : lr,
-                           'wd'               : wd,
-                           'mtm'              : mtm,
-                           'accuracy_list'    : None,
-                           'loss_list'        : None,
-                           'accuracy'         : None,
-                           'loss'             : None,
-                           'F1_scores'        : None,
-                           'ordered_Xfeat'    : self.dataset.columns.to_list()[:-1],
-                           'Y_dict'           : self.Y_dict}
-
-    # Start the learning thread
-        task = lambda: self.model.learn(X_train_norm, Y_train,
-                                        X_valid_norm, Y_valid,
-                                        self.optimizer, device)
-        self.learnThread.setParameters(task, (self.Y_train, self.Y_valid),
-                                       (e_min, e_max), upRate)
-        self.learnThread.start()
-
-
-
-    def update_learningScores(self, thread_out):
-    # Extract objects from thread output
-        e, (tr_loss, vd_loss), (tr_acc, vd_acc) = thread_out
-    # Store new loss and accuracy values
-        self.tr_losses.append(tr_loss)
-        self.vd_losses.append(vd_loss)
-        self.tr_acc.append(tr_acc)
-        self.vd_acc.append(vd_acc)
-    # Update progress bar
-        self.progBar.setValue(e)
-
-    def update_learningScoresView(self):
-        self.update_curve('loss', (self.tr_losses, self.vd_losses))
-        self.update_curve('accuracy', (self.tr_acc, self.vd_acc))
-        self.update_scoreLabel('Train', 'loss', self.tr_losses[-1])
-        self.update_scoreLabel('Validation', 'loss', self.vd_losses[-1])
-        self.update_scoreLabel('Train', 'accuracy', self.tr_acc[-1])
-        self.update_scoreLabel('Validation', 'accuracy', self.vd_acc[-1])
-
-    def finalize_learning(self, thread_out):
-    # Reset the progress bar
-        self.progBar.reset()
-
-    # Check the result from the learning external thread:
-        completed, e = thread_out
-        if not completed: # it means that the learning operation has raised an exception
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Learning failed.', detailedText=repr(e))
-
-        else:
-        # Set the Progress Bar temporarily
-            self.progBar.setRange(0, 4)
-            self.progBar.setTextVisible(False)
-
-        # Update loss and accuracy plots and labels on exit
-            self.update_learningScoresView()
-            self.progBar.setValue(1)
-
-        # Populate missing model variables in memory (except F1 scores)
-            self.model_vars['epochs']           = len(self.tr_losses)
-            self.model_vars['optim_state_dict'] = self.optimizer.state_dict()
-            self.model_vars['model_state_dict'] = self.model.state_dict()
-            self.model_vars['accuracy_list']    = (self.tr_acc, self.vd_acc)
-            self.model_vars['loss_list']        = (self.tr_losses, self.vd_losses)
-            self.model_vars['accuracy']         = [self.tr_acc[-1], self.vd_acc[-1]]
-            self.model_vars['loss']             = [self.tr_losses[-1], self.vd_losses[-1]]
-            self.progBar.setValue(2)
-
-        # Apply the model one more time to get final predictions
-        # Also we apply the predict function of the model in order to compute the softmax function
-        # This is better than using the predictions from forward() because they're based on 'pure' linear outputs
-            # regrDegree = self.model_vars['regressorDegree']
-            # if regrDegree > 1:
-            #     X_train = ML_tools.map2Polynomial(self.X_train, regrDegree)
-
-            # X_train_norm = ML_tools.norm_data(ML_tools.array2Tensor(self.X_train),
-            #                                   *self.model_vars['standards'], False)
-            # X_valid_norm = ML_tools.norm_data(ML_tools.array2Tensor(self.X_valid),
-            #                                   *self.model_vars['standards'], False)
-            # self.tr_preds = self.model.predict(X_train_norm.to(self.model_vars['device']))[1].cpu()
-            # self.vd_preds = self.model.predict(X_valid_norm.to(self.model_vars['device']))[1].cpu()
-            self.tr_preds = ML_tools.applyModel(self.model_vars, self.X_train)[1]
-            self.vd_preds = ML_tools.applyModel(self.model_vars, self.X_valid)[1]
-            self.progBar.setValue(3)
-
-        # Update Train and Validation F1 scores and save them in memory
-
-            #               micro  |  macro  |  weighted
-            # F1 train             |         |
-            # F1 validation        |         |
-            # F1 test              |         |
-
-            f1_scores = np.empty((3,3))
-            for n, avg in enumerate(('micro', 'macro', 'weighted')):
-                f1_scores[0, n] = _tr = ML_tools.f1score(self.Y_train, self.tr_preds, avg)
-                f1_scores[1, n] = _vd = ML_tools.f1score(self.Y_valid, self.vd_preds, avg)
-                self.update_scoreLabel('Train', f'F1_{avg}', _tr)
-                self.update_scoreLabel('Validation', f'F1_{avg}', _vd)
-            self.model_vars['F1_scores'] = f1_scores
-            self.progBar.setValue(4)
-
-        # Update Confusion Matrices
-            self.update_ConfusionMatrix('Train')
-            self.update_ConfusionMatrix('Validation')
-
-        # Enable testing and end learning session with success
-            self.testModel_btn.setEnabled(True)
-            self.progBar.reset()
-            self.progBar.setTextVisible(True)
-            QW.QMessageBox.information(self, 'X-Min Learn',
-                                       'Learning session completed succesfully.')
-
-    # Update Main Actions buttons (START-STOP-LEARN) on exit
-        self.startLearn_btn.setEnabled(True)
-        self.stopLearn_btn.setEnabled(False)
-        self.saveModel_btn.setEnabled(False)
-
-
-    def stop_learning(self):
-        self.learnThread.requestInterruption()
-
-    def test_model(self):
-        # Handling of potential GUI bugs were save model button is active when it should not
-        if self.model is None:
-            self.saveModel_btn.setEnabled(False)
-            return
-
-        choice = QW.QMessageBox.warning(self, 'X-Min Learn', 'Are you sure to '\
-                'test your model?\nWarning: once the model is tested on Test set '\
-                'it should not be further trained with the same Train set.',
-                                        QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                        QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
-            self.progBar.setRange(0, 5)
-
-        # Predict targets on Test set
-            self.ts_preds = ML_tools.applyModel(self.model_vars, self.X_test)[1]
-            self.progBar.setValue(1)
-
-        # Compute Test accuracy and update label and model variable
-            test_acc = ML_tools.accuracy(self.Y_test, self.ts_preds)
-            self.update_scoreLabel('Test', 'accuracy', test_acc)
-            self.model_vars['accuracy'].append(test_acc)
-            self.progBar.setValue(2)
-
-        # Compute Test F1 scores and update label and model variable
-            for n, avg in enumerate(('micro', 'macro', 'weighted')):
-                _ts = ML_tools.f1score(self.Y_test, self.ts_preds, avg)
-                self.update_scoreLabel('Test', f'F1_{avg}', _ts)
-                self.model_vars['F1_scores'][2, n] = _ts
-            self.progBar.setValue(3)
-
-        # Update Test Confusion Matrix
-            self.update_ConfusionMatrix('Test')
-            self.progBar.setValue(4)
-
-        # Populate model preview
-            text = ''
-            for k, v in self.model_vars.items():
-                text += f'{k.upper()} = {repr(v)}\n\n'
-            self.modelPreview.clear()
-            self.modelPreview.setText(text)
-            self.progBar.setValue(5)
-
-        # Enable Save model button on exit
-            self.saveModel_btn.setEnabled(True)
-
-        # Reset progress bar and end testing session with success
-            self.progBar.reset()
-            QW.QMessageBox.information(self, 'X-Min Learn',
-                                        'Your model has been tested succesfully.')
-
-
-    def save_model(self):
-        path, _  = QW.QFileDialog.getSaveFileName(self, 'Save model',
-                                                  pref.get_dirPath('out'),
-                                                  'PyTorch Data File (*.pth)')
-        if path:
-            pref.set_dirPath('out', os.path.dirname(path))
-            try:
-                log_path = CF.extend_filename(path, '_log', ext='.txt')
-                extendedLog = pref.get_setting('class/extLog', False, bool)
-                ML_tools.saveModel(self.model_vars, path, log_path, extendedLog)
-                QW.QMessageBox.information(self, 'Model saved',
-                                           'The model was saved succesfully.')
-            except Exception as e:
-                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                'An error was raised while saving the model.',
-                                 detailedText=repr(e))
-
-
-    def closeEvent(self, event):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                          "Do you really want to close the Model Learner?",
-                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                          QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
-            event.accept()
-        else:
-            event.ignore()
-
-
-
-
-
-
-
-
-
-
-
+#         self.learnThread.requestInterruption()
+
+#     def test_model(self):
+#         # Handling of potential GUI bugs were save model button is active when it should not
+#         if self.model is None:
+#             self.saveModel_btn.setEnabled(False)
+#             return
+
+#         choice = QW.QMessageBox.warning(self, 'X-Min Learn', 'Are you sure to '\
+#                 'test your model?\nWarning: once the model is tested on Test set '\
+#                 'it should not be further trained with the same Train set.',
+#                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                         QW.QMessageBox.No)
+#         if choice == QW.QMessageBox.Yes:
+#             self.progBar.setRange(0, 5)
+
+#         # Predict targets on Test set
+#             self.ts_preds = ML_tools.applyModel(self.model_vars, self.X_test)[1]
+#             self.progBar.setValue(1)
+
+#         # Compute Test accuracy and update label and model variable
+#             test_acc = ML_tools.accuracy(self.Y_test, self.ts_preds)
+#             self.update_scoreLabel('Test', 'accuracy', test_acc)
+#             self.model_vars['accuracy'].append(test_acc)
+#             self.progBar.setValue(2)
+
+#         # Compute Test F1 scores and update label and model variable
+#             for n, avg in enumerate(('micro', 'macro', 'weighted')):
+#                 _ts = ML_tools.f1score(self.Y_test, self.ts_preds, avg)
+#                 self.update_scoreLabel('Test', f'F1_{avg}', _ts)
+#                 self.model_vars['F1_scores'][2, n] = _ts
+#             self.progBar.setValue(3)
+
+#         # Update Test Confusion Matrix
+#             self.update_ConfusionMatrix('Test')
+#             self.progBar.setValue(4)
+
+#         # Populate model preview
+#             text = ''
+#             for k, v in self.model_vars.items():
+#                 text += f'{k.upper()} = {repr(v)}\n\n'
+#             self.modelPreview.clear()
+#             self.modelPreview.setText(text)
+#             self.progBar.setValue(5)
+
+#         # Enable Save model button on exit
+#             self.saveModel_btn.setEnabled(True)
+
+#         # Reset progress bar and end testing session with success
+#             self.progBar.reset()
+#             QW.QMessageBox.information(self, 'X-Min Learn',
+#                                         'Your model has been tested succesfully.')
+
+
+#     def save_model(self):
+#         path, _  = QW.QFileDialog.getSaveFileName(self, 'Save model',
+#                                                   pref.get_dirPath('out'),
+#                                                   'PyTorch Data File (*.pth)')
+#         if path:
+#             pref.set_dirPath('out', os.path.dirname(path))
+#             try:
+#                 log_path = CF.extend_filename(path, '_log', ext='.txt')
+#                 extendedLog = pref.get_setting('class/extLog', False, bool)
+#                 ML_tools.saveModel(self.model_vars, path, log_path, extendedLog)
+#                 QW.QMessageBox.information(self, 'Model saved',
+#                                            'The model was saved succesfully.')
+#             except Exception as e:
+#                 cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                                 'An error was raised while saving the model.',
+#                                  detailedText=repr(e))
+
+
+#     def closeEvent(self, event):
+#         choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                           "Do you really want to close the Model Learner?",
+#                                           QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                           QW.QMessageBox.No)
+#         if choice == QW.QMessageBox.Yes:
+#             event.accept()
+#         else:
+#             event.ignore()
 
 
 
@@ -6811,7 +8885,7 @@ class PhaseRefiner(QW.QWidget):
 
         # ROI warning icon
             self.algmWarn = QW.QLabel()
-            self.algmWarn.setPixmap(QPixmap('Icons/warnIcon.png').scaled(30, 30,
+            self.algmWarn.setPixmap(QG.QPixmap('Icons/warnIcon.png').scaled(30, 30,
                                                                          Qt.KeepAspectRatio))
             self.algmWarn.setSizePolicy(QW.QSizePolicy.Maximum,
                                         QW.QSizePolicy.Maximum)
@@ -7119,7 +9193,7 @@ class DataViewer(QW.QWidget):
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navTbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(QG.QCursor.pos())
 
 
 
