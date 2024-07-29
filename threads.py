@@ -352,10 +352,11 @@ class NpvThread(MultiTaskThread):
         super().__init__()
 
     # Set main attributes
-        self.arrays = list()
-        self.map_names = list()
+        self.arrays = []
+        self.map_names = []
         self.size = 0
         self.npv_func = None
+
 
     def set_params(self, arrays: list[np.ndarray], map_names: list[str], 
                    size:int, npv_func: Callable):
@@ -377,6 +378,18 @@ class NpvThread(MultiTaskThread):
         self.map_names = map_names
         self.size = size
         self.npv_func = npv_func
+
+
+    def reset(self):
+        '''
+        Reset the thread parameters for safety measures. This function is 
+        automatically called by the thread when terminated.
+
+        '''
+        self.arrays = []
+        self.map_names = []
+        self.size = 0
+        self.npv_func = None
 
 
     def run(self):
@@ -413,12 +426,15 @@ class NpvThread(MultiTaskThread):
         # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
 
+        finally:
+        # Reset parameters for safety measures
+            self.reset()
+
 
 
 class RoiDetectionThread(MultiTaskThread):
     '''
     Multi task thread that automatically identifies ROIs from an NPV map.
-
     '''
     def __init__(self):
         '''
@@ -459,6 +475,19 @@ class RoiDetectionThread(MultiTaskThread):
         self.distance = distance
         self.npv_map = npv_map
         self.current_roimap = current_roimap
+
+
+    def reset(self):
+        '''
+        Reset the thread parameters for safety measures. This function is 
+        automatically called by the thread when terminated.
+
+        '''
+        self.n_roi = 0
+        self.size = 0
+        self.distance = 0
+        self.npv_map = None
+        self.current_roimap = None
 
 
     def run(self):
@@ -522,6 +551,12 @@ class RoiDetectionThread(MultiTaskThread):
         except Exception as e:
         # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
+
+        finally:
+        # Reset parameters for safety measures
+            self.reset()
+
+
 
 # class BalanceThread(QThread): # ??? can be made a generic thread?
 #     taskFinished = pyqtSignal(tuple)

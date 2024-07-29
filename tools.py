@@ -1219,7 +1219,6 @@ class MineralClassifier(DraggableTool):
     One of the main tools of X-Min Learn, that allows the classification of
     input maps using pre-trained eager ML models, ROI-based lazy ML algorithms
     and/or clustering algorithms. It also allows sub-phase classifications.
-
     '''
 
     def __init__(self):
@@ -1247,6 +1246,7 @@ class MineralClassifier(DraggableTool):
 
     # Connect signals to slots
         self._connect_slots()
+
 
     def _init_ui(self):
         '''
@@ -1398,6 +1398,7 @@ class MineralClassifier(DraggableTool):
                                        QW.QSizePolicy.Fixed)
         self.conf_slider.setRange(0, 100)
         self.conf_slider.setSingleStep(5)
+        self.conf_slider.setTracking(False)
         self.conf_slider.setSliderPosition(50)
         self.conf_slider.setEnabled(False)
 
@@ -1493,8 +1494,8 @@ class MineralClassifier(DraggableTool):
     # Main layout
         left_vbox = QW.QVBoxLayout()
         left_vbox.setSpacing(30)
-        left_vbox.addWidget(data_group)
         left_vbox.addWidget(class_group)
+        left_vbox.addWidget(data_group)
         left_vbox.addStretch(1)
         left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
 
@@ -1561,7 +1562,7 @@ class MineralClassifier(DraggableTool):
         self.conf_slider.valueChanged.connect(self.setConfidenceThreshold)
 
     
-    def onMaskRadioButtonToggled(self, toggled:bool):
+    def onMaskRadioButtonToggled(self, toggled: bool):
         '''
         Manage the GUI visualization of the input mask options. When one option
         is toggled, the other is disabled.
@@ -1569,7 +1570,8 @@ class MineralClassifier(DraggableTool):
         Parameters
         ----------
         toggled : bool
-            _description_
+            State of radio button.
+
         '''
         if self.sender() == self.mask_radbtn_1:
             self.load_mask_btn.setEnabled(toggled)
@@ -1602,6 +1604,7 @@ class MineralClassifier(DraggableTool):
         ----------
         idx : int
             The choosen mineral map index.
+
         '''
         mmap = self.minmaps_list.topLevelItem(idx)
         classes = mmap.get('data').get_phases()
@@ -2056,7 +2059,7 @@ class MineralClassifier(DraggableTool):
     def _parseClassifierResult(self, result:tuple, success:bool):
         '''
         Parse the result of the classification thread. If the classification 
-        was successfull, this function shows the mineral map in the canvas.
+        was successful, this function shows the mineral map in the canvas.
 
         Parameters
         ----------

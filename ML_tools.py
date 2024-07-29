@@ -1092,7 +1092,7 @@ class ModelBasedClassifier(_ClassifierBase):
 
         Parameters
         ----------
-        array : np.ndarray
+        array : ndarray | Tensor
             Labels array.
         dtype : str, optional
             Encoded array dtype. The default is 'int16'.
@@ -1108,13 +1108,13 @@ class ModelBasedClassifier(_ClassifierBase):
         return res.astype(dtype)
 
 
-    def decodeLabels(self, array: np.ndarray, dtype='U8'):
+    def decodeLabels(self, array: np.ndarray|torch.Tensor, dtype='U8'):
         '''
         Decode labels from class IDs to text names.
 
         Parameters
         ----------
-        array : np.ndarray
+        array : ndarray | Tensor
             Labels array.
         dtype : str, optional
             Decoded array dtype. The default is 'U8'.
@@ -1278,7 +1278,7 @@ class RoiBasedClassifier(_ClassifierBase):
 
         Returns
         -------
-        tr_data : list of ndarrays
+        tr_data : list[ndarray]
             Training data, splitted in feature and label data. The list also
             includes the full input feature data if <return_full_input> is 
             True.

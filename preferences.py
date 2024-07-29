@@ -32,7 +32,7 @@ XML_PETROLEUM = '#005858'       # (0, 88, 88)
 
 # Special button colors
 BTN_GREEN = '#4CAF50'        
-BTN_RED = '#A21709'             # (162, 23, 9)
+BTN_RED = '#ED4337'             # (237, 67, 55)
 
 # Histogram mask color
 HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
@@ -328,12 +328,12 @@ SS_mainTabWidget = (SS_tabWidget +
     %(CASPER_DARK, SAN_MARINO, SAN_MARINO))
 
 
-SS_table = (
-    '''QTableWidget QTableCornerButton::section {
-            background: %s;
-            border: 1px outset %s;
-            border-radius: 1px;}'''
-    %(IVORY, BLACK_PEARL))
+# SS_table = (
+#     '''QTableWidget QTableCornerButton::section {
+#             background: %s;
+#             border: 1px outset %s;
+#             border-radius: 1px;}'''
+#     %(IVORY, BLACK_PEARL))
 
 
 SS_pathLabel = (
@@ -361,11 +361,12 @@ SS_grouparea_notitle = (
 SS_grouparea_title = (SS_grouparea_notitle + 
     '''QGroupBox {
             font: bold;
-            padding-top: 7ex;}'''
+            padding-top: 8ex;}'''
     '''QGroupBox::title {
             color: black;
-            padding: 2ex;
-            subcontrol-origin: padding;}'''
+            padding: 0px;
+            subcontrol-origin: padding;
+            top: 3ex;}'''
     '''QGroupBox::title:!enabled {
             color: gray;}''')
 

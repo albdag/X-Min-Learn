@@ -2703,7 +2703,7 @@ class CsvChunkReader():
     Ready to use class for reading large CSV files in chunks for better
     performance.
     '''
-    def __init__(self, dec: str, sep :str|None=None, chunksize=2**20//8, 
+    def __init__(self, dec: str, sep: str|None=None, chunksize=2**20//8, 
                  pBar=False):
         '''
         Constructor.
@@ -2759,7 +2759,8 @@ class CsvChunkReader():
 
     # Compile and return the pandas Dataframe
         dataframe = pd.concat(chunkList)
-        if self.pBar: progBar.setValue(nChunks + 1)
+        if self.pBar: 
+            progBar.setValue(nChunks + 1)
         return dataframe
 
 

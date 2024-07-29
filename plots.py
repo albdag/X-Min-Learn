@@ -124,7 +124,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         super(_CanvasBase, self).__init__(self.fig)
 
     # Set the default style
-        mpl.style.use('seaborn-v0_8-colorblind') # menu/pref to change style
+        mpl.style.use('seaborn-v0_8-dark') # menu/pref to change style
 
     # Set events connections for mouse-wheel zoom and mouse-wheel pan
         if wheel_zoom:
@@ -1055,7 +1055,7 @@ class BarCanvas(_CanvasBase):
 
     # Set the grid on for y or x axis
         gridax = 'y' if self.orient == 'v' else 'x'
-        self.ax.grid(True, axis=gridax, ls=':', lw=1, zorder=0)
+        self.ax.grid(True, axis=gridax, ls=':', lw=0.5, zorder=0)
 
     # Adjust the ticks and tickslabels properties
         if tickslabels is not None:
@@ -1100,7 +1100,7 @@ class BarCanvas(_CanvasBase):
 
     # Build the legend
         if labels is not None: 
-            self.ax.legend() # this will probably need tweaks. Also requires to be cleared before each plot
+            self.ax.legend() # this will probably need tweaks(?)
 
     # Refresh label amounts if required
         self.show_amounts(self.visible_amounts)
@@ -1526,7 +1526,7 @@ class ConfMatCanvas(_CanvasBase):
 
 class SilhouetteCanvas(_CanvasBase):
     '''
-    Specific canvas object for displaying Silhouette scores.
+    A canvas object for displaying Silhouette scores.
     '''
     def __init__(self, size=(4.8, 6.4), **kwargs):
         '''
@@ -1583,7 +1583,7 @@ class SilhouetteCanvas(_CanvasBase):
     def update_canvas(self, sil_values: dict, sil_avg: float, title: str, 
                       palette: dict):
         '''
-        Render a new silhouette plot.
+        Draw a new silhouette plot.
 
         Parameters
         ----------

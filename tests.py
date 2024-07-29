@@ -5,47 +5,32 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import sklearn.cluster
 import sklearn.metrics
+from sklearn.preprocessing import PolynomialFeatures
 from scipy import ndimage
-import os, sys
+import os, sys, time, math
 from _base import *
 
+def num_output_features_no_bias(n, d):
+    return sum(math.comb(n + i - 1, i) for i in range(1, d + 1))
 
-import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout
-from PyQt5.QtCore import QObject, QEvent
+def map2Polynomial(arr, degree, return_n_features=False):
+    kern = PolynomialFeatures(degree, include_bias=False)
+    out = kern.fit_transform(arr)
+# workaround to know how many in_feat there will be after polynomial mapping
+    if return_n_features:
+        out = (out, kern.n_output_features_)
+    return out
 
-def expanding_tabs_style_sheet(tw):
-    tw.setStyleSheet(f"QTabBar::tab {{ width: {tw.size().width() // tw.count()}px; }}")
+deg = 1
+arr = np.arange(20).reshape(1, -1)
+arr_poly, n = map2Polynomial(arr, deg, True)
+print(arr)
+print(arr_poly)
+print(n)
+print(num_output_features_no_bias(arr.shape[1], deg))
 
-class ResizeFilter(QObject):
-    def __init__(self, target):
-        super().__init__(target)
-        self.target = target
 
-    def eventFilter(self, object, event):
-        if event.type() == QEvent.Resize:
-            expanding_tabs_style_sheet(self.target)
-        return False
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Expanding Tabs Example")
-        self.setGeometry(100, 100, 600, 400)
-
-        self.tab_widget = QTabWidget()
-        self.setCentralWidget(self.tab_widget)
-
-        self.tab_widget.addTab(QWidget(), "Tab1")
-        self.tab_widget.addTab(QWidget(), "Tab2")
-        self.tab_widget.addTab(QWidget(), "Tab3")
-
-        self.tab_widget.installEventFilter(ResizeFilter(self.tab_widget))
-
-app = QApplication(sys.argv)
-window = MainWindow()
-window.show()
-sys.exit(app.exec_())
 
 
 ### ------------------ A U T O   R O I   D E T E C T O R ------------------ ###

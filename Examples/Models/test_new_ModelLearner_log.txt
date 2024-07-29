@@ -1,0 +1,78 @@
+ALGM_NAME
+'Softmax Regression'
+
+
+LOSS_NAME
+'Cross-Entropy loss'
+
+
+OPTIM_NAME
+'SGD'
+
+
+ORDERED_XFEAT
+['Al', 'BSE', 'Ca', 'Fe', 'K', 'Mg', 'Mn', 'Na', 'Si', 'Ti']
+
+
+Y_DICT
+{'Amp': 0, 'Ap': 1, 'Chl': 2, 'Cpx': 3, 'Ep': 4, 'FeOx': 5, 'Grt': 6, 'Ilm': 7, 'Kfs': 8, 'Opx': 9, 'Pl': 10, 'Qtz': 11, 'Ttn': 12}
+
+
+DEVICE
+'cuda'
+
+
+SEED
+121021582
+
+
+PARENTMODEL_PATH
+''
+
+
+GT_DATASET_PATH
+'C:/Users/dagos/Coding Projects/X-Min Learn/X-Min-Learn/Examples/Datasets/GC29_Dataset.csv'
+
+
+TVT_RATEOS
+(0.5, 0.25, 0.25)
+
+
+BALANCING_INFO
+[]
+
+
+REGRESSORDEGREE
+1
+
+
+EPOCHS
+100
+
+
+LR
+0.01
+
+
+WD
+0.0
+
+
+MTM
+0.0
+
+
+ACCURACY
+[0.5621266920349186, 0.5628318306053847, 0.5609738857255055]
+
+
+LOSS
+[1.8338654041290283, 1.8265368938446045, None]
+
+
+F1_SCORES
+array([[0.15259734, 0.4730126 ],
+       [0.1541037 , 0.47314337],
+       [0.15120084, 0.47248042]])
+
+
