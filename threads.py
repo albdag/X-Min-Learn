@@ -72,32 +72,32 @@ class MineralClassificationThread(MultiTaskThread):
         '''
         super(MineralClassificationThread, self).__init__()
     
-    # Set main attributes
-        self.classifier = None
-        self.algorithm = None
+    # Set main attribute
+        self.pipeline = ()
 
-
-    def set_classifier(self, classifier):
+    
+    def set_pipeline(self, pipeline: tuple[Callable]):
         '''
-        Set the classifier that is requesting this worker. Useful to access to
-        the classifiers attributes and methods.
+        Set classification pipeline. This function must always be called before
+        start() to be able to properly run the classification thread.
 
         Parameters
         ----------
-        classifier : _ClassifierBase
-            Classifier.
-        '''
-        self.classifier = classifier
-        self.algorithm = classifier.algorithm
-
-
-    def reset_classifier(self):
-        '''
-        Reset the classifier attributes for safety measures.
+        pipeline : tuple[Callable]
+            Sequence of functions to be performed by the thread to achieve the
+            mineral classification.
 
         '''
-        self.classifier = None
-        self.algorithm = None
+        self.pipeline = pipeline
+
+
+    def reset(self):
+        '''
+        Reset the thread parameters for safety measures. This function is 
+        automatically called by the thread when terminated.
+
+        '''
+        self.pipeline = None
 
 
     def run(self):
@@ -105,9 +105,14 @@ class MineralClassificationThread(MultiTaskThread):
         Main function of the thread. Defines how the worker should perform its
         tasks. To be reimplemented in each child.
 
-        '''     
-        if self.classifier is None or self.algorithm is None: 
-            return
+        Raises
+        ------
+        ValueError
+            The classification pipeline is not set.
+
+        ''' 
+        if not self.pipeline:
+            raise ValueError('Classification pipeline is not set.')
 
 
 
@@ -132,21 +137,22 @@ class ModelBasedClassificationThread(MineralClassificationThread):
         '''
         super().run()
 
+        pre_process, predict, post_process = self.pipeline
+
         try:
         # Pre-process feature data
             self.taskInitialized.emit('Pre-processing data')
-            feat_data = self.classifier.preProcessFeatureData()
+            feat_data = pre_process()
 
         # Predict unknown data and calculate probability scores
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Identifying mineral classes')
-            prob, pred = self.algorithm.predict(feat_data.float())
+            prob, pred = predict(feat_data)
 
         # Reconstruct the result
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Reconstructing mineral map')
-            prob = prob.detach().numpy().round(2)
-            pred = self.classifier.decodeLabels(pred)
+            prob, pred = post_process(prob, pred)
 
         # Send the workFinished signal with success
             self.workFinished.emit((pred, prob), True)
@@ -157,7 +163,7 @@ class ModelBasedClassificationThread(MineralClassificationThread):
 
         finally:
         # Reset parameters for safety measures
-            self.reset_classifier()
+            self.reset()
 
 
 class RoiBasedClassificationThread(MineralClassificationThread):
@@ -180,25 +186,27 @@ class RoiBasedClassificationThread(MineralClassificationThread):
         '''
         super().run()
 
+        get_train_data, fit, predict, compute_prob = self.pipeline
+
         try:
         # Extract training data
             self.taskInitialized.emit('Collecting training data')
-            x_train, y_train, in_data = self.classifier.getTrainingData()
+            x_train, y_train, in_data = get_train_data()
 
         # "Train" the classifier
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Training classifier')
-            self.algorithm.fit(x_train, y_train)
+            fit(x_train, y_train)
 
         # Predict unknown data
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Identifying mineral classes')
-            pred = self.algorithm.predict(in_data)
+            pred = predict(in_data)
 
         # Compute probability score
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Calculating probability map')
-            prob = self.algorithm.predict_proba(in_data).max(axis=1)
+            prob = compute_prob(in_data)
 
         # Send the workFinished signal with success
             self.workFinished.emit((pred, prob), True)
@@ -209,7 +217,7 @@ class RoiBasedClassificationThread(MineralClassificationThread):
 
         finally:
         # Reset parameters for safety measures
-            self.reset_classifier()
+            self.reset()
 
 
 
@@ -233,61 +241,44 @@ class UnsupervisedClassificationThread(MineralClassificationThread):
         '''
         super().run()
 
+        (pre_process, fit, predict, compute_prob, sil_score, chi_score, 
+         dbi_score) = self.pipeline
+
         try:
         # Pre-process input data
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Pre-processing data')
-            in_data = self.classifier.preProcessFeatureData()
+            in_data = pre_process()
             
         # Fit data
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Fitting data')
-            self.algorithm.fit(in_data)
+            fit(in_data)
 
         # Cluster data
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Clustering data')
-            pred = self.algorithm.predict(in_data)
+            pred = predict(in_data)
 
         # Compute probability score
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Computing probability score')
-            dist = self.algorithm.transform(in_data).min(axis=1)
-            prob = 1 - dist/dist.max()
+            prob = compute_prob(in_data)
 
-        # Compute silhouette score (by cluster)
+        # Compute silhouette score
             if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Computing silhouette score by cluster')
-            sil_clust = None
-            if self.classifier.do_silhouette_score:
-                sample_size = int(self.classifier.silhouette_ratio * pred.size)
-                rng = np.random.default_rng(self.classifier.seed)
-                subset_idx = rng.permutation(pred.size)[:sample_size]
-                _in_data, _pred = in_data[subset_idx, :], pred[subset_idx]
-                sil_sam = sklearn.metrics.silhouette_samples(_in_data, _pred)
-                unq_val = np.unique(_pred)
-                sil_clust = {u: np.sort(sil_sam[_pred == u]) for u in unq_val}
-
-        # Compute silhouette score (average)
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Computing average silhouette score')
-            sil_avg = None
-            if sil_clust:
-                sil_avg = np.mean(sil_sam)
+            self.taskInitialized.emit('Computing silhouette score')
+            sil_clust, sil_avg = sil_score(in_data, pred)
 
         # Compute Calinski-Harabasz Index (CHI) score
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Computing Calinski-Harabasz Index')
-            chi = None
-            if self.classifier.do_chi_score:
-                chi = sklearn.metrics.calinski_harabasz_score(in_data, pred)
+            chi = chi_score(in_data, pred)
 
         # Compute Davies-Bouldin Index (DBI) score
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Computing Davies-Bouldin Index')
-            dbi = None
-            if self.classifier.do_dbi_score:
-                dbi = sklearn.metrics.davies_bouldin_score(in_data, pred)
+            dbi = dbi_score(in_data, pred)
 
         # Send the workFinished signal with success
             out = (pred.astype('U8'), prob, sil_avg, sil_clust, chi, dbi)
@@ -299,52 +290,52 @@ class UnsupervisedClassificationThread(MineralClassificationThread):
 
         finally:
         # Reset parameters for safety measures
-            self.reset_classifier()
+            self.reset()
 
 
 
-class SilhouetteThread(QThread):
-    subtaskCompleted = pyqtSignal() # to increment progressBar by 1 unit
-    taskFinished = pyqtSignal(tuple) # (True/False, outputs/exception)
+# class SilhouetteThread(QThread):
+#     subtaskCompleted = pyqtSignal() # to increment progressBar by 1 unit
+#     taskFinished = pyqtSignal(tuple) # (True/False, outputs/exception)
 
-    def __init__(self):
-        super(SilhouetteThread, self).__init__()
+#     def __init__(self):
+#         super(SilhouetteThread, self).__init__()
 
-        self.data = None
-        self.pred = None
+#         self.data = None
+#         self.pred = None
 
-    def set_params(self, data, pred):
-        self.data = data
-        self.pred = pred
+#     def set_params(self, data, pred):
+#         self.data = data
+#         self.pred = pred
 
-    def silhouette_metric(data, pred, type):
-        if type == 'avg':
-            return sklearn.metrics.silhouette_score(data, pred, metric='euclidean')
-        elif type == 'all':
-            return sklearn.metrics.silhouette_samples(data, pred, metric='euclidean')
-        else:
-            raise NameError(f'{type} is not a valid silhouette score type.')
+#     def silhouette_metric(data, pred, type):
+#         if type == 'avg':
+#             return sklearn.metrics.silhouette_score(data, pred, metric='euclidean')
+#         elif type == 'all':
+#             return sklearn.metrics.silhouette_samples(data, pred, metric='euclidean')
+#         else:
+#             raise NameError(f'{type} is not a valid silhouette score type.')
 
-    def run(self):
-        try:
-        # Compute the overall average silhouette score
-            mask = self.pred != '_ND_' # exclude ND data for the average prediction
-            sil_avg = self.silhouette_metric(self.data[mask, :], self.pred[mask], type='avg')
-            self.subtaskCompleted.emit()
+#     def run(self):
+#         try:
+#         # Compute the overall average silhouette score
+#             mask = self.pred != '_ND_' # exclude ND data for the average prediction
+#             sil_avg = self.silhouette_metric(self.data[mask, :], self.pred[mask], type='avg')
+#             self.subtaskCompleted.emit()
 
-        # Compute the silhouette score for each sample
-            sil_sam = self.silhouette_metric(self.data, self.pred, type='all')
-            self.subtaskCompleted.emit()
+#         # Compute the silhouette score for each sample
+#             sil_sam = self.silhouette_metric(self.data, self.pred, type='all')
+#             self.subtaskCompleted.emit()
 
-            success = True
-            out = (sil_avg, sil_sam, self.pred)
+#             success = True
+#             out = (sil_avg, sil_sam, self.pred)
 
-        except Exception as e:
-            success = False
-            out = (e,)
+#         except Exception as e:
+#             success = False
+#             out = (e,)
 
-        finally:
-            self.taskFinished.emit((success, out))
+#         finally:
+#             self.taskFinished.emit((success, out))
 
 
 

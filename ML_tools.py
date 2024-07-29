@@ -927,6 +927,21 @@ class _ClassifierBase():
         self.algorithm = None # to be reimplemented in each subclass
         self.input_stack = input_stack
         self.map_shape = input_stack.maps_shape
+
+
+    @property
+    def classification_pipeline(self):
+        '''
+        Defines the classification pipeline of this classifier. To reimplement
+        in each child.
+
+        Returns
+        -------
+        tuple
+            Classification pipeline.
+
+        '''
+        return ()
         
         
     def startThreadedClassification(self):
@@ -934,7 +949,7 @@ class _ClassifierBase():
         Launch the classification external thread (worker).
 
         '''
-        self.thread.set_classifier(self)
+        self.thread.set_pipeline(self.classification_pipeline)
         self.thread.start()
 
 
@@ -964,7 +979,42 @@ class ModelBasedClassifier(_ClassifierBase):
                   }
         super(ModelBasedClassifier, self).__init__(**kwargs)
         self.model = model
-        self.algorithm = model.getTrainedModel()
+        self.algorithm = model.get_trained_network()
+
+
+    @property
+    def classification_pipeline(self):
+        '''
+        Classification pipeline for all model-based classifiers.
+
+        Returns
+        -------
+        tuple
+            Pipeline
+
+        '''
+        f1 = self.preProcessFeatureData
+        f2 = self.predict
+        f3 = self.postProcessOutputData
+        return (f1, f2, f3)
+    
+
+    def classify(self):
+        '''
+        Run entire not-threaded classification process.
+
+        Returns
+        -------
+        pred: ndarray
+            Predictions.
+        prob: ndarray
+            Probability scores.
+
+        '''
+        feat_data = self.preProcessFeatureData()
+        prob, pred = self.predict(feat_data)
+        prob, pred = self.postProcessOutputData(prob, pred)
+        return pred, prob
 
 
     def preProcessFeatureData(self):
@@ -980,19 +1030,63 @@ class ModelBasedClassifier(_ClassifierBase):
     # Get a 2D features array suited for classification (n_pix x n_maps)
         feat_data = self.input_stack.get_feature_array()
 
-    # Map features from linear to polynomial if required
-        if (regr_degree := self.model.regrDegree) > 1:
-            feat_data = map2Polynomial(feat_data, regr_degree)
+    # Map features from linear to polynomial (get original data if degree=1)
+        feat_data = map_polinomial_features(feat_data, self.model.poly_degree)
 
     # Standardize data
-        feat_data = torch.tensor(feat_data)
-        feat_data = norm_data(feat_data, self.model.xMean, self.model.xStd,
+        feat_data = array2tensor(feat_data, 'float32')
+        feat_data = norm_data(feat_data, self.model.x_mean, self.model.x_stdev,
                               return_standards=False)
 
         return feat_data
+    
 
+    def predict(self, feat_data: torch.Tensor):
+        '''
+        Classify and compute probability scores.
 
-    def encodeLabels(self, array: np.ndarray, dtype='int16'):
+        Parameters
+        ----------
+        feat_data : Tensor
+            Input feature data.
+
+        Returns
+        -------
+        prob : ndarray
+            Probability scores.
+        pred : ndarray
+            Predictions.
+
+        '''
+        prob, pred = self.algorithm.predict(feat_data.float())
+        return prob, pred
+    
+
+    def postProcessOutputData(self, prob: torch.Tensor, pred: torch.Tensor):
+        '''
+        Post-process probability scores and predictions for better readability.
+
+        Parameters
+        ----------
+        prob : torch.Tensor
+            Probability scores.
+        pred : torch.Tensor
+            Predictions.
+
+        Returns
+        -------
+        prob : ndarray
+            Rounded probability scores.
+        pred : ndarray
+            Decoded predictions.
+
+        '''
+        prob = prob.detach().numpy().round(2)
+        pred = self.decodeLabels(pred)
+        return prob, pred
+    
+
+    def encodeLabels(self, array: np.ndarray|torch.Tensor, dtype='int16'):
         '''
         Encode labels from text names to class IDs.
 
@@ -1074,6 +1168,43 @@ class RoiBasedClassifier(_ClassifierBase):
         self.n_jobs = n_jobs
         self.proximity = pixel_proximity
 
+    
+    @property
+    def classification_pipeline(self):
+        '''
+        Classification pipeline for all ROI-based classifiers.
+
+        Returns
+        -------
+        tuple
+            Pipeline
+
+        '''
+        f1 = self.getTrainingData
+        f2 = self.fit
+        f3 = self.predict
+        f4 = self.computeProbabilityScores
+        return (f1, f2, f3, f4)
+    
+
+    def classify(self):
+        '''
+        Run entire not-threaded classification process.
+
+        Returns
+        -------
+        pred: ndarray
+            Predictions.
+        prob: ndarray
+            Probability scores.
+
+        '''
+        x_train, y_train, in_data = self.getTrainingData()
+        self.fit(x_train, y_train)
+        pred = self.predict(in_data)
+        prob = self.computeProbabilityScores(in_data)
+        return pred, prob
+
 
     def getCoordMaps(self):
         '''
@@ -1109,8 +1240,7 @@ class RoiBasedClassifier(_ClassifierBase):
         feat_data = self.input_stack.get_feature_array()
 
     # Normalize the data
-        feat_data = norm_data(feat_data, return_standards=False, 
-                              engine='numpy')
+        feat_data = norm_data(feat_data, return_standards=False)
 
         return feat_data
 
@@ -1168,6 +1298,58 @@ class RoiBasedClassifier(_ClassifierBase):
         tr_data = [x_train, y_train]
         if return_full_input: tr_data.append(x)
         return tr_data
+    
+
+    def fit(self, x_train: np.ndarray, y_train: np.ndarray):
+        '''
+        Fit classifier to training data.
+
+        Parameters
+        ----------
+        x_train : ndarray
+            Training feature data. 
+        y_train : ndarray
+            Training target data.
+
+        '''
+        self.algorithm.fit(x_train, y_train)
+    
+
+    def predict(self, in_data: np.ndarray):
+        '''
+        Predict unknown data. This function must always be called after fit.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input unknown data.
+
+        Returns
+        -------
+        pred : ndarray
+            Predictions.
+
+        '''
+        pred = self.algorithm.predict(in_data)
+        return pred
+    
+
+    def computeProbabilityScores(self, in_data: np.ndarray):
+        '''
+        Compute confidence scores.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input unknown data.
+
+        Returns
+        -------
+        prob : ndarray
+            Probability scores.
+        '''
+        prob = self.algorithm.predict_proba(in_data).max(axis=1)
+        return prob
 
 
 
@@ -1262,6 +1444,48 @@ class UnsupervisedClassifier(_ClassifierBase):
         self.do_dbi_score = dbi_score
 
 
+    @property
+    def classification_pipeline(self):
+        '''
+        Classification pipeline for all unsupervised classifiers.
+
+        Returns
+        -------
+        tuple
+            Pipeline
+
+        '''
+        f1 = self.preProcessFeatureData
+        f2 = self.fit
+        f3 = self.predict
+        f4 = self.computeProbabilityScores
+        f5 = self.computeSilhouetteScore
+        f6 = self.computeChiScore
+        f7 = self.computeDbiScore
+        return (f1, f2, f3, f4, f5, f6, f7)
+    
+
+    def classify(self):
+        '''
+        Run entire not-threaded classification process. Warning: this function
+        returns prediction labels as integer values and not as string like the
+        threaded classification.
+
+        Returns
+        -------
+        pred: ndarray
+            Predictions.
+        prob: ndarray
+            Probability scores.
+
+        '''
+        in_data = self.preProcessFeatureData()
+        self.fit(in_data)
+        pred = self.predict(in_data)
+        prob = self.computeProbabilityScores(in_data)
+        return pred, prob
+
+
     def getCoordMaps(self):
         '''
         Return x, y pixel indices (coordinates) maps.
@@ -1296,13 +1520,153 @@ class UnsupervisedClassifier(_ClassifierBase):
         feat_data = self.input_stack.get_feature_array()
 
     # Normalize the data
-        feat_data = norm_data(feat_data, return_standards=False, 
-                              engine='numpy')
+        feat_data = norm_data(feat_data, return_standards=False)
 
         return feat_data
+    
 
+    def fit(self, in_data: np.ndarray):
+        '''
+        Fit classifier to input data.
 
+        Parameters
+        ----------
+        in_data : ndarray
+            Input data.
 
+        '''
+        self.algorithm.fit(in_data)
+
+    
+    def predict(self, in_data: np.ndarray):
+        '''
+        Cluster input data.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input data.
+
+        Returns
+        -------
+        pred : ndarray
+            Clustered data.
+
+        '''
+        pred = self.algorithm.predict(in_data)
+        return pred
+    
+
+    def computeProbabilityScores(self, in_data: np.ndarray):
+        '''
+        Compute confidence scores.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input data.
+
+        Returns
+        -------
+        prob : ndarray
+            Probability scores.
+
+        '''
+        dist = self.algorithm.transform(in_data).min(axis=1)
+        prob = 1 - dist/dist.max()
+        return prob
+    
+
+    def computeSilhouetteScore(self, in_data: np.ndarray, pred: np.ndarray):
+        '''
+        Compute silhouette score. The computation is ignored if the attribute
+        'do_silhouette_score' is set to False.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input data.
+        pred : ndarray
+            Clustered data.
+
+        Returns
+        -------
+        sil_clust : ndarray | None
+            Silhouette score by cluster.
+        sil_avg : float | None
+            Average silhouette score.
+
+        '''
+        if self.do_silhouette_score:
+        # Define a random data sample of required size
+            sample_size = int(self.silhouette_ratio * pred.size)
+            rng = np.random.default_rng(self.seed)
+            subset_idx = rng.permutation(pred.size)[:sample_size]
+            data_slice, pred_slice = in_data[subset_idx, :], pred[subset_idx]
+        # Compute silhouette score by cluster
+            sil_sam = sklearn.metrics.silhouette_samples(data_slice, pred_slice)
+            unq_val = np.unique(pred_slice)
+            sil_clust = {u: np.sort(sil_sam[pred_slice == u]) for u in unq_val}
+        # Compute average silhouette score
+            sil_avg = np.mean(sil_sam)
+        
+        else:
+            sil_clust, sil_avg = None, None
+
+        return sil_clust, sil_avg
+    
+
+    def computeChiScore(self, in_data: np.ndarray, pred: np.ndarray):
+        '''
+        Compute Calinski-Harabasz Index. The computation is ignored if the 
+        attribute 'do_chi_score' is set to False.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input data.
+        pred : ndarray
+            Clustered data.
+
+        Returns
+        -------
+        chi : float | None
+            Calinski-Harabasz Index.
+
+        '''
+        if self.do_chi_score:
+            chi = sklearn.metrics.calinski_harabasz_score(in_data, pred)
+        else:
+            chi = None
+        return  chi
+    
+
+    def computeDbiScore(self, in_data: np.ndarray, pred: np.ndarray):
+        '''
+        Compute Davies-Bouldin Index. The computation is ignored if the 
+        attribute 'do_dbi_score' is set to False.
+
+        Parameters
+        ----------
+        in_data : ndarray
+            Input data.
+        pred : ndarray
+            Clustered data.
+
+        Returns
+        -------
+        dbi : float | None
+            Davies-Bouldin Index.
+
+        '''
+        if self.do_dbi_score:
+            dbi = sklearn.metrics.davies_bouldin_score(in_data, pred)
+        else:
+            dbi = None
+        return dbi
+        
+
+       
 class KMeans(UnsupervisedClassifier):
     '''
     K-Means classifier.

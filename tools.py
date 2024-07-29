@@ -1547,7 +1547,7 @@ class MineralClassifier(DraggableTool):
         self.show_lbl_action.toggled.connect(self.barplot.show_amounts)
 
     # Run mineral classification when classify button is clicked
-        self.classify_btn.clicked.connect(self.classify)
+        self.classify_btn.clicked.connect(self.startClassification)
 
     # Interrupt mineral classification when stop button is clicked
         self.stop_btn.clicked.connect(self.stopClassification)
@@ -2010,7 +2010,7 @@ class MineralClassifier(DraggableTool):
             self.maps_viewer.draw() 
 
 
-    def classify(self):
+    def startClassification(self):
         '''
         Launch a classification process.
 
@@ -2043,12 +2043,12 @@ class MineralClassifier(DraggableTool):
 
         if csf is not None:
             csf.thread.taskInitialized.connect(self.progbar.step)
+            csf.thread.workInterrupted.connect(self._endClassification)
             csf.thread.workFinished.connect(self._parseClassifierResult)
 
             self.progbar.setRange(0, csf.classification_steps)
             self._current_classifier = csf
             self._isBusyClassifying = True
-
 
             csf.startThreadedClassification()
 
@@ -2156,10 +2156,9 @@ class MineralClassifier(DraggableTool):
 
         '''
         if self._isBusyClassifying:
-            warn_text = 'A classification process is still active. Close '\
-                        'Mineral Classifier anyway?'
+            text = 'A classification process is still active. Close anyway?'
             btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', warn_text,
+            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
                                             btns, QW.QMessageBox.No)
             if choice == QW.QMessageBox.Yes:
                 self.stopClassification()
@@ -2250,9 +2249,8 @@ class MineralClassifier(DraggableTool):
         # Check if all required input maps are present and order them to fit
         # the correct order
         # add a user-friendly popup to link each map to required feat instead (enhancement)
-            required_features = self.model.inFeat
             ordered_indices = []
-            for feat in required_features:
+            for feat in self.model.features:
                 if not CF.guessMap(feat, maps_names, caseSens=True):
                     QW.QMessageBox.critical(self, 'X-Min Learn',
                                             f'Unable to identify {feat} map.')
