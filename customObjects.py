@@ -3596,7 +3596,6 @@ class RandomSeedGenerator(QW.QWidget):
     Ready to use widget to set, manage and display a random seed.
     '''
     seedChanged = QC.pyqtSignal(int, int) # old seed, new seed
-    _max_val = 10**8
 
     def __init__(self, parent=None):
         '''
@@ -3612,7 +3611,7 @@ class RandomSeedGenerator(QW.QWidget):
 
     # Set main attributes
         self._old_seed = None
-        self.seed = 0
+        self.seed = None
 
     # Set GUI and connect signals to slots
         self._init_ui()
@@ -3629,7 +3628,13 @@ class RandomSeedGenerator(QW.QWidget):
         '''
     # Random seed line edit
         self.seed_input = QW.QLineEdit()
-        self.seed_input.setValidator(QG.QIntValidator(0, self._max_val))
+
+    # Custom validator that accepts numbers between 1 and 999999999 and 
+    # empty strings. This is required to control the behaviour of the lineedit
+    # when user leaves the field empty.
+        regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8})?$")
+        validator = QG.QRegularExpressionValidator(regex)
+        self.seed_input.setValidator(validator)
 
     # Randomize seed button
         self.rand_btn = StyledButton(QG.QIcon(r'Icons/dice.png'))
@@ -3648,8 +3653,11 @@ class RandomSeedGenerator(QW.QWidget):
         Signals-slots connector.
 
         '''
+    # Make sure that the seed is never left empty
+        self.seed_input.editingFinished.connect(self.fill_empty_seed)
+
     # Change seed either manually or through randomization
-        self.seed_input.textChanged.connect(self.change_seed)
+        self.seed_input.textChanged.connect(self.on_seed_changed)
         self.rand_btn.clicked.connect(self.randomize_seed)
 
 
@@ -3658,11 +3666,11 @@ class RandomSeedGenerator(QW.QWidget):
         Randomize seed.
 
         '''
-        seed = np.random.default_rng().integers(1, self._max_val)
+        seed = np.random.default_rng().integers(1, 999999999)
         self.seed_input.setText(str(seed))
 
 
-    def change_seed(self, new_seed: str):
+    def on_seed_changed(self, new_seed: str):
         '''
         Set a new seed.
 
@@ -3672,10 +3680,18 @@ class RandomSeedGenerator(QW.QWidget):
             New seed in string format.
 
         '''
-        self._old_seed = self.seed
-        self.seed = int(new_seed)
-        self.seedChanged.emit(self._old_seed, self.seed)
+        if new_seed != '':
+            self._old_seed = self.seed
+            self.seed = int(new_seed)
+            self.seedChanged.emit(self._old_seed, self.seed)
 
 
+    def fill_empty_seed(self):
+        '''
+        Fill empty seed with a new random seed.
+
+        '''
+        if not self.seed_input.text():
+            self.randomize_seed()
 
 
