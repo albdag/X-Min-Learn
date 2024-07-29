@@ -3543,9 +3543,32 @@ class DescriptiveProgressBar(QW.QWidget):
         self.pbar.setRange(minimum, maximum)
 
 
+    def setUndetermined(self):
+        '''
+        Set the prograss bar in an undetermined state.
+
+        '''
+        self.pbar.setRange(0, 0)
+
+
+    def undetermined(self):
+        '''
+        Check if the progress bar is in an undetermined state.
+
+        Returns
+        -------
+        undet : bool
+            Progress bar has undetermined state.
+
+        '''
+        undet = self.pbar.minimum() == self.pbar.maximum() == 0
+        return undet
+
+
     def step(self, step_description: str):
         '''
-        Increase progress bar by one step and set a new step description.
+        Increase progress bar by one step and set a new step description. If 
+        progress bar is in an undetermined state, just set the description.
 
         Parameters
         ----------
@@ -3554,7 +3577,8 @@ class DescriptiveProgressBar(QW.QWidget):
 
         '''
         self.desc.setText(step_description)
-        self.pbar.setValue(self.pbar.value() + 1)
+        if not self.undetermined():
+            self.pbar.setValue(self.pbar.value() + 1)
 
 
     def reset(self):

@@ -18,10 +18,11 @@ from _base import RoiMap
 class MultiTaskThread(QThread):
     '''
     Base function for threads defined by a fixed known amount of tasks. It is
-    equipped with a custom signal to inform when each task is initialized and
-    another custom signals which is emitted when the entire procedure is done.
+    equipped with custom signals to inform when each task is initialized and
+    when the entire procedure is completed or interrupted.
     '''
     taskInitialized = pyqtSignal(str)
+    workInterrupted = pyqtSignal()
     workFinished = pyqtSignal(tuple, bool)
 
     def __init__(self):
@@ -29,6 +30,23 @@ class MultiTaskThread(QThread):
         Constructor.
         '''
         super(MultiTaskThread, self).__init__()
+
+    
+    def isInterruptionRequested(self):
+        '''
+        Add a custom signal to the default isInterruptionRequested function.
+
+        Returns
+        -------
+        interrupt : bool
+            If the thread interruption has been requested.
+
+        '''
+        interrupt = super(MultiTaskThread, self).isInterruptionRequested()
+        if interrupt:
+            self.workInterrupted.emit()
+        return interrupt
+
 
     def run(self):
         '''

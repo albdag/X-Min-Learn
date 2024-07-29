@@ -2116,8 +2116,9 @@ class MineralClassifier(DraggableTool):
 
         '''
         if self._current_classifier is not None:
+            self.progbar.setUndetermined()
+            self.progbar.step('Interrupting classification')
             self._current_classifier.thread.requestInterruption()
-            self._endClassification()
 
 
     def _endClassification(self, success=False):
@@ -2131,9 +2132,12 @@ class MineralClassifier(DraggableTool):
             is False.
 
         '''
-        self.progbar.reset()
         self._isBusyClassifying = False
         self._current_classifier = None
+        self.progbar.reset()
+    # If pbar is left undetermined, it visually seems that process hasn't stop
+        if self.progbar.undetermined():
+            self.progbar.setMaximum(1)
 
         if success:
             QW.QMessageBox.information(self, 'X-Min Lern', 
