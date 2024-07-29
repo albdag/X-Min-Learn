@@ -4,6 +4,7 @@ Created on Sun Mar  5 19:31:39 2023
 
 @author: albdag
 """
+import gc
 
 from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
@@ -319,43 +320,43 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Preferences 
         self.pref_action.triggered.connect(
-            lambda: self.launch('Preferences', tabbed=False))
+            lambda: self.launch_dialog('Preferences'))
 
     # Launch Convert Grayscale images to ASCII 
         self.conv2ascii_action.triggered.connect(
-            lambda: self.launch('Grayscale2Ascii'))
+            lambda: self.launch_dialog('Grayscale2Ascii'))
 
     # Launch Convert RGB yo Mineral Maps 
         self.conv2mmap_action.triggered.connect(
-            lambda: self.launch('Rgb2Minmap'))
+            lambda: self.launch_dialog('Rgb2Minmap'))
 
     # Launch Build Dummy Maps 
         self.dummy_map_action.triggered.connect(
-            lambda: self.launch('DummyMaps'))
+            lambda: self.launch_dialog('DummyMaps'))
 
     # Launch Sub-sample Dataset 
         self.subsample_ds_action.triggered.connect(
-            lambda: self.launch('SubSampleDataset'))
+            lambda: self.launch_dialog('SubSampleDataset'))
 
     # Launch Merge Datasets 
         self.merge_ds_action.triggered.connect(
-            lambda: self.launch('MergeDatasets'))
+            lambda: self.launch_dialog('MergeDatasets'))
 
     # Launch Dataset Builder 
         self.ds_builder_action.triggered.connect(
-            lambda: self.launch('DatasetBuilder'))
+            lambda: self.launch_tool('DatasetBuilder'))
 
     # Launch Model Learner 
         self.model_learner_action.triggered.connect(
-            lambda: self.launch('ModelLearner'))
+            lambda: self.launch_tool('ModelLearner'))
 
     # Launch Mineral Classifier 
         self.classifier_action.triggered.connect(
-            lambda: self.launchMineralClassifier())
+            lambda: self.launch_tool('MineralClassifier'))
 
     # Launch Phase Refiner 
         self.refiner_action.triggered.connect(
-            lambda: self.launch('PhaseRefiner'))
+            lambda: self.launch_tool('PhaseRefiner'))
 
 
     def addPane(self, dockWidgetArea, pane, visible=True):
@@ -384,38 +385,47 @@ class MainWindow(QW.QMainWindow):
             pane.show()
             pane.raise_()
 
+
     def createPopupMenu(self):
         popupmenu = super(MainWindow, self).createPopupMenu()
         popupmenu.setStyleSheet(pref.SS_menu)
         return popupmenu
     
-    def launchMineralClassifier(self, tabbed=True):
-        mc = tools.MineralClassifier()
-    
-    # Connect this MineralClassifier instance's signals with appropriate slots
-        mc.inmaps_selector.sampleUpdateRequested.connect(
-            lambda: mc.inmaps_selector.updateCombox(
-                self.dataManager.getAllGroups()))
-        mc.inmaps_selector.mapsUpdateRequested.connect(
-            lambda idx: mc.inmaps_selector.updateList(
-                self.dataManager.topLevelItem(idx).inmaps))
-    
-    # Show the Mineral Classifier as a tab or as a stand-alone window
-        if tabbed:
-            self.tabWidget.addTab(mc)
+
+    def launch_dialog(self, dialogname):
+        # just a placeholder. Probably just use lambda: <dialog>.show() and 
+        # discard this function
+        print(f'{dialogname} not implemented.')
+
+
+    def launch_tool(self, toolname, tabbed=True):
+    # Force garbage collection every time a new tool instance gets opened
+        gc.collect()
+        
+        if toolname == 'DatasetBuilder':
+            tool = tools.DatasetBuilder()
+
+        elif toolname == 'ModelLearner':
+            tool = tools.ModelLearner()
+
+        elif toolname == 'MineralClassifier':
+            tool = tools.MineralClassifier()
+            # Connect this MineralClassifier signals with appropriate slots
+            tool.inmaps_selector.sampleUpdateRequested.connect(
+                lambda: tool.inmaps_selector.updateCombox(
+                    self.dataManager.getAllGroups()))
+            tool.inmaps_selector.mapsUpdateRequested.connect(
+                lambda idx: tool.inmaps_selector.updateList(
+                    self.dataManager.topLevelItem(idx).inmaps))
+            
         else:
-            mc.show()
+            tool = None
 
-    def launch(self, toolname, tabbed=True):
-        tools_dict = {'DatasetBuilder': tools.DatasetBuilder,
-                      'ModelLearner': tools.ModelLearner}
-        tool = tools_dict.get(toolname, None)
-
-        if tool is not None:
+        if isinstance(tool, tools.DraggableTool):
             if tabbed:
-                self.tabWidget.addTab(tool())
+                self.tabWidget.addTab(tool)
             else:
-                tool().show()
+                tool.show()
 
         else:
             print(f'{toolname} not implemented.')
