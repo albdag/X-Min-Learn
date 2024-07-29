@@ -3695,3 +3695,268 @@ class RandomSeedGenerator(QW.QWidget):
             self.randomize_seed()
 
 
+
+class PercentLineEdit(QW.QFrame):
+    '''
+    Advanced object that allows altering an integer either through a percentage 
+    value with a spinbox or directly by typing a new number in a validated line
+    edit. A custom set of icons visually indicate if the new integer is bigger, 
+    smaller or equal to the original one.
+
+    '''
+    valueEdited = QC.pyqtSignal(int)
+
+    def __init__(self, base_value: int, min_perc=1, max_perc=100, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        base_value : int
+            Original integer value.
+        min_perc : int, optional
+            Minimum allowed percentage value. It cannot be smaller than 1. The
+            default is 1.
+        max_perc : int, optional
+            Maximum allowed percentage value. It cannot be smaller than 100. 
+            The default is 100.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
+        super(PercentLineEdit, self).__init__(parent)
+
+    # Main attributes
+        self._base = base_value
+        self._value = base_value
+        self._min_perc = 1 if min_perc < 1 else min_perc
+        self._max_perc = 100 if max_perc < 100 else max_perc
+
+    # Widget attributes
+        self.setFrameStyle(QW.QFrame.StyledPanel | QW.QFrame.Plain)
+        self.setLineWidth(2)
+
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Line edit for direct integer input. Equipped with a regex validator that
+    # accepts numbers between 1 and 10**9 as well as empty strings. This allows
+    # a fine control over the behaviour of the line edit.
+        regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8}|1000000000)?$")
+        validator = QG.QRegularExpressionValidator(regex)
+        self.linedit = QW.QLineEdit(str(self._value))
+        self.linedit.setValidator(validator)
+
+    # Spinbox for percentage input
+        self.spinbox = StyledSpinBox(self._min_perc, self._max_perc)
+        self.spinbox.setFixedWidth(100)
+        self.spinbox.setSuffix(' %')
+        self.spinbox.setValue(100)
+
+    # Visual increase/decrese icon indicator
+        self.iconlbl = QW.QLabel()
+        self.setIcon()
+
+    # Adjust layout
+        layout = QW.QHBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.addWidget(self.linedit)
+        layout.addWidget(self.iconlbl)
+        layout.addWidget(self.spinbox)
+        self.setLayout(layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        
+    # Line edit slots
+        self.linedit.editingFinished.connect(self.onLineditEditingFinished)
+        self.linedit.textChanged.connect(self.onLineditChanged)
+
+    # Spinbox slot
+        self.spinbox.valueChanged.connect(self.onSpinboxChanged)
+
+
+    def setIcon(self):
+        '''
+        Change visual increase/decrease icon indicator based on the difference
+        between base value and new input value.
+        '''
+        delta = self._value - self._base
+
+        if delta > 0:
+            icon = r'Icons/increase.png'
+        elif delta < 0:
+            icon = r'Icons/decrease.png'
+        else:
+            icon = r'Icons/stationary.png'
+
+        pixmap = QG.QPixmap(icon).scaled(20, 20, QC.Qt.KeepAspectRatio)
+        self.iconlbl.setPixmap(pixmap)
+
+
+    def onLineditEditingFinished(self):
+        '''
+        Replace empty strings with original base value. Send valueEdited signal
+        otherwise.
+
+        '''
+        text = self.linedit.text()
+        if not text:
+            self.linedit.setText(str(self._base))
+        else:
+            self.valueEdited.emit(int(text))
+
+
+    def onLineditChanged(self, value: str):
+        '''
+        Store new input value and auto adjust spinbox accordingly.
+
+        Parameters
+        ----------
+        value : str
+            Input line edit value
+
+        '''
+        self._value = int(value) if value else self._base
+        perc = self.ratio() * 100
+
+    # GUI update
+        self.adjustSpinboxPrefix(perc)
+        self.setIcon()
+        
+    # Prevent spinbox from sending signals when auto adjusted. Prenvent 
+    # overflow errors as well when perc is bigger than upper spinbox limit. 
+        perc = self._max_perc if perc > self._max_perc else round(perc)
+        self.spinbox.blockSignals(True)
+        self.spinbox.setValue(round(perc))
+        self.spinbox.blockSignals(False)
+
+
+    def onSpinboxChanged(self, perc: int):
+        '''
+        Compute new input value and auto adjust line edit accordingly.
+
+        Parameters
+        ----------
+        perc : int
+            Input spinbox value.
+
+        '''
+        self._value = round(self._base * perc / 100)
+
+    # GUI update
+        self.adjustSpinboxPrefix(perc)
+        self.setIcon()
+        
+    # Prevent line edit from sending signals when auto adjusted.
+        self.linedit.blockSignals(True)
+        self.linedit.setText(str(self._value))
+        self.linedit.blockSignals(False)
+
+    # Send valueEdited signal 
+        self.valueEdited.emit(self._value)
+
+
+    def adjustSpinboxPrefix(self, perc: int|float):
+        '''
+        Set a prefix to spinbox if percentage is not within its value range. 
+
+        Parameters
+        ----------
+        perc : int | float
+            Percentage value.
+
+        '''
+        if perc < self._min_perc:
+            self.spinbox.setPrefix('<')
+        elif perc > self._max_perc:
+            self.spinbox.setPrefix('>')
+        else:
+            self.spinbox.setPrefix('')
+
+    
+    def value(self):
+        '''
+        Getter function for value attribute.
+
+        Returns
+        -------
+        int
+            Current value.
+
+        '''
+        return self._value
+    
+
+    def setValue(self, value: int):
+        '''
+        Setter function for value attribute.
+
+        Parameters
+        ----------
+        value : int
+            Integer value.
+
+        '''
+        self.linedit.setText(str(value))
+
+
+    def percent(self):
+        '''
+        Get current percent value. Prefixes are not honored. Use ratio() for 
+        exact ratio.
+
+        Returns
+        -------
+        int
+            Current percent value.
+
+        '''
+        return self.spinbox.value()
+
+
+    def setPercent(self, perc: int):
+        '''
+        Set current percent value.
+
+        Parameters
+        ----------
+        perc : int
+            Percent value.
+
+        '''
+        self.spinbox.setValue(perc)
+    
+
+    def ratio(self, round_decimals: int|None = None):
+        '''
+        Get current value / base value ratio.
+
+        Parameters
+        ----------
+        round_decimals : int | None, optional
+            Round ratio to this number of decimals. If None, no rounding is 
+            performed. The default is None.
+
+        Returns
+        -------
+        float | int
+            Current ratio.
+
+        '''
+        r = self._value / self._base
+        if round_decimals is not None:
+            r = round(r, round_decimals)
+        return r
+
+
