@@ -233,11 +233,9 @@ SS_button = (
     '''QPushButton:flat {
             border: none;
             background-color: transparent;}'''
-    '''QPushButton:hover {
+    '''QPushButton:!flat:hover {
             background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                                               stop: 0 white, stop: 1 %s);}'''
-    '''QPushButton:flat:hover {
-            background-color: transparent;}'''
     '''QPushButton:pressed {
             border: 2px solid %s;}'''
     '''QPushButton:checked {

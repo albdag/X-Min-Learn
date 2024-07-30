@@ -5024,7 +5024,7 @@ class ModelLearner(DraggableTool):
         self.balancing_multicore_cbox.setChecked(False)
 
     # Balancing preview table (Styled Table)
-        hl = ('Class', 'Original #', 'Current #', 'After balancing #')
+        hl = ('Class', 'Original', 'Current', 'After balancing')
         self.balancing_table = cObj.StyledTable(0, 4)
         # ResizeModes: 0=Interactive, 1=Stretch, 2=Fixed, 3=ResizeToContent
         self.balancing_table.horizontalHeader().setSectionResizeMode(3)

@@ -3746,7 +3746,7 @@ class PercentLineEdit(QW.QFrame):
         GUI constructor.
 
         '''
-    # Line edit for direct integer input. Equipped with a regex validator that
+    # QLineEdit for direct integer input. Equipped with a regex validator that
     # accepts numbers between 1 and 10**9 as well as empty strings. This allows
     # a fine control over the behaviour of the line edit.
         regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8}|1000000000)?$")
@@ -3754,21 +3754,26 @@ class PercentLineEdit(QW.QFrame):
         self.linedit = QW.QLineEdit(str(self._value))
         self.linedit.setValidator(validator)
 
-    # Spinbox for percentage input
+    # Spinbox for percentage input (Styled Spinbox)
         self.spinbox = StyledSpinBox(self._min_perc, self._max_perc)
-        self.spinbox.setFixedWidth(100)
+        #self.spinbox.setFixedWidth(100)
         self.spinbox.setSuffix(' %')
         self.spinbox.setValue(100)
 
-    # Visual increase/decrese icon indicator
+    # Visual increase/decrese icon indicator (QLabel)
         self.iconlbl = QW.QLabel()
         self.setIcon()
+
+    # Reset button (Styled Button)
+        self.reset_btn = StyledButton(QG.QIcon(r'Icons/refresh.png'))
+        self.reset_btn.setFlat(True)
 
     # Adjust layout
         layout = QW.QHBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
-        layout.addWidget(self.linedit)
         layout.addWidget(self.iconlbl)
+        layout.addWidget(self.linedit)
+        layout.addWidget(self.reset_btn)
         layout.addWidget(self.spinbox)
         self.setLayout(layout)
 
@@ -3778,13 +3783,10 @@ class PercentLineEdit(QW.QFrame):
         Signals-slots connector.
 
         '''
-        
-    # Line edit slots
         self.linedit.editingFinished.connect(self.onLineditEditingFinished)
         self.linedit.textChanged.connect(self.onLineditChanged)
-
-    # Spinbox slot
         self.spinbox.valueChanged.connect(self.onSpinboxChanged)
+        self.reset_btn.clicked.connect(self.resetValue)
 
 
     def setIcon(self):
@@ -3910,6 +3912,14 @@ class PercentLineEdit(QW.QFrame):
 
         '''
         self.linedit.setText(str(value))
+
+
+    def resetValue(self):
+        '''
+        Reset original value.
+
+        '''
+        self.setValue(self._base)
 
 
     def percent(self):
