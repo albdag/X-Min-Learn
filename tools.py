@@ -5383,14 +5383,14 @@ class ModelLearner(DraggableTool):
             lambda t: self.m_neigh_spbox.setEnabled(t=='BorderlineSMOTE'))
     
     # Hide strategy warning icon when US algorithm is in the following list
-        us_sublist = ('None', 'RandUS', 'NearMiss')
+        us_no_warn = ('None', 'RandUS', 'NearMiss')
         self.us_combox.currentTextChanged.connect(
-            lambda t: self.us_warn_icon.setHidden(t in us_sublist))
+            lambda t: self.us_warn_icon.setHidden(t in us_no_warn))
         
     # Enable n-neighbors spinbox when US algorithm is not in the following list
-        us_sublist = ('RandUS', 'TomekLinks')
+        us_no_nus = ('RandUS', 'TomekLinks')
         self.us_combox.currentTextChanged.connect(
-            lambda t: self.n_neigh_spbox.setEnabled(t not in us_sublist))
+            lambda t: self.n_neigh_spbox.setEnabled(t not in us_no_nus))
     
     # Set strategy based on the selection made in the strategy combobox 
         self.strategy_combox.currentTextChanged.connect(self.parseStrategy)
