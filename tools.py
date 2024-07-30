@@ -5511,7 +5511,7 @@ class ModelLearner(DraggableTool):
             return QW.QMessageBox.critical(self, 'X-Min Learn', text)
     
     # Ask confirmation if a dataset was already processed
-        if self.dataset.are_subsets_split():
+        if self.dataset and self.dataset.are_subsets_split():
             text = 'Current progress will be lost if seed is changed. Confirm?'
             choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
                      QW.QMessageBox.Yes | QW.QMessageBox.No,
