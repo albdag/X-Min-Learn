@@ -2073,6 +2073,7 @@ class MineralClassifier(DraggableTool):
         # Parse the classification result appropriately
             if self._current_classifier.type == 'Unsupervised':
                 pred, prob, sil_avg, sil_clust, chi, dbi = result
+                pred = pred.astype('U8')
             else:   
                 pred, prob = result
                 sil_avg, sil_clust, chi, dbi = None, None, None, None
@@ -5820,22 +5821,27 @@ class ModelLearner(DraggableTool):
         classes = [c.text() for c in self.getBalancingTableCellsByColumn(0)]
         values = [cw.value() for cw in self.getBalancingTableCellsByColumn(3)]
         ratios = [cw.ratio(1) for cw in self.getBalancingTableCellsByColumn(3)]
-        strategy = dict(zip(classes, values))
 
-    # Get over-sampling and under-sampling algorithms
-        over_sampler = self.os_combox.currentText()
-        under_sampler = self.us_combox.currentText()
+    # Get over-sampling and under-sampling parameters
+        strategy = dict(zip(classes, values))
+        ovs = self.os_combox.currentText()
+        uds = self.us_combox.currentText()
+        seed = self.seed_generator.seed
+        kos = self.k_neigh_spbox.value()
+        mos = self.m_neigh_spbox.value()
+        nus = self.n_neigh_spbox.value()
+        njobs = (-1) ** self.balancing_multicore_cbox.isChecked()
 
     # Ask for user confirm
         i = []
-        if over_sampler == 'None':
-            over_sampler = None
+        if ovs == 'None':
+            ovs = None
             i.append('Over-Sampling not selected. Increased classes ignored.')
         elif max(ratios) > 5:
             i.append('High after-balancing value(s) detected (>500 %). '\
                      'Aggressive over-sampling can cause model overfitting!')
-        if under_sampler == 'None':
-            under_sampler = None
+        if uds == 'None':
+            uds = None
             i.append('Under-Sampling not selected. Decreased classes ignored.')
         elif min(ratios) < 0.2:
             i.append('Low after-balancing value(s) detected (<20 %). '\
@@ -5854,18 +5860,15 @@ class ModelLearner(DraggableTool):
             self.canc_balancing_btn.setEnabled(False)
             self.balancing_pbar.reset()
             self.balancing_pbar.setUndetermined()
-            params = {'x': self.dataset.x_train, 
-                      'y': self.dataset.y_train,
-                      'strategy': strategy,
-                      'seed': self.seed_generator.seed,
-                      'osa': over_sampler,
-                      'usa': under_sampler,
-                      'kos': self.k_neigh_spbox.value(),
-                      'mos': self.m_neigh_spbox.value(),
-                      'nus': self.n_neigh_spbox.value(),
-                      'njobs': (-1)**self.balancing_multicore_cbox.isChecked()
-                      }
-            self.balancing_thread.set_params(**params)
+
+            f1 = self.dataset.parse_balancing_strategy
+            f2 = self.dataset.oversample
+            f3 = self.dataset.undersample
+            f4 = self.dataset.shuffle
+            pipeline = (f1, f2, f3, f4)
+            params = (strategy, seed, ovs, uds, kos, mos, nus, njobs)
+
+            self.balancing_thread.set_pipeline(pipeline, params)
             self.balancing_thread.start()
 
 

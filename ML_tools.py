@@ -8,6 +8,8 @@ Created on Wed Apr 28 13:06:51 2021
 import math
 from typing import Any
 
+import imblearn.over_sampling as OS
+import imblearn.under_sampling as US
 import numpy as np
 import pandas as pd
 import sklearn.cluster
@@ -190,17 +192,15 @@ class GroundTruthDataset():
         self.orig_subsets_ratios = (train_ratio, valid_ratio, test_ratio)
 
     # Encode targets' labels as IDs    
-        targets_ids = np.empty(self.targets.shape, dtype='int16')
+        targ_ids = np.empty(self.targets.shape, dtype='int16')
         for lbl, id in self.encoder.items():
-            targets_ids[self.targets==lbl] = id
+            targ_ids[self.targets==lbl] = id
 
     # Apply permutations to dataset
-        n_instances = self.features.shape[axis]
-        perm_idx = np.random.default_rng(seed).permutation(n_instances)
-        feat_perm = self.features[perm_idx]
-        targ_perm = targets_ids[perm_idx]
+        feat_perm, targ_perm = self.shuffle(self.features, targ_ids, axis, seed)
 
     # Define split indices
+        n_instances = self.features.shape[axis]
         idx = [int(n_instances * train_ratio), 
                int(n_instances * (train_ratio + valid_ratio))]
 
@@ -221,6 +221,44 @@ class GroundTruthDataset():
         return feat_split, targ_split
     
 
+    def shuffle(self, x_feat: np.ndarray, y_targ: np.ndarray, axis=0,
+                seed: int|None = None):
+        '''
+        Apply permutation to provided features (x) and targets (y) arrays.
+
+        Parameters
+        ----------
+        x_feat : ndarray
+            Features array.
+        y_targ : np.ndarray
+            Targets array.
+        axis : int, optional
+            Permutation is applied along this axis. The default is 0.
+        seed : int | None, optional
+            If provided, sets a permutation seed. If None, the seed is chosen 
+            randomly. The default is None.
+
+        Returns
+        -------
+        x_feat : ndarray
+            Permuted features array.
+        y_targ : np.ndarray
+            Permuteed targets array.
+
+        Raises
+        ------
+        ValueError
+            x_feat and y_targ must have the same length along axis.
+
+        '''
+        
+        if (len_x := x_feat.shape[axis]) != (len_y := y_targ.shape[axis]):
+            raise ValueError(f'Different length for x={len_x} and y={len_y}.')
+        
+        perm = np.random.default_rng(seed).permutation(len_x)
+        return x_feat[perm], y_targ[perm]
+
+
     def update_counters(self):
         '''
         Refresh train, validation and test counters.
@@ -239,6 +277,286 @@ class GroundTruthDataset():
             self.valid_counter[lbl] = np.count_nonzero(self.y_valid==id)
             self.test_counter[lbl] = np.count_nonzero(self.y_test==id)
 
+
+    def parse_balancing_strategy(self, strategy: int|str|dict, verbose=False):
+        '''
+        Build over-sampling and under-sampling strategies based on the provided
+        overall balancing strategy. The outputs of this function are a required
+        input parameter for oversample() and undersample() functions.
+
+        Parameters
+        ----------
+        strategy : int | str | dict
+            Overall balancing strategy. It can be:
+                - int: all classes will be resampled to this specific value.
+                - str: a predefined function: ['Min', 'Max', 'Mean', 'Median'].
+                - dict: a dictionary with the required value for each class.
+        verbose : bool, optional
+            If True, include a class by class strategy info dictionary. The 
+            default is False.
+
+        Returns
+        -------
+        os_strat : dict
+            Over-sampling strategy.
+        us_strat : dict
+            Under-sampling strategy.
+        info : dict, optional
+            Class by class strategy info dictionary, if verbose is True.
+
+        Raises
+        ------
+        ValueError
+            Dataset must be split into subsets before calling this function.
+        ValueError
+            The provided string strategy is invalid.
+        TypeError
+            The provided strategy is not of a valid type.
+
+        '''
+        if not self.are_subsets_split():
+            raise ValueError('Dataset is not split in subsets.')
+    
+    # Parse strategy parameter
+        unq, cnt = np.unique(self.y_train, return_counts=True)
+
+        if type(strategy) == int:
+            num = [strategy] * len(cnt)
+
+        elif type(strategy) == str:
+            if strategy == 'Min':
+                num = [cnt.min()] * len(cnt)
+            elif strategy == 'Max':
+                num = [cnt.max()] * len(cnt)
+            elif strategy == 'Mean':
+                num = [int(np.mean(cnt))] * len(cnt)
+            elif strategy == 'Median':
+                num = [int(np.median(cnt))] * len(cnt)
+            else:
+                raise ValueError(f'Invalid strategy: {strategy}')
+
+        elif type(strategy) == dict:
+            num = list(strategy.values())
+
+        else:
+            raise TypeError(f'Invalid type for strategy: {type(strategy)}')
+        
+    # Set over-sampling and under-sampling strategies
+        os_strat, us_strat = {}, {}
+        for u, c, n in zip(unq, cnt, num):
+            if n >= c:
+                os_strat[u] = n
+            else:
+                us_strat[u] = n
+
+    # If verbose is True, also return a class by class strategy info dictionary
+        if verbose:
+            info = dict(zip(unq, [f'{c} -> {n}' for c, n in zip(cnt, num)]))
+            return os_strat, us_strat, info
+        else:
+            return os_strat, us_strat
+        
+
+    def oversample(self, os_strat: dict, algorithm: str|None, seed: int, k=5, 
+                   m=10, x: np.ndarray|None = None, y: np.ndarray|None = None,
+                   verbose=False):
+        '''
+        Apply over-sampling balancing operations.
+
+        Parameters
+        ----------
+        os_strat : dict
+            Over-sampling strategy. (See parse_balancing_strategy() function).
+        algorithm : str | None
+            Over-sampling algorithm. Must be one of 'SMOTE', 'BorderlineSMOTE',
+            'SVMSMOTE', 'ADASYN' or None. If None, no over-sampling will be 
+            performed.
+        seed : int
+            Random seed for reproducible results.
+        k : int, optional
+            Number of neighbours to be used to generate synthetic samples. The 
+            default is 5.
+        m : int, optional
+            Number of neighbours to be used to determine if a minority sample 
+            is in "danger". Only valid for 'BorderlineSMOTE' and 'SVMSMOTE'. 
+            The default is 10.
+        x : ndarray | None, optional
+            Features array. If None, the train subset features will be used.
+            The default is None.
+        y : ndarray | None, optional
+            Targets array. If None, the train subset targets will be used. The
+            default is None.
+        verbose : bool, optional
+            If True, include a tuple containing info on the parameters used for
+            the computation. The default is False.
+
+        Returns
+        -------
+        x_bal : ndarray
+            Over-sampled features array.
+        y_bal : ndarray
+            Over-sampled targets array.
+        info : dict, optional
+            Parameters info tuple, if verbose is True.
+
+        Raises
+        ------
+        ValueError
+            Algorithm must be one of 'SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', 
+            'ADASYN' or None.
+
+        '''
+    # Initialize over-sampler
+        if algorithm is None:
+            ovs = None
+
+        elif algorithm == 'SMOTE':
+            ovs = OS.SMOTE(sampling_strategy = os_strat,
+                           random_state = seed,
+                           k_neighbors = k)
+        
+        elif algorithm == 'BorderlineSMOTE':
+            ovs = OS.BorderlineSMOTE(sampling_strategy = os_strat,
+                                     random_state = seed,
+                                     k_neighbors = k,
+                                     m_neighbors = m)
+        elif algorithm == 'SVMSMOTE':
+            ovs = OS.SVMSMOTE(sampling_strategy = os_strat,
+                              random_state = seed,
+                              k_neighbors = k,
+                              m_neighbors = m)
+        
+        elif algorithm == 'ADASYN':
+            ovs = OS.ADASYN(sampling_strategy = os_strat,
+                            random_state = seed,
+                            n_neighbors = k)
+
+        else:
+            valid_alg = ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', 'ADASYN']
+            err = f'Invalid algorithm: {algorithm}. Must be one of {valid_alg}'
+            raise ValueError(err)
+        
+    # Compute over-sampling
+        x = self.x_train if x is None else x
+        y = self.y_train if y is None else y
+        if ovs:
+            x_bal, y_bal = ovs.fit_resample(x, y)
+        else:
+            x_bal, y_bal = x, y
+
+    # If verbose is True, also return an info tuple
+        if verbose:
+            info = (algorithm, seed, k, m)
+            return x_bal, y_bal, info
+        else:
+            return x_bal, y_bal
+        
+
+    def undersample(self, us_strat: dict, algorithm: str|None, seed: int, n=3, 
+                    njobs=1, x: np.ndarray|None = None, 
+                    y: np.ndarray|None = None, verbose=False):
+        '''
+        Apply under-sampling balancing operations.
+
+        Parameters
+        ----------
+        us_strat : dict
+            Under-sampling strategy. (See parse_balancing_strategy() function).
+        algorithm : str | None
+            Under-sampling algorithm. Must be one of 'RandUS', 'NearMiss', 
+            'ClusterCentroids', 'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR' or
+            None. If None, no under-sampling will be performed.
+        seed : int
+            Random seed for reproducible results.
+        n : int, optional
+            Number of neighbours to be used to compute the average distance to 
+            the minority point samples. The default is 3.
+        njobs : int, optional
+            Number of CPU cores used during computation. If -1 all available 
+            processessors are used. The default is 1.
+        x : ndarray | None, optional
+            Features array. If None, the train subset features will be used.
+            The default is None.
+        y : ndarray | None, optional
+            Targets array. If None, the train subset targets will be used. The
+            default is None.
+        verbose : bool, optional
+            If True, include a tuple containing info on the parameters used for
+            the computation. The default is False.
+
+        Returns
+        -------
+        x_bal : ndarray
+            Under-sampled features array.
+        y_bal : ndarray
+            Under-sampled targets array.
+        info : dict, optional
+            Parameters info tuple, if verbose is True.
+
+        Raises
+        ------
+        ValueError
+            Algorithm must be one of 'RandUS', 'NearMiss', 'ClusterCentroids', 
+            'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR' or None.
+
+        '''
+    # Initialize under-sampler
+        if algorithm is None:
+            uds = None
+
+        elif algorithm == 'RandUS':
+            uds = US.RandomUnderSampler(sampling_strategy = us_strat,
+                                        random_state = seed)
+        
+        elif algorithm == 'NearMiss':
+            uds = US.NearMiss(sampling_strategy = us_strat,
+                              n_neighbors = n,
+                              n_jobs = njobs)
+        
+        elif algorithm == 'ClusterCentroids':
+            uds = US.ClusterCentroids(sampling_strategy = us_strat,
+                                      random_state = seed)
+        
+        elif algorithm == 'TomekLinks':
+            us_strat = list(us_strat.keys())
+            uds = US.TomekLinks(sampling_strategy = us_strat,
+                                n_jobs = njobs)
+        
+        elif algorithm in ('ENN-all', 'ENN-mode'):
+            us_strat = list(us_strat.keys())
+            kind = algorithm.split('-')[-1]
+            uds = US.EditedNearestNeighbours(sampling_strategy = us_strat,
+                                             n_neighbors = n,
+                                             kind_sel = kind,
+                                             n_jobs = njobs)
+
+        elif algorithm == 'NCR':
+            us_strat = list(us_strat.keys())
+            uds = US.NeighbourhoodCleaningRule(sampling_strategy = us_strat,
+                                               n_neighbors = n,
+                                               n_jobs = njobs)
+
+        else:
+            valid_alg = ['RandUS', 'NearMiss', 'ClusterCentroids', 'TomekLinks',
+                         'ENN-all', 'ENN-mode', 'NCR']
+            err = f'Invalid algorithm: {algorithm}. Must be one of {valid_alg}'
+            raise ValueError(err)
+
+    # Compute under-sampling
+        x = self.x_train if x is None else x
+        y = self.y_train if y is None else y
+        if uds:
+            x_bal, y_bal = uds.fit_resample(x, y)
+        else:
+            x_bal, y_bal = x, y
+
+    # If verbose is True, also return an info tuple
+        if verbose:
+            info = (algorithm, seed, n, njobs)
+            return x_bal, y_bal, info
+        else:
+            return x_bal, y_bal
+        
 
     def apply_balancing(self, balanced_x: np.ndarray, balanced_y: np.ndarray):
         '''
@@ -283,6 +601,57 @@ class GroundTruthDataset():
         self.x_train = self.orig_x_train.copy()
         self.y_train = self.orig_y_train.copy()
         self.train_counter = self.orig_train_counter.copy()
+
+
+    def balance_trainset(self, strategy: int|str|dict, seed: int, 
+                         osa: str|None = None, usa: str|None = None, kos=5,
+                         mos=10, nus=3, njobs=1):
+        '''
+        Run entire not-threaded balancing session on the train subset.
+
+        Parameters
+        ----------
+        strategy : int | str | dict
+            Overall balancing strategy. See parse_balancing_strategy() for more
+            details.
+        seed : int
+            Random seed for reproducible results.
+        osa : str | None, optional
+            Over-sampling algorithm. See oversample() for a list of possible
+            choices. If None, no over-sampling will be performed. The default 
+            is None.
+        usa : str | None, optional
+            Under-sampling algorithm. See undersample() for a list of possible
+            choices. If None, no under-sampling will be performed. The default 
+            is None.
+        kos : int, optional
+            Number of k-neighbours to consider in over-sampling algorithm. See
+            k parameter in oversample() for more details. The default is 5.
+        mos : int, optional
+            Number of m-neighbours to consider in over-sampling algorithm. See
+            m parameter in oversample() for more details. The default is 10.
+        nus : int, optional
+            Number of n-neighbours to consider in under-sampling algorithm. See
+            m parameter in undersample() for more details. The default is 3.
+        njobs : int, optional
+            Number of CPU cores used during under-sampling computation. If -1 
+            all available processessors are used. The default is 1.
+
+        '''
+
+    # Get balancing parameters
+        x_train, y_train = self.x_train, self.y_train
+        os_strat, us_strat = self.parse_balancing_strategy(strategy)
+
+    # Under-sample and then over-sample train subset
+        x_train, y_train = self.undersample(us_strat, usa, seed, nus, njobs,
+                                            x=None, y=None)
+        x_train, y_train = self.oversample(os_strat, osa, seed, kos, mos,
+                                           x=x_train, y=y_train)
+    # Apply balancing operations to dataset
+        if osa or usa:
+            x_train, y_train = self.shuffle(x_train, y_train, seed=seed)
+            self.apply_balancing(x_train, y_train)
 
 
     def counters(self):
@@ -900,7 +1269,7 @@ class _ClassifierBase():
     Base class for all types of mineral classifiers.
     '''
     def __init__(self, type_: str, name: str, classification_steps: int,
-                 thread: threads.MineralClassificationThread,
+                 thread: threads.FixedStepsThread,
                  input_stack: InputMapStack):
         '''
         Constructor.
@@ -913,7 +1282,7 @@ class _ClassifierBase():
             Descriptive name of the classifier.
         classification_steps : int
             Number of classification steps required.
-        thread : threads.MineralClassificationThread
+        thread : FixedStepsThread
             Employed mineral classification worker.
         input_stack : InputMapStack
             Stack of input maps.

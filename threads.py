@@ -9,8 +9,6 @@ from typing import Callable
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-import imblearn.over_sampling as OS
-import imblearn.under_sampling as US
 import numpy as np
 from scipy import ndimage
 import sklearn.metrics
@@ -18,7 +16,7 @@ import sklearn.metrics
 from _base import RoiMap
 
 
-class MultiTaskThread(QThread):
+class FixedStepsThread(QThread):
     '''
     Base function for threads defined by a fixed known amount of tasks. It is
     equipped with custom signals to inform when each task is initialized and
@@ -32,7 +30,27 @@ class MultiTaskThread(QThread):
         '''
         Constructor.
         '''
-        super(MultiTaskThread, self).__init__()
+        super(FixedStepsThread, self).__init__()
+        self.pipeline = ()
+        self.args = None
+    
+
+    def set_pipeline(self, pipeline: tuple[Callable], args: tuple|None = None):
+        '''
+        Set tasks pipeline. This function must always be called before start() 
+        to be able to properly run the thread.
+
+        Parameters
+        ----------
+        pipeline : tuple[Callable]
+            Sequence of functions to be performed by the thread.
+        args : tuple | None, optional
+            Sequence of optional parameters required by the functions of the 
+            pipeline. The default is None. 
+
+        '''
+        self.pipeline = pipeline
+        self.args = args
 
     
     def isInterruptionRequested(self):
@@ -45,7 +63,7 @@ class MultiTaskThread(QThread):
             If the thread interruption has been requested.
 
         '''
-        interrupt = super(MultiTaskThread, self).isInterruptionRequested()
+        interrupt = super(FixedStepsThread, self).isInterruptionRequested()
         if interrupt:
             self.workInterrupted.emit()
         return interrupt
@@ -57,69 +75,24 @@ class MultiTaskThread(QThread):
         tasks. To be reimplemented in each child.
 
         '''
-        return
-
-
-class MineralClassificationThread(MultiTaskThread):
-    '''
-    A special type of multitask thread, tailored for all mineral classification
-    procedures. 
-    '''
-    def __init__(self):
-        '''
-        Constructor.
-
-        '''
-        super(MineralClassificationThread, self).__init__()
+        if not self.pipeline:
+            raise ValueError('Tasks pipeline is not set.')
     
-    # Set main attribute
-        self.pipeline = ()
-
-    
-    def set_pipeline(self, pipeline: tuple[Callable]):
-        '''
-        Set classification pipeline. This function must always be called before
-        start() to be able to properly run the classification thread.
-
-        Parameters
-        ----------
-        pipeline : tuple[Callable]
-            Sequence of functions to be performed by the thread to achieve the
-            mineral classification.
-
-        '''
-        self.pipeline = pipeline
-
 
     def reset(self):
         '''
-        Reset the thread parameters for safety measures. This function is 
-        automatically called by the thread when terminated.
+        Reset the thread parameters for safety measures. This function should 
+        be called by the thread when terminated.
 
         '''
-        self.pipeline = None
-
-
-    def run(self):
-        '''
-        Main function of the thread. Defines how the worker should perform its
-        tasks. To be reimplemented in each child.
-
-        Raises
-        ------
-        ValueError
-            The classification pipeline is not set.
-
-        ''' 
-        if not self.pipeline:
-            raise ValueError('Classification pipeline is not set.')
+        self.pipeline = ()
+        self.args = None
 
 
 
-class ModelBasedClassificationThread(MineralClassificationThread):
+class ModelBasedClassificationThread(FixedStepsThread):
     '''
-    A mineral classification thread specialized for supervised ML model based
-    classifers.
+    A fixed steps thread specialized for supervised model-based classifications.
     '''
     def __init__(self):
         '''
@@ -166,9 +139,10 @@ class ModelBasedClassificationThread(MineralClassificationThread):
             self.reset()
 
 
-class RoiBasedClassificationThread(MineralClassificationThread):
+
+class RoiBasedClassificationThread(FixedStepsThread):
     '''
-    A mineral classification thread specialized for ROI based classifers.
+    A fixed steps thread specialized for ROI-based classifications.
     '''
     def __init__(self):
         '''
@@ -221,9 +195,9 @@ class RoiBasedClassificationThread(MineralClassificationThread):
 
 
 
-class UnsupervisedClassificationThread(MineralClassificationThread):
+class UnsupervisedClassificationThread(FixedStepsThread):
     '''
-    A mineral classification thread specialized for unsupervised classifiers.
+    A fixed steps thread specialized for unsupervised classifications.
     '''
     def __init__(self):
         '''
@@ -281,7 +255,7 @@ class UnsupervisedClassificationThread(MineralClassificationThread):
             dbi = dbi_score(in_data, pred)
 
         # Send the workFinished signal with success
-            out = (pred.astype('U8'), prob, sil_avg, sil_clust, chi, dbi)
+            out = (pred, prob, sil_avg, sil_clust, chi, dbi)
             self.workFinished.emit(out, True)
 
         except Exception as e:
@@ -294,52 +268,11 @@ class UnsupervisedClassificationThread(MineralClassificationThread):
 
 
 
-# class SilhouetteThread(QThread):
-#     subtaskCompleted = pyqtSignal() # to increment progressBar by 1 unit
-#     taskFinished = pyqtSignal(tuple) # (True/False, outputs/exception)
-
-#     def __init__(self):
-#         super(SilhouetteThread, self).__init__()
-
-#         self.data = None
-#         self.pred = None
-
-#     def set_params(self, data, pred):
-#         self.data = data
-#         self.pred = pred
-
-#     def silhouette_metric(data, pred, type):
-#         if type == 'avg':
-#             return sklearn.metrics.silhouette_score(data, pred, metric='euclidean')
-#         elif type == 'all':
-#             return sklearn.metrics.silhouette_samples(data, pred, metric='euclidean')
-#         else:
-#             raise NameError(f'{type} is not a valid silhouette score type.')
-
-#     def run(self):
-#         try:
-#         # Compute the overall average silhouette score
-#             mask = self.pred != '_ND_' # exclude ND data for the average prediction
-#             sil_avg = self.silhouette_metric(self.data[mask, :], self.pred[mask], type='avg')
-#             self.subtaskCompleted.emit()
-
-#         # Compute the silhouette score for each sample
-#             sil_sam = self.silhouette_metric(self.data, self.pred, type='all')
-#             self.subtaskCompleted.emit()
-
-#             success = True
-#             out = (sil_avg, sil_sam, self.pred)
-
-#         except Exception as e:
-#             success = False
-#             out = (e,)
-
-#         finally:
-#             self.taskFinished.emit((success, out))
-
-
-
-class NpvThread(MultiTaskThread):
+class NpvThread(FixedStepsThread): 
+    # Should NOT inherit from FixedStepsThread, as the n. of possible steps is
+    # data driven. Should be moved to DynamicStepsThread. Also move the logic
+    # of the function to master code, as thread is just a worker and should
+    # just execute commands.
     '''
     Multi task thread that computes the cumulative Neighborhood Pixel Variance
     (NPV) map.
@@ -432,7 +365,11 @@ class NpvThread(MultiTaskThread):
 
 
 
-class RoiDetectionThread(MultiTaskThread):
+class RoiDetectionThread(FixedStepsThread):
+    # Should NOT inherit from FixedStepsThread, as the n. of possible steps is
+    # data driven. Should be moved to DynamicStepsThread. Also move the logic
+    # of the function to master code, as thread is just a worker and should
+    # just execute commands.
     '''
     Multi task thread that automatically identifies ROIs from an NPV map.
     '''
@@ -558,30 +495,287 @@ class RoiDetectionThread(MultiTaskThread):
 
 
 
-# class BalanceThread(QThread): # ??? can be made a generic thread?
-#     taskFinished = pyqtSignal(tuple)
-
+# class BalancingThread(MultiTaskThread):
+#     '''
+#     Multi task thread for balancing imbalanced training sets using different
+#     over-sampling and/or under-sampling algorithms. 
+#     '''
 #     def __init__(self):
-#         super(BalanceThread, self).__init__()
+#         '''
+#         Constructor.
 
-#         self.func = lambda: None
+#         '''
+#         super(BalancingThread, self).__init__()
 
-#     def set_func(self, func):
-#         self.func = func
+#         self._init_params()
+
+    
+#     def _init_params(self):
+#         '''
+#         Initialize (or reset) all the required balancing parameters.
+
+#         '''
+#         self.x = None         # input dataset features
+#         self.y = None         # input dataset labels
+#         self.strategy = None  # balancing strategy
+#         self.seed = None      # random seed
+#         self.os = None        # over-sampling algorithm
+#         self.us = None        # under-sampling algorithm
+#         self.kos = None       # k-neighbours (oversampling parameter)
+#         self.mos = None       # m-neighbours (oversampling parameter)
+#         self.nus = None       # n-neighbours (undersampling parameter)
+
+
+#     def set_params(self, x: np.ndarray, y: np.ndarray, strategy: dict,
+#                    seed: int, osa: str|None=None, usa: str|None=None, kos=5, 
+#                    mos=10, nus=3, njobs=1):
+#         '''
+#         Set balancing parameters.
+
+#         Parameters
+#         ----------
+#         x : np.ndarray
+#             Input training features from unbalanced dataset.
+#         y : np.ndarray
+#             Output training labels from unbalanced dataset.
+#         strategy : dict
+#             Dataset balancing strategy. It must indicate the exact value of 
+#             resampling for each class.
+#         seed : int 
+#             Deterministic random state.
+#         osa : str | None, optional
+#             Over-sampling algorithm. If None, over-sampling is prevented. The 
+#             default is None.
+#         usa : str | None, optional
+#             Under-sampling algorithm. If None, under-sampling is prevented. The 
+#             default is None.
+#         kos : int, optional
+#             Number of nearest neighbours used to construct synthetic samples 
+#             during over-sampling. The default is 5.
+#         mos : int, optional
+#             Number of nearest neighbours used to determine if a minority sample
+#             is in danger during over-sampling. The default is 10.
+#         nus : int, optional
+#             Number of nearest neighbours used during under-sampling. The 
+#             default is 3.
+#         njobs : int, optional
+#             Number of parallel CPU threads. If -1, all processors are used. The
+#             default is 1.
+
+#         '''
+#         self.x = x
+#         self.y = y
+#         self.strategy = strategy
+#         self.seed = seed
+#         self.os = osa
+#         self.us = usa
+#         self.kos = kos
+#         self.mos = mos
+#         self.nus = nus
+#         self.njobs = njobs
+
+
+#     def get_oversampler(self, algm: str, strat: dict, kos: int, mos: int,
+#                         seed: int):
+#         '''
+#         Get over-sampling method.
+
+#         Parameters
+#         ----------
+#         algm : str
+#             Over-sampling algorithm as a valid string.
+#         strat : dict
+#             Over-sampling strategy for each class.
+#         kos : int
+#             Number of nearest neighbours used to construct synthetic samples 
+#             during over-sampling.
+#         mos : int
+#             Number of nearest neighbours used by some algorithms to determine 
+#             if a minority sample is in danger during over-sampling.
+#         seed : int
+#             Deterministic random state.
+
+#         Returns
+#         -------
+#         imblearn.BaseOverSampler
+#             Over-sampling class.
+
+#         Raises
+#         ------
+#         KeyError
+#             Algorithm must be one of ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE',
+#             'ADASYN'].
+
+#         '''
+#         if algm == 'SMOTE':
+#             return OS.SMOTE(sampling_strategy = strat,
+#                             random_state = seed,
+#                             k_neighbors = kos)
+        
+#         elif algm == 'BorderlineSMOTE':
+#             return OS.BorderlineSMOTE(sampling_strategy = strat,
+#                                       random_state = seed,
+#                                       k_neighbors = kos,
+#                                       m_neighbors = mos)
+#         elif algm == 'SVMSMOTE':
+#             return OS.SVMSMOTE(sampling_strategy = strat,
+#                                random_state = seed,
+#                                k_neighbors = kos,
+#                                m_neighbors = mos)
+        
+#         elif algm == 'ADASYN':
+#             return OS.ADASYN(sampling_strategy = strat,
+#                              random_state = seed,
+#                              n_neighbors = kos)
+
+#         else:
+#             err = f"Unknown over-sampling algorithm: {algm}. Must be one of "\
+#                   "the following: ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', "\
+#                   "'ADASYN']"
+#             raise KeyError(err)
+
+
+#     def get_undersampler(self, algm: str, strat: dict, nus: int, seed: int, 
+#                          njobs: int):
+#         '''
+#         Get under-sampling method.
+
+#         Parameters
+#         ----------
+#         algm : str
+#             Under-sampling algorithm as a valid string.
+#         strat : dict
+#             Under-sampling strategy for each class.
+#         nus : int
+#             Number of nearest neighbours used by some algorithms.
+#         seed : int
+#             Deterministic random state.
+#         njobs : int
+#              Number of parallel CPU threads. If -1, all processors are used.
+
+#         Returns
+#         -------
+#         imblearn.BaseUnderSampler
+#             Under-sampling class.
+
+#         Raises
+#         ------
+#         KeyError
+#             Algorithm must be one of ['RandUS', 'NearMiss', 'ClusterCentroids',
+#             'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR'].
+
+#         '''
+#         if algm == 'RandUS':
+#             return US.RandomUnderSampler(sampling_strategy = strat,
+#                                          random_state = seed)
+        
+#         elif algm == 'NearMiss':
+#             return US.NearMiss(sampling_strategy = strat,
+#                                n_neighbors = nus,
+#                                n_jobs = njobs)
+        
+#         elif algm == 'ClusterCentroids':
+#             return US.ClusterCentroids(sampling_strategy = strat,
+#                                        random_state = seed)
+        
+#         elif algm == 'TomekLinks':
+#             return US.TomekLinks(sampling_strategy = list(strat.keys()),
+#                                  n_jobs = njobs)
+        
+#         elif algm in ('ENN-all', 'ENN-mode'):
+#             return US.EditedNearestNeighbours(sampling_strategy = list(strat.keys()),
+#                                               n_neighbors = nus,
+#                                               kind_sel = algm.split('-')[-1],
+#                                               n_jobs = njobs)
+
+#         elif algm == 'NCR':
+#             return US.NeighbourhoodCleaningRule(sampling_strategy = list(strat.keys()),
+#                                                 n_neighbors = nus,
+#                                                 n_jobs = njobs)
+
+#         else:
+#             err = f"Unknown under-sampling algorithm: {algm}. Must be one of "\
+#                   "the following: ['RandUS', 'NearMiss', 'ClusterCentroids', "\
+#                   "'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR']"
+#             raise KeyError(err)
+
 
 #     def run(self):
+#         '''
+#         Main function of the thread. Defines how the worker should perform its
+#         tasks.
+
+#         '''
+#     # Store balancing parameters in a dictionary
+#         info = {'Strategy': self.strategy, 
+#                 'OS': self.os, 
+#                 'US': self.us,
+#                 'n-neigh_US': self.nus, 
+#                 'k-neigh_OS': self.kos, 
+#                 'm-neigh_OS': self.mos, 
+#                 'Seed': self.seed
+#                 }
+        
+#     # S T R A T E G Y
+#         if self.isInterruptionRequested(): return
+#         self.taskInitialized.emit('Parsing strategy')
+        
+#     # Update strategy in balancing info dictionary
+#         unq, cnt = np.unique(self.y, return_counts=True)
+#         num = list(self.strategy.values())
+#         strat_by_class = zip(unq, [f'{c} -> {n}' for c, n in zip(cnt, num)])
+#         info['Strategy'] = dict(strat_by_class)
+
+#     # Set over-sampling and under-sampling strategies
+#         os_strat, us_strat = {}, {}
+#         for u, c, n in zip(unq, cnt, num):
+#             if n >= c:
+#                 os_strat[u] = n
+#             else:
+#                 us_strat[u] = n
+
 #         try:
-#             out = self.func()
+#         # U N D E R - S A M P L I N G
+#             if self.isInterruptionRequested(): return
+#             self.taskInitialized.emit('Under-sampling dataset')
+
+#             if self.us:
+#                 us_method = self.get_undersampler(self.us, us_strat, self.nus,
+#                                                 self.seed, self.njobs)
+#                 self.x, self.y = us_method.fit_resample(self.x, self.y)
+
+#         # O V E R - S A M P L I N G
+#             if self.isInterruptionRequested(): return
+#             self.taskInitialized.emit('Over-sampling dataset')
+
+#             if self.os:
+#                 os_method = self.get_oversampler(self.os, os_strat, self.kos,
+#                                                  self.mos, self.seed)
+#                 self.x, self.y = os_method.fit_resample(self.x, self.y)
+
+#         # D A T A S E T  P E R M U T A T I O N
+#             if self.isInterruptionRequested(): return
+#             self.taskInitialized.emit('Applying permutation')
+
+#             if self.os or self.us:
+#                 perm = np.random.default_rng(self.seed).permutation(len(self.x))
+#                 x_balanced, y_balanced = self.x[perm], self.y[perm]
+#             else:
+#                 x_balanced, y_balanced = self.x, self.y
+
+
+#             self.workFinished.emit((x_balanced, y_balanced, info), True)
+
 #         except Exception as e:
-#             out = (e,)
+#             self.workFinished((e,), False)
+
 #         finally:
-#             self.taskFinished.emit(out)
+#             self._init_params()
 
 
-class BalancingThread(MultiTaskThread):
+class BalancingThread(FixedStepsThread):
     '''
-    Multi task thread for balancing imbalanced training sets using different
-    over-sampling and/or under-sampling algorithms. 
+    A fixed steps thread specialized for balancing training sets. 
     '''
     def __init__(self):
         '''
@@ -590,270 +784,59 @@ class BalancingThread(MultiTaskThread):
         '''
         super(BalancingThread, self).__init__()
 
-        self._init_params()
-
-    
-    def _init_params(self):
-        '''
-        Initialize (or reset) all the required balancing parameters.
-
-        '''
-        self.x = None         # input dataset features
-        self.y = None         # input dataset labels
-        self.strategy = None  # balancing strategy
-        self.seed = None      # random seed
-        self.os = None        # over-sampling algorithm
-        self.us = None        # under-sampling algorithm
-        self.kos = None       # k-neighbours (oversampling parameter)
-        self.mos = None       # m-neighbours (oversampling parameter)
-        self.nus = None       # n-neighbours (undersampling parameter)
-
-
-    def set_params(self, x: np.ndarray, y: np.ndarray, strategy: dict,
-                   seed: int, osa: str|None=None, usa: str|None=None, kos=5, 
-                   mos=10, nus=3, njobs=1):
-        '''
-        Set balancing parameters.
-
-        Parameters
-        ----------
-        x : np.ndarray
-            Input training features from unbalanced dataset.
-        y : np.ndarray
-            Output training labels from unbalanced dataset.
-        strategy : dict
-            Dataset balancing strategy. It must indicate the exact value of 
-            resampling for each class.
-        seed : int 
-            Deterministic random state.
-        osa : str | None, optional
-            Over-sampling algorithm. If None, over-sampling is prevented. The 
-            default is None.
-        usa : str | None, optional
-            Under-sampling algorithm. If None, under-sampling is prevented. The 
-            default is None.
-        kos : int, optional
-            Number of nearest neighbours used to construct synthetic samples 
-            during over-sampling. The default is 5.
-        mos : int, optional
-            Number of nearest neighbours used to determine if a minority sample
-            is in danger during over-sampling. The default is 10.
-        nus : int, optional
-            Number of nearest neighbours used during under-sampling. The 
-            default is 3.
-        njobs : int, optional
-            Number of parallel CPU threads. If -1, all processors are used. The
-            default is 1.
-
-        '''
-        self.x = x
-        self.y = y
-        self.strategy = strategy
-        self.seed = seed
-        self.os = osa
-        self.us = usa
-        self.kos = kos
-        self.mos = mos
-        self.nus = nus
-        self.njobs = njobs
-
-
-    def get_oversampler(self, algm: str, strat: dict, kos: int, mos: int,
-                        seed: int):
-        '''
-        Get over-sampling method.
-
-        Parameters
-        ----------
-        algm : str
-            Over-sampling algorithm as a valid string.
-        strat : dict
-            Over-sampling strategy for each class.
-        kos : int
-            Number of nearest neighbours used to construct synthetic samples 
-            during over-sampling.
-        mos : int
-            Number of nearest neighbours used by some algorithms to determine 
-            if a minority sample is in danger during over-sampling.
-        seed : int
-            Deterministic random state.
-
-        Returns
-        -------
-        imblearn.BaseOverSampler
-            Over-sampling class.
-
-        Raises
-        ------
-        KeyError
-            Algorithm must be one of ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE',
-            'ADASYN'].
-
-        '''
-        if algm == 'SMOTE':
-            return OS.SMOTE(sampling_strategy = strat,
-                            random_state = seed,
-                            k_neighbors = kos)
-        
-        elif algm == 'BorderlineSMOTE':
-            return OS.BorderlineSMOTE(sampling_strategy = strat,
-                                      random_state = seed,
-                                      k_neighbors = kos,
-                                      m_neighbors = mos)
-        elif algm == 'SVMSMOTE':
-            return OS.SVMSMOTE(sampling_strategy = strat,
-                               random_state = seed,
-                               k_neighbors = kos,
-                               m_neighbors = mos)
-        
-        elif algm == 'ADASYN':
-            return OS.ADASYN(sampling_strategy = strat,
-                             random_state = seed,
-                             n_neighbors = kos)
-
-        else:
-            err = f"Unknown over-sampling algorithm: {algm}. Must be one of "\
-                  "the following: ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', "\
-                  "'ADASYN']"
-            raise KeyError(err)
-
-
-    def get_undersampler(self, algm: str, strat: dict, nus: int, seed: int, 
-                         njobs: int):
-        '''
-        Get under-sampling method.
-
-        Parameters
-        ----------
-        algm : str
-            Under-sampling algorithm as a valid string.
-        strat : dict
-            Under-sampling strategy for each class.
-        nus : int
-            Number of nearest neighbours used by some algorithms.
-        seed : int
-            Deterministic random state.
-        njobs : int
-             Number of parallel CPU threads. If -1, all processors are used.
-
-        Returns
-        -------
-        imblearn.BaseUnderSampler
-            Under-sampling class.
-
-        Raises
-        ------
-        KeyError
-            Algorithm must be one of ['RandUS', 'NearMiss', 'ClusterCentroids',
-            'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR'].
-
-        '''
-        if algm == 'RandUS':
-            return US.RandomUnderSampler(sampling_strategy = strat,
-                                         random_state = seed)
-        
-        elif algm == 'NearMiss':
-            return US.NearMiss(sampling_strategy = strat,
-                               n_neighbors = nus,
-                               n_jobs = njobs)
-        
-        elif algm == 'ClusterCentroids':
-            return US.ClusterCentroids(sampling_strategy = strat,
-                                       random_state = seed)
-        
-        elif algm == 'TomekLinks':
-            return US.TomekLinks(sampling_strategy = list(strat.keys()),
-                                 n_jobs = njobs)
-        
-        elif algm in ('ENN-all', 'ENN-mode'):
-            return US.EditedNearestNeighbours(sampling_strategy = list(strat.keys()),
-                                              n_neighbors = nus,
-                                              kind_sel = algm.split('-')[-1],
-                                              n_jobs = njobs)
-
-        elif algm == 'NCR':
-            return US.NeighbourhoodCleaningRule(sampling_strategy = list(strat.keys()),
-                                                n_neighbors = nus,
-                                                n_jobs = njobs)
-
-        else:
-            err = f"Unknown under-sampling algorithm: {algm}. Must be one of "\
-                  "the following: ['RandUS', 'NearMiss', 'ClusterCentroids', "\
-                  "'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR']"
-            raise KeyError(err)
-
 
     def run(self):
         '''
         Main function of the thread. Defines how the worker should perform its
-        tasks.
+        tasks. 
 
         '''
-    # Store balancing parameters in a dictionary
-        info = {'Strategy': self.strategy, 
-                'OS': self.os, 
-                'US': self.us,
-                'n-neigh_US': self.nus, 
-                'k-neigh_OS': self.kos, 
-                'm-neigh_OS': self.mos, 
-                'Seed': self.seed
-                }
-        
-    # S T R A T E G Y
-        if self.isInterruptionRequested(): return
-        self.taskInitialized.emit('Parsing strategy')
-        
-    # Update strategy in balancing info dictionary
-        unq, cnt = np.unique(self.y, return_counts=True)
-        num = list(self.strategy.values())
-        strat_by_class = zip(unq, [f'{c} -> {n}' for c, n in zip(cnt, num)])
-        info['Strategy'] = dict(strat_by_class)
+        super().run()
 
-    # Set over-sampling and under-sampling strategies
-        os_strat, us_strat = {}, {}
-        for u, c, n in zip(unq, cnt, num):
-            if n >= c:
-                os_strat[u] = n
-            else:
-                us_strat[u] = n
+        parse_strat, oversample, undersample, shuffle = self.pipeline
+        strategy, seed, osa, usa, kos, mos, nus, njobs = self.args
+        balancing_info = {}
 
         try:
-        # U N D E R - S A M P L I N G
+        # Parse over-sampling and under-sampling strategies
+            if self.isInterruptionRequested(): return
+            self.taskInitialized.emit('Parsing strategy')
+            os_strat, us_strat, strat_info = parse_strat(strategy, verbose=True)
+            balancing_info['Strategy'] = strat_info
+            balancing_info['OS'] = osa
+            balancing_info['US'] = usa
+            balancing_info['n-neigh_US'] = nus
+            balancing_info['k-neigh_OS'] = kos
+            balancing_info['m-neigh_OS'] = mos
+            balancing_info['Seed'] = seed
+
+        # Compute under-sampling
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Under-sampling dataset')
+            x_train, y_train = undersample(us_strat, usa, seed, nus, njobs)
 
-            if self.us:
-                us_method = self.get_undersampler(self.us, us_strat, self.nus,
-                                                self.seed, self.njobs)
-                self.x, self.y = us_method.fit_resample(self.x, self.y)
-
-        # O V E R - S A M P L I N G
+        # Compute over-sampling
             if self.isInterruptionRequested(): return
             self.taskInitialized.emit('Over-sampling dataset')
+            x_train, y_train = oversample(os_strat, osa, seed, kos, mos,
+                                          x=x_train, y=y_train)
 
-            if self.os:
-                os_method = self.get_oversampler(self.os, os_strat, self.kos,
-                                                 self.mos, self.seed)
-                self.x, self.y = os_method.fit_resample(self.x, self.y)
-
-        # D A T A S E T  P E R M U T A T I O N
+        # Shuffle dataset
             if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Applying permutation')
+            self.taskInitialized.emit('Shuffling dataset')
+            if osa or usa:
+                x_train, y_train = shuffle(x_train, y_train, seed=seed)
 
-            if self.os or self.us:
-                perm = np.random.default_rng(self.seed).permutation(len(self.x))
-                x_balanced, y_balanced = self.x[perm], self.y[perm]
-            else:
-                x_balanced, y_balanced = self.x, self.y
-
-
-            self.workFinished.emit((x_balanced, y_balanced, info), True)
+        # Send the workFinished signal with success
+            self.workFinished.emit((x_train, y_train, balancing_info), True)
 
         except Exception as e:
-            self.workFinished((e,), False)
+        # Send the workFinished signal with error
+            self.workFinished.emit((e,), False)
 
         finally:
-            self._init_params()
+        # Reset parameters for safety measures
+            self.reset()
 
 
 
