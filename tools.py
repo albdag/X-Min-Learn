@@ -2282,9 +2282,14 @@ class MineralClassifier(DraggableTool):
                                                      'PyTorch model (*.pth)')
             if path:
                 pref.set_dirPath('in', os.path.dirname(path))
-                self.model = ML_tools.EagerModel.load(path)
+                try:
+                    self.model = ML_tools.EagerModel.load(path)
+                except Exception as e:
+                    return cObj.RichMsgBox(self, QW.QMessageBox.Critical,
+                                           'X-Min Learn', 'Incompatible model',
+                                           detailedText = repr(e))
                 self.model_path.setPath(path)
-                logpath = self.model.generateLogPath(path)
+                logpath = self.model.generate_log_path(path)
 
                 # If model log was deleted or moved, ask for rebuilding it
                 if not os.path.exists(logpath):
@@ -2295,7 +2300,7 @@ class MineralClassifier(DraggableTool):
                                                      QW.QMessageBox.Yes)
                     if choice == QW.QMessageBox.Yes:
                         ext_log = pref.get_setting('class/extLog', False, bool)
-                        self.model.saveLog(logpath, extended=ext_log)
+                        self.model.save_log(logpath, extended=ext_log)
 
                 # Load log file. No error will be raised if it does not exist
                 self.model_info.setDoc(logpath)
@@ -2324,12 +2329,6 @@ class MineralClassifier(DraggableTool):
             if self.model == None:
                 QW.QMessageBox.critical(self, 'X-Min Learn', 
                                         'A pre-trained model is required')
-                return None
-
-        # Check for missing model variables
-            if len(missing := self.model.missingVariables()):
-                QW.QMessageBox.critical(self, 'X-Min Learn', f'Missing model '\
-                                        f'variables:\n{missing}')
                 return None
 
         # Check if all required input maps are present and order them to fit
@@ -6084,7 +6083,7 @@ class ModelLearner(DraggableTool):
 
         # Add new balancing info to the balancing operation tracker
             self.balancing_pbar.step('Tracking balancing info')
-            info['New TVT rateos'] = (round(tr_ratio, 2), # rename to 'New TVT ratios'
+            info['New TVT ratios'] = (round(tr_ratio, 2), 
                                       round(vd_ratio, 2), 
                                       round(ts_ratio, 2))
             self.balancing_info.append(info)
@@ -6455,34 +6454,36 @@ class ModelLearner(DraggableTool):
         if parent_path:
             self.model = ML_tools.EagerModel.load(parent_path)
             var_dict = self.model.variables
-            var_dict['optim_name'] = optim_name
+            var_dict['optimizer'] = optim_name
             var_dict['device'] = device
-            var_dict['parentModel_path'] = parent_path
-            var_dict['GT_dataset_path'] = self.dataset.filepath
-            var_dict['TVT_rateos'] = self.dataset.orig_subsets_ratios
+            var_dict['parent_model_path'] = parent_path
+            var_dict['dataset_path'] = self.dataset.filepath
+            var_dict['tvt_ratios'] = self.dataset.orig_subsets_ratios
             var_dict['balancing_info'] = self.balancing_info
-            var_dict['lr'] = lr
-            var_dict['wd'] = wd
-            var_dict['mtm'] = mtm
+            var_dict['learning_rate'] = lr
+            var_dict['weight_decay'] = wd
+            var_dict['momentum'] = mtm
+            var_dict['batch_size'] = batch_size
 
     # If a parent model is not provided, initialize a new model from scratch
         else:
             self.model = ML_tools.EagerModel.initialize_empty()
             var_dict = self.model.variables
-            var_dict['algm_name'] = algm_name
-            var_dict['optim_name'] = optim_name
-            var_dict['ordered_Xfeat'] = self.dataset.features_names()
-            var_dict['Y_dict'] = self.dataset.encoder
+            var_dict['algorithm'] = algm_name
+            var_dict['optimizer'] = optim_name
+            var_dict['input_features'] = self.dataset.features_names()
+            var_dict['class_encoder'] = self.dataset.encoder
             var_dict['device'] = device
             var_dict['seed'] = self.seed_generator.seed
-            var_dict['parentModel_path'] = parent_path
-            var_dict['GT_dataset_path'] = self.dataset.filepath
-            var_dict['TVT_rateos'] = self.dataset.orig_subsets_ratios
+            var_dict['parent_model_path'] = parent_path
+            var_dict['dataset_path'] = self.dataset.filepath
+            var_dict['tvt_ratios'] = self.dataset.orig_subsets_ratios
             var_dict['balancing_info'] = self.balancing_info
-            var_dict['regressorDegree'] = poly_deg
-            var_dict['lr'] = lr
-            var_dict['wd'] = wd
-            var_dict['mtm'] = mtm
+            var_dict['polynomial_degree'] = poly_deg
+            var_dict['learning_rate'] = lr
+            var_dict['weight_decay'] = wd
+            var_dict['momentum'] = mtm
+            var_dict['batch_size'] = batch_size
             var_dict['accuracy_list'] = ([], [])
             var_dict['loss_list'] = ([], [])
        
@@ -6524,11 +6525,11 @@ class ModelLearner(DraggableTool):
         self.network = self.model.get_network_architecture()
         self.network.to(device)
         self.optimizer = self.model.get_optimizer(self.network)
-        var_dict['loss_name'] = self.network._loss
+        var_dict['loss'] = self.network._loss
 
         if parent_network_state_dict := var_dict['model_state_dict']:
             self.network.load_state_dict(parent_network_state_dict)
-        if parent_optimizer_state_dict := var_dict['optim_state_dict']:
+        if parent_optimizer_state_dict := var_dict['optimizer_state_dict']:
             self.optimizer.load_state_dict(parent_optimizer_state_dict)
 
         self.learning_pbar.setValue(4)
@@ -6625,13 +6626,13 @@ class ModelLearner(DraggableTool):
         # Complete populating model variables
             var_dict = self.model.variables
             var_dict['epochs'] = len(tr_loss_list)
-            var_dict['optim_state_dict'] = self.optimizer.state_dict()
+            var_dict['optimizer_state_dict'] = self.optimizer.state_dict()
             var_dict['model_state_dict'] = self.network.state_dict()
             var_dict['accuracy_list'] = (tr_acc_list, vd_acc_list)
             var_dict['loss_list'] = (tr_loss_list, vd_loss_list)
             var_dict['accuracy'] = [tr_acc_list[-1], vd_acc_list[-1], None]
             var_dict['loss'] = [tr_loss_list[-1], vd_loss_list[-1], None]
-            var_dict['F1_scores'] = f1_scores
+            var_dict['f1_scores'] = f1_scores
 
         # Update Confusion Matrices
             self.updateConfusionMatrix('Train', train_pred)
@@ -6827,7 +6828,7 @@ class ModelLearner(DraggableTool):
             for n, avg in enumerate(('macro', 'weighted')):
                 f1_ts = ML_tools.f1_score(self.dataset.y_test, test_pred, avg)
                 self.updateScoreLabel('Test', f'F1_{avg}', f1_ts)
-                var_dict['F1_scores'][2, n] = f1_ts
+                self.model.variables['f1_scores'][2, n] = f1_ts
             
             self.learning_pbar.setValue(3)
 
@@ -6855,7 +6856,7 @@ class ModelLearner(DraggableTool):
         if path:
             pref.set_dirPath('out', os.path.dirname(path))
             try:
-                log_path = self.model.generateLogPath(path)
+                log_path = self.model.generate_log_path(path)
                 extended_log = pref.get_setting('class/extLog', False, bool)
                 self.model.save(path, log_path, extended_log)
                 QW.QMessageBox.information(self, 'X-Min Learn', 'Model saved.')

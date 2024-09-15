@@ -22,6 +22,7 @@ import torch.utils.data as torch_data
 
 from _base import InputMap, InputMapStack, MineralMap, RoiMap
 import conv_functions as CF
+import preferences as pref
 import threads
 
 
@@ -1192,31 +1193,37 @@ class EagerModel():
     '''
     A base class to manipulate and process eager ML models and their variables.
     '''
-    _base_vrb = ['algm_name', 
-                 'loss_name', 
-                 'optim_name',
-                 'ordered_Xfeat', 
-                 'Y_dict', 
+
+# Model versioning is used to keep compatibility with old models
+    _current_version = 2 
+
+    _base_vrb = ['version',
+                 'algorithm', 
+                 'loss', 
+                 'optimizer',
+                 'input_features', 
+                 'class_encoder', 
                  'device', 
                  'seed',
-                 'parentModel_path', 
-                 'GT_dataset_path', 
-                 'TVT_rateos',
+                 'parent_model_path', 
+                 'dataset_path', 
+                 'tvt_ratios',
                  'balancing_info', 
-                 'regressorDegree', 
+                 'polynomial_degree', 
                  'epochs', 
-                 'lr',
-                 'wd', 
-                 'mtm', 
+                 'learning_rate',
+                 'weight_decay', 
+                 'momentum',
+                 'batch_size', 
                  'accuracy', 
                  'loss', 
-                 'F1_scores'
+                 'f1_scores'
                  ]
     
     _extended_vrb = ['accuracy_list', 
                      'loss_list',
                      'standards',
-                     'optim_state_dict', 
+                     'optimizer_state_dict', 
                      'model_state_dict'
                      ]
 
@@ -1234,17 +1241,28 @@ class EagerModel():
         Raise
         -----
         ValueError
+            Raised when model's version is incompatible because the app is 
+            outdated.
+        KeyError
             Raised when model is missing variables.
 
         '''
     # Set main attributes
         self.variables = variables
-        if len(mv := self.missingVariables()):
-            raise ValueError(f'Missing model variables: {mv}')
-
         self.filepath = model_path
 
+    # Check model version compatibility
+        version = self.variables.get('version', 0)
+        if version < self._current_version:
+            self._convert_legacy_model(version, self.filepath)
+        elif version > self._current_version:
+            raise ValueError(f'This model requires an updated app version.')
 
+    # Check for missing variables
+        if len(mv := self.missing_variables()):
+            raise KeyError(f'Missing model variables: {mv}')
+
+        
     @classmethod
     def initialize_empty(cls):
         '''
@@ -1258,6 +1276,7 @@ class EagerModel():
         '''
         keys = cls._base_vrb + cls._extended_vrb
         variables = dict().fromkeys(keys)
+        variables['version'] = cls._current_version
         return cls(variables)
 
 
@@ -1282,23 +1301,23 @@ class EagerModel():
 
     @property
     def algorithm(self):
-        return self.variables.get('algm_name')
+        return self.variables.get('algorithm')
     
     @property
     def optimizer(self):
-        return self.variables.get('optim_name')
+        return self.variables.get('optimizer')
     
     @property
     def hyperparameters(self):
-        lr = self.variables.get('lr')
-        wd = self.variables.get('wd')
-        mtm = self.variables.get('mtm')
+        lr = self.variables.get('learning_rate')
+        wd = self.variables.get('weight_decay')
+        mtm = self.variables.get('momentum')
         epochs = self.variables.get('epochs')
         return (lr, wd, mtm, epochs)
 
     @property
     def features(self):
-        return self.variables.get('ordered_Xfeat')
+        return self.variables.get('input_features')
     
     @property
     def targets(self):
@@ -1306,7 +1325,7 @@ class EagerModel():
 
     @property
     def encoder(self):
-        return self.variables.get('Y_dict')
+        return self.variables.get('class_encoder')
 
     @property
     def x_mean(self):
@@ -1322,11 +1341,76 @@ class EagerModel():
 
     @property
     def poly_degree(self):
-        return self.variables.get('regressorDegree')
+        return self.variables.get('polynomial_degree')
     
     @property
     def seed(self):
         return self.variables.get('seed')
+    
+
+    def _convert_legacy_model(self, version: int, path: str|None=None):
+        '''
+        Convert old model to latest version. The applied changes depend on the
+        version of the old model.
+
+        Parameters
+        ----------
+        version : int
+            Model version.
+        path : str | None, optional
+            Model filepath. If provided, the model file will be overwritten.
+            The default is None.
+
+        '''
+    # Apply changes based on model version
+        if version < 1:
+            self.variables['algorithm'] = self.variables.pop('algm_name')
+            self.variables['loss'] = self.variables.pop('loss_name')
+            self.variables['optimizer'] = self.variables.pop('optim_name')
+            self.variables['input_features'] = self.variables.pop('ordered_Xfeat')
+            self.variables['class_encoder'] = self.variables.pop('Y_dict')
+            self.variables['parent_model_path'] = self.variables.pop('parentModel_path')
+            self.variables['dataset_path'] = self.variables.pop('GT_dataset_path')
+            self.variables['tvt_ratios'] = self.variables.pop('TVT_rateos')
+            self.variables['polynomial_degree'] = self.variables.pop('regressorDegree')
+            self.variables['f1_scores'] = self.variables.pop('F1_scores')
+
+            self.variables['batch_size'] = 0
+
+        if version < 2:
+            self.variables['learning_rate'] = self.variables.pop('lr')
+            self.variables['weight_decay'] = self.variables.pop('wd')
+            self.variables['momentum'] = self.variables.pop('mtm')
+            self.variables['optimizer_state_dict'] = self.variables.pop('optim_state_dict')
+
+    # Set updated model version
+        self.variables['version'] = self._current_version
+
+    # Reorder variables
+        var_order = self._base_vrb + self._extended_vrb
+        self.variables = CF.sort_dict_by_list(self.variables, var_order)
+
+    # Save the converted model and its log file if a path is provided
+        if path is not None:
+            log_path = self.generate_log_path(path)
+            extended = pref.get_setting('class/extLog', False, bool)
+            self.save(path, log_path=log_path, extended_log=extended)
+
+
+
+    def missing_variables(self):
+        '''
+        Check if any model variable is missing.
+
+        Returns
+        -------
+        missing : set
+            Missing variables.
+
+        '''
+        required_vrb = self._base_vrb + self._extended_vrb
+        missing = set(required_vrb) - set(self.variables.keys())
+        return missing
     
 
     def get_network_architecture(self):
@@ -1430,10 +1514,10 @@ class EagerModel():
         torch.save(self.variables, outpath)
         self.filepath = outpath
         if log_path is not None:
-            self.saveLog(log_path, extended_log)
+            self.save_log(log_path, extended_log)
 
 
-    def saveLog(self, outpath: str, extended=False):
+    def save_log(self, outpath: str, extended=False):
         '''
         Save model log file.
 
@@ -1450,10 +1534,10 @@ class EagerModel():
             for k, v in self.variables.items():
                 if not extended and k in self._extended_vrb:
                     continue
-                log.write(f'{k.upper()}\n{repr(v)}\n\n\n')
+                log.write(f'{k.upper().replace('_', ' ')}\n{repr(v)}\n\n\n')
 
 
-    def generateLogPath(self, path: str|None):
+    def generate_log_path(self, path: str|None):
         '''
         Automatically generate a log filepath from the given path.
 
@@ -1471,21 +1555,6 @@ class EagerModel():
         if path is None: return
         logpath = CF.extend_filename(path, '_log', ext='.txt')
         return logpath
-
-
-    def missingVariables(self):
-        '''
-        Check if any model variable is missing.
-
-        Returns
-        -------
-        missing : set
-            Missing variables.
-
-        '''
-        required_vrb = self._base_vrb + self._extended_vrb
-        missing = set(required_vrb) - set(self.variables.keys())
-        return missing
 
 
 
