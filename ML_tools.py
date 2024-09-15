@@ -2161,7 +2161,7 @@ def cuda_available():
 
 
 def confusion_matrix(true: np.ndarray|torch.Tensor, 
-                     preds:np.ndarray|torch.Tensor, ids: list|tuple):
+                     pred: np.ndarray|torch.Tensor, ids: list|tuple):
     '''
     Compute confusion matrix.
 
@@ -2169,7 +2169,7 @@ def confusion_matrix(true: np.ndarray|torch.Tensor,
     ----------
     true : ndarray | Tensor
         True classes.
-    preds : ndarray | Tensor
+    pred : ndarray | Tensor
         Predicted classes.
     ids : list | tuple
         List of classes IDs.
@@ -2180,11 +2180,15 @@ def confusion_matrix(true: np.ndarray|torch.Tensor,
         Confusion matrix of shape (n_classes, n_classes).
 
     '''
-    cm = sklearn.metrics.confusion_matrix(true, preds, labels=ids)
+    if isinstance(true, torch.Tensor):
+        true = true.cpu().detach().numpy()
+    if isinstance(pred, torch.Tensor):
+        pred = pred.cpu().detach().numpy()
+    cm = sklearn.metrics.confusion_matrix(true, pred, labels=ids)
     return cm
 
 
-def f1_score(true: np.ndarray|torch.Tensor, preds: np.ndarray|torch.Tensor, 
+def f1_score(true: np.ndarray|torch.Tensor, pred: np.ndarray|torch.Tensor, 
              avg: str):
     '''
     Compute average F1 score.
@@ -2193,7 +2197,7 @@ def f1_score(true: np.ndarray|torch.Tensor, preds: np.ndarray|torch.Tensor,
     ----------
     true : ndarray | Tensor
         True classes.
-    preds : ndarray | Tensor
+    pred : ndarray | Tensor
         Predicted classes.
     avg : str
         Average type. Must be one of ('micro', 'macro', 'weighted').
@@ -2204,12 +2208,16 @@ def f1_score(true: np.ndarray|torch.Tensor, preds: np.ndarray|torch.Tensor,
         Average F1 score.
 
     '''
-    f1 = sklearn.metrics.f1_score(true, preds, average=avg)
+    if isinstance(true, torch.Tensor):
+        true = true.cpu().detach().numpy()
+    if isinstance(pred, torch.Tensor):
+        pred = pred.cpu().detach().numpy()
+    f1 = sklearn.metrics.f1_score(true, pred, average=avg)
     return f1
 
 
 def accuracy_score(true: np.ndarray|torch.Tensor, 
-                   preds:np.ndarray|torch.Tensor):
+                   pred: np.ndarray|torch.Tensor):
     '''
     Compute accuracy score.
 
@@ -2217,7 +2225,7 @@ def accuracy_score(true: np.ndarray|torch.Tensor,
     ----------
     true : ndarray | Tensor
         True classes.
-    preds : ndarray | Tensor
+    pred : ndarray | Tensor
         Predicted classes.
 
     Returns
@@ -2226,7 +2234,11 @@ def accuracy_score(true: np.ndarray|torch.Tensor,
         Accuracy score.
 
     '''
-    accuracy = sklearn.metrics.accuracy_score(true, preds)
+    if isinstance(true, torch.Tensor):
+        true = true.cpu().detach().numpy()
+    if isinstance(pred, torch.Tensor):
+        pred = pred.cpu().detach().numpy()
+    accuracy = sklearn.metrics.accuracy_score(true, pred)
     return accuracy
 
 
