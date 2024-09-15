@@ -5124,6 +5124,15 @@ class ModelLearner(DraggableTool):
         self.balancing_help_btn.setFlat(True)
         self.balancing_help_btn.setToolTip('More info about dataset balancing')
 
+    # Oversampling strategy warning icon (QLabel)
+        os_warn = QG.QPixmap(r'Icons/warnIcon.png')
+        self.os_warn_icon = QW.QLabel()
+        self.os_warn_icon.setPixmap(os_warn.scaled(16, 16, Qt.KeepAspectRatio))
+        self.os_warn_icon.setToolTip(
+            'The selected Over-Sampling algorithm generates an amount of '\
+            'samples that may differ from the requested one')
+        self.os_warn_icon.hide()
+
     # Oversampling algorithm selector (Styled ComboBox)
         self.os_combox = cObj.StyledComboBox()
         self.os_combox.addItems(self.os_list)
@@ -5139,19 +5148,19 @@ class ModelLearner(DraggableTool):
         self.m_neigh_spbox.setValue(10)
         self.m_neigh_spbox.setToolTip(
             'Nearest neighbours to determine if a minority sample is in danger')
+        
+    # Undersampling strategy warning icon (QLabel)
+        us_warn = QG.QPixmap(r'Icons/warnIcon.png')
+        self.us_warn_icon = QW.QLabel()
+        self.us_warn_icon.setPixmap(us_warn.scaled(16, 16, Qt.KeepAspectRatio))
+        self.us_warn_icon.setToolTip(
+            'The selected Under-Sampling algorithm removes an amount of '\
+            'samples that may differ from the requested one')
+        self.us_warn_icon.hide()
 
     # Undersampling algorithm selector (Styled ComboBox)
         self.us_combox = cObj.StyledComboBox()
         self.us_combox.addItems(self.us_list)
-
-    # Undersampling strategy warning icon (QLabel)
-        pixmap = QG.QPixmap(r'Icons/warnIcon.png')
-        self.us_warn_icon = QW.QLabel()
-        self.us_warn_icon.setPixmap(pixmap.scaled(30, 30, Qt.KeepAspectRatio))
-        self.us_warn_icon.setToolTip(
-            'The selected Under-Sampling algorithm yields values that may '\
-            'differ from those requested')
-        self.us_warn_icon.hide()
 
     # Undersampling N-neighbours selector (Styled SpinBox)
         self.n_neigh_spbox = cObj.StyledSpinBox()
@@ -5213,15 +5222,16 @@ class ModelLearner(DraggableTool):
         balancing_grid = QW.QGridLayout()
         balancing_grid.setSpacing(10)
         balancing_grid.addWidget(self.balancing_help_btn, 0, 0, Qt.AlignLeft)
-        balancing_grid.addWidget(self.us_warn_icon, 0, 2, Qt.AlignRight)
-        balancing_grid.addWidget(QW.QLabel('Over-Sampling'), 1, 0, 1, 3)
+        balancing_grid.addWidget(QW.QLabel('Over-Sampling'), 1, 0, 1, 2)
+        balancing_grid.addWidget(self.os_warn_icon, 1, 2, Qt.AlignRight)
         balancing_grid.addWidget(cObj.LineSeparator(lw=2), 2, 0, 1, 3)
         balancing_grid.addWidget(self.os_combox, 3, 0)
         balancing_grid.addWidget(QW.QLabel('K neigh.'), 3, 1, Qt.AlignRight)
         balancing_grid.addWidget(self.k_neigh_spbox, 3, 2)
         balancing_grid.addWidget(QW.QLabel('M neigh.'), 4, 1, Qt.AlignRight)
         balancing_grid.addWidget(self.m_neigh_spbox, 4, 2)
-        balancing_grid.addWidget(QW.QLabel('Under-Sampling'), 6, 0, 1, 3)
+        balancing_grid.addWidget(QW.QLabel('Under-Sampling'), 6, 0, 1, 2)
+        balancing_grid.addWidget(self.us_warn_icon, 6, 2, Qt.AlignRight)
         balancing_grid.addWidget(cObj.LineSeparator(lw=2), 7, 0, 1, 3)
         balancing_grid.addWidget(self.us_combox, 8, 0)
         balancing_grid.addWidget(QW.QLabel('N neigh.'), 8, 1, Qt.AlignRight)
@@ -5536,11 +5546,15 @@ class ModelLearner(DraggableTool):
         link = 'https://imbalanced-learn.org/stable/user_guide.html#user-guide'
         self.balancing_help_btn.clicked.connect(lambda: webbrowser.open(link))
 
+    # Show/hide OS warning icon based on selected OS algorithm
+        self.os_combox.currentTextChanged.connect(
+            lambda t: self.os_warn_icon.setHidden(t != 'ADASYN'))
+
     # Enable m-neighbors spinbox only when OS algorithm is BorderlineSMOTE
         self.os_combox.currentTextChanged.connect(
             lambda t: self.m_neigh_spbox.setEnabled(t=='BorderlineSMOTE'))
     
-    # Hide strategy warning icon when US algorithm is in the following list
+    # Show/hide US warning icon based on selected US algorithm
         us_no_warn = ('None', 'RandUS', 'NearMiss')
         self.us_combox.currentTextChanged.connect(
             lambda t: self.us_warn_icon.setHidden(t in us_no_warn))
