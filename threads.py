@@ -18,7 +18,7 @@ from _base import RoiMap
 
 class FixedStepsThread(QThread):
     '''
-    Base function for threads defined by a fixed known amount of tasks. It is
+    Base class for threads defined by a fixed known amount of tasks. It is
     equipped with custom signals to inform when each task is initialized and
     when the entire procedure is completed or interrupted.
     '''
@@ -66,13 +66,14 @@ class FixedStepsThread(QThread):
         interrupt = super(FixedStepsThread, self).isInterruptionRequested()
         if interrupt:
             self.workInterrupted.emit()
+            self.reset()
         return interrupt
 
 
     def run(self):
         '''
         Main function of the thread. Defines how the worker should perform its
-        tasks. To be reimplemented in each child.
+        task. To be reimplemented in each child.
 
         '''
         if not self.pipeline:
@@ -99,7 +100,7 @@ class ModelBasedClassificationThread(FixedStepsThread):
         Constructor.
 
         '''
-        super().__init__()
+        super(ModelBasedClassificationThread, self).__init__()
 
 
     def run(self):
@@ -108,7 +109,7 @@ class ModelBasedClassificationThread(FixedStepsThread):
         tasks. 
 
         '''
-        super().run()
+        super(ModelBasedClassificationThread, self).run()
 
         pre_process, predict, post_process = self.pipeline
 
@@ -149,7 +150,7 @@ class RoiBasedClassificationThread(FixedStepsThread):
         Constructor.
 
         '''
-        super().__init__()
+        super(RoiBasedClassificationThread, self).__init__()
 
 
     def run(self):
@@ -158,7 +159,7 @@ class RoiBasedClassificationThread(FixedStepsThread):
         tasks. 
 
         '''
-        super().run()
+        super(RoiBasedClassificationThread, self).run()
 
         get_train_data, fit, predict, compute_prob = self.pipeline
 
@@ -204,7 +205,7 @@ class UnsupervisedClassificationThread(FixedStepsThread):
         Constructor.
 
         '''
-        super().__init__()
+        super(UnsupervisedClassificationThread, self).__init__()
 
 
     def run(self):
@@ -213,7 +214,7 @@ class UnsupervisedClassificationThread(FixedStepsThread):
         tasks. 
         
         '''
-        super().run()
+        super(UnsupervisedClassificationThread, self).run()
 
         (pre_process, fit, predict, compute_prob, sil_score, chi_score, 
          dbi_score) = self.pipeline
@@ -282,7 +283,7 @@ class NpvThread(FixedStepsThread):
         Constructor.
 
         '''
-        super().__init__()
+        super(NpvThread, self).__init__()
 
     # Set main attributes
         self.arrays = []
@@ -378,7 +379,7 @@ class RoiDetectionThread(FixedStepsThread):
         Constructor.
 
         '''
-        super().__init__()
+        super(RoiDetectionThread, self).__init__()
 
     # Set main attributes
         self.n_roi = 0
@@ -775,7 +776,7 @@ class RoiDetectionThread(FixedStepsThread):
 
 class BalancingThread(FixedStepsThread):
     '''
-    A fixed steps thread specialized for balancing training sets. 
+    Fixed steps thread specialized for balancing training sets. 
     '''
     def __init__(self):
         '''
@@ -791,7 +792,7 @@ class BalancingThread(FixedStepsThread):
         tasks. 
 
         '''
-        super().run()
+        super(BalancingThread, self).run()
 
         parse_strat, oversample, undersample, shuffle = self.pipeline
         strategy, seed, osa, usa, kos, mos, nus, njobs = self.args
@@ -840,81 +841,207 @@ class BalancingThread(FixedStepsThread):
 
 
 
-class LearningThread(QThread):
-    epochCompleted = pyqtSignal(tuple) # (epoch, losses, acc)
-    renderRequested = pyqtSignal()
-    taskFinished = pyqtSignal(tuple, bool) # (result/exception, True/False)
+# class LearningThread(QThread):
+#     epochCompleted = pyqtSignal(tuple) # (epoch, losses, acc)
+#     renderRequested = pyqtSignal()
+#     taskFinished = pyqtSignal(tuple, bool) # (result/exception, True/False)
+
+#     def __init__(self):
+#         super(LearningThread, self).__init__()
+
+#         self.epochs = range(0)
+#         self.upRate = 0
+#         self.y_tr = None
+#         self.y_vd = None
+#         self.func = lambda: None
+
+
+#     def setParameters(self, func: Callable, y_tr: np.ndarray, y_vd: np.ndarray, 
+#                       epoch_range: tuple[int], uprate: int):
+#         self.set_func(func)
+#         self.set_ground_truth(y_tr, y_vd)
+#         self.set_epochs(*epoch_range)
+#         self.set_uprate(uprate)
+
+
+#     def set_func(self, func):
+#         self.func = func
+
+
+#     def set_ground_truth(self, y_tr, y_vd):
+#         self.y_tr = y_tr
+#         self.y_vd = y_vd
+
+
+#     def set_epochs(self, e_min, e_max):
+#         self.epochs = range(e_min, e_max)
+
+
+#     def set_uprate(self, value):
+#         self.upRate = value
+
+
+#     def run(self):
+
+#         try:
+#             for e in self.epochs:
+#             # Check for user cancel request
+#                 if self.isInterruptionRequested():
+#                     e -= 1
+#                     break
+
+#             # Learn
+#                 tr_loss, vd_loss, tr_pred, vd_pred = self.func()
+
+#             # Compute accuracy
+#                 tr_acc = sklearn.metrics.accuracy_score(self.y_tr, tr_pred)
+#                 vd_acc = sklearn.metrics.accuracy_score(self.y_vd, vd_pred)
+
+#             # Update progress bar and scores
+#                 scores = (e, (tr_loss, vd_loss), (tr_acc,  vd_acc))
+#                 self.epochCompleted.emit(scores)
+
+#             # Update loss and accuracy plots and labels
+#                 if (e+1) % self.upRate == 0:
+#                     self.renderRequested.emit()
+
+#         # Exit with success
+#             self.renderRequested.emit() # force last plot and labels rendering
+#             self.taskFinished.emit((tr_pred, vd_pred), True)
+
+#         except Exception as e:
+#         # Exit with error
+#             self.taskFinished.emit((e,), False)
+
+#         finally:
+#         # Reset parameters for safety measures
+#             self.setParameters(lambda: None, None, None, (0, 0), 0)
+
+
+
+class DynamicStepsThread(QThread):
+    '''
+    Base class for threads defined by a main task with a variable amount of 
+    iterations. It is equipped with custom signals to inform when each 
+    iteration is completed and when the entire procedure is completed or 
+    interrupted.
+    '''
+    iterCompleted = pyqtSignal(int)
+    taskFinished = pyqtSignal(tuple, bool)
 
     def __init__(self):
-        super(LearningThread, self).__init__()
+        '''
+        Constructor.
 
-        self.epochs = range(0)
-        self.upRate = 0
-        self.y_tr = None
-        self.y_vd = None
-        self.func = lambda: None
-
-
-    def setParameters(self, func: Callable, y_tr: np.ndarray, y_vd: np.ndarray, 
-                      epoch_range: tuple[int], uprate: int):
-        self.set_func(func)
-        self.set_ground_truth(y_tr, y_vd)
-        self.set_epochs(*epoch_range)
-        self.set_uprate(uprate)
+        '''
+        super(DynamicStepsThread, self).__init__()
+        self.task = None
+        self.params = None
 
 
-    def set_func(self, func):
-        self.func = func
+    def set_task(self, function: Callable):
+        '''
+        Set the main task of the thread. This function must be called before
+        starting the thread.
+
+        Parameters
+        ----------
+        function : Callable
+            The main task of the thread.
+
+        '''
+        self.task = function
 
 
-    def set_ground_truth(self, y_tr, y_vd):
-        self.y_tr = y_tr
-        self.y_vd = y_vd
+    def set_params(self, *args):
+        '''
+        Set optional parameters for the task.
 
-
-    def set_epochs(self, e_min, e_max):
-        self.epochs = range(e_min, e_max)
-
-
-    def set_uprate(self, value):
-        self.upRate = value
+        '''
+        self.params = (args)
 
 
     def run(self):
+        '''
+        Main function of the thread. Defines how the worker should perform its
+        task. To be reimplemented in each child.
+
+        '''
+        if self.task is None:
+            raise ValueError('Task is not set.')
+    
+
+    def reset(self):
+        '''
+        Reset the thread parameters for safety measures. This function should 
+        be called by the thread when terminated.
+
+        '''
+        self.task = None
+        self.params = None
+
+
+
+class LearningThread(DynamicStepsThread):
+    '''
+    Dynamic steps thread specialized for supervised learning sessions. 
+    '''
+
+    renderRequested = pyqtSignal(tuple)
+
+    def __init__(self):
+        '''
+        Constructor.
+
+        '''
+        super(LearningThread, self).__init__()
+
+
+    def run(self):
+        '''
+        Main function of the thread. Defines how the worker should perform its
+        task. 
+
+        '''
+        super(LearningThread, self).run()
+
+        (e_min, e_max, uprate, tr_loss_list, ts_loss_list, tr_acc_list, 
+         ts_acc_list) = self.params
 
         try:
-            for e in self.epochs:
+            for e in range(e_min, e_max):
             # Check for user cancel request
                 if self.isInterruptionRequested():
                     e -= 1
                     break
 
             # Learn
-                tr_loss, vd_loss, tr_pred, vd_pred = self.func()
+                tr_loss, ts_loss, tr_acc, ts_acc = self.task()
+            
+            # Store loss and accuracy values
+                tr_loss_list.append(tr_loss)
+                ts_loss_list.append(ts_loss)
+                tr_acc_list.append(tr_acc)
+                ts_acc_list.append(ts_acc)
 
-            # Compute accuracy
-                tr_acc = sklearn.metrics.accuracy_score(self.y_tr, tr_pred)
-                vd_acc = sklearn.metrics.accuracy_score(self.y_vd, vd_pred)
-
-            # Update progress bar and scores
-                scores = (e, (tr_loss, vd_loss), (tr_acc,  vd_acc))
-                self.epochCompleted.emit(scores)
+            # Update progress bar
+                self.iterCompleted.emit(e)
 
             # Update loss and accuracy plots and labels
-                if (e+1) % self.upRate == 0:
-                    self.renderRequested.emit()
+                if (e + 1) % uprate == 0:
+                    self.renderRequested.emit((tr_loss_list, ts_loss_list, 
+                                               tr_acc_list, ts_acc_list))
 
-        # Exit with success
-            self.renderRequested.emit() # force last plot and labels rendering
-            self.taskFinished.emit((tr_pred, vd_pred), True)
+        # Force last plot and labels rendering and exit with success 
+            self.renderRequested.emit((tr_loss_list, ts_loss_list, tr_acc_list,
+                                       ts_acc_list)) 
+            self.taskFinished.emit(((tr_loss_list, ts_loss_list, tr_acc_list,
+                                     ts_acc_list)), True)
 
-        except Exception as e:
+        except Exception as exc:
         # Exit with error
-            self.taskFinished.emit((e,), False)
+            self.taskFinished.emit((exc,), False)
 
         finally:
         # Reset parameters for safety measures
-            self.setParameters(lambda: None, None, None, (0, 0), 0)
-
-
-
+            self.reset()

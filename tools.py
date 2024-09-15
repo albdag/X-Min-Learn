@@ -4823,17 +4823,6 @@ class ModelLearner(DraggableTool):
         self.network = None 
         self.optimizer = None 
 
-    # Train, validation and test model predictions
-        self.train_pred = None
-        self.valid_pred = None
-        self.test_pred = None
-
-    # Train and validation loss and accuracy evolution lists
-        self.train_loss_list = []
-        self.valid_loss_list = []
-        self.train_accuracy_list = []
-        self.valid_accuracy_list = []
-
 # End of main attributes ------------------------------------------------------
 
     # Initialize the GUI
@@ -4934,6 +4923,17 @@ class ModelLearner(DraggableTool):
         self.epochs_spbox = cObj.StyledSpinBox(max_value=10**8)
         self.epochs_spbox.setValue(100)
 
+    # Batch size (editable Styled Combobox)
+        combox_tooltip = 'A batch size of 0 means a single batch'
+        default_batch_sizes = map(lambda n: str(2 ** n), range(5, 13))
+        self.batch_combox = cObj.StyledComboBox(tooltip=combox_tooltip)
+        self.batch_combox.addItem('0')
+        self.batch_combox.addItems(default_batch_sizes)
+        self.batch_combox.setCurrentIndex(0)
+        self.batch_combox.setEditable(True)
+        self.batch_combox.setValidator(QG.QIntValidator(0, 2**24))
+        self.batch_combox.setInsertPolicy(QW.QComboBox.InsertPolicy.NoInsert)
+
     # Hyperparameters group (Group Area)
         hparam_form = QW.QFormLayout()
         hparam_form.setSpacing(10)
@@ -4941,6 +4941,7 @@ class ModelLearner(DraggableTool):
         hparam_form.addRow('Weight Decay', self.wd_spbox)
         hparam_form.addRow('Momentum', self.mtm_spbox)
         hparam_form.addRow('Epochs', self.epochs_spbox)
+        hparam_form.addRow('Batch size', self.batch_combox)
         hparam_group = cObj.CollapsibleArea(hparam_form, 
                                             title='Hyperparameters')
         
@@ -4973,6 +4974,13 @@ class ModelLearner(DraggableTool):
         self.plots_update_rate.setText('10')
         self.plots_update_rate.setStyleSheet(pref.SS_menu)
 
+    # Number of workers (Styled Spinbox)
+        max_workers = ML_tools.num_cores() // 2 # safety
+        self.workers_spbox = cObj.StyledSpinBox(max_value=max_workers)
+        self.workers_spbox.setValue(0)
+        self.workers_spbox.setToolTip(
+            '0 workers means no parallel computation. Used if batch size > 0.')
+
     # Use GPU acceleration (Checkbox)
         self.cuda_cbox = QW.QCheckBox('Use GPU acceleration')
         self.cuda_cbox.setChecked(ML_tools.cuda_available())
@@ -4985,6 +4993,7 @@ class ModelLearner(DraggableTool):
         pref_form.addRow('Algorithm', self.algm_combox)
         pref_form.addRow('Optimization function', self.optim_combox)
         pref_form.addRow('Graphics refresh rate', self.plots_update_rate)
+        pref_form.addRow('Number of workers', self.workers_spbox)
         pref_form.addRow(self.cuda_cbox)
         pref_group = cObj.CollapsibleArea(pref_form,
                                           title='Learning preferences')
@@ -5501,7 +5510,7 @@ class ModelLearner(DraggableTool):
         self.balancing_thread.workFinished.connect(self._parseBalancingResult)
 
     # Learning thread signals
-        self.learning_thread.epochCompleted.connect(self._updateLearningScores)
+        self.learning_thread.iterCompleted.connect(self.learning_pbar.setValue)
         self.learning_thread.renderRequested.connect(self._drawLearningScores)
         self.learning_thread.taskFinished.connect(self._parseLearningResult)
 
@@ -5518,7 +5527,11 @@ class ModelLearner(DraggableTool):
     # Update the learning plots refresh rate when the number of epochs changes
         self.epochs_spbox.valueChanged.connect(
             lambda value: self.plots_update_rate.setText(str(value // 10)))
-        
+
+    # Prevent empty values in batch size combobox
+        self.batch_combox.editTextChanged.connect(
+            lambda t: self.batch_combox.setCurrentIndex(0) if not t else None)
+
     # Enable poly degree spinbox when polynomial feature mapping is checked
         self.feat_mapping_cbox.stateChanged.connect(
             lambda state: self.poly_deg_spbox.setEnabled(state))
@@ -5601,13 +5614,6 @@ class ModelLearner(DraggableTool):
     
     # Reset model 
         self.model = None 
-
-    # Reset predictions and accuracy / loss lists
-        self.train_pred, self.valid_pred, self.test_pred = None, None, None
-        self.train_loss_list.clear()
-        self.valid_loss_list.clear()
-        self.train_accuracy_list.clear()
-        self.valid_accuracy_list.clear()
 
     # Remove parent model
         self.removeParentModel()
@@ -6436,6 +6442,8 @@ class ModelLearner(DraggableTool):
         wd = self.wd_spbox.value()
         mtm = self.mtm_spbox.value()
         epochs = self.epochs_spbox.value()
+        batch_size = int(self.batch_combox.currentText())
+        workers = self.workers_spbox.value()
         poly_feat_mapping = self.feat_mapping_cbox.isChecked()
         poly_deg = self.poly_deg_spbox.value() if poly_feat_mapping else 1
         algm_name = self.algm_combox.currentText()
@@ -6540,18 +6548,27 @@ class ModelLearner(DraggableTool):
             uprate = epochs * 0.02 # prevent too fast updates that crashes the thread(?)
 
     # Initialize loss and accuracy lists and plots
-        self.train_accuracy_list, self.valid_accuracy_list = var_dict['accuracy_list']
-        self.train_loss_list, self.valid_loss_list = var_dict['loss_list']
+        loss_lists = var_dict['loss_list']
+        acc_lists = var_dict['accuracy_list']
         for plot in (self.loss_plot, self.accuracy_plot):
             plot.clear_canvas()
 
     # Start the learning thread
-        task_args = (x_train_norm, y_train, x_valid_norm, y_valid, 
-                     self.optimizer, device)
-        task = lambda: self.network.learn(*task_args)
+        if batch_size:
+            train_loader = ML_tools.DataLoader(x_train_norm, y_train, 
+                                               batch_size, workers) 
+            valid_loader = ML_tools.DataLoader(x_valid_norm, y_valid, 
+                                               batch_size, workers)
+            task = lambda: self.network.batch_learn(train_loader, valid_loader,
+                                                    self.optimizer, device)
+        else:
+            task = lambda: self.network.learn(x_train_norm, y_train, 
+                                              x_valid_norm, y_valid, 
+                                              self.optimizer, device)
 
-        args = (task, y_train.numpy(), y_valid.numpy(), (e_min, e_max), uprate)
-        self.learning_thread.setParameters(*args)
+        self.learning_thread.set_task(task)
+        self.learning_thread.set_params(e_min, e_max, uprate, *loss_lists, 
+                                        *acc_lists)
         self.learning_thread.start()
 
 
@@ -6571,11 +6588,23 @@ class ModelLearner(DraggableTool):
         '''
         self.learning_pbar.reset()
         
-    # Parse thread result if learning session succeded
+    # Predict full train and validation sets if learning session succeded
         if success: 
-            self.train_pred, self.valid_pred = result
+            tr_loss_list, vd_loss_list, tr_acc_list, vd_acc_list = result
             self.learning_pbar.setRange(0, 2)
             self.learning_pbar.setTextVisible(False)
+
+            d = self.model.poly_degree
+            x_mean, x_stdev = self.model.variables['standards']
+            device = self.model.variables['device']
+            x_train = ML_tools.map_polinomial_features(self.dataset.x_train, d)
+            x_valid = ML_tools.map_polinomial_features(self.dataset.x_valid, d)
+            x_train = ML_tools.array2tensor(x_train, 'float32')
+            x_valid = ML_tools.array2tensor(x_valid, 'float32')
+            x_train = ML_tools.norm_data(x_train, x_mean, x_stdev, False)
+            x_valid = ML_tools.norm_data(x_valid, x_mean, x_stdev, False)
+            train_pred = self.network.predict(x_train.to(device))[1].cpu()
+            valid_pred = self.network.predict(x_valid.to(device))[1].cpu()
 
         # Update train and validation F1 scores
             #                  macro  |  weighted
@@ -6584,8 +6613,8 @@ class ModelLearner(DraggableTool):
             # F1 test                 |
             f1_scores = np.empty((3, 2))
             for n, avg in enumerate(('macro', 'weighted')):
-                tr_args = (self.dataset.y_train, self.train_pred, avg)
-                vd_args = (self.dataset.y_valid, self.valid_pred, avg)
+                tr_args = (self.dataset.y_train, train_pred, avg)
+                vd_args = (self.dataset.y_valid, valid_pred, avg)
                 f1_tr = f1_scores[0, n] = ML_tools.f1_score(*tr_args)
                 f1_vd = f1_scores[1, n] = ML_tools.f1_score(*vd_args)
                 self.updateScoreLabel('Train', f'F1_{avg}', f1_tr)
@@ -6594,21 +6623,19 @@ class ModelLearner(DraggableTool):
             self.learning_pbar.setValue(1)
 
         # Complete populating model variables
-            tr_loss, vd_loss = self.train_loss_list, self.valid_loss_list
-            tr_acc, vd_acc = self.train_accuracy_list, self.valid_accuracy_list
             var_dict = self.model.variables
-            var_dict['epochs'] = len(self.train_loss_list)
+            var_dict['epochs'] = len(tr_loss_list)
             var_dict['optim_state_dict'] = self.optimizer.state_dict()
             var_dict['model_state_dict'] = self.network.state_dict()
-            var_dict['accuracy_list'] = (tr_acc, vd_acc)
-            var_dict['loss_list'] = (tr_loss, vd_loss)
-            var_dict['accuracy'] = [tr_acc[-1], vd_acc[-1], None]
-            var_dict['loss'] = [tr_loss[-1], vd_loss[-1], None]
+            var_dict['accuracy_list'] = (tr_acc_list, vd_acc_list)
+            var_dict['loss_list'] = (tr_loss_list, vd_loss_list)
+            var_dict['accuracy'] = [tr_acc_list[-1], vd_acc_list[-1], None]
+            var_dict['loss'] = [tr_loss_list[-1], vd_loss_list[-1], None]
             var_dict['F1_scores'] = f1_scores
 
         # Update Confusion Matrices
-            self.updateConfusionMatrix('Train')
-            self.updateConfusionMatrix('Validation')
+            self.updateConfusionMatrix('Train', train_pred)
+            self.updateConfusionMatrix('Validation', valid_pred)
 
             self.learning_pbar.setValue(2)
 
@@ -6633,36 +6660,34 @@ class ModelLearner(DraggableTool):
 
 
 
-    def _updateLearningScores(self, scores: tuple):
+    # def _updateLearningScores(self, scores: tuple):
+    #     '''
+    #     Update the loss and accuracy list with new values. This function should
+    #     be called every time a new learning epoch is completed.
+
+    #     Parameters
+    #     ----------
+    #     scores : tuple
+    #         Learning scores. In order: epoch, train and validation losses,
+    #         train and validation accuracies.
+
+    #     '''
+    #     e, (tr_loss, vd_loss), (tr_acc, vd_acc) = scores
+    # # Store new loss and accuracy values
+    #     self.train_loss_list.append(tr_loss)
+    #     self.valid_loss_list.append(vd_loss)
+    #     self.train_accuracy_list.append(tr_acc)
+    #     self.valid_accuracy_list.append(vd_acc)
+    # # Update progress bar
+    #     self.learning_pbar.setValue(e)
+
+
+    def _drawLearningScores(self, scores: tuple):
         '''
-        Update the loss and accuracy list with new values. This function should
-        be called every time a new learning epoch is completed.
-
-        Parameters
-        ----------
-        scores : tuple
-            Learning scores. In order: epoch, train and validation losses,
-            train and validation accuracies.
+        Update loss and accuracy curves, as well as score labels.
 
         '''
-        e, (tr_loss, vd_loss), (tr_acc, vd_acc) = scores
-    # Store new loss and accuracy values
-        self.train_loss_list.append(tr_loss)
-        self.valid_loss_list.append(vd_loss)
-        self.train_accuracy_list.append(tr_acc)
-        self.valid_accuracy_list.append(vd_acc)
-    # Update progress bar
-        self.learning_pbar.setValue(e)
-
-
-    def _drawLearningScores(self):
-        '''
-        Update loss and accuracy curves, as well as score labels, with the last
-        train and validation accuracy and loss values.
-
-        '''
-        tr_loss, tr_acc = self.train_loss_list, self.train_accuracy_list
-        vd_loss, vd_acc = self.valid_loss_list, self.valid_accuracy_list
+        tr_loss, vd_loss, tr_acc, vd_acc = scores
 
     # Update the loss and accuracy curves
         self.updateLearningCurve('loss', tr_loss, vd_loss)
@@ -6706,7 +6731,7 @@ class ModelLearner(DraggableTool):
         canvas.update_canvas(curves, [f'Train {plot}', f'Validation {plot}'])
 
 
-    def updateConfusionMatrix(self, subset: str):
+    def updateConfusionMatrix(self, subset: str, preds: np.ndarray):
         '''
         Populate confusion matrix of the given subset.
 
@@ -6718,19 +6743,16 @@ class ModelLearner(DraggableTool):
         '''
         if subset == 'Train':
             true = self.dataset.y_train
-            preds = self.train_pred
             perc = self.train_cm_perc_action.isChecked()
             canvas = self.train_confmat
 
         elif subset == 'Validation':
             true = self.dataset.y_valid
-            preds = self.valid_pred
             perc = self.valid_cm_perc_action.isChecked()
             canvas = self.valid_confmat
 
         elif subset == 'Test':
             true = self.dataset.y_test
-            preds = self.test_pred
             perc = self.test_cm_perc_action.isChecked()
             canvas = self.test_confmat
 
@@ -6783,36 +6805,34 @@ class ModelLearner(DraggableTool):
             self.learning_pbar.setRange(0, 4)
 
         # Predict targets on test set
-            x_test, y_test = self.dataset.x_test, self.dataset.y_test
-            var_dict = self.model.variables
-            degree = self.model.poly_degree
-            device = var_dict['device']
-            x_mean, x_stdev = var_dict['standards']
+            d = self.model.poly_degree
+            device = self.model.variables['device']
+            x_mean, x_stdev = self.model.variables['standards']
 
-            x_test = ML_tools.map_polinomial_features(x_test, degree)
+            x_test = ML_tools.map_polinomial_features(self.dataset.x_test, d)
             x_test = ML_tools.array2tensor(x_test, 'float32')
             x_test = ML_tools.norm_data(x_test, x_mean, x_stdev, False)
-            self.test_pred = self.network.predict(x_test.to(device))[1].cpu()
+            test_pred = self.network.predict(x_test.to(device))[1].cpu()
 
             self.learning_pbar.setValue(1)
 
         # Compute test accuracy
-            test_acc = ML_tools.accuracy_score(y_test, self.test_pred)
-            var_dict['accuracy'][2] = test_acc
+            test_acc = ML_tools.accuracy_score(self.dataset.y_test, test_pred)
+            self.model.variables['accuracy'][2] = test_acc
             self.updateScoreLabel('Test', 'accuracy', test_acc)
             
             self.learning_pbar.setValue(2)
 
         # Compute test F1 scores 
             for n, avg in enumerate(('macro', 'weighted')):
-                f1_ts = ML_tools.f1_score(y_test, self.test_pred, avg)
+                f1_ts = ML_tools.f1_score(self.dataset.y_test, test_pred, avg)
                 self.updateScoreLabel('Test', f'F1_{avg}', f1_ts)
                 var_dict['F1_scores'][2, n] = f1_ts
             
             self.learning_pbar.setValue(3)
 
         # Update test Confusion Matrix 
-            self.updateConfusionMatrix('Test')
+            self.updateConfusionMatrix('Test', test_pred)
             self.learning_pbar.setValue(4)
 
         # Update GUI

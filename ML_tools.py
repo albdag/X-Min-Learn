@@ -6,6 +6,7 @@ Created on Wed Apr 28 13:06:51 2021
 """
 
 import math
+import multiprocessing
 from typing import Any
 
 import imblearn.over_sampling as OS
@@ -17,6 +18,7 @@ import sklearn.metrics
 import sklearn.neighbors
 import sklearn.preprocessing
 import torch
+import torch.utils.data as torch_data
 
 from _base import InputMap, InputMapStack, MineralMap, RoiMap
 import conv_functions as CF
@@ -802,6 +804,94 @@ class NeuralNetwork(torch.nn.Module):
         self.get_bias().data[:parent_output_size] = parent_biases
 
 
+class TorchDataset(torch_data.Dataset):
+    '''
+    A custom torch dataset class useful to properly access mineral ground truth
+    datasets within a torch data loader (see DataLoader class).
+    '''
+
+    def __init__(self, features: torch.Tensor, targets: torch.Tensor):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Input features.
+        targets : torch.Tensor
+            Output targets.
+
+        '''
+        self.feat = features
+        self.targ = targets
+    
+
+    def __getitem__(self, idx: int):
+        '''
+        Dataset batch getter function.
+
+        Parameters
+        ----------
+        idx : int
+            Dataset slice index.
+
+        Returns
+        -------
+        dict
+            Requested batch of features and targets.
+
+        '''
+        x = self.feat[idx, :]
+        y = self.targ[idx]
+        return {'features': x, 'target': y}
+    
+
+    def __len__(self):
+        '''
+        Return the number of entries in the dataset. 
+
+        Returns
+        -------
+        int
+            Dataset length.
+        '''
+        return len(self.targ)
+
+
+class DataLoader(torch_data.DataLoader):
+    '''
+    Custom torch data loader, used to access data when a batch learning session
+    is required.
+    '''
+    
+    def __init__(self, features: torch.Tensor, targets: torch.Tensor, 
+                 batch_size: int, workers: int=0):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Input features. The tensor must NOT be loaded on GPU.
+        targets : torch.Tensor
+            Output targets. The tensor must NOT be loaded on GPU.
+        batch_size : int
+            Number of entries for each batch of data.
+        workers : int, optional
+            Number of CPU cores used. If 0, no multiprocessing is performed. 
+            The default is 0.
+
+        '''
+        self.workers = workers
+        self.dataset = TorchDataset(features, targets)
+        self.batch_size = batch_size
+
+        super(DataLoader, self).__init__(dataset=self.dataset, 
+                                         batch_size=self.batch_size, 
+                                         num_workers=self.workers,
+                                         pin_memory=True) 
+
+
 
 class SoftMaxRegressor(NeuralNetwork):
     '''
@@ -900,10 +990,72 @@ class SoftMaxRegressor(NeuralNetwork):
         return probs, classes
 
 
-    def learn(self, X_train: torch.Tensor, Y_train: torch.Tensor, # maybe could be moved to parent class
-              X_test: torch.Tensor, Y_test: torch.Tensor, 
-              optimizer: torch.optim.Optimizer, device: str):
+    # def learn(self, X_train: torch.Tensor, Y_train: torch.Tensor, # maybe could be moved to parent class
+    #           X_test: torch.Tensor, Y_test: torch.Tensor, 
+    #           optimizer: torch.optim.Optimizer, device: str):
         
+    #     '''
+    #     Defines a single learning iteration.
+
+    #     Parameters
+    #     ----------
+    #     X_train : Tensor
+    #         Train set feature data.   
+    #     Y_train : Tensor
+    #         Train set label data.
+    #     X_test : Tensor
+    #         Test set feature data.   
+    #     Y_test : Tensor
+    #         Test set label data.
+    #     optimizer : Optimizer
+    #         Optimizer.
+    #     device : str
+    #         Where to compute the learning iteration. Can be either 'cpu' or 
+    #         'cuda'.
+
+    #     Returns
+    #     -------
+    #     train_loss : float
+    #         Train set loss.
+    #     test_loss : float
+    #         Test set loss.
+    #     train_preds : Tensor
+    #         Predictions on train set.
+    #     test_prefs : Tensor
+    #         Predictions on test set
+
+    #     '''
+    # # Predict train data and compute train loss
+    #     self.train()
+    #     optimizer.zero_grad()
+
+    #     out = self.forward(X_train.to(device))
+    #     l = self.loss(out, Y_train.long().to(device))
+ 
+    #     l.backward()
+    #     optimizer.step()
+    #     # optimizer.zero_grad() # Should this be called before l.backward()?
+
+    #     train_loss = l.cpu().detach().numpy().item()
+    #     train_preds = out.max(1)[1].cpu()
+
+    # # Predict test data and compute test loss
+    #     self.eval()
+    #     with torch.set_grad_enabled(False):
+
+    #         out = self.forward(X_test.to(device))
+    #         l = self.loss(out, Y_test.long().to(device))
+
+    #         test_loss = l.cpu().detach().numpy().item()
+    #         test_preds = out.max(1)[1].cpu()
+
+    #     return (train_loss, test_loss, train_preds, test_preds)
+    
+
+
+    def learn(self, x_train: torch.Tensor, y_train: torch.Tensor, # maybe could be moved to parent class
+              x_test: torch.Tensor, y_test: torch.Tensor, 
+              optimizer: torch.optim.Optimizer, device: str):
         '''
         Defines a single learning iteration.
 
@@ -912,11 +1064,11 @@ class SoftMaxRegressor(NeuralNetwork):
         X_train : Tensor
             Train set feature data.   
         Y_train : Tensor
-            Train set label data.
+            Train set target data.
         X_test : Tensor
             Test set feature data.   
         Y_test : Tensor
-            Test set label data.
+            Test set target data.
         optimizer : Optimizer
             Optimizer.
         device : str
@@ -935,31 +1087,104 @@ class SoftMaxRegressor(NeuralNetwork):
             Predictions on test set
 
         '''
+        x_train = x_train.to(device)
+        y_train = y_train.long().to(device)
+        x_test = x_test.to(device)
+        y_test = y_test.long().to(device)
+
     # Predict train data and compute train loss
         self.train()
         optimizer.zero_grad()
 
-        out = self.forward(X_train.to(device))
-        l = self.loss(out, Y_train.long().to(device))
+        out = self.forward(x_train)
+        loss = self.loss(out, y_train)
+        acc = (out.argmax(1) == y_train).float().mean()
  
-        l.backward()
+        loss.backward()
         optimizer.step()
-        # optimizer.zero_grad() # Should this be called before l.backward()?
 
-        train_loss = l.cpu().detach().numpy().item()
-        train_preds = out.max(1)[1].cpu()
+        train_loss = loss.item()
+        train_acc = acc.item()
 
     # Predict test data and compute test loss
         self.eval()
         with torch.set_grad_enabled(False):
 
-            out = self.forward(X_test.to(device))
-            l = self.loss(out, Y_test.long().to(device))
+            out = self.forward(x_test)
+            loss = self.loss(out, y_test)
+            acc = (out.argmax(1) == y_test).float().mean()
 
-            test_loss = l.cpu().detach().numpy().item()
-            test_preds = out.max(1)[1].cpu()
+            test_loss = loss.item()
+            test_acc = acc.item()
 
-        return (train_loss, test_loss, train_preds, test_preds)
+        return (train_loss, test_loss, train_acc, test_acc)
+
+
+    def batch_learn(self, train_loader: DataLoader, test_loader: DataLoader, # maybe could be moved to parent class
+                      optimizer: torch.optim.Optimizer, device: str):
+        '''
+        Defines a single batched learning iteration. 
+
+        Parameters
+        ----------
+        X_train : Tensor
+            Train set feature data.   
+        Y_train : Tensor
+            Train set target data.
+        X_test : Tensor
+            Test set feature data.   
+        Y_test : Tensor
+            Test set target data.
+        optimizer : Optimizer
+            Optimizer.
+
+        Returns
+        -------
+        train_loss : float
+            Train set loss.
+        test_loss : float
+            Test set loss.
+        train_preds : Tensor
+            Predictions on train set.
+        test_prefs : Tensor
+            Predictions on test set
+
+        '''
+        loaders = {'train': train_loader, 'test': test_loader}
+        batch_tr_loss, batch_ts_loss = [], []
+        batch_tr_acc, batch_ts_acc = [], []
+
+        for mode in ('train', 'test'):
+            self.train() if mode == 'train' else self.eval()
+            
+            with torch.set_grad_enabled(mode == 'train'):
+                for batch in loaders[mode]:
+                    x = batch['features'].to(device, non_blocking=True)
+                    y = batch['target'].long().to(device, non_blocking=True)
+
+                    if mode == 'train':
+                        optimizer.zero_grad()
+
+                    out = self.forward(x)
+                    loss = self.loss(out, y)
+                    # acc = accuracy_score(y, out.max(1)[1])
+                    acc = (out.argmax(1) == y).float().mean()
+
+                    if mode == 'train':
+                        loss.backward()
+                        optimizer.step()
+                        batch_tr_loss.append(loss.item())
+                        batch_tr_acc.append(acc.item())
+                    else:
+                        batch_ts_loss.append(loss.item())
+                        batch_ts_acc.append(acc.item())
+
+        train_loss = sum(batch_tr_loss) / len(batch_tr_loss)
+        test_loss = sum(batch_ts_loss) / len(batch_ts_loss)
+        train_accuracy = sum(batch_tr_acc) / len(batch_tr_acc)
+        test_accuracy = sum(batch_ts_acc) / len(batch_ts_acc)
+
+        return train_loss, test_loss, train_accuracy, test_accuracy
 
 
 
@@ -2240,6 +2465,19 @@ def accuracy_score(true: np.ndarray|torch.Tensor,
         pred = pred.cpu().detach().numpy()
     accuracy = sklearn.metrics.accuracy_score(true, pred)
     return accuracy
+
+
+def num_cores():
+    '''
+    Get the number of CPU cores of the machine.
+
+    Returns
+    -------
+    int
+        Number of cores.
+
+    '''
+    return multiprocessing.cpu_count()
 
 
 # def getNetworkArchitecture(network_id, in_feat, out_cls, seed=None): # deprecated. Moved to EagerModel
