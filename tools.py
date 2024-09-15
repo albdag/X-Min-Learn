@@ -1349,12 +1349,12 @@ class MineralClassifier(DraggableTool):
         self.classifier_tabwid = cObj.StyledTabWidget()
         self.classifier_tabwid.tabBar().setDocumentMode(True)
         self.classifier_tabwid.tabBar().setExpanding(True)
-        self.classifier_tabwid.addTab(self.PreTrainedClassifierTab(self),
-                                      title='Pre-trained')
-        self.classifier_tabwid.addTab(self.RoiBasedClassifierTab(self),
-                                      title='ROI-based')
-        self.classifier_tabwid.addTab(self.UnsupervisedClassifierTab(self),
-                                      title='Unsupervised')
+        self.pre_train_tab = self.PreTrainedClassifierTab()
+        self.roi_based_tab = self.RoiBasedClassifierTab()
+        self.unsuperv_tab = self.UnsupervisedClassifierTab()
+        self.classifier_tabwid.addTab(self.pre_train_tab, title='Pre-trained')
+        self.classifier_tabwid.addTab(self.roi_based_tab, title='ROI-based')
+        self.classifier_tabwid.addTab(self.unsuperv_tab, title='Unsupervised')
 
     # Classification progress bar (Descriptive ProgressBar)
         self.progbar = cObj.DescriptiveProgressBar()
@@ -1531,6 +1531,10 @@ class MineralClassifier(DraggableTool):
         self.minmap_combox.clicked.connect(self.updateMineralMapsCombox)
         self.minmap_combox.activated.connect(self.updateClassesCombox)
         self.class_combox.textActivated.connect(self.getMaskFromClass)
+
+    # Add/remove ROI maps in canvas when requested by the RoiBasedClassifierTab
+        self.roi_based_tab.addRoiMapRequested.connect(self.addRoiMap)
+        self.roi_based_tab.removeRoiMapRequested.connect(self.removeRoiMap)
 
     # Actions to be performed when a mineral map is clicked
         self.minmaps_list.itemClicked.connect(self.showMineralMap)
@@ -1757,6 +1761,40 @@ class MineralClassifier(DraggableTool):
     # Masks are only rendered on top of Input Maps
         if self.maps_viewer.contains_heatmap():
             self.showInputMap(self.inmaps_selector.currentItem())
+
+
+    def addRoiMap(self, roimap: RoiMap):
+        '''
+        Render ROI map's patches and annotations in the maps canvas.
+
+        Parameters
+        ----------
+        roimap : RoiMap
+            The ROI map to be rendered.
+
+        '''
+        color = pref.get_setting('class/trAreasCol', (255,0,0), tuple)
+        filled = pref.get_setting('class/trAreasFill', False, bool)
+
+        for name, bbox in roimap.roilist:
+            patch = cObj.RoiPatch(bbox, CF.RGB2float([color]), filled)
+            text = cObj.RoiAnnotation(name, patch)
+            self.maps_viewer.ax.add_patch(patch)
+            self.maps_viewer.ax.add_artist(text)
+
+        self.maps_viewer.draw_idle()
+
+
+    def removeRoiMap(self):
+        '''
+        Remove all ROI map's patches and annotations from the maps canvas.
+
+        '''
+        for child in self.maps_viewer.ax.get_children():
+            if isinstance(child, (cObj.RoiPatch, cObj.RoiAnnotation)):
+                child.remove()
+
+        self.maps_viewer.draw_idle()
 
 
     def showMineralMap(self, item: cObj.DataObject | None):
@@ -2175,18 +2213,35 @@ class MineralClassifier(DraggableTool):
 
 
     class PreTrainedClassifierTab(QW.QWidget):
+        '''
+        First tab of the Mineral Classifier's tab widget, which allows the 
+        selection of a classifier type. This tab allows the loading of a 
+        pre-trained ML model.
+        '''
+
         def __init__(self, parent=None):
-            self.parent = parent
+            '''
+            Constructor.
+
+            Parameters
+            ----------
+            parent : QWidget or None, optional
+                GUI parent widget of this tab. The default is None.
+
+            '''
             super().__init__(parent)
 
-        # Set main attribute
+        # Set main attributes
             self.model = None
 
             self._init_ui()
             self._connect_slots()
 
         def _init_ui(self):
+            '''
+            GUI constructor.
 
+            '''
         # Load Model (Styled Button)
             self.load_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
                                               'Load model')
@@ -2210,10 +2265,18 @@ class MineralClassifier(DraggableTool):
 
 
         def _connect_slots(self):
+            '''
+            Signals-slots connector.
+
+            '''
             self.load_btn.clicked.connect(self.loadModel)
 
 
         def loadModel(self):
+            '''
+            Load a pre-trained model from file.
+
+            '''
             path, _ = QW.QFileDialog.getOpenFileName(self, 'Import model',
                                                      pref.get_dirPath('in'),
                                                      'PyTorch model (*.pth)')
@@ -2238,7 +2301,26 @@ class MineralClassifier(DraggableTool):
                 self.model_info.setDoc(logpath)
 
 
-        def getClassifier(self, input_stack, maps_names):
+        def getClassifier(self, input_stack: InputMapStack, maps_names: list):
+            '''
+            Return the classifier stored in the loaded pre-trained model. This
+            function also checks if the input maps required by the model are
+            present.
+
+            Parameters
+            ----------
+            input_stack : InputMapStack
+                The stack of input maps.
+            maps_names : list
+                List of input maps names.
+
+            Returns
+            -------
+            ModelBasedClassifier or None
+                The pre-trained classifier or None if the required input maps
+                are not present.
+
+            '''
             if self.model == None:
                 QW.QMessageBox.critical(self, 'X-Min Learn', 
                                         'A pre-trained model is required')
@@ -2268,8 +2350,25 @@ class MineralClassifier(DraggableTool):
 
 
     class RoiBasedClassifierTab(QW.QWidget):
+        '''
+        Second tab of the Mineral Classifier's tab widget, which allows the 
+        selection of a classifier type. This tab allows the selection of a 
+        ROI-based classifier.
+        '''
+
+        addRoiMapRequested = QC.pyqtSignal(RoiMap)
+        removeRoiMapRequested = QC.pyqtSignal()
+
         def __init__(self, parent=None):
-            self.parent = parent
+            '''
+            Constructor.
+
+            Parameters
+            ----------
+            parent : QWidget or None, optional
+                GUI parent widget of this tab. The default is None.
+
+            '''
             super().__init__(parent)
 
         # Set main attributes
@@ -2280,7 +2379,10 @@ class MineralClassifier(DraggableTool):
             self._connect_slots()
 
         def _init_ui(self):
+            '''
+            GUI constructor.
 
+            '''
         # Load ROI map (Styled Button)
             self.load_btn = cObj.StyledButton(QIcon('Icons/load.png'),
                                               'Load ROI map')
@@ -2349,8 +2451,11 @@ class MineralClassifier(DraggableTool):
             self.setLayout(main_layout)
 
 
-
         def _connect_slots(self):
+            '''
+            Signals-slots connector.
+
+            '''
         # Load ROI map from file
             self.load_btn.clicked.connect(self.loadRoiMap)
 
@@ -2362,83 +2467,88 @@ class MineralClassifier(DraggableTool):
 
 
         def loadRoiMap(self):
+            '''
+            Load a new ROI map from file and request its rendering in the 
+            Mineral Classifier's maps canvas.
+
+            '''
         # Get path to new ROI map
             path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
                                                      pref.get_dirPath('in'),
                                                      'ROI maps (*.rmp)')
             if path:
                 pref.set_dirPath('in', os.path.dirname(path))
-                pbar = cObj.PopUpProgBar(self, 4, 'Loading data', cancel=False)
+                pbar = cObj.PopUpProgBar(self, 3, 'Loading data', cancel=False)
                 pbar.setValue(0)
-            else: return
 
+            # Try loading the ROI map. Exit function if something goes wrong
+                try:
+                    new_roimap = RoiMap.load(path)
+                    pbar.increase()
+                except Exception as e:
+                    pbar.reset()
+                    return cObj.RichMsgBox(self, QW.QMessageBox.Critical,
+                                        'X-Min Learn', f'Unexpected file:\n{path}',
+                                        detailedText = repr(e))
 
-        # Try loading the new ROI map. Exit function if something goes wrong
-            try:
-                new_roimap = RoiMap.load(path)
+            # Remove previous ROI map from canvas
+                self.unloadRoiMap()
                 pbar.increase()
-            except Exception as e:
-                pbar.reset()
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical,
-                                       'X-Min Learn', f'Unexpected file:\n{path}',
-                                       detailedText = repr(e))
 
-        # Remove previous ROI map from canvas
-            self.removeRoiMap()
-            self.roimap_path.clearPath()
-            pbar.increase()
-
-        # Add the new ROI map and populate the canvas with its ROIs
-            self.addRoiMap(new_roimap)
-            self.roimap_path.setPath(path)
-            pbar.increase()
-
-        # Refresh view
-            self.parent.maps_viewer.draw_idle()
-            pbar.increase()
+            # Add the new ROI map and populate the canvas with its ROIs
+                self._roimap = new_roimap
+                self.addRoiMapRequested.emit(new_roimap)
+                self.roimap_path.setPath(path)
+                pbar.increase()
 
 
         def unloadRoiMap(self):
-            self.removeRoiMap()
-            self.roimap_path.clearPath()
-            self.parent.maps_viewer.draw_idle()
+            '''
+            Unload current ROI map and request its removal from the Mineral
+            Classifier's maps canvas.
 
+            '''
+            if self._roimap is not None:
+                self._roimap = None
+                self.roimap_path.clearPath()
+                self.removeRoiMapRequested.emit()
+                
 
-        def removeRoiMap(self):
-            if self._roimap is None: return
-        # Remove ROI patches and annotations from canvas
-            for child in self.parent.maps_viewer.ax.get_children():
-                if isinstance(child, (cObj.RoiPatch, cObj.RoiAnnotation)):
-                    child.remove()
-        # Reset the class attribute
-            self._roimap = None
+        def switchAlgorithm(self, algorithm: str):
+            '''
+            Swap widget in the algorithms panel based on selected algorithm.
 
+            Parameters
+            ----------
+            algorithm : str
+                Selected algorithm.
 
-        def addRoiMap(self, roimap):
-            if roimap is None: return
-            roilist = roimap.roilist
-            canvas = self.parent.maps_viewer
-
-        # Display the ROIs patches and their annotations in canvas
-            color = pref.get_setting('class/trAreasCol', (255,0,0), tuple)
-            filled = pref.get_setting('class/trAreasFill', False, bool)
-
-            for name, bbox in roilist:
-                patch = cObj.RoiPatch(bbox, CF.RGB2float([color]), filled)
-                text = cObj.RoiAnnotation(name, patch)
-                canvas.ax.add_patch(patch)
-                canvas.ax.add_artist(text)
-
-        # Update the class attribute
-            self._roimap = roimap
-
-
-        def switchAlgorithm(self, algorithm):
+            '''
             idx = self._algorithms.index(algorithm)
             self.algm_panel.setCurrentWidget(idx)
 
 
-        def getClassifier(self, input_stack, maps_names=None): # maps names is here only for args compatibility with ModelBased Classifier
+        def getClassifier(self, input_stack: InputMapStack, maps_names=None): 
+            '''
+            Return the ROI-based classifier with the selected parameters. This
+            fuction also checks if the extension the ROI map is compatible with
+            the extensions of the input maps.
+
+            Parameters
+            ----------
+            input_stack : InputMapStack
+                The stack of input maps.
+            maps_names : None, optional
+                This has no use. It is here only for args compatibility with
+                ModelBased Classifier. The default is None.
+
+            Returns
+            -------
+            RoiBasedClassifier or None
+                The ROI-based classifier or None if the ROI map is absent or it
+                has incompatible extension.
+
+            '''
             roimap = self._roimap
             prox = self.pixprox_cbox.checkState()
             algm = self.algm_combox.currentText()
@@ -2448,6 +2558,7 @@ class MineralClassifier(DraggableTool):
                                         'A ROI map is required')
                 return None
 
+        # Check if ROI map extension differs from input maps extensions
             if input_stack.maps_shape != roimap.shape:
                 warn_text = 'ROI map extension is different from sample '\
                             'extension. Proceed anyway?'
@@ -2470,18 +2581,35 @@ class MineralClassifier(DraggableTool):
 
 
     class UnsupervisedClassifierTab(QW.QWidget):
+        ''' 
+        Third tab of the Mineral Classifier's tab widget, which allows the 
+        selection of a classifier type. This tab allows the selection of an 
+        unsupervised classifier.
+        '''
+
         def __init__(self, parent=None):
-            self.parent = parent
+            '''
+            Constructor.
+
+            Parameters
+            ----------
+            parent : QWidget or None, optional
+                GUI parent widget of this tab. The default is None.
+
+            '''
             super().__init__(parent)
 
-        # Set main attributes
+        # Set main attribute
             self._algorithms = ('K-Means',)
 
             self._init_ui()
             self._connect_slots()
 
         def _init_ui(self):
+            '''
+            GUI constructor.
 
+            '''
         # Seed generator widget
             self.seed_generator = cObj.RandomSeedGenerator()
 
@@ -2564,6 +2692,10 @@ class MineralClassifier(DraggableTool):
 
 
         def _connect_slots(self):
+            '''
+            Signals-slots connector.
+
+            '''
         # Disable silhouette data ratio when silhouette score is unchecked
             self.silscore_cbox.stateChanged.connect(
                 self.silscore_ratio_spbox.setEnabled)
@@ -2571,12 +2703,38 @@ class MineralClassifier(DraggableTool):
             self.algm_combox.currentTextChanged.connect(self.switchAlgorithm)
 
 
-        def switchAlgorithm(self, algorithm):
+        def switchAlgorithm(self, algorithm: str):
+            '''
+            Swap widget in the algorithms panel based on selected algorithm.
+
+            Parameters
+            ----------
+            algorithm : str
+                Selected algorithm.
+
+            '''
             idx = self._algorithms.index(algorithm)
             self.algm_panel.setCurrentWidget(idx)
 
 
-        def getClassifier(self, input_stack, maps_names=None): # maps names is here only for args compatibility with ModelBased Classifier
+        def getClassifier(self, input_stack: InputMapStack, maps_names=None):
+            '''
+            Return the unsupervised classifier with the selected parameters.
+
+            Parameters
+            ----------
+            input_stack : InputMapStack
+                The stack of input maps.
+            maps_names : None, optional
+                This has no use. It is here only for args compatibility with
+                ModelBased Classifier. The default is None.
+
+            Returns
+            -------
+            UnsupervisedClassifier
+                The unsupervised classifier.
+
+            '''
         # Common clustering parameters
             seed = self.seed_generator.seed
             prox = self.pixprox_cbox.checkState()
