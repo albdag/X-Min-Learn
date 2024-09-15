@@ -216,9 +216,10 @@ SS_combox = (
             image: url(Icons/arrowDown_dark.png);}'''
     '''QComboBox QAbstractItemView {
             background-color: %s;
-            border: 1px solid %s;}'''
-    %(IVORY, BLACK_PEARL, BLOSSOM, BLOSSOM, BLACK_PEARL, BLACK_PEARL,
-      IVORY, SAN_MARINO))
+            border: 1px solid %s;
+            color: black;}'''
+    %(IVORY, BLACK_PEARL, BLOSSOM, BLOSSOM, BLACK_PEARL, BLACK_PEARL, IVORY,
+      SAN_MARINO))
 
 
 SS_button = (

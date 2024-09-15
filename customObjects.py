@@ -1343,24 +1343,30 @@ class StyledComboBox(QW.QComboBox):
     '''
     QSS-styled reimplementation of a QComboBox, with auto-generating tooltips.
     '''
-    def __init__(self, parent=None):
+    def __init__(self, tooltip=None, parent=None):
         '''
         Constructor
 
         Parameters
         ----------
+        tooltip : str | None, optional
+            Fixed combo box tooltip. If None, the tooltip automatically changes
+            when the current text changes. The default is None.
         parent : QObject | None, optional
             The GUI parent of this object. The default is None.
 
         '''
         super(StyledComboBox, self).__init__(parent)
 
-    # Set automatic tooltip update when the combobox text is changed
-        self.setToolTip(self.currentText())
-        self.currentTextChanged.connect(self.setToolTip)
+    # Set automatic tooltip update if no tooltip is provided
+        if tooltip:
+            self.setToolTip(tooltip)
+        else:
+            self.setToolTip(self.currentText())
+            self.currentTextChanged.connect(self.setToolTip)
 
-    # Set stylesheet
-        self.setStyleSheet(pref.SS_combox)
+    # Set stylesheet (SS_menu in case of editable combo box)
+        self.setStyleSheet(pref.SS_combox + pref.SS_menu)
 
 
     def wheelEvent(self, event: QG.QWheelEvent):
