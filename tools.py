@@ -1258,7 +1258,7 @@ class MineralClassifier(DraggableTool):
 #  -------------------------------------------------------------------------  #
         
     # Input maps selector 
-        self.inmaps_selector = cObj.InputMapsSelector()
+        self.inmaps_selector = cObj.SampleMapsSelector('inmaps')
 
     # Remove mask button (StyledButton)
         self.del_mask_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
@@ -1511,9 +1511,9 @@ class MineralClassifier(DraggableTool):
 
         '''
     # Reset canvas and enable/disable classify button if input data is updated
-        self.inmaps_selector.inputDataChanged.connect(
+        self.inmaps_selector.mapsDataChanged.connect(
             self.maps_viewer.clear_canvas)
-        self.inmaps_selector.inputDataChanged.connect(
+        self.inmaps_selector.mapsDataChanged.connect(
             self.updateClassifyButtonState)
 
     # Actions to be performed when an input map is clicked

@@ -1802,7 +1802,7 @@ class AutoUpdateComboBox(QW.QComboBox):
 
 
 
-class CBoxMapLayout(QW.QGridLayout): # deprecated! Use InputMapsSelector instead
+class CBoxMapLayout(QW.QGridLayout): # deprecated! Use SampleMapsSelector instead
     cboxPressed = QC.pyqtSignal()
 
     def __init__(self, paths, parent=None):
@@ -3318,33 +3318,51 @@ class RoiAnnotation(mpl.text.Annotation):
 
         
 
-class InputMapsSelector(QW.QWidget):
+class SampleMapsSelector(QW.QWidget):
     '''
-    Ready to use widget that allows to load input maps from a sample and show
-    them in a QTreeWidget, allowing maps selection through dedicated 
-    checkboxes. This widget sends signals to request the input data. This 
-    signals must be catched by the widget that holds such information,  namely
+    Ready to use widget that allows loading maps from a sample and show them
+    in a QTreeWidget, optionally allowing their selection through dedicated 
+    checkboxes. This widget sends signals to request the maps data. This
+    signals must be catched by the widget that holds such information, namely
     the DataManager.
     '''
     sampleUpdateRequested = QC.pyqtSignal()
     mapsUpdateRequested = QC.pyqtSignal(int) # index of sample
-    inputDataChanged = QC.pyqtSignal()
+    mapsDataChanged = QC.pyqtSignal()
     mapClicked = QC.pyqtSignal(DataObject)
 
-    def __init__(self, parent=None):
+
+    def __init__(self, maps_type: str, checkable=True, parent=None):
         '''
         Constructor.
 
         Parameters
         ----------
+        maps_type : str
+            Must be 'inmaps' to list input maps or 'minmaps' to list mineral 
+            maps.
+        checkable : bool, optional
+            Whether the individual maps in the list
         parent : QObject | None, optional
             The GUI parent of this object. The default is None.
 
+        Raise
+        -----
+        ValueError
+            maps_type must be 'inmaps' or 'minmaps'
+
         '''
-        super(InputMapsSelector, self).__init__(parent)
+        super(SampleMapsSelector, self).__init__(parent)
+
+    # Set main attributes
+        self.maps_type = maps_type
+        if self.maps_type not in ('inmaps', 'minmaps'):
+            raise ValueError("maps_type must be 'inmaps' or 'minmaps'")
+        self.checkable = checkable
 
         self._init_ui()
         self._connect_slots()
+
 
     def _init_ui(self):
         '''
@@ -3354,10 +3372,10 @@ class InputMapsSelector(QW.QWidget):
     # Sample combobox (Auto Update Combo Box)
         self.sample_combox = AutoUpdateComboBox()
 
-    # Input maps list (Tree widget)
-        self.inmaps_list = QW.QTreeWidget()
-        self.inmaps_list.setHeaderHidden(True)
-        self.inmaps_list.setStyleSheet(pref.SS_menu)
+    # Maps list (Tree widget)
+        self.maps_list = QW.QTreeWidget()
+        self.maps_list.setHeaderHidden(True)
+        self.maps_list.setStyleSheet(pref.SS_menu)
 
     # Set layout
         main_layout = QW.QVBoxLayout()
@@ -3365,7 +3383,7 @@ class InputMapsSelector(QW.QWidget):
         main_layout.addWidget(QW.QLabel('Select sample'))
         main_layout.addWidget(self.sample_combox)
         main_layout.addSpacing(10)
-        main_layout.addWidget(self.inmaps_list)
+        main_layout.addWidget(self.maps_list)
         self.setLayout(main_layout)
 
 
@@ -3380,7 +3398,7 @@ class InputMapsSelector(QW.QWidget):
             lambda idx: self.mapsUpdateRequested.emit(idx))
         
     # Send tree widget signals as custom signals
-        self.inmaps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
+        self.maps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
 
 
     def updateCombox(self, samples: list):
@@ -3399,61 +3417,65 @@ class InputMapsSelector(QW.QWidget):
         self.sample_combox.updateItems(samples_names)
 
     
-    def updateList(self, inmaps_subgr: DataSubGroup):
+    def updateList(self, sample: DataGroup):
         '''
-        Updates the list of currently loaded input maps owned by the sample 
-        currently selected in the samples combobox. This function is called by
-        the main window when a new item is selected in the sample combobox.
+        Updates the list of currently loaded maps owned by the sample currently
+        selected in the samples combobox. This function is called by the main 
+        window when a new item is selected in the sample combobox.
 
         Parameters
         ----------
-        inmaps_subgr : DataSubGroup
-            The input maps subgroup of the currently selected sample.
+        sample : DataGroup
+            The currently selected sample as a DataGroup.
 
         '''
     # Clear the input maps lists
-        self.inmaps_list.clear()
+        self.maps_list.clear()
 
     # Exit function if the subgroup is empty
-        if inmaps_subgr.isEmpty():
+        subgr = sample.inmaps if self.maps_type == 'inmaps' else sample.minmaps
+        if subgr.isEmpty():
             return
 
     # Get every input map object and re-assemble them into the inmaps list
-        for i in inmaps_subgr.getChildren():
-            item = DataObject(i.get('data'))
-            item.setCheckState(0, QC.Qt.Checked)
-            self.inmaps_list.addTopLevelItem(item)
+        for c in subgr.getChildren():
+            item = DataObject(c.get('data'))
+            if self.checkable:
+                item.setCheckState(0, QC.Qt.Checked)
+            self.maps_list.addTopLevelItem(item)
 
-    # Send a signal to inform that input maps data changed
-        self.inputDataChanged.emit()
+    # Send a signal to inform that maps data changed
+        self.mapsDataChanged.emit()
 
 
     def getChecked(self):
         '''
-        Get the currently checked input maps data objects.
+        Get the currently checked maps data objects.
 
         Returns
         -------
         checked : list
-            List of checked input maps data objects.
+            List of checked maps data objects.
 
         '''
-        n_maps = self.inmaps_list.topLevelItemCount()
-        items = [self.inmaps_list.topLevelItem(i) for i in range(n_maps)]
-        checked = [i for i in items if i.checkState(0)]
-        return checked
+        if self.checkable:
+            n_maps = self.maps_list.topLevelItemCount()
+            items = [self.maps_list.topLevelItem(i) for i in range(n_maps)]
+            checked = [i for i in items if i.checkState(0)]
+            return checked
     
 
     def itemCount(self):
         '''
-        Return the amount of input maps loaded in the maps list.
+        Return the amount of maps loaded in the maps list.
 
         Returns
         -------
         int
-            Number of input maps.
+            Number of maps.
+
         '''
-        return self.inmaps_list.topLevelItemCount()
+        return self.maps_list.topLevelItemCount()
     
 
     def currentItem(self):
@@ -3463,9 +3485,10 @@ class InputMapsSelector(QW.QWidget):
         Returns
         -------
         DataObject
-            Currently selected input map object.
+            Currently selected map object.
+
         '''
-        return self.inmaps_list.currentItem()
+        return self.maps_list.currentItem()
     
 
     def clear(self):
@@ -3474,7 +3497,7 @@ class InputMapsSelector(QW.QWidget):
 
         '''
         self.sample_combox.clear()
-        self.inmaps_list.clear()
+        self.maps_list.clear()
 
 
 

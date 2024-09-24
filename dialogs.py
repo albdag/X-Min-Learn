@@ -66,7 +66,7 @@ class AutoRoiDetector(QW.QDialog):
 
         '''
     # Input maps selector
-        self.maps_selector = cObj.InputMapsSelector()
+        self.maps_selector = cObj.SampleMapsSelector('inmaps')
 
     # Number of ROIs selector (SpinBox)
         self.nroi_spbox = cObj.StyledSpinBox(min_value=1, max_value=100)
@@ -156,9 +156,9 @@ class AutoRoiDetector(QW.QDialog):
         self.roi_detect_thread.workFinished.connect(self._parse_roi_detection)
 
     # Enable search btn and update parameters when input maps list is populated
-        self.maps_selector.inputDataChanged.connect(
+        self.maps_selector.mapsDataChanged.connect(
             lambda: self.search_btn.setEnabled(True))
-        self.maps_selector.inputDataChanged.connect(self.update_params_range)
+        self.maps_selector.mapsDataChanged.connect(self.update_params_range)
 
     # Fix even size values
         self.size_spbox.valueChanged.connect(self.fix_even_size)
@@ -218,7 +218,7 @@ class AutoRoiDetector(QW.QDialog):
         '''
     # Get the shape of the first map in the list. If maps have different shapes
     # the dialog will later abort the computation anyway.
-        shp = self.maps_selector.inmaps_list.topLevelItem(0).get('data').shape
+        shp = self.maps_selector.maps_list.topLevelItem(0).get('data').shape
 
     # Set the maximum selectable ROI distance and ROI size based on shape
         max_dist = min(shp) // 10

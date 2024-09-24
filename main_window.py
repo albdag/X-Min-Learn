@@ -304,7 +304,7 @@ class MainWindow(QW.QMainWindow):
         
         self.roiEditor.autoroi_dial.maps_selector.mapsUpdateRequested.connect(
             lambda idx: self.roiEditor.autoroi_dial.maps_selector.updateList(
-                self.dataManager.topLevelItem(idx).inmaps))
+                self.dataManager.topLevelItem(idx)))
         
     # Quit app 
         self.close_action.triggered.connect(self.close)
@@ -416,7 +416,7 @@ class MainWindow(QW.QMainWindow):
                     self.dataManager.getAllGroups()))
             tool.inmaps_selector.mapsUpdateRequested.connect(
                 lambda idx: tool.inmaps_selector.updateList(
-                    self.dataManager.topLevelItem(idx).inmaps))
+                    self.dataManager.topLevelItem(idx)))
             
         else:
             tool = None
