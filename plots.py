@@ -548,7 +548,7 @@ class ImageCanvas(_CanvasBase):
         return isinstance(self.cmap, mpl.colors.LinearSegmentedColormap)
 
 
-    def scale_clim(self, toggled: bool, arrays: list[np.ndarray]=[]):
+    def scale_clim(self, toggled: bool, arrays: list[np.ndarray]|None=None):
         '''
         Toggle scaled norm limits.
 
@@ -556,9 +556,9 @@ class ImageCanvas(_CanvasBase):
         ----------
         toggled : bool
             Enable/disable scaled norm limits.
-        arrays : list of numpy arrays, optional
+        arrays : list of numpy arrays or None, optional
             List of arrays from which to extract the scaled norm limits. It
-            must be a non-empty list if <toggled> is True. The default is [].
+            must be a non-empty list if <toggled> is True. The default is None.
 
         Raises
         ------
@@ -568,7 +568,7 @@ class ImageCanvas(_CanvasBase):
         '''
     # Enable scaled norm limits
         if toggled:
-            if not len(arrays):
+            if not arrays:
                 err = '<arrays> must be a non-empty list if <toggled> is True'
                 raise ValueError(err)
             glb_min = min([arr.min() for arr in arrays])
@@ -1845,7 +1845,8 @@ class CurveCanvas(_CanvasBase):
     #     self.draw_idle()
 
 
-    def update_canvas(self, curves: list[tuple], labels: list[str], colors=[]):
+    def update_canvas(self, curves: list[tuple], labels: list[str], 
+                      colors: list|None=None):
         '''
         Update existent curves in the plot. If curve is not existent, add it as
         a new curve. Curve existence is determined via its label.
@@ -1856,10 +1857,10 @@ class CurveCanvas(_CanvasBase):
             List of (x, y) cooords for each curve.
         labels : list[str]
             A sequence of unique strings providing the label for each curve.
-        colors : list, optional
-            List of valid matplotlib colors for each curve. If left empty,  
+        colors : list or None, optional
+            List of valid matplotlib colors for each curve. If None or empty,
             default colors will be selected based on current matplotlib style. 
-            The default is [].
+            The default is None.
 
         Raises
         ------
@@ -1876,7 +1877,7 @@ class CurveCanvas(_CanvasBase):
         if len(set(labels)) < len(labels):
             raise ValueError('Labels must be unique names.')
         
-    # Set colors to a list of None if left empty
+    # Set colors to a list of None if not specified
         if not colors:
             colors = [None] * len(curves)
 

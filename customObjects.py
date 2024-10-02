@@ -2312,7 +2312,8 @@ class SplitterLayout(QW.QBoxLayout):
         self.insertLayout(layout, -1, stretch)
 
 
-    def addLayouts(self, layouts: list[QW.QLayout], stretches: list[int]=[]):
+    def addLayouts(self, layouts: list[QW.QLayout], 
+                   stretches: list[int]|None=None):
         '''
         Add multiple layouts after all the other items. 
 
@@ -2320,10 +2321,10 @@ class SplitterLayout(QW.QBoxLayout):
         ----------
         layouts : list[QLayout]
             List of layouts to be added.
-        stretches : list[int], optional
+        stretches : list[int] or None, optional
             List of stretches for each layout. Must have the same size of 
-            layouts. If empty, stretches are automatically set to 0 for each 
-            layout. The default is [].
+            layouts. If None, stretches are automatically set to 0 for each 
+            layout. The default is None.
 
         Raises
         ------
@@ -2331,7 +2332,7 @@ class SplitterLayout(QW.QBoxLayout):
             Layouts and stretches must have the same size.
 
         '''
-        if not len(stretches):
+        if stretches is None:
             stretches = [0] * len(layouts)
         else:
             assert len(layouts) == len(stretches)
@@ -2374,7 +2375,8 @@ class SplitterLayout(QW.QBoxLayout):
         self.insertWidget(widget, -1, stretch)
 
 
-    def addWidgets(self, widgets: list[QW.QWidget], stretches: list[int]=[]):
+    def addWidgets(self, widgets: list[QW.QWidget], 
+                   stretches: list[int]|None=None):
         '''
         Add multiple widgets after all the other items. 
 
@@ -2382,10 +2384,10 @@ class SplitterLayout(QW.QBoxLayout):
         ----------
         widgets : list[QWidget]
             List of widgets to be added.
-        stretches : list[int], optional
+        stretches : list[int] or None, optional
             List of stretches for each widget. Must have the same size of 
-            widgets. If empty, stretches are automatically set to 0 for each 
-            widget. The default is [].
+            widgets. If None, stretches are automatically set to 0 for each 
+            widget. The default is None.
 
         Raises
         ------
@@ -2393,7 +2395,7 @@ class SplitterLayout(QW.QBoxLayout):
             Widgets and stretches must have the same size.
 
         '''
-        if not len(stretches):
+        if stretches is None:
             stretches = [0] * len(widgets)
         else:
             assert len(widgets) == len(stretches)
@@ -2407,18 +2409,19 @@ class SplitterGroup(QW.QSplitter):
     '''
     Convenient class to quickly group multiple widgets in a QSplitter.
     '''
-    def __init__(self, qobjects: list[QC.QObject]=[], stretches: list[int]=[], 
-                 orient=QC.Qt.Horizontal):
+    def __init__(self, qobjects: list[QC.QObject]|None=None, 
+                 stretches: list[int]|None=None, orient=QC.Qt.Horizontal):
         '''
         Constructor
 
         Parameters
         ----------
-        qobjects : list[QObject], optional
-            List of layouts or widgets. The default is [].
-        stretches : list[int], optional
+        qobjects : list[QObject] or None, optional
+            List of layouts or widgets. If None the list will be empty. The 
+            default is None.
+        stretches : list[int] or None, optional
             List of stretches for each object. Must have the same size of  
-            qobjects. If empty, stretches are not set. The default is [].
+            qobjects. If None, stretches are not set. The default is None.
         orient : Qt.Orientation, optional
             Orientation of the splitter. The default is Qt.Horizontal.
 
@@ -2435,6 +2438,8 @@ class SplitterGroup(QW.QSplitter):
 
     # Add each object to the splitter. If the object is a layout, wrap it first
     # in a QWidget
+        if qobjects is None:
+            qobjects = []
         for obj in qobjects:
             if not obj.isWidgetType():
                 w_obj = QW.QWidget()
@@ -2444,7 +2449,7 @@ class SplitterGroup(QW.QSplitter):
                 self.addWidget(obj)
 
     # Add stretches to each object
-        if len(stretches):
+        if stretches is not None:
             assert len(stretches) == len(qobjects)
             for i, s in enumerate(stretches):
                 self.setStretchFactor(i, s)

@@ -133,14 +133,14 @@ class GroundTruthDataset():
         return self.features, self.targets
     
 
-    def update_encoder(self, parent_encoder={}):
+    def update_encoder(self, parent_encoder: dict|None=None):
         '''
         Refresh the encoder. Can inherit from a parent encoder.
 
         Parameters
         ----------
-        parent_encoder : dict, optional
-            Existent encoder. The default is {}.
+        parent_encoder : dict or None, optional
+            Existent encoder. The default is None.
 
         Raises
         ------
@@ -151,7 +151,7 @@ class GroundTruthDataset():
         if self.targets is None:
             raise ValueError('Features and targets are not split yet.')
         
-        self.encoder = parent_encoder
+        self.encoder = parent_encoder if parent_encoder is not None else {}
         for u in np.unique(self.targets):
             if not u in self.encoder.keys():
                 self.encoder[u] = len(self.encoder)
