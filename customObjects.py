@@ -1507,7 +1507,7 @@ class StyledRadioButton(QW.QRadioButton):
     '''
     QSS-styled reimplementation of a QRadioButton.
     '''
-    def __init__(self, text='', parent=None):
+    def __init__(self, text='', icon: QG.QIcon|None=None, parent=None):
         '''
         Constructor
 
@@ -1515,11 +1515,15 @@ class StyledRadioButton(QW.QRadioButton):
         ----------
         text : str
             The text of the radio button. The default is ''.
-        parent : QObject | None, optional
+        icon : QIcon or None, optional
+            The icon of the radio button. The default is None.
+        parent : QObject or None, optional
             The GUI parent of this object. The default is None.
 
         '''
         super(StyledRadioButton, self).__init__(text, parent)
+        if icon is not None:
+            self.setIcon(icon)
         self.setStyleSheet(pref.SS_radioButton)
 
 
@@ -1843,27 +1847,32 @@ class RadioBtnLayout(QW.QBoxLayout):
     '''
     selectionChanged = QC.pyqtSignal(int) # id of button
 
-    def __init__(self, btn_names:list, default=0, orient='vertical',
-                 parent=None):
+    def __init__(self, names: list[str], icons: list[QG.QIcon]|None=None, 
+                 default=0, orient='vertical', parent=None):
         '''
         Constructor.
 
         Parameters
         ----------
-        btn_names : list
+        names : list
             List of radio button names.
+        icons : list or None, optional
+            List of button icons. Must be the same length of names. The default
+            is None.
         default : int, optional
             The radio button selected by default. The default is 0.
         orient : str, optional
             Orientation of the layout. Can be 'horizontal' or 'vertical'. The
             default is 'vertical'.
-        parent : QObject | None, optional
+        parent : QObject or None, optional
             The GUI parent of this object. The default is None.
 
         Raises
         ------
         NameError
             Orientation string must be one of ['horizontal', 'vertical'].
+        ValueError
+            If provided, icons list must have the same length of names list.
 
         '''
     # Set the current selected button id
@@ -1877,6 +1886,10 @@ class RadioBtnLayout(QW.QBoxLayout):
         else:
             raise NameError(f'{orient} is not a valid orientation.')
         
+    # Check for same length of names and icons (if provided) lists
+        if icons is not None and len(names) != len(icons):
+            raise ValueError('Icons and names list have different lengths.')
+        
     # Set a QButtonGroup working behind the scene
         super(RadioBtnLayout, self).__init__(direction, parent)
         self.btn_group = QW.QButtonGroup()
@@ -1884,8 +1897,9 @@ class RadioBtnLayout(QW.QBoxLayout):
     # Populate the layout with styled radio buttons. Connect each radio button
     # clicked signal with a custom method that sends a new signal only when the 
     # selection has changed
-        for i, n in enumerate(btn_names):
-            btn = StyledRadioButton(n)
+        for i, n in enumerate(names):
+            icon = None if icons is None else icons[i]
+            btn = StyledRadioButton(n, icon)
             self.btn_group.addButton(btn, id=i)
             if i == default: 
                 btn.setChecked(True)
