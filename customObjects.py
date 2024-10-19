@@ -1128,7 +1128,7 @@ class RectSel(mpl.widgets.RectangleSelector):
 
         '''
     # Customize the appearence of the rectangle selector and of its handles
-        rect_props = dict(fc=pref.BLACK_PEARL, ec=pref.BLOSSOM, alpha=0.8, 
+        rect_props = dict(fc=pref.BLACK_PEARL, ec=pref.BLOSSOM, alpha=0.6, 
                           lw=2, fill=True)
         handle_props = dict(mfc=pref.BLOSSOM, mec=pref.BLACK_PEARL, alpha=1)
 
