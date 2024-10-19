@@ -1304,7 +1304,7 @@ class MineralClassifier(DraggableTool):
         self.del_minmap_btn.setToolTip('Remove mineral map')
 
     # Mineral maps legend (Legend)
-        self.legend = cObj.Legend(interactive=False)
+        self.legend = cObj.Legend()
         self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
 
     # Mineral maps bar canvas (BarCanvas)

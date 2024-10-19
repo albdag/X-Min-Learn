@@ -462,9 +462,12 @@ class DataObject(QW.QTreeWidgetItem):
 
 class Legend(QW.QTreeWidget):
     '''
-    A legend object that allows data editing if set as interactive. It sends
-    various signals to notify each edit, which must be catched and handled by
-    other widget(s).
+    An interactive legend object for displaying and editing the names and the 
+    palette colors of mineral phases within a mineral map. Optionally, the 
+    mineral modal amounts are displayed as well. It can include a right-click 
+    context menu action for advanced interactions. This object sends various 
+    signals to notify each edit request, which must be catched and handled by 
+    other widgets to be effective.
     '''
     instances = []
     colorChangeRequested = QC.pyqtSignal(QW.QTreeWidgetItem, tuple) # item, col
@@ -475,7 +478,7 @@ class Legend(QW.QTreeWidget):
     maskExtractionRequested = QC.pyqtSignal(list) # list of classes
 
 
-    def __init__(self, amounts=True, interactive=False, parent=None):
+    def __init__(self, amounts=True, context_menu=False, parent=None):
         '''
         Constructor.
 
@@ -484,9 +487,9 @@ class Legend(QW.QTreeWidget):
         amounts : bool, optional
             Include classes amounts (percentage) in the legend. The default is
             True.
-        interactive : bool, optional
-            Whether the legend should allow editing of its items. The default
-            is False.
+        context_menu : bool, optional
+            Whether a context menu should popup when right-clicking on a legend
+            item. The default is False.
         parent : QWidget or None, optional
             GUI parent widget of the legend. The default is None.
 
@@ -500,7 +503,7 @@ class Legend(QW.QTreeWidget):
     # Define main attributes
         self._highlighted_item = None
         self.amounts = amounts
-        self.interactive = interactive
+        self.has_context_menu = context_menu
         self.precision = pref.get_setting('plots/legendDec', 3, type=int)
         
     # Customize the legend appearence and properties (headers & selection mode)
@@ -532,11 +535,11 @@ class Legend(QW.QTreeWidget):
 
         '''
         self.itemDoubleClicked.connect(self.onDoubleClick)
-        if self.interactive:
+        if self.has_context_menu:
             self.customContextMenuRequested.connect(self.showContextMenu)
 
 
-    def showContextMenu(self, point):
+    def showContextMenu(self, point: QC.QPoint):
         '''
         Shows a context menu with custom actions.
 
@@ -603,7 +606,7 @@ class Legend(QW.QTreeWidget):
         menu.exec(QG.QCursor.pos())
 
 
-    def onDoubleClick(self, item:QW.QTreeWidgetItem, column:int):
+    def onDoubleClick(self, item: QW.QTreeWidgetItem, column: int):
         '''
         Wrapper function that triggers different actions depending on which 
         column was double-clicked.
@@ -623,7 +626,7 @@ class Legend(QW.QTreeWidget):
         else:
             self.requestItemHighlight(item != self._highlighted_item, item)
 
-    def copyColorHexToClipboard(self, item):
+    def copyColorHexToClipboard(self, item: QW.QTreeWidgetItem):
         '''
         Copy the selected phase color to the clipboard as a HEX string.
 
@@ -641,7 +644,7 @@ class Legend(QW.QTreeWidget):
         clipboard.setText(hex_color)
 
 
-    def requestColorChange(self, item):
+    def requestColorChange(self, item: QW.QTreeWidgetItem):
         '''
         Request to change the color of a class by sending a signal. The signal
         must be catched and handled by the widget that contains the legend.
@@ -662,7 +665,7 @@ class Legend(QW.QTreeWidget):
             self.colorChangeRequested.emit(item, rgb)
 
 
-    def requestRandomColorChange(self, item):
+    def requestRandomColorChange(self, item: QW.QTreeWidgetItem):
         '''
         Request to randomize the color of a class by sending a signal. The
         signal must be catched and handled by the widget that contains the
@@ -677,7 +680,7 @@ class Legend(QW.QTreeWidget):
         self.colorChangeRequested.emit(item, ())
 
 
-    def changeItemColor(self, item, color):
+    def changeItemColor(self, item: QW.QTreeWidgetItem, color: tuple[int]):
         '''
         Change the color of the item in the legend.
 
@@ -695,7 +698,7 @@ class Legend(QW.QTreeWidget):
         item.setWhatsThis(0, str(color))
 
 
-    def requestClassRename(self, item):
+    def requestClassRename(self, item: QW.QTreeWidgetItem):
         '''
         Request to change the name of a class by sending a signal. The signal
         must be catched and handled by the widget that contains the legend.
@@ -719,7 +722,7 @@ class Legend(QW.QTreeWidget):
             return QW.QMessageBox.critical(self, 'X-Min Learn', 'Invalid name.')
 
 
-    def rename_class(self, item, name):
+    def renameClass(self, item: QW.QTreeWidgetItem, name: str):
         '''
         Change the name of the item in the legend.
 
@@ -754,7 +757,7 @@ class Legend(QW.QTreeWidget):
                                                'Invalid name.')
 
 
-    def requestItemHighlight(self, toggled:bool, item:QW.QTreeWidgetItem):
+    def requestItemHighlight(self, toggled: bool, item: QW.QTreeWidgetItem):
         '''
         Request to highlight the selected mineral class. Highlight means to
         show ONLY the selected class in map.
@@ -783,7 +786,7 @@ class Legend(QW.QTreeWidget):
         self.maskExtractionRequested.emit(classes)
 
 
-    def set_precision(self, value):
+    def setPrecision(self, value: int):
         '''
         Set the number of decimals of the class amounts.
 
@@ -797,7 +800,54 @@ class Legend(QW.QTreeWidget):
         # self.update()
 
 
-    def update(self, mineral_map):
+    def addClass(self, name: str, color: tuple[int], amount: float):
+        '''
+        Add a new mineral class to the legend.
+
+        Parameters
+        ----------
+        name : str
+            Class name.
+        color : tuple[int]
+            Class color as RGB triplet. 
+        amount : float
+            Class modal amount. This value is ignored if legend amounts are not
+            enabled.
+
+        '''
+        item = QW.QTreeWidgetItem(self)
+        item.setIcon(0, RGBIcon(color))    # icon [column 0]
+        item.setWhatsThis(0, str(color))   # RGB string ['virtual' column 0]
+        item.setText(1, name)              # class name [column 1]
+        if self.amounts:                   # amounts (optional) [column 2]
+            amount = round(amount, self.precision)
+            item.setText(2, f'{amount}%')
+
+
+    def hasClass(self, name: str):
+        '''
+        Check if the given class is already displayed in the legend. The search
+        is done through the class name.
+
+        Parameters
+        ----------
+        name : str
+            Class name to check.
+
+        Returns
+        -------
+        bool
+            Whether the legend already contains a class with the given name.
+
+        '''
+        for idx in range(self.topLevelItemCount()):
+            item = self.topLevelItem(idx)
+            if item.text(1) == name:
+                return True
+        return False
+
+
+    def update(self, mineral_map: MineralMap):
         '''
         Updates the legend.
 
@@ -814,17 +864,10 @@ class Legend(QW.QTreeWidget):
         self._highlighted_item = None
 
     # Populate the legend with mineral classes
-        phases = mineral_map.get_phases()
-        for p in phases:
-            color = mineral_map.get_phase_color(p)
-
-            i = QW.QTreeWidgetItem(self)
-            i.setIcon(0, RGBIcon(color))    # icon [column 0]
-            i.setWhatsThis(0, str(color))   # RGB string ['virtual' column 0]
-            i.setText(1, p)                 # phase name [column 1]
-            if self.amounts:                # amounts (optional) [column 2]
-                amount = round(mineral_map.get_phase_amount(p), self.precision)
-                i.setText(2, f'{amount}%')
+        for phase in mineral_map.get_phases():
+            color = mineral_map.get_phase_color(phase)
+            amount = mineral_map.get_phase_amount(phase)
+            self.addClass(phase, color, amount)
 
     # Resize columns
         self.header().resizeSections(QW.QHeaderView.ResizeToContents)

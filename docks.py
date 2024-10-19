@@ -1329,7 +1329,7 @@ class ModeViewer(cObj.StyledTabWidget):
         
         '''
     # Interactive legend
-        self.legend = cObj.Legend(interactive=True)
+        self.legend = cObj.Legend(context_menu=True)
 
     # Canvas
         self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
