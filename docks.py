@@ -1511,7 +1511,7 @@ class ModeViewer(cObj.StyledTabWidget):
         self._current_data_object.setEdited(True)
 
 
-    def onClassRenamed(self, legend_item:QW.QTreeWidgetItem, new_name:str):
+    def onClassRenamed(self, legend_item: QW.QTreeWidgetItem, new_name: str):
         '''
         Rename a class. This function propagates the changes to the mineral
         map, the map canvas, the mode bar plot and the legend. It also sets the
@@ -1530,26 +1530,17 @@ class ModeViewer(cObj.StyledTabWidget):
     # Get mineral map data
         minmap = self._current_data_object.get('data')
 
-    # Rename the phase in the mineral map. Exit func if name is already taken)
+    # Exit function if name is already taken
         old_name = legend_item.text(1)
-        if new_name not in minmap.get_phases():
-            minmap.rename_phase(old_name, new_name)
-        else:
+        if minmap.has_phase(new_name):
             return QW.QMessageBox.critical(self, 'X-Min Learn',
                                            f'{new_name} is already taken')
-
+    
+    # Rename the phase in the mineral map
+        minmap.rename_phase(old_name, new_name)
+            
     # Request update scene
         self.updateSceneRequested.emit(self._current_data_object)
-
-    # # Update the image canvas
-    #     mmap, enc, col = minmap.get_plot_data()
-    #     self.map_canvas.draw_discretemap(mmap, enc, col)
-
-    # # Update the mode canvas
-    #     self._update_mode_canvas(minmap)
-
-    # # Update the legend
-    #     self.legend.rename_class(legend_item, new_name)
 
     # Set the current data object as edited
         self._current_data_object.setEdited(True)

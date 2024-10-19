@@ -1942,7 +1942,7 @@ class MineralClassifier(DraggableTool):
         minmap_thr.edit_minmap(minmap_thr._with_nodata(thresh))
 
     # Set special color to ND data (bugfix for constantly changing _ND_ color)
-        if '_ND_' in minmap_thr.get_phases():
+        if minmap_thr.has_phase('_ND_'):
             minmap_thr.set_phase_color('_ND_', self._nodata_color)
 
         return minmap_thr
@@ -2010,7 +2010,7 @@ class MineralClassifier(DraggableTool):
     # Deny renaming if name is already taken
         item = self.minmaps_list.currentItem()
         minmap = item.get('data') 
-        if new_name in minmap.get_phases():
+        if minmap.has_phase(new_name):
             return QW.QMessageBox.critical(self, 'X-Min Learn',
                                            f'{new_name} is already taken')
 
