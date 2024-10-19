@@ -1805,15 +1805,15 @@ class StyledToolbar(QW.QToolBar):
 
 
 
-class AutoUpdateComboBox(QW.QComboBox):
+class AutoUpdateComboBox(StyledComboBox):
     '''
-    A reimplementation of a QComboBox that introduces a new QtSignal which is 
-    sent when the combo box button is clicked. This signal can be connected to
-    a custom method that allows to update the list of items in the combo box.
+    A reimplementation of a Styled ComboBox with a new QtSignal which triggers 
+    when the combo box button is clicked. This signal can be connected to a
+    custom method that allows to update the list of items in the combo box.
     '''
     clicked = QC.pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, **kwargs):
         '''
         Constructor.
 
@@ -1821,10 +1821,11 @@ class AutoUpdateComboBox(QW.QComboBox):
         ----------
         parent : QObject | None, optional
             The GUI parent of this object. The default is None.
+        **kwargs
+            Parent class arguments (see StyledComboBox class).
 
         '''
-        super(AutoUpdateComboBox, self).__init__(parent)
-        self.setStyleSheet(pref.SS_combox)
+        super(AutoUpdateComboBox, self).__init__(parent=parent, **kwargs)
 
     def showPopup(self):
         '''
@@ -1835,7 +1836,7 @@ class AutoUpdateComboBox(QW.QComboBox):
         self.clicked.emit()
         super(AutoUpdateComboBox, self).showPopup()
 
-    def updateItems(self, items:list):
+    def updateItems(self, items: list):
         '''
         Populate the combo box with new items and delete the previous ones.
 
