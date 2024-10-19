@@ -190,8 +190,7 @@ class DataManager(QW.QTreeWidget):
 
         # Clear all
             clear_all = QW.QAction(QIcon(r'Icons/remove.png'), 'Delete all')
-            clear_all.triggered.connect(self.clear)
-            clear_all.triggered.connect(self.clearView)
+            clear_all.triggered.connect(self.clearAll)
 
             menu.addAction(new_group)
             menu.addSeparator()
@@ -910,8 +909,17 @@ class DataManager(QW.QTreeWidget):
     def refreshView(self):
         self.viewData(self.currentItem())
 
+
     def clearView(self):
         self.clearSceneRequested.emit()
+
+
+    def clearAll(self):
+        choice = QW.QMessageBox.question(self, 'X-Min Learn', 
+                                         'Remove all samples?')
+        if choice == QW.QMessageBox.Yes:
+            self.clear()
+            self.clearView()
 
 
 
