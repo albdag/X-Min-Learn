@@ -2000,8 +2000,10 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
         # Check that canvas has implemented the function reset_view
         reset_view = getattr(self.canvas, "reset_view", None)
         if callable(reset_view):
-            home = self.findChildren(QAction)[2]
-            home.triggered.connect(reset_view)
+            for a in self.actions():
+                if a.text() == 'Home':
+                    a.triggered.connect(reset_view)
+                    return
 
 
     def insertAction(self, before_idx: int, action: QAction):
