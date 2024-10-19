@@ -65,6 +65,19 @@ class InputMap():
 
     # Any other file extension is discarded.
         raise TypeError('This file is not supported.')
+    
+
+    def copy(self):
+        '''
+        Return a copy of this input map.
+
+        Returns
+        -------
+        InputMap
+            A copy of this input map.
+
+        '''
+        return InputMap(self.map.copy())
 
 
     def get_masked(self, mask: np.ndarray):
