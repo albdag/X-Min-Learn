@@ -180,6 +180,29 @@ class MineralMap():
             self.set_palette(self.rand_colorlist())
 
 
+    def __eq__(self, value: object):
+        '''
+        Reimplementation of equality method.
+
+        Parameters
+        ----------
+        value : object
+            The object to be compared with this mineral map.
+
+        Returns
+        -------
+        bool
+            Whether the two objects contain the same mineral map data.
+
+        '''
+        if isinstance(value, MineralMap):
+            return (np.array_equal(value.minmap, self.minmap) and 
+                    np.array_equal(value.probmap, self.probmap) and
+                    value.palette == self.palette)
+        else:
+            return False
+        
+  
     @classmethod
     def load(cls, filepath: str):
         '''
@@ -231,6 +254,20 @@ class MineralMap():
 
     # Instantiate a new Mineral Map object
         return cls(minmap, probmap, palette, filepath)
+    
+
+    def copy(self):
+        '''
+        Return a copy of this mineral map.
+
+        Returns
+        -------
+        MineralMap
+            A copy of this mineral map.
+
+        '''
+        return MineralMap(self.minmap.copy(), self.probmap.copy(), 
+                          self.palette.copy())
 
 
     def _compile_encoder(self, unique: np.ndarray|list):
@@ -328,14 +365,19 @@ class MineralMap():
         int
             Corresponding phase ID.
 
-        '''
-        IDs = self.get_phases_ids()
-        try:
-            idx = next(filter(lambda k: self.encoder[k]==phase, IDs))
-            return IDs[idx]
-        except StopIteration:
-            raise ValueError(f'{phase} is not an occuring phase.')
+        Raises
+        ------
+        ValueError
+            'phase' is not a valid phase.
 
+        '''
+        if not self.has_phase(phase):
+            raise ValueError(f'{phase} is not an occuring phase.')
+        
+        ids = self.get_phases_ids()
+        idx = next(filter(lambda id_: self.encoder[id_] == phase, ids))
+        return ids[idx]
+            
 
     def as_phase(self, id_: int):
         '''
@@ -350,10 +392,16 @@ class MineralMap():
         -------
         str
             Corresponding phase name.
+        
+        Raises
+        ------
+        ValueError
+            'id_'is not a valid ID.
 
         '''
-        if id_ > len(self.encoder) - 1:
+        if not self.has_id(id_):
             raise ValueError(f'{id_} is not a valid ID.')
+        
         return self.encoder[id_]
     
 
@@ -429,7 +477,8 @@ class MineralMap():
         return dict(zip(labels, colors))
 
 
-    def edit_minmap(self, new_minmap: np.ndarray, alter_probmap=False):
+    def edit_minmap(self, new_minmap: np.ndarray, alter_probmap=False,
+                    prob_score: float=np.nan):
         '''
         Apply user's edits to the mineral map. The probability map, the
         encoded mineral map and the palette get automatically updated
@@ -439,18 +488,23 @@ class MineralMap():
         ----------
         new_minmap : NumPy ndarray
             The new edited mineral map.
-
         alter_probmap : bool, optional
-            If True, the probability score of edited pixels will be set to 1.
-            The default is False.
+            If True, the probability score of edited pixels will be set to 
+            'prob_score'. The default is False.
+        prob_score: float, optional
+            Probability score to be assigned to edited pixels. Ignored if 
+            'alter_probmap' is set to False. The default is np.nan.
 
         '''
-    # Set probability score of edited pixels to 1, if requested 
+    # Ensure new minmap has the correct data type
+        new_minmap = new_minmap.astype(self._DTYPE_STR)
+
+    # Alter probability score of edited pixels, if requested 
         if alter_probmap:
-            self.probmap[self.minmap != new_minmap] = 1
+            self.probmap[self.minmap != new_minmap] = prob_score
 
     # Get the original map phases, BEFORE the editing operation
-        old_phases = self.get_phases()
+        phases_old = self.get_phases()
 
     # Apply edits to the mineral map and update the derived attributes
         self.minmap = new_minmap
@@ -458,8 +512,8 @@ class MineralMap():
 
     # Get the new map phases, AFTER the editing operation, and then update the
     # palette
-        new_phases = self.get_phases()
-        self.update_palette(old_phases, new_phases)
+        phases_new = self.get_phases()
+        self.update_palette(phases_old, phases_new)
 
 
     def get_phase_amount(self, phase: str):
@@ -581,6 +635,42 @@ class MineralMap():
         minmap_encoded_ma = np.ma.masked_where(mask, self.minmap_encoded)
         probmap_ma = np.ma.masked_where(mask, self.probmap)
         return (minmap_ma, minmap_encoded_ma, probmap_ma)
+    
+
+    def has_id(self, id_: int):
+        '''
+        Check if the given ID is present in the mineral map.
+
+        Parameters
+        ----------
+        id_ : int
+            ID to check.
+
+        Returns
+        -------
+        bool
+            Whether the mineral map contains the given ID.
+
+        '''
+        return id_ in self.get_phases_ids()
+    
+
+    def has_phase(self, phase: str):
+        '''
+        Check if the given phase is present in the mineral map.
+
+        Parameters
+        ----------
+        phase : str
+            Phase to check.
+
+        Returns
+        -------
+        bool
+            Whether the mineral map contains the given phase.
+
+        '''
+        return phase in self.get_phases()
 
 
     def is_obsolete(self):
@@ -684,7 +774,7 @@ class MineralMap():
                 _rgb = np.random.default_rng().integers(256, size=3)
             RGB_arr = np.r_[RGB_arr, _rgb.reshape(1,3)]
 
-        return RGB_arr.tolist()
+        return list(map(tuple, RGB_arr))
 
 
     def rename_phase(self, old: str, new: str):
