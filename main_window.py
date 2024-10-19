@@ -205,8 +205,7 @@ class MainWindow(QW.QMainWindow):
         self.refiner_action = QW.QAction(QG.QIcon(r'Icons/refine.png'),
                                          'Phase &Refiner', self)
         self.refiner_action.setShortcut('Ctrl+Alt+R')
-        self.refiner_action.setStatusTip('Use morphological image processing '\
-                                         'tools to refine mineral maps.')
+        self.refiner_action.setStatusTip('Refine mineral maps')
 
 
     def _init_toolbars(self):
@@ -416,6 +415,16 @@ class MainWindow(QW.QMainWindow):
                     self.dataManager.getAllGroups()))
             tool.inmaps_selector.mapsUpdateRequested.connect(
                 lambda idx: tool.inmaps_selector.updateList(
+                    self.dataManager.topLevelItem(idx)))
+            
+        elif toolname == 'PhaseRefiner':
+            tool = tools.PhaseRefiner()
+            # Connect this PhaseRefiner signals with appropriate slots
+            tool.minmap_selector.sampleUpdateRequested.connect(
+                lambda: tool.minmap_selector.updateCombox(
+                    self.dataManager.getAllGroups()))
+            tool.minmap_selector.mapsUpdateRequested.connect(
+                lambda idx: tool.minmap_selector.updateList(
                     self.dataManager.topLevelItem(idx)))
             
         else:

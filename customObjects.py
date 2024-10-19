@@ -17,7 +17,6 @@ from PyQt5 import QtCore as QC
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
-import scipy
 
 # Temporary imports, deprecated. Will be removed
 from matplotlib import patheffects as mpe
@@ -2833,141 +2832,141 @@ class CsvChunkReader():
         return dataframe
 
 
-class KernelSelector(QW.QWidget):
+# class KernelSelector(QW.QWidget): # deprecated. Now included within the Phase Refiner tool
 
-    structureChanged = QC.pyqtSignal()
+#     structureChanged = QC.pyqtSignal()
 
-    def __init__(self, rank=2, parent=None):
-        super(KernelSelector, self).__init__()
-        self.rank=rank
+#     def __init__(self, rank=2, parent=None):
+#         super(KernelSelector, self).__init__()
+#         self.rank=rank
 
-        # Shapes -> Square: 0, Circle: 1, Rhombus: 2
-        self.shape = 0
-        # self.sq_connect = True
-        self.iter = 1
+#         # Shapes -> Square: 0, Circle: 1, Rhombus: 2
+#         self.shape = 0
+#         # self.sq_connect = True
+#         self.iter = 1
 
-        self.structure = None
-        self.build_defaultStructure()
+#         self.structure = None
+#         self.build_defaultStructure()
 
-        self.init_ui()
+#         self.init_ui()
 
-    def init_ui(self):
-    # Kernel structure representation
-        self.grid = QW.QGridLayout()
-        self.build_grid()
-        grid_box = GroupArea(self.grid)
-        grid_box.setStyleSheet('''border: 2 solid black;
-                                  padding-top: 0px;''')
+#     def init_ui(self):
+#     # Kernel structure representation
+#         self.grid = QW.QGridLayout()
+#         self.build_grid()
+#         grid_box = GroupArea(self.grid)
+#         grid_box.setStyleSheet('''border: 2 solid black;
+#                                   padding-top: 0px;''')
 
-    # # Square connectivity checkbox
-    #     self.connect_cbox = QW.QCheckBox('Square Connectivity')
-    #     self.connect_cbox.setChecked(self.sq_connect)
-    #     self.connect_cbox.stateChanged.connect(self.set_connectivity)
+#     # # Square connectivity checkbox
+#     #     self.connect_cbox = QW.QCheckBox('Square Connectivity')
+#     #     self.connect_cbox.setChecked(self.sq_connect)
+#     #     self.connect_cbox.stateChanged.connect(self.set_connectivity)
 
-    # Default kernel shapes radio buttons group
-        self.kernelShapes_btns = RadioBtnLayout(('Square', 'Circle', 'Rhombus'),
-                                                orient='horizontal')
-        self.kernelShapes_btns.selectionChanged.connect(self.set_shape)
+#     # Default kernel shapes radio buttons group
+#         self.kernelShapes_btns = RadioBtnLayout(('Square', 'Circle', 'Rhombus'),
+#                                                 orient='horizontal')
+#         self.kernelShapes_btns.selectionChanged.connect(self.set_shape)
 
-    # Kernel size slider selector
-        self.kernelSize_slider = QW.QSlider(QC.Qt.Horizontal)
-        self.kernelSize_slider.setMinimum(1)
-        self.kernelSize_slider.setMaximum(5)
-        self.kernelSize_slider.setSingleStep(1)
-        self.kernelSize_slider.setSliderPosition(self.iter)
-        self.kernelSize_slider.valueChanged.connect(self.set_iterations)
-        kernelSize_form = QW.QFormLayout()
-        kernelSize_form.addRow('Kernel size', self.kernelSize_slider)
+#     # Kernel size slider selector
+#         self.kernelSize_slider = QW.QSlider(QC.Qt.Horizontal)
+#         self.kernelSize_slider.setMinimum(1)
+#         self.kernelSize_slider.setMaximum(5)
+#         self.kernelSize_slider.setSingleStep(1)
+#         self.kernelSize_slider.setSliderPosition(self.iter)
+#         self.kernelSize_slider.valueChanged.connect(self.set_iterations)
+#         kernelSize_form = QW.QFormLayout()
+#         kernelSize_form.addRow('Kernel size', self.kernelSize_slider)
 
-    # Adjust main layout
-        mainLayout = QW.QVBoxLayout()
-        mainLayout.addWidget(grid_box, alignment=QC.Qt.AlignCenter)
-        # mainLayout.addWidget(self.connect_cbox)
-        mainLayout.addLayout(self.kernelShapes_btns)
-        mainLayout.addLayout(kernelSize_form)
-        self.setLayout(mainLayout)
+#     # Adjust main layout
+#         mainLayout = QW.QVBoxLayout()
+#         mainLayout.addWidget(grid_box, alignment=QC.Qt.AlignCenter)
+#         # mainLayout.addWidget(self.connect_cbox)
+#         mainLayout.addLayout(self.kernelShapes_btns)
+#         mainLayout.addLayout(kernelSize_form)
+#         self.setLayout(mainLayout)
 
-    def get_structure(self):
-        return self.structure
+#     def get_structure(self):
+#         return self.structure
 
-    def updateKernel(self):
-        self.build_defaultStructure()
-        self.build_grid()
-        self.structureChanged.emit()
+#     def updateKernel(self):
+#         self.build_defaultStructure()
+#         self.build_grid()
+#         self.structureChanged.emit()
 
-    def build_defaultStructure(self):
-        # Connectivity (conn) allows to build only rhombic (1) or squared (2) structures
-        conn = 1 if self.shape == 2 else 2
-        struct = scipy.ndimage.generate_binary_structure(self.rank, conn)
-        struct = scipy.ndimage.iterate_structure(struct, self.iter)
-        # If a circle (self.shape=1) was required, transform the squared structure into circular
-        if self.shape == 1:
-            struct = self._drawCircleStructure(struct)
-        self.structure = struct
+#     def build_defaultStructure(self):
+#         # Connectivity (conn) allows to build only rhombic (1) or squared (2) structures
+#         conn = 1 if self.shape == 2 else 2
+#         struct = scipy.ndimage.generate_binary_structure(self.rank, conn)
+#         struct = scipy.ndimage.iterate_structure(struct, self.iter)
+#         # If a circle (self.shape=1) was required, transform the squared structure into circular
+#         if self.shape == 1:
+#             struct = self._drawCircleStructure(struct)
+#         self.structure = struct
 
-    def _drawCircleStructure(self, baseStructure):
-        # J is the number of rows/cols of base (square) structure
-        J = baseStructure.shape[0]
-        # Compute the Euclidean distance from center (x=J//2; y=J//2)
-        Y, X = np.ogrid[:J, :J]
-        dist = np.sqrt((X - J//2)**2 + (Y - J//2)**2)
-        # Return the circle mask
-        return dist <= J/2 # J/2 = radius (in float type)
+#     def _drawCircleStructure(self, baseStructure):
+#         # J is the number of rows/cols of base (square) structure
+#         J = baseStructure.shape[0]
+#         # Compute the Euclidean distance from center (x=J//2; y=J//2)
+#         Y, X = np.ogrid[:J, :J]
+#         dist = np.sqrt((X - J//2)**2 + (Y - J//2)**2)
+#         # Return the circle mask
+#         return dist <= J/2 # J/2 = radius (in float type)
 
-    def set_shape(self, idx):
-        self.shape = idx
-        self.updateKernel()
+#     def set_shape(self, idx):
+#         self.shape = idx
+#         self.updateKernel()
 
-    # def set_connectivity(self, isSquared):
-    #     self.sq_connect = isSquared
-    #     self.updateKernel()
+#     # def set_connectivity(self, isSquared):
+#     #     self.sq_connect = isSquared
+#     #     self.updateKernel()
 
-    def set_iterations(self, value):
-        self.iter = value
-        self.updateKernel()
+#     def set_iterations(self, value):
+#         self.iter = value
+#         self.updateKernel()
 
-    def _clear_grid(self, grid):
-        for i in reversed(range(grid.count())):
-            grid.itemAt(i).widget().setParent(None)
+#     def _clear_grid(self, grid):
+#         for i in reversed(range(grid.count())):
+#             grid.itemAt(i).widget().setParent(None)
 
-    def draw_node(self, active):
-        img = QG.QImage(8, 8, QG.QImage.Format_RGB32)
-        rgb = (255,0,0) if active else (0,0,0)
-        img.fill(QG.QColor(*rgb))
-        node = QG.QPixmap.fromImage(img)
-        return node
+#     def draw_node(self, active):
+#         img = QG.QImage(8, 8, QG.QImage.Format_RGB32)
+#         rgb = (255,0,0) if active else (0,0,0)
+#         img.fill(QG.QColor(*rgb))
+#         node = QG.QPixmap.fromImage(img)
+#         return node
 
-    def build_grid(self):
-        self._clear_grid(self.grid)
-        radius = self.structure.shape[0]
-        for row in range(radius):
-            for col in range(radius):
-                wid = QW.QLabel()
-                wid.setPixmap(self.draw_node(self.structure[row, col]))
-                self.grid.addWidget(wid, row, col)
+#     def build_grid(self):
+#         self._clear_grid(self.grid)
+#         radius = self.structure.shape[0]
+#         for row in range(radius):
+#             for col in range(radius):
+#                 wid = QW.QLabel()
+#                 wid.setPixmap(self.draw_node(self.structure[row, col]))
+#                 self.grid.addWidget(wid, row, col)
 
-    # def build_grid(self):
-    #     self._clear_grid(self.grid)
-    #     radius = self.structure.shape[0]
-    #     for row in range(radius):
-    #         for col in range(radius):
-    #             node = QW.QPushButton()
-    #             node.setMaximumSize(12,12)
-    #             node.setCheckable(True)
-    #             node.setStyleSheet('''QPushButton {background-color : black;}'''
-    #                                '''QPushButton::checked {background-color : red;}''')
-    #             node.setChecked(self.structure[row, col])
-    #             node.toggled.connect(lambda tgl, r=row, c=col: self.activate_node(tgl, r, c))
-    #             self.grid.addWidget(node, row, col)
+#     # def build_grid(self):
+#     #     self._clear_grid(self.grid)
+#     #     radius = self.structure.shape[0]
+#     #     for row in range(radius):
+#     #         for col in range(radius):
+#     #             node = QW.QPushButton()
+#     #             node.setMaximumSize(12,12)
+#     #             node.setCheckable(True)
+#     #             node.setStyleSheet('''QPushButton {background-color : black;}'''
+#     #                                '''QPushButton::checked {background-color : red;}''')
+#     #             node.setChecked(self.structure[row, col])
+#     #             node.toggled.connect(lambda tgl, r=row, c=col: self.activate_node(tgl, r, c))
+#     #             self.grid.addWidget(node, row, col)
 
-    # def activate_node(self, active, row, col):
-    #     # Avoid Erosion + recontruction freezing bug, by limiting the number of active nodes to 5
-    #     if np.count_nonzero(self.structure) <= 5 and not active:
-    #         self.sender().setChecked(True)
-    #         return
-    #     self.structure[row, col] = active
-    #     self.structureChanged.emit()
-    #     print('FUNCTION Finished')
+#     # def activate_node(self, active, row, col):
+#     #     # Avoid Erosion + recontruction freezing bug, by limiting the number of active nodes to 5
+#     #     if np.count_nonzero(self.structure) <= 5 and not active:
+#     #         self.sender().setChecked(True)
+#     #         return
+#     #     self.structure[row, col] = active
+#     #     self.structureChanged.emit()
+#     #     print('FUNCTION Finished')
 
 
 class RichMsgBox(QW.QMessageBox):

@@ -11,7 +11,6 @@ import webbrowser
 
 import numpy as np
 from pandas import DataFrame, concat
-from scipy import ndimage as nd
 
 from PyQt5 import QtWidgets as QW
 from PyQt5 import QtCore as QC
@@ -6895,6 +6894,1226 @@ class ModelLearner(DraggableTool):
 
 
 
+class PhaseRefiner(DraggableTool):
+    '''
+    One of the main tools of X-Min Learn, which allows for post-processing 
+    refinement operations to be applied on classified mineral maps.
+    '''
+    
+    def __init__(self):
+        '''
+        Constructor.
+
+        '''
+        super(PhaseRefiner, self).__init__()
+
+    # Set widget attributes
+        self.setWindowTitle('Phase Refiner')
+        self.setWindowIcon(QIcon(r'Icons/refine.png'))
+
+    # Set main attributes
+        self._refiner_mode = 0 # Basic: 0, Advanced: 1'
+        self.minmap = None
+        self._minmap_backup = None
+
+    # Set attributes for advanced refiner
+        self._phase = None
+        self._roi_extents = None
+        self._variance_colors = [(0, 0, 0),       # 0 -> background preserved
+                                 (255, 0, 0),     # 1 -> phase removed
+                                 (0, 255, 0),     # 2 -> phase added
+                                 (255, 255, 255)] # 3 -> phase preserved
+
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+#  -------------------------------------------------------------------------  #
+#                           SAMPLE SELECTION WIDGETS
+#  -------------------------------------------------------------------------  #
+
+    # Mineral map selector (SampleMapsSelector)
+        self.minmap_selector = cObj.SampleMapsSelector('minmaps', False)
+        self.minmap_selector.setMaximumHeight(200)
+
+    # Select mineral map (Styled Button)
+        self.select_map_btn = cObj.StyledButton(text='Select map')
+
+    # Sample selection group 
+        sample_vbox = QW.QVBoxLayout()
+        sample_vbox.addWidget(self.minmap_selector)
+        sample_vbox.addWidget(self.select_map_btn)
+        sample_group = cObj.CollapsibleArea(sample_vbox, 'Map selection',
+                                            collapsed=False)
+
+#  -------------------------------------------------------------------------  #
+#                             LEGEND WIDGETS
+#  -------------------------------------------------------------------------  #
+
+    # Current selected mineral map (PathLabel)
+        self.selected_map_lbl = cObj.PathLabel(full_display=False)
+
+    # Legend
+        self.legend = cObj.Legend()
+        self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
+        self.legend.setMinimumHeight(400)
+
+    # Legend group
+        legend_form = QW.QFormLayout()
+        legend_form.addRow('Current map', self.selected_map_lbl)
+        legend_form.addRow(self.legend)
+        legend_group = cObj.CollapsibleArea(legend_form, 'Legend', 
+                                            collapsed=False)
+
+#  -------------------------------------------------------------------------  #
+#                              KERNEL WIDGETS
+#  -------------------------------------------------------------------------  #
+
+    # Kernel shape selector (Radio Buttons Group)
+        shapes = ('square', 'circle', 'diamond')
+        shp_icons = [QG.QIcon(rf'Icons/{s}.png') for s in shapes]
+        self.kern_shape_btns = cObj.RadioBtnLayout(['', '', ''], shp_icons, 
+                                                   orient='horizontal')
+        for shp, btn in zip(shapes, self.kern_shape_btns.buttons()):
+            btn.setObjectName(shp)
+            btn.setToolTip(shp.capitalize())
+
+    # Kernel size selector (Styled SpinBox)
+        self.kern_size_spbox = cObj.StyledSpinBox(3, 49, 2)
+        self.kern_size_spbox.setToolTip('Must be an odd value')
+
+    # Skip border (Checkbox)
+        self.skip_border_cbox = QW.QCheckBox('Skip borders')
+        self.skip_border_cbox.setToolTip('Preserve map borders')
+
+    # Kernel group
+        kern_form = QW.QFormLayout()
+        kern_form.setSpacing(15)
+        kern_form.addRow('Shape', self.kern_shape_btns)
+        kern_form.addRow('Size', self.kern_size_spbox)
+        kern_form.addRow(self.skip_border_cbox)
+        kern_group = cObj.GroupArea(kern_form, 'Kernel')
+
+#  -------------------------------------------------------------------------  #
+#                              SETTINGS WIDGETS
+#  -------------------------------------------------------------------------  #
+
+    # NoData phase selector (AutoUpdate ComboBox) [-> Basic Refiner]
+        tip = 'Allows finer control of NoData'
+        self.nd_combox = cObj.AutoUpdateComboBox(tooltip=tip)
+        self.nd_combox.setPlaceholderText('No selection') # Not working in Qt 5.15.2 due to a Qt BUG
+
+    # NoData phase clear button (Styled Button) [-> Basic Refiner]
+        self.nd_clear_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+
+    # NoData threshold (Styled DoubleSpinBox) [-> Basic Refiner]
+        self.nd_thresh_spbox = cObj.StyledDoubleSpinBox(max_value=0.99)
+        self.nd_thresh_spbox.setValue(0.5)
+        self.nd_thresh_spbox.setToolTip('Output NoData class only if NoData '\
+                                        'pixels exceed this ratio in kernel')
+        self.nd_thresh_spbox.setEnabled(False)
+
+    # Algorithm selection (Styled ComboBox) [-> Advanced Refiner]
+        self.algm_combox = cObj.StyledComboBox()
+        algms = ('Erosion + Reconstruction', 'Opening', 'Closing', 'Erosion', 
+                 'Dilation', 'Fill Holes')
+        self.algm_combox.addItems(algms)
+
+    # Algorithm warning icon (QLabel) [-> Advanced Refiner]
+        warn_icon = QG.QPixmap(r'Icons/warnIcon.png')
+        self.algm_warn = QW.QLabel()
+        self.algm_warn.setPixmap(warn_icon.scaled(16, 16, Qt.KeepAspectRatio))
+        self.algm_warn.setToolTip('The selected algorithm ignore ROIs')
+        self.algm_warn.hide()
+
+    # Invert mask (CheckBox) [-> Advanced Refiner]
+        self.invert_mask_cbox = QW.QCheckBox('Invert mask')
+
+    # Invert ROI (CheckBox) [-> Advanced Refiner]
+        self.invert_roi_cbox = QW.QCheckBox('Invert ROI')
+
+    # Removed pixels behaviour (Styled ComboBox) [-> Advanced Refiner]
+        self.del_pixels_combox = cObj.StyledComboBox(
+            'How should removed pixels be reclassified?')
+        self.del_pixels_combox.addItems(('_ND_', 'Nearest class'))
+    
+    # [Basic Refiner] settings group  
+        basic_settings_grid = QW.QGridLayout()
+        basic_settings_grid.setVerticalSpacing(10)
+        basic_settings_grid.addWidget(QW.QLabel('NoData class'), 0, 0, 1, 1)
+        basic_settings_grid.addWidget(self.nd_combox, 0, 1, 1, 1)
+        basic_settings_grid.addWidget(self.nd_clear_btn, 0, 2, 1, 1)
+        basic_settings_grid.addWidget(QW.QLabel('Threshold'), 1, 0, 1, 1)
+        basic_settings_grid.addWidget(self.nd_thresh_spbox, 1, 1, 1, -1)
+        basic_settings_grid.setColumnStretch(0, 1)
+        basic_settings_grid.setColumnStretch(1, 1)
+        basic_settings_group = cObj.GroupArea(basic_settings_grid, 'Settings')
+
+    # [Advanced Refiner] settings group  
+        advan_settings_grid = QW.QGridLayout()
+        advan_settings_grid.setVerticalSpacing(10)
+        advan_settings_grid.addWidget(QW.QLabel('Algorithm'), 0, 0, 1, 1)
+        advan_settings_grid.addWidget(self.algm_warn, 0, 1, 1, 1)
+        advan_settings_grid.addWidget(self.algm_combox, 0, 2, 1, 1)
+        advan_settings_grid.addWidget(self.invert_mask_cbox, 1, 0, 1, -1)
+        advan_settings_grid.addWidget(self.invert_roi_cbox, 2, 0, 1, -1)
+        advan_settings_grid.addWidget(QW.QLabel('Removed as'), 3, 0, 1, 1)
+        advan_settings_grid.addWidget(self.del_pixels_combox, 3, 2, 1, 1)
+        advan_settings_grid.setColumnStretch(0, 1)
+        advan_settings_grid.setColumnStretch(2, 1)
+        advan_settings_group = cObj.GroupArea(advan_settings_grid, 'Settings')
+
+    # Settings container widget (StackedWidget)
+        self.settings_stack = QW.QStackedWidget()
+        self.settings_stack.addWidget(basic_settings_group)
+        self.settings_stack.addWidget(advan_settings_group)
+
+#  -------------------------------------------------------------------------  #
+#                    CONTROL WIDGETS (APPLY-CANCEL-SAVE)
+#  -------------------------------------------------------------------------  #
+
+    # Apply refinement (Styled Button)
+        self.apply_btn = cObj.StyledButton(text='APPLY', 
+                                           bg_color=pref.BTN_GREEN)
+        self.apply_btn.setToolTip('Apply filter')
+
+    # Cancel refinements (Styled Button)
+        self.cancel_btn = cObj.StyledButton(text='CANCEL',
+                                            bg_color=pref.BTN_RED)
+        self.cancel_btn.setToolTip('Revert all edits')
+
+    # Save refinements (Styled Button)
+        self.save_btn = cObj.StyledButton(QIcon(r'Icons/save.png'), 'SAVE')
+        self.save_btn.setToolTip('Save refined mineral map')
+
+    # Control widgets layout
+        ctrl_widgets_grid = QW.QGridLayout()
+        ctrl_widgets_grid.addWidget(self.apply_btn, 0, 0, 1, 1)
+        ctrl_widgets_grid.addWidget(self.cancel_btn, 0, 1, 1, 1)
+        ctrl_widgets_grid.addWidget(self.save_btn, 1, 0, 1, -1)
+
+
+#  -------------------------------------------------------------------------  #
+#                       BASIC REFINER RENDERING WIDGETS
+#  -------------------------------------------------------------------------  #
+
+    # Original map canvas (Image Canvas) 
+        self.orig_canvas_basic = plots.ImageCanvas(cbar=False)
+        self.orig_canvas_basic.fig.suptitle('Original', size='large')
+        self.orig_canvas_basic.setMinimumSize(500, 500)
+        
+    # Navigation toolbar of original map canvas (NavTbar)
+        self.orig_navtbar_basic = plots.NavTbar(self.orig_canvas_basic, self)
+        self.orig_navtbar_basic.removeToolByIndex([3, 4, 8, 9])
+        self.orig_navtbar_basic.fixHomeAction()
+        
+    # Current map canvas (Image Canvas) 
+        self.curr_canvas_basic = plots.ImageCanvas(cbar=False)
+        self.curr_canvas_basic.fig.suptitle('Current', size='large')
+        self.curr_canvas_basic.setMinimumSize(500, 500)
+        self.curr_canvas_basic.share_axis(self.orig_canvas_basic.ax)
+
+    # Navigation toolbar of current map canvas (NavTbar) 
+        self.curr_navtbar_basic = plots.NavTbar(self.curr_canvas_basic, self)
+        self.curr_navtbar_basic.removeToolByIndex([3, 4, 8, 9])
+        self.curr_navtbar_basic.fixHomeAction()
+
+    # Original map mode barplot (BarCanvas)
+        self.orig_barplot = plots.BarCanvas(wheel_pan=False, wheel_zoom=False)
+        self.orig_barplot.setMinimumHeight(200)
+
+    # Navigation toolbar of the original map mode barplot (NavTbar)
+        self.orig_barplot_navtbar = plots.NavTbar(self.orig_barplot, self, 
+                                                  Qt.Vertical, coords=False)
+        self.orig_barplot_navtbar.removeToolByIndex(list(range(2, 10)))
+    
+    # Show labels percent in NavTbar of original map mode barplot (Action)
+        self.orig_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
+                                          'Show amounts')
+        self.orig_lbl_action.setCheckable(True)
+        self.orig_barplot_navtbar.insertAction(10, self.orig_lbl_action)
+
+    # Current map mode barplot (BarCanvas)
+        self.curr_barplot = plots.BarCanvas(wheel_pan=False, wheel_zoom=False)
+        self.curr_barplot.setMinimumHeight(200)
+
+    # Navigation toolbar of the current map mode barplot (NavTbar)
+        self.curr_barplot_navtbar = plots.NavTbar(self.curr_barplot, self, 
+                                                  Qt.Vertical, coords=False)
+        self.curr_barplot_navtbar.removeToolByIndex(list(range(2, 10)))
+    
+    # Show labels percent in NavTbar of current map mode barplot (Action)
+        self.curr_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
+                                          'Show amounts')
+        self.curr_lbl_action.setCheckable(True)
+        self.curr_barplot_navtbar.insertAction(10, self.curr_lbl_action)
+
+    # Basic Refiner rendering group
+        basic_refiner_grid = QW.QGridLayout()
+        basic_refiner_grid.setHorizontalSpacing(10)
+        basic_refiner_grid.setRowStretch(1, 1)
+        basic_refiner_grid.addWidget(self.orig_navtbar_basic, 0, 0, 1, 2)
+        basic_refiner_grid.addWidget(self.curr_navtbar_basic, 0, 2, 1, 2)
+        basic_refiner_grid.addWidget(self.orig_canvas_basic, 1, 0, 1, 2)
+        basic_refiner_grid.addWidget(self.curr_canvas_basic, 1, 2, 1, 2)
+        basic_refiner_grid.addWidget(self.orig_barplot_navtbar, 2, 0, 1, 1)
+        basic_refiner_grid.addWidget(self.orig_barplot, 2, 1, 1, 1)
+        basic_refiner_grid.addWidget(self.curr_barplot, 2, 2, 1, 1)
+        basic_refiner_grid.addWidget(self.curr_barplot_navtbar, 2, 3, 1, 1)
+        
+#  -------------------------------------------------------------------------  #
+#                     ADVANCED REFINER RENDERING WIDGETS
+#  -------------------------------------------------------------------------  #
+
+    # Current map canvas (Image Canvas) 
+        self.curr_canvas_advan = plots.ImageCanvas(cbar=False)
+        self.curr_canvas_advan.fig.suptitle('Current', size='large')
+        self.curr_canvas_advan.setMinimumSize(500, 500)
+    
+    # Navigation toolbar of current map canvas (NavTbar) 
+        self.curr_navtbar_advan = plots.NavTbar(self.curr_canvas_advan, self)
+        self.curr_navtbar_advan.removeToolByIndex([3, 4, 8, 9])
+        self.curr_navtbar_advan.fixHomeAction()
+
+    # Reset current phase (Action) [-> Navigation toolbar of current map]
+        self.reset_phase_action = QW.QAction(QIcon(r'Icons/refresh.png'), 
+                                             'Reset current phase')
+        self.curr_navtbar_advan.insertSeparator(10)
+        self.curr_navtbar_advan.insertAction(10, self.reset_phase_action)
+        
+    # Preview map canvas (Image Canvas)
+        self.prev_canvas_advan = plots.ImageCanvas(cbar=False)
+        self.prev_canvas_advan.fig.suptitle('Refined preview', size='large')
+        self.prev_canvas_advan.setMinimumSize(500, 500)
+        self.prev_canvas_advan.share_axis(self.curr_canvas_advan.ax)
+
+    # Navigation toolbar of preview map canvas (NavTbar)
+        self.prev_navtbar_advan = plots.NavTbar(self.prev_canvas_advan, self)
+        self.prev_navtbar_advan.removeToolByIndex([3, 4, 8, 9])
+        self.prev_navtbar_advan.fixHomeAction()
+        
+    # Draw ROI (Action) [-> Navigation toolbar of preview map]
+        self.draw_roi_action = QW.QAction(QIcon(r'Icons/roi.png'), 'Draw ROI')
+        self.draw_roi_action.setCheckable(True)
+        self.prev_navtbar_advan.insertSeparator(10)
+        self.prev_navtbar_advan.insertAction(10, self.draw_roi_action)
+
+    # ROI selector widget 
+        self.roi_sel = cObj.RectSel(self.prev_canvas_advan.ax, self.onRoiDrawn)
+
+    # Original phase info (Group Area)
+        orig_info_name = QW.QLabel()
+        orig_info_pixels = QW.QLabel()
+        orig_info_mode = QW.QLabel()
+        orig_info_form = QW.QFormLayout()
+        orig_info_form.setVerticalSpacing(5)
+        orig_info_form.addRow('Phase: ', orig_info_name)
+        orig_info_form.addRow('Pixels: ', orig_info_pixels)
+        orig_info_form.addRow('Amount: ', orig_info_mode)
+        orig_info_group = cObj.GroupArea(orig_info_form, 'Original')
+
+    # Current phase info (Group Area) 
+        curr_info_name = QW.QLabel()
+        curr_info_pixels = QW.QLabel()
+        curr_info_mode = QW.QLabel()
+        curr_info_form = QW.QFormLayout()
+        curr_info_form.setVerticalSpacing(5)
+        curr_info_form.addRow('Phase: ', curr_info_name)
+        curr_info_form.addRow('Pixels: ', curr_info_pixels)
+        curr_info_form.addRow('Amount: ', curr_info_mode)
+        curr_info_group = cObj.GroupArea(curr_info_form, 'Current')
+
+    # Preview phase info (Group Area)
+        prev_info_name = QW.QLabel()
+        prev_info_pixels = QW.QLabel()
+        prev_info_mode = QW.QLabel()
+        prev_info_icon = QW.QLabel()
+        prev_info_added = QW.QLabel()
+        prev_info_added.setStyleSheet('QLabel {color: green;}')
+        prev_info_removed = QW.QLabel()
+        prev_info_removed.setStyleSheet('QLabel {color: red;}')
+
+        prev_info_form = QW.QFormLayout()
+        prev_info_form.setVerticalSpacing(5)
+        prev_info_form.addRow('Phase: ', prev_info_name)
+        prev_info_form.addRow('Pixels: ', prev_info_pixels)
+        prev_info_form.addRow('Amount: ', prev_info_mode)
+
+        prev_info_grid = QW.QGridLayout()
+        prev_info_grid.setColumnStretch(0, 2)
+        prev_info_grid.setColumnStretch(1, 1)
+        prev_info_grid.setColumnStretch(2, 1)
+        prev_info_grid.addLayout(prev_info_form, 0, 0, -1, 1)
+        prev_info_grid.addWidget(prev_info_icon, 0, 1, 1, -1, 
+                                 Qt.AlignHCenter | Qt.AlignTop)
+        prev_info_grid.addWidget(prev_info_added, 1, 1, 1, 1, 
+                                 Qt.AlignHCenter | Qt.AlignTop)
+        prev_info_grid.addWidget(prev_info_removed, 1, 2, 1, 1, 
+                                 Qt.AlignHCenter | Qt.AlignTop)
+
+        prev_info_group = cObj.GroupArea(prev_info_grid, 'Preview')
+
+    # Convenient advanced info labels list 
+        self.advan_info = (orig_info_name, orig_info_pixels, orig_info_mode,
+                           curr_info_name, curr_info_pixels, curr_info_mode,
+                           prev_info_name, prev_info_pixels, prev_info_mode,
+                           prev_info_icon, prev_info_added, prev_info_removed)
+
+    # [Advanced Refiner] rendering group
+        advan_refiner_grid = QW.QGridLayout()
+        advan_refiner_grid.setHorizontalSpacing(10)
+        advan_refiner_grid.setRowStretch(1, 1)
+        advan_refiner_grid.addWidget(self.curr_navtbar_advan, 0, 0, 1, 2)
+        advan_refiner_grid.addWidget(self.prev_navtbar_advan, 0, 2, 1, 2)
+        advan_refiner_grid.addWidget(self.curr_canvas_advan, 1, 0, 1, 2)
+        advan_refiner_grid.addWidget(self.prev_canvas_advan, 1, 2, 1, 2)
+        advan_refiner_grid.addWidget(orig_info_group, 2, 0, 1, 1)
+        advan_refiner_grid.addWidget(curr_info_group, 2, 1, 1, 1)
+        advan_refiner_grid.addWidget(prev_info_group, 2, 2, 1, 2)
+
+
+#  -------------------------------------------------------------------------  #
+#                             ADJUST LAYOUT
+#  -------------------------------------------------------------------------  #
+
+    # Left panel layout
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.setSpacing(15)
+        left_vbox.addWidget(sample_group)
+        left_vbox.addWidget(legend_group)
+        left_vbox.addWidget(kern_group)
+        left_vbox.addWidget(self.settings_stack)
+        left_vbox.addLayout(ctrl_widgets_grid)
+        left_vbox.addStretch(1)
+        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
+
+    # Right panel layout
+        self.mode_tabwid = cObj.StyledTabWidget()
+        self.mode_tabwid.addTab(basic_refiner_grid, QIcon(r'Icons/cube.png'),
+                                'BASIC MODE')
+        self.mode_tabwid.addTab(advan_refiner_grid, QIcon(r'Icons/gear.png'), 
+                                'ADVANCED MODE')
+        self.mode_tabwid.tabBar().setTabToolTip(
+            0, 'Quick and simple refinement with mode filter')
+        self.mode_tabwid.tabBar().setTabToolTip(
+            1, 'Class-wise advanced refinement with multiple binary filters')
+        right_scroll = cObj.GroupScrollArea(self.mode_tabwid, frame=False)
+
+    # Main layout
+        main_layout = cObj.SplitterLayout()
+        main_layout.addWidgets((left_scroll, right_scroll))
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+    # New map selected 
+        self.select_map_btn.clicked.connect(self.onMapSelected)
+
+    # Legend
+        self.legend.itemSelectionChanged.connect(self.onPhaseSelected)
+        self.legend.colorChangeRequested.connect(self.changePhaseColor)
+        self.legend.itemRenameRequested.connect(self.renamePhase)
+        self.legend.itemHighlightRequested.connect(self.highlightPhase)
+
+    # Kernel selection
+        self.kern_size_spbox.editingFinished.connect(self.ensureOddKernelSize)
+        self.kern_shape_btns.selectionChanged.connect(self.onKernelChanged)
+        self.kern_size_spbox.valueChanged.connect(self.onKernelChanged)
+        self.skip_border_cbox.stateChanged.connect(self.onKernelChanged)
+
+    # NoData control settings [Basic Refiner]
+        self.nd_combox.clicked.connect(self.updateNoDataComboBox)
+        self.nd_combox.currentIndexChanged.connect(
+            lambda i: self.nd_thresh_spbox.setEnabled(i != -1))
+        self.nd_clear_btn.clicked.connect(
+            lambda: self.nd_combox.setCurrentIndex(-1))
+        
+    # Algorithm and advanced settings [Advanced Refiner]
+        self.algm_combox.currentTextChanged.connect(self.onAlgorithmChanged)
+        self.invert_mask_cbox.stateChanged.connect(self.updateAdvancedPreview)
+        self.invert_roi_cbox.stateChanged.connect(self.updateAdvancedPreview)
+
+    # Refiner mode swapping 
+        self.mode_tabwid.currentChanged.connect(self.onRefinerModeSwapped)
+
+    # Barplots show label actions [Basic Refiner]
+        self.orig_lbl_action.toggled.connect(self.orig_barplot.show_amounts)
+        self.curr_lbl_action.toggled.connect(self.curr_barplot.show_amounts)
+
+    # Advanced toolbar actions (reset phase and draw ROI) [Advanced Refiner]
+        self.draw_roi_action.toggled.connect(self.toggleRoiSelector)
+        self.reset_phase_action.triggered.connect(self.resetPhase)
+    
+    # Control buttons
+        self.apply_btn.clicked.connect(self.applyRefinement)
+        self.cancel_btn.clicked.connect(self.resetMap)
+        self.save_btn.clicked.connect(self.saveMap)
+        
+        
+    def onMapSelected(self):
+        '''
+        Actions to be performed when a mineral map is selected.
+
+        '''
+    # Exit function if selection is invalid
+        selected = self.minmap_selector.currentItem()
+        if selected is None:
+            return
+        
+    # Ask for user confirm
+        elif self.minmap is not None:
+            text = 'Change map? Unsaved edits on current map will be lost.'
+            btns = QW.QMessageBox.Yes | QW.QMessageBox.No 
+            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text, btns,
+                                            QW.QMessageBox.No)
+            if choice == QW.QMessageBox.No:
+                return
+    
+    # Change current mineral map with the one selected
+        self.changeCurrentMap(selected.get('data'))
+  
+
+    def changeCurrentMap(self, minmap: MineralMap):
+        '''
+        Change the current mineral map with 'minmap'.
+
+        Parameters
+        ----------
+        minmap : MineralMap
+            New mineral map.
+
+        '''
+    # Reset refiner attributes
+        self.minmap = minmap.copy()
+        self._minmap_backup = minmap.copy()
+        self._phase = None
+    
+    # Update widgets
+        self.selected_map_lbl.setPath(minmap.filepath)
+        self.legend.update(minmap)
+        self.nd_combox.clear()
+
+    # Render refiner widgets
+        if self._refiner_mode == 0:
+            self.renderBasic()
+        else:
+            self.renderAdvanced()
+
+    
+    def onPhaseSelected(self):
+        '''
+        Actions to be performed when a mineral phase is selected (left-clicked)
+        in the legend.
+
+        '''
+    # Change the current phase attribute
+        selected = self.legend.selectedItems()
+        if len(selected):
+            self._phase = selected[0].text(1)
+
+    # Render only advanced refiner widgets
+        if self._refiner_mode == 1:
+            self.renderAdvanced()
+
+
+    def changePhaseColor(self, legend_item: QW.QTreeWidgetItem, color: tuple):
+        '''
+        Alter the displayed color of a mineral phase. This function propagates 
+        the changes to the current map, the backup map, the basic refiner 
+        widgets and the legend. The arguments of this function are specifically
+        compatible with the colorChangeRequested signal emitted by the legend 
+        (see Legend object for more details). 
+
+        Parameters
+        ----------
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested the color change.
+        color : tuple
+            RGB triplet.
+
+        '''
+    # Update the phase color in current and backup mineral maps
+        phase = legend_item.text(1)
+        if self._minmap_backup.has_phase(phase):
+            self._minmap_backup.set_phase_color(phase, color)
+        if self.minmap.has_phase(phase):
+            self.minmap.set_phase_color(phase, color)
+
+    # Update the item color in the legend
+        self.legend.changeItemColor(legend_item, color)
+
+    # Render only basic refiner widgets
+        if self._refiner_mode == 0:
+            self.renderBasic()
+
+
+    def renamePhase(self, legend_item: QW.QTreeWidgetItem, new_name: str):
+        '''
+        Rename a mineral phase. This function propagates the changes to the
+        current map, the backup map, the refiner widgets and the legend. The 
+        arguments of this function are specifically compatible with the 
+        itemRenameRequested signal emitted by the legend (see Legend object for
+        more details).
+
+        Parameters
+        ----------
+        legend_item : QTreeWidgetItem
+            The legend item that requested to be renamed.
+        new_name : str
+            New class name.
+
+        '''
+    # Deny renaming if the name already exists
+        old_name = legend_item.text(1)
+        if self.minmap.has_phase(new_name):
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           f'{new_name} is already taken')
+        
+    # Renamed phase is also the currently selected phase, so the current phase
+    # attribute must be updated to avoid errors.
+        self._phase = new_name
+
+    # Rename phase in original and current mineral maps
+        if self._minmap_backup.has_phase(old_name):
+            self._minmap_backup.rename_phase(old_name, new_name)
+        if self.minmap.has_phase(old_name):
+            self.minmap.rename_phase(old_name, new_name)
+
+    # Rename phase name shown in legend
+        self.legend.renameClass(legend_item, new_name)
+    
+    # Render refiner widgets
+        if self._refiner_mode == 0:
+            self.renderBasic()
+        else:
+            self.renderAdvanced()
+
+
+    def highlightPhase(self, toggled: bool, legend_item: QW.QTreeWidgetItem):
+        '''
+        Highlight on/off the selected mineral phase in the basic refiner plots.
+        The arguments of this function are specifically compatible with the 
+        itemHighlightRequested signal emitted by the legend (see Legend object 
+        for more details).
+
+        Parameters
+        ----------
+        toggled : bool
+            Highlight on/off
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested to be highlighted.
+
+        '''
+    # Do nothing if in advanced mode
+        if self._refiner_mode == 1:
+            return
+
+        if toggled:
+            phase = legend_item.text(1) 
+
+        # Compute current mineral map clims
+            if self.minmap.has_phase(phase):
+                phase_id = self.minmap.as_id(phase)
+                vmin, vmax = phase_id - 0.5, phase_id + 0.5
+            else:
+                vmin, vmax = 0, 0
+        
+        # Compute original mineral map clims
+            if self._minmap_backup.has_phase(phase):
+                phase_id_bkp = self._minmap_backup.as_id(phase)
+                vmin_bkp, vmax_bkp = phase_id_bkp - 0.5, phase_id_bkp + 0.5
+            else:
+                vmin_bkp, vmax_bkp = 0, 0
+
+        else:
+            vmin, vmax = None, None
+            vmin_bkp, vmax_bkp = None, None
+
+    # Update clims and render plots
+        self.orig_canvas_basic.update_clim(vmin_bkp, vmax_bkp)
+        self.curr_canvas_basic.update_clim(vmin, vmax)
+        self.orig_canvas_basic.draw_idle()
+        self.curr_canvas_basic.draw_idle()
+
+
+    def updateLegendAmounts(self):
+        '''
+        Update the amounts of the mineral phases currently displayed in the
+        legend. We use this function instead of 'legend.update()', which would 
+        be the ideal method, because we do not want to remove from the legend
+        the mineral phases that have been cleared out from the mineral map as a
+        result of refinement operations. 
+
+        '''
+        prec = self.legend.precision
+        for idx in range(self.legend.topLevelItemCount()):
+            item = self.legend.topLevelItem(idx)
+            phase = item.text(1)
+
+        # If a phase was completely removed from the currently edited mineral
+        # map, just set its amount to 0.
+            if self.minmap.has_phase(phase):
+                amount = round(self.minmap.get_phase_amount(phase), prec)
+            else:
+                amount = 0.0
+
+            item.setText(2, f'{amount}%')
+
+
+    def ensureOddKernelSize(self):
+        '''
+        Ensure that user-typed kernel size value is always odd.
+
+        '''
+        size = self.kern_size_spbox.value()
+        if not size % 2:
+            self.kern_size_spbox.setValue(size - 1)
+
+
+    def onKernelChanged(self):
+        '''
+        Actions to be performed when kernel parameters are changed. 
+
+        '''
+        if self._refiner_mode == 1: 
+            self.updateAdvancedPreview()
+
+
+    def updateNoDataComboBox(self):
+        '''
+        Auto-update function for the NoData selection combo box.
+
+        '''
+        if self.minmap is not None:
+            self.nd_combox.updateItems(self.minmap.get_phases())
+
+
+    def onAlgorithmChanged(self, algorithm: str):
+        '''
+        Actions to be performed when the advanced algorithm is changed. 
+
+        Parameters
+        ----------
+        algorithm : str
+            Algorithm name.
+
+        '''
+        self.algm_warn.setVisible(algorithm == 'Fill Holes')
+        self.updateAdvancedPreview()
+
+
+    def onRefinerModeSwapped(self, mode: int):
+        '''
+        Actions to be performed when the refiner mode (basic or advanced) is 
+        changed through the dedicated tab widget.
+
+        Parameters
+        ----------
+        mode : int
+            Refiner mode. Can only be '0' (Basic) or '1' (Advanced).
+
+        '''
+
+        self._refiner_mode = mode
+
+    # Swap settings stack
+        self.settings_stack.setCurrentIndex(mode)
+
+    # Render refiner widgets
+        if mode == 0:
+            self.renderBasic()
+        else:
+            self.renderAdvanced()
+
+
+    def renderBasic(self):
+        '''
+        Render basic refiner widgets, which include original and current maps
+        canvases and corresponding bar plots.
+
+        '''
+    # Clear widgets if no mineral map is currently selected
+        if self.minmap is None:
+            return self.clearView()
+    
+    # Update maps canvases
+        mmap_enc_bkp, enc_bkp, col_bkp = self._minmap_backup.get_plot_data()
+        mmap_enc, enc, col = self.minmap.get_plot_data()
+        self.orig_canvas_basic.draw_discretemap(mmap_enc_bkp, enc_bkp, col_bkp)
+        self.curr_canvas_basic.draw_discretemap(mmap_enc, enc, col)
+
+    # Update bar plots
+        lbl_bkp, mod_bkp = zip(*self._minmap_backup.get_labeled_mode().items())
+        bar_col_bkp = [self._minmap_backup.get_phase_color(l) for l in lbl_bkp]
+        lbl, mod = zip(*self.minmap.get_labeled_mode().items())
+        bar_col = [self.minmap.get_phase_color(l) for l in lbl]
+        self.orig_barplot.update_canvas(mod_bkp, lbl_bkp, colors=bar_col_bkp)
+        self.curr_barplot.update_canvas(mod, lbl, colors=bar_col)
+        
+    
+    def renderAdvanced(self):
+        '''
+        Render advanced refiner widgets, which include current and preview
+        phase maps canvases and info widgets.
+
+        '''
+    # Clear widgets if no mineral map or mineral phase is currently selected
+        if self.minmap is None or self._phase is None:
+            return self.clearView()
+        
+    # Update current phase map canvas
+        phasemap = self.minmap.minmap == self._phase
+        encoder = {0: 'Background', 1: self._phase}
+        colors = [(0, 0, 0), (255, 255, 255)]
+        self.curr_canvas_advan.draw_discretemap(phasemap, encoder, colors, '')
+        
+    # Update preview phase map canvas and info widgets
+        self.updateAdvancedPreview()
+
+
+    def updateAdvancedPreview(self):
+        '''
+        Update advanced preview of current phase and advanced info widgets.
+
+        '''
+    # Do nothing if no mineral map or mineral phase is currently selected
+        if self.minmap is None or self._phase is None:
+            return
+        
+    # Compute refinement operations
+        current_map = (self.minmap.minmap == self._phase).astype('uint8')
+        refined_map = self.computeAdvancedRefinement(current_map)
+        variance_map = 2 * refined_map + current_map
+
+    # Update preview canvas
+        encoder = {0: 'Background', 1: f'Removed {self._phase}', 
+                   2: f'Added {self._phase}', 3: self._phase}
+        self.prev_canvas_advan.draw_discretemap(variance_map, encoder,
+                                                self._variance_colors, '')
+
+    # Compute original phase info
+        orig_pixels = np.count_nonzero((self._minmap_backup.minmap == self._phase))
+        if orig_pixels == 0:
+            orig_amount = 0.0
+        else:
+            orig_amount = self._minmap_backup.get_phase_amount(self._phase)
+
+    # Compute current phase info
+        curr_pixels = np.count_nonzero(current_map)
+        if curr_pixels == 0:
+            curr_amount = 0.0
+        else:
+            curr_amount = self.minmap.get_phase_amount(self._phase)
+    
+    # Compute preview phase info
+        prev_pixels = np.count_nonzero(refined_map)
+        prev_amount = 100 * prev_pixels / refined_map.size
+
+        if curr_pixels > prev_pixels:
+            icon = r'Icons/decrease.png'
+        elif curr_pixels < prev_pixels:
+            icon = r'Icons/increase.png'
+        else:
+            icon = r'Icons/stationary.png'
+
+        prev_pixmap = QG.QPixmap(icon).scaled(48, 48, QC.Qt.KeepAspectRatio)
+        prev_added = np.count_nonzero(variance_map == 2)
+        prev_removed = np.count_nonzero(variance_map == 1)
+
+    # Update info widgets
+        prec = self.legend.precision
+        self.advan_info[0].setText(self._phase)                      # original name
+        self.advan_info[1].setText(str(orig_pixels))                 # original pixels
+        self.advan_info[2].setText(f'{round(orig_amount, prec)} %')  # original amount
+        self.advan_info[3].setText(self._phase)                      # current name
+        self.advan_info[4].setText(str(curr_pixels))                 # current pixels
+        self.advan_info[5].setText(f'{round(curr_amount, prec)} %')  # current amount
+        self.advan_info[6].setText(self._phase)                      # preview name
+        self.advan_info[7].setText(str(prev_pixels))                 # preview pixels
+        self.advan_info[8].setText(f'{round(prev_amount, prec)} %')  # preview amount
+        self.advan_info[9].setPixmap(prev_pixmap)                    # preview icon
+        self.advan_info[10].setText(f'+{prev_added}')                # preview added pixels
+        self.advan_info[11].setText(f'-{prev_removed}')              # preview removed pixels
+
+
+    def clearView(self):
+        '''
+        Clear refiner widgets.
+
+        '''
+    # Basic Refiner cleaning operations 
+        if self._refiner_mode == 0: 
+            self.orig_canvas_basic.clear_canvas()
+            self.curr_canvas_basic.clear_canvas()
+            self.orig_barplot.clear_canvas()
+            self.curr_barplot.clear_canvas()
+
+    # Advanced Refiner cleaning operations 
+        else:
+            self.curr_canvas_advan.clear_canvas()
+            self.curr_canvas_advan.ax.set_title('Select a phase', pad=-100)
+            self.prev_canvas_advan.clear_canvas()
+            self.prev_canvas_advan.ax.set_title('Select a phase', pad=-100)
+            for lbl in self.advan_info:
+                lbl.clear()
+
+
+    def applyRefinement(self):
+        '''
+        Wrapper method to apply basic or advanced refinement operations.
+
+        '''
+
+    # Basic refinement operations
+        if self._refiner_mode == 0:
+            self.refineBasic()
+            self.renderBasic()
+
+    # Advanced refinement operations
+        else:
+            self.refineAdvanced()
+            self.renderAdvanced()
+        
+    # Force edit legend amounts
+        self.updateLegendAmounts()
+
+
+    def refineBasic(self):
+        '''
+        Edit the current mineral map using the result of basic refinement 
+        operations.
+
+        '''
+        pbar = cObj.PopUpProgBar(self, 3, 'Applying filter', cancel=False, 
+                                 forceShow=True)
+
+    # Compute basic refinement operations. An encoded refined map is returned.
+        refined_encoded = self.computeBasicRefinement()
+        pbar.setValue(1)
+
+    # Decode the refined mineral map
+        refined = np.empty(refined_encoded.shape, dtype=self.minmap._DTYPE_STR)
+        for _id, lbl in self.minmap.encoder.items():
+            refined[refined_encoded == _id] = lbl
+        pbar.setValue(2)
+
+    # Apply edits to current mineral map
+        self.minmap.edit_minmap(refined, alter_probmap=True)
+        pbar.setValue(3)
+
+        
+    def refineAdvanced(self):
+        '''
+        Edit the current mineral map using the result of advanced refinement
+        operations.
+
+        '''
+    # Get variance map from the advanced preview to compute phase masks
+        preview = self.prev_canvas_advan.get_map()
+        removed_pixels_mask = preview == 1
+        added_pixels_mask = preview == 2
+    
+    # Remove deleted phase pixels and add new phase pixels
+        refined_map = self.replaceRemovedPixels(removed_pixels_mask)
+        refined_map[added_pixels_mask] = self._phase
+
+    # Edit current mineral map
+        self.minmap.edit_minmap(refined_map, alter_probmap=True)
+
+    # Add _ND_ to legend if it was not present but has now been added to the 
+    # current mineral map after calling the 'replaceRemovedPixels' function
+        if self.minmap.has_phase('_ND_') and not self.legend.hasClass('_ND_'):
+            color = self.minmap.get_phase_color('_ND_')
+            amount = self.minmap.get_phase_amount('_ND_')
+            self.legend.addClass('_ND_', color, amount)
+
+    
+    def replaceRemovedPixels(self, mask: np.ndarray):
+        '''
+        Rename pixels removed from advanced refinement operations. Removed 
+        pixels must be highlighted by 'mask'. 
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            Boolean array that highlights pixels that have been removed from
+            the current mineral map and need renaming. It must have the same
+            shape of the current mineral map.
+
+        Returns
+        -------
+        minmap : np.ndarray
+            A modified version of the current mineral map array.
+
+        '''
+    # Get a copy of the current mineral map array and the renaming strategy
+        minmap = self.minmap.minmap.copy()
+        strategy = self.del_pixels_combox.currentText()
+
+    # Nearest class strategy
+        if strategy == 'Nearest class':
+            minmap = ML_tools.replace_with_nearest(minmap, mask)
+    # _ND_ strategy
+        else:
+            minmap[mask] = '_ND_'
+
+        return minmap
+
+
+    def computeBasicRefinement(self):
+        '''
+        Return a refined encoded version of the current mineral map after the
+        application of basic refinement operations. 
+
+        Returns
+        -------
+        refined : np.array
+            Refined encoded mineral map.
+
+        '''
+    # Construct kernel structure
+        kern_shape = self.kern_shape_btns.getChecked().objectName()
+        kern_size = self.kern_size_spbox.value()
+        kernel = ML_tools.construct_kernel_filter(kern_shape, kern_size)
+
+    # Apply max frequency (mode) filter
+        mmap_enc = self.minmap.minmap_encoded
+        nan_phase = self.nd_combox.currentText()
+        nan_id = None if nan_phase == '' else self.minmap.as_id(nan_phase)
+        nan_thr = self.nd_thresh_spbox.value()
+        refined = ML_tools.apply_mode_filter(mmap_enc, kernel, nan_id, nan_thr)
+
+    # Preserve borders if required
+        if self.skip_border_cbox.isChecked():
+            refined = self.preserveMapBorders(refined, mmap_enc, kern_size//2)
+
+        return refined
+
+
+    def computeAdvancedRefinement(self, phasemap: np.ndarray):
+        '''
+        Return a refined version of the input 'phasemap' after the application
+        of advanced refinement operations.
+
+        Parameters
+        ----------
+        phasemap : np.ndarray
+            Boolean map of the currently selected phase.
+
+        Returns
+        -------
+        refined : np.ndarray
+            Refined phase map.
+
+        '''
+
+    # Construct kernel structure
+        kern_shape = self.kern_shape_btns.getChecked().objectName()
+        kern_size = self.kern_size_spbox.value()
+        kernel = ML_tools.construct_kernel_filter(kern_shape, kern_size)
+        
+    # Get ROI mask if required ('Fill Holes' always ignores the ROI)
+        algm = self.algm_combox.currentText()
+        roi = self.constructRoiMask() if algm != 'Fill Holes' else None
+        if self.invert_roi_cbox.isChecked() and roi is not None:
+            roi = np.invert(roi)
+
+    # Phase mask inversion (if required) only affects morphology operation. The
+    # result must then be inverted back. 
+        if self.invert_mask_cbox.isChecked():
+            refined = np.invert(ML_tools.apply_binary_morph(np.invert(phasemap),
+                                                            algm, kernel, roi))
+        else:
+            refined = ML_tools.apply_binary_morph(phasemap, algm, kernel, roi)
+
+    # Preserve borders if required
+        if self.skip_border_cbox.isChecked():
+            refined = self.preserveMapBorders(refined, phasemap, kern_size//2)
+
+        return refined
+
+    
+    def preserveMapBorders(self, refined: np.ndarray, original: np.ndarray, 
+                           thickness: int):
+        '''
+        Return a modified version of 'refined' mineral map, where the pixels
+        at the border are replaced by the corresponding ones in the 'original'
+        mineral map. The border thickness is controlled by 'thickness'.
+
+        Parameters
+        ----------
+        refined : np.ndarray
+            Refined mineral map. Must have the same shape of 'original'.
+        original : np.ndarray
+            Original mineral map. Must have the same shape of 'refined'.
+        thickness : int
+            Border thickness.
+
+        Returns
+        -------
+        np.ndarray
+            Refined mineral map with preserved borders.
+
+        '''
+        if thickness <= 0:
+            return refined
+        
+        border_mask = np.zeros(original.shape)
+        border_mask[thickness:-thickness, thickness:-thickness] = 1
+        return np.where(border_mask, refined, original)
+    
+
+    def toggleRoiSelector(self, toggled: bool):
+        '''
+        Toggle on/off the ROI rectangle selector.
+
+        Parameters
+        ----------
+        toggled : bool
+            Toggle the ROI selector on (True) or off (False).
+
+        '''
+    # Toggle on/off and update the ROI rectangle selector widget
+        self.roi_sel.set_active(toggled)
+        self.roi_sel.set_visible(toggled)
+        self.roi_sel.update()
+
+    # Also update the advanced preview if a valid ROI is/was set
+        if self._roi_extents is not None:
+            self.updateAdvancedPreview()
+
+
+    def onRoiDrawn(self, eclick, erelease):
+        '''
+        Callback function for the ROI rectangle selector. It is triggered when
+        selection is performed by the user (left mouse button click-release).
+
+        Parameters
+        ----------
+        eclick : Matplotlib MouseEvent
+            Mouse click event.
+        erelease : Matplotlib MouseEvent
+            Mouse release event.
+
+        '''
+    # Do nothing if the advanced preview canvas is empty
+        if self.prev_canvas_advan.is_empty():
+            return
+    
+    # Update the ROI extents attribute and the advanced preview
+        self._roi_extents = self.roi_sel.fixed_extents(self.minmap.shape)
+        self.updateAdvancedPreview()
+    
+
+    def constructRoiMask(self):
+        '''
+        Construct a ROI mask from the user-drawn ROI. The mask is used for the
+        advanced refiner operations.
+
+        Returns
+        -------
+        np.ndarray or None
+            The ROI mask or None if no valid ROI is drawn.
+
+        '''
+    # ROI mask is invalid if ROI extents are invalid or ROI selector is off 
+        if self._roi_extents is None or not self.roi_sel.active:
+            return None
+
+    # Construct the ROI mask array from the current ROI extents
+        r0,r1,c0,c1 = self._roi_extents
+        roi_mask = np.zeros(self.minmap.shape, dtype=bool)
+        roi_mask[r0:r1, c0:c1] = True
+        return roi_mask
+
+
+    def resetPhase(self):
+        '''
+        Cancel all refinement operations made on the currently selected phase.
+        This include added and removed (renamed) pixels.
+
+        '''
+    # Do nothing if currently selected phase is invalid
+        if self._phase is None:
+            return
+
+    # Wherever the phase is present (original or current map), reset to original
+        orig_minmap = self._minmap_backup.minmap
+        curr_minmap = self.minmap.minmap
+        mask = (orig_minmap == self._phase) | (curr_minmap == self._phase)
+        restored = np.where(mask, orig_minmap, curr_minmap)
+        self.minmap.edit_minmap(restored, alter_probmap=False)
+    
+    # Also restore the original probability map values, since those are altered
+    # when phases are refined (see 'alter_probmap' argument of 'edit_minmap'). 
+        self.minmap.probmap[mask] = self._minmap_backup.probmap[mask]
+
+    # Render advanced refiner widgets
+        self.renderAdvanced()
+
+    # Force edit legend amounts
+        self.updateLegendAmounts()
+
+
+    def resetMap(self):
+        '''
+        Cancel all the refinement operations made on the current mineral map. 
+
+        '''
+    # Do nothing if the current mineral map has not been edited
+        if self.minmap == self._minmap_backup:
+            return
+    
+    # Ask for user confirm
+        btns = QW.QMessageBox.Yes | QW.QMessageBox.No
+        choice = QW.QMessageBox.question(self, 'X-Min Learn',
+                                         'Discard all refinements?', btns,
+                                         QW.QMessageBox.No)
+        if choice == QW.QMessageBox.No:
+            return
+    
+    # Reset map and render refiner widgets
+        self.minmap = self._minmap_backup.copy()
+        if self._refiner_mode == 0:
+            self.renderBasic()
+        else:
+            self.renderAdvanced()
+
+
+    def saveMap(self):
+        '''
+        Save current refined mineral map to disk.
+
+        '''
+    # Ask for output path
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
+                                                    pref.get_dirPath('out'),
+                                                    '''Mineral map (*.mmp)''')
+        if not outpath:
+            return
+        
+    # Send success or error message
+        pref.set_dirPath('out', os.path.dirname(outpath))
+        try:
+            self.minmap.save(outpath)
+            return QW.QMessageBox.information(self, 'X-Min Learn', 
+                                              'Map saved with success')
+        except Exception as e:
+            return cObj.RichMsgBox(self, QW.QMessageBox.critical, 'X-Min Learn',
+                                   'An error occurred while saving the map',
+                                   detailedText=repr(e))
+                                               
+
+
 # class ModelLearner_OLD(DraggableTool):
 
 #     def __init__(self, parent):
@@ -8715,609 +9934,606 @@ class ModelLearner(DraggableTool):
 #             event.accept()
 #         else:
 #             event.ignore()
-
-
-
-
-class PhaseRefiner(QW.QWidget):
-
-    def __init__(self, minmap_array, parent):
-        self.parent = parent
-        super(PhaseRefiner, self).__init__()
-        self.setWindowTitle('Phase Refiner')
-        self.setWindowIcon(QIcon('Icons/refine.png'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
-
-        self.minmap = minmap_array
-        self.phases = np.unique(self.minmap)
-        self._backup = self.minmap.copy()
-
-    # Build Tab Widget
-        self._basicTab = self.BasicRefiner(self)
-        self._advancedTab = self.AdvancedRefiner(self)
-
-        self.tabWidget = QW.QTabWidget()
-        self.setStyleSheet('''QTabBar {color: black;}'''
-                           '''QTabWidget {background-color: rgb(169, 185, 188);}''')
-        self.tabWidget.addTab(self._basicTab, 'Basic')
-        self.tabWidget.addTab(self._advancedTab, 'Advanced')
-
-    # Adjust Main Layout
-        mainLayout = QW.QHBoxLayout()
-        mainLayout.addWidget(self.tabWidget)
-        self.setLayout(mainLayout)
-
-        self.adjustSize()
-
-    def closeEvent(self, event):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         "Do you really want to close the Phase Refiner?",
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
-            event.accept()
-        else:
-            event.ignore()
-
-
-    class BasicRefiner(QW.QWidget):
-
-        def __init__(self, parent):
-
-            self.parent = parent
-            super(parent.BasicRefiner, self).__init__()
-
-            self.phases = self.parent.phases
-            self.minmap = self.parent.minmap
-            self.refined = self.minmap.copy()
-
-            self.originalModeDict = dict(zip(*CF.get_mode(self.minmap, ordered=True)))
-            self.refinedModeDict = self.originalModeDict.copy()
-
-            self.mainParent = self.parent.parent
-
-            self.init_ui()
-
-        def init_ui(self):
-
-        # Kernel size selector widget
-            self.kernelSel = cObj.KernelSelector()
-
-        # Preserve image borders checkbox
-            self.psvBorders_cbox = QW.QCheckBox('Preserve borders')
-            self.psvBorders_cbox.setToolTip('The borders thickness will be choosen according to the kernel size')
-
-        # Nan value selector combobox
-            self.nanVal_combox = QW.QComboBox()
-            self.nanVal_combox.addItem('None')
-            self.nanVal_combox.addItems(self.phases)
-            self.nanVal_combox.setToolTip('Treat the selected phase as No Data')
-            self.nanVal_combox.currentTextChanged.connect(
-                lambda txt: self.nanTol_spbox.setEnabled(txt!='None'))
-
-        # Nan tolerance selector double spinbox
-            self.nanTol_spbox = QW.QDoubleSpinBox()
-            self.nanTol_spbox.setDecimals(2)
-            self.nanTol_spbox.setValue(0.5)
-            self.nanTol_spbox.setRange(0, 0.99)
-            self.nanTol_spbox.setSingleStep(0.1)
-            self.nanTol_spbox.setToolTip('If the amount of NaN pixels in Kernel are bigger than this value, '\
-                                         'the output will be forced to be the NaN value')
-            self.nanTol_spbox.setEnabled(False)
-
-        # Apply button
-            self.apply_btn = QW.QPushButton('Apply')
-            self.apply_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                             font-weight: bold''')
-            self.apply_btn.clicked.connect(self.applyFilter)
-
-        # Save button
-            self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
-            self.save_btn.setEnabled(False)
-            self.save_btn.clicked.connect(self.save)
-
-        # Adjust preferences group
-            nan_form = QW.QFormLayout()
-            nan_form.addRow('NaN value', self.nanVal_combox)
-            nan_form.addRow('NaN tolerance percentage', self.nanTol_spbox)
-
-            btn_hbox = QW.QHBoxLayout()
-            btn_hbox.addWidget(self.apply_btn)
-            btn_hbox.addWidget(self.save_btn)
-
-            pref_vbox = QW.QVBoxLayout()
-            pref_vbox.addWidget(self.kernelSel)
-            pref_vbox.addWidget(self.psvBorders_cbox)
-            pref_vbox.addLayout(nan_form)
-            pref_vbox.addLayout(btn_hbox)
-            pref_group = cObj.GroupArea(pref_vbox, 'Preferences')
-
-        # Original map canvas + NavTbar
-            self.origCanvas = cObj.DiscreteClassCanvas(self, tight=True)
-            self.origCanvas.update_canvas('Original', self.minmap,
-                                          colors = self.mainParent._minmaptab.MinMapView.curr_colors)
-            self.origCanvas.setMinimumSize(100, 100)
-            self.origNTbar = cObj.NavTbar(self.origCanvas, self)
-            self.origNTbar.fixHomeAction()
-            self.origNTbar.removeToolByIndex([3, 4, 8, 9])
-
-        # Original map Mode Bar Chart
-            self.origMode = cObj.BarCanvas(self, size=(5.0, 3.5))
-            self._updateModePlot('Original')
-
-        # Refined map canvas + NavTbar
-            self.refCanvas = cObj.DiscreteClassCanvas(self, tight=True)
-            self.refCanvas.setMinimumSize(100, 100)
-            self.refCanvas.update_canvas('Refined', self.minmap,
-                                          colors = self.origCanvas.curr_colors)
-            CF.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
-            self.refNTbar = cObj.NavTbar(self.refCanvas, self)
-            self.refNTbar.fixHomeAction()
-            self.refNTbar.removeToolByIndex([3, 4, 8, 9])
-
-        # Refined map Mode Bar Chart
-            self.refMode = cObj.BarCanvas(self, size=(5.0, 3.5))
-            self._updateModePlot('Refined')
-
-        # Legend List widget
-            self.legend = cObj.CanvasLegend(self.origCanvas, amounts=False,
-                                            childrenCanvas=[self.refCanvas])
-            self.legend.itemColorChanged.connect(
-                lambda: self._updateModePlot('Original'))
-            self.legend.itemColorChanged.connect(
-                lambda: self._updateModePlot('Refined'))
-
-        # Adjust Main Layout
-            left_area = QW.QVBoxLayout()
-            left_area.addWidget(self.legend)
-            left_area.addWidget(pref_group)
-
-            plot_area = QW.QGridLayout()
-            for row, (w_orig, w_ref) in enumerate((
-                (self.origNTbar,  self.refNTbar),
-                (self.origCanvas, self.refCanvas),
-                (self.origMode,   self.refMode))):
-                plot_area.addWidget(w_orig, row, 0)
-                plot_area.addWidget(w_ref,  row, 1)
-            plot_area.setRowStretch(1, 2)
-            plot_area.setRowStretch(2, 1)
-
-            main_split = cObj.SplitterGroup((left_area, plot_area), (1, 2)) # use SplitterLayout
-
-            mainLayout = QW.QHBoxLayout()
-            mainLayout.addWidget(main_split)
-            self.setLayout(mainLayout)
-
-
-        def _updateRefinedCanvas(self, lbl_arr):
-            self.refCanvas.update_canvas('Refined', lbl_arr)
-            self.legend._transferColors()
-            self._updateModePlot('Refined')
-            # lbl, mode = CF.get_mode(lbl_arr, ordered=True)
-            # self.refMode.update_canvas('Refined Mineral Mode', mode, lbl)
-
-        def _updateModePlot(self, plot):
-            if plot == 'Refined':
-                canvas = self.refMode
-                modeDict = self.refinedModeDict
-            elif plot == 'Original':
-                canvas = self.origMode
-                modeDict = self.originalModeDict
-            else : raise NameError(f'{plot}')
-
-            lbl, mode = zip(*modeDict.items())
-            # Use the current colors of original canvas, which includes always all the classes
-            col_dict = dict(zip(self.phases, self.origCanvas.curr_colors))
-            # The sort_dict_by_list func excludes from col_dict the keys not in lbl (see documentation)
-            col_dict = CF.sort_dict_by_list(col_dict, lbl)
-            canvas.update_canvas(f'{plot} Mineral Mode', mode, lbl,
-                                 colors=list(col_dict.values()))
-
-        # def get_arrayCenter(self, arr):
-        #     size = len(arr)
-        #     idx = size//2
-        #     # if size % 2 == 0:
-        #     #     idx += (size**0.5)//2
-        #     center = arr[int(idx)]
-        #     return center
-
-        def preserve_borders(self, orig, filt, tck):
-            # tck = border thickness
-            if tck <= 0:
-                return filt
-            out_mask = np.zeros(orig.shape)
-            out_mask[tck:-tck, tck:-tck] = 1
-            out = np.where(out_mask, filt, orig)
-            return out
-
-        def max_freq(self, arr, nan=None, nan_tolerance=0.5):
-            arr = arr.astype(int)
-            nan_cnt = np.count_nonzero(arr==nan)
-            if nan_cnt > len(arr) * nan_tolerance:
-                return nan
-
-            f = np.bincount(arr[arr!=nan])
-            out = f.argmax()
-            # max_f = np.where(f == f.max())[0]
-            # if len(max_f) > 1:
-            #     center = self.get_arrayCenter(arr)
-            #     if center in max_f:
-            #         out = center
-
-            return out
-
-        def applyFilter(self):
-            pbar = cObj.PopUpProgBar(self, 5, 'Applying filter',
-                                     cancel=False, forceShow=True)
-            arr = self.origCanvas.data
-            transDict = self.origCanvas.dataDict
-            kernel = self.kernelSel.get_structure()
-            excl_borders = self.psvBorders_cbox.isChecked()
-            nan_str = self.nanVal_combox.currentText()
-            nan = None if nan_str=='None' else transDict[nan_str]
-            nan_tol = self.nanTol_spbox.value()
-            pbar.setValue(1)
-
-            freq = nd.generic_filter(arr, function=self.max_freq, footprint=kernel, mode='nearest',
-                                     extra_keywords={'nan': nan, 'nan_tolerance': nan_tol})
-            if excl_borders:
-                border_tck = kernel.shape[0] // 2
-                freq = self.preserve_borders(arr, freq, border_tck)
-            pbar.setValue(2)
-
-            self.refined = CF.decode_labels(freq, transDict)
-            pbar.setValue(3)
-
-            self.refinedModeDict = dict(zip(*CF.get_mode(self.refined, ordered=True)))
-            pbar.setValue(4)
-
-            self._updateRefinedCanvas(self.refined)
-            self.save_btn.setEnabled(True)
-            pbar.setValue(5)
-
-        def save(self):
-            outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
-                                                        pref.get_dirPath('out'),
-                                                        '''Compressed ASCII file (*.gz)
-                                                           ASCII file (*.txt)''')
-            if outpath:
-                pref.set_dirPath('out', os.path.dirname(outpath))
-                np.savetxt(outpath, self.refined, fmt='%s')
-                autoload = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                   'Do you want to load the result in the "Mineral Map Tab"?',
-                                                   QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                   QW.QMessageBox.Yes)
-                if autoload == QW.QMessageBox.Yes:
-                    self.mainParent._minmaptab.loadMaps([outpath])
-
-
-    class AdvancedRefiner(QW.QWidget):
-
-        def __init__(self, parent):
-
-            self.parent = parent
-            super(parent.AdvancedRefiner, self).__init__()
-
-            self.minmap = self.parent.minmap
-            self.phases = self.parent.phases
-            self.mainParent = self.parent.parent
-
-            self.algmDict = {'Erosion + Reconstruction' : lambda x, s, mask: nd.binary_propagation(
-                                                                             nd.binary_erosion(x, s, mask=mask),
-                                                                             structure=s, mask=x),
-                             'Opening (Erosion + Dilation)' : nd.binary_opening,
-                             'Closing (Dilation + Erosion)' : nd.binary_closing,
-                             'Erosion' :    nd.binary_erosion,
-                             'Dilation' :   nd.binary_dilation,
-                             'Fill holes' : nd.binary_fill_holes}
-
-            self.varianceRGB = {-1 : (255,0,0),      # -> -1 new background pixel
-                                 0 : (0,0,0),        # ->  0 same background pixel
-                                 1 : (255,255,255),  # ->  1 same phase pixel
-                                 2 : (0,255,0)}      # ->  2 new phase pixel
-
-            self.roi = None
-
-            self.init_ui()
-            self.update_phaseView()
-
-
-        def init_ui(self):
-
-        # Mineral phases TOC
-            self.TOC = cObj.RadioBtnLayout(self.phases)
-            for btn in self.TOC.get_buttonList():
-                btn.clicked.connect(self.update_phaseView)
-            TOC_group = cObj.GroupScrollArea(self.TOC, 'Mineral Phases')
-            TOC_group.setStyleSheet('border: 0px;')
-
-        # Reset original phase button
-            self.resetPhase_btn = QW.QPushButton('Reset')
-            self.resetPhase_btn.setStyleSheet('''background-color: red;
-                                                 font-weight: bold;
-                                                 color: white''')
-            self.resetPhase_btn.setToolTip('Discard all refinement operations for this phase')
-            self.resetPhase_btn.clicked.connect(self.resetPhase)
-
-        # Original phase preview + NavTbar
-            self.origCanvas = cObj.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
-            self.origCanvas.fig.suptitle('Original', size='x-large')
-            self.origCanvas.setMinimumSize(100, 100)
-
-            self.origNTbar = cObj.NavTbar(self.origCanvas, self)
-            self.origNTbar.fixHomeAction()
-            self.origNTbar.removeToolByIndex([3, 4, 8, 9, 12])
-
-        # Refine phase button
-            self.refinePhase_btn = QW.QPushButton('Apply')
-            self.refinePhase_btn.setStyleSheet('''background-color: rgb(50,205,50);
-                                                  font-weight: bold''')
-            self.refinePhase_btn.setToolTip('Refine the phase')
-            self.refinePhase_btn.clicked.connect(self.refinePhase)
-
-        # Refined phase preview + NavTbar
-            self.refCanvas = cObj.DiscreteClassCanvas(self, tight=True)
-            self.refCanvas.fig.suptitle('Refined', size='x-large')
-            self.refCanvas.setMinimumSize(100, 100)
-            CF.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
-
-            self.refNTbar = cObj.NavTbar(self.refCanvas, self)
-            self.refNTbar.fixHomeAction()
-            self.refNTbar.removeToolByIndex([3, 4, 8, 9, 12])
-
-        # Region Of Interest Selector + Zoom Lock Actions in refined phase NavTbar
-            self.roiSelAction = QW.QAction(QIcon('Icons/ROI_selection.png'),
-                                          'Select Region Of Interest', self.refNTbar)
-            self.roiSelAction.setCheckable(True)
-            self.roiSelAction.toggled.connect(self.toggle_roiSel)
-
-            self.zoomLockAction = QW.QAction(QIcon('Icons/lockZoom.png'),
-                                            'Lock zoom', self.refNTbar)
-            self.zoomLockAction.setCheckable(True)
-            self.zoomLockAction.triggered.connect(self.lock_zoom)
-
-            self.refNTbar.insertActions(10, (self.zoomLockAction, 
-                                             self.roiSelAction))
-
-        # ROI warning icon
-            self.algmWarn = QW.QLabel()
-            self.algmWarn.setPixmap(QG.QPixmap('Icons/warnIcon.png').scaled(30, 30,
-                                                                         Qt.KeepAspectRatio))
-            self.algmWarn.setSizePolicy(QW.QSizePolicy.Maximum,
-                                        QW.QSizePolicy.Maximum)
-            self.algmWarn.setToolTip('Warning: the selected algorithm ignores the Region Of Interest.')
-            self.algmWarn.hide()
-
-        # Rectangle selector widget
-            self.rectSel = cObj.RectSel(self.refCanvas.ax, self.select_roi, btns=[1])
-
-        # Preview Area group
-            origTbar_hbox = QW.QHBoxLayout()
-            origTbar_hbox.addWidget(self.resetPhase_btn, alignment=Qt.AlignLeft)
-            origTbar_hbox.addWidget(self.origNTbar, alignment=Qt.AlignLeft)
-            origTbar_hbox.addStretch()
-            orig_vbox = QW.QVBoxLayout()
-            orig_vbox.addLayout(origTbar_hbox)
-            orig_vbox.addWidget(self.origCanvas)
-
-            refTbar_hbox = QW.QHBoxLayout()
-            refTbar_hbox.addWidget(self.refinePhase_btn, alignment=Qt.AlignLeft)
-            refTbar_hbox.addWidget(self.refNTbar, alignment=Qt.AlignLeft)
-            refTbar_hbox.addStretch()
-            refTbar_hbox.addWidget(self.algmWarn, alignment=Qt.AlignRight)
-            ref_vbox = QW.QVBoxLayout()
-            ref_vbox.addLayout(refTbar_hbox)
-            ref_vbox.addWidget(self.refCanvas)
-
-            preview_hbox = QW.QHBoxLayout()
-            preview_hbox.addLayout(orig_vbox)
-            preview_hbox.addLayout(ref_vbox)
-            preview_group = cObj.GroupArea(preview_hbox, 'Preview')
-
-        # Morphological tool algorithms combobox
-            self.algm_combox = QW.QComboBox()
-            self.algm_combox.addItems(self.algmDict.keys())
-            self.algm_combox.currentTextChanged.connect(self.update_phaseView)
-            algm_form = QW.QFormLayout()
-            algm_form.addRow('Algorithm', self.algm_combox)
-
-        # Invert mask checkbox
-            self.invertMask_cbox = QW.QCheckBox('Invert mask')
-            self.invertMask_cbox.stateChanged.connect(self.update_phaseView)
-
-        # Invert ROI checkbox
-            self.invertROI_cbox = QW.QCheckBox('Invert ROI')
-            self.invertROI_cbox.stateChanged.connect(self.update_phaseView)
-
-        # Kernel size selector widget
-            self.kernelSel = cObj.KernelSelector()
-            self.kernelSel.structureChanged.connect(self.update_phaseView)
-
-        # Removed pixels behaviour combobox
-            self.delPixAs_combox = QW.QComboBox()
-            self.delPixAs_combox.addItems(['Nearest',
-                                           'ND'])
-            self.delPixAs_combox.setToolTip('Indicates how to reclassify pixels deleted by the refinement algorithm.')
-            delPixAs_form = QW.QFormLayout()
-            delPixAs_form.addRow('Removed Pixels as:', self.delPixAs_combox)
-
-        # Reset all edits button
-            self.resetAll_btn = QW.QPushButton(QIcon('Icons/generic_del.png'),
-                                               'Reset All')
-            self.resetAll_btn.setToolTip('Discard all edits')
-            self.resetAll_btn.clicked.connect(self.resetAll)
-
-        # Save edits button
-            self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
-            self.save_btn.clicked.connect(self.saveEdits)
-
-        # Adjust options group
-            saveReset_hbox = QW.QHBoxLayout()
-            saveReset_hbox.addWidget(self.resetAll_btn)
-            saveReset_hbox.addWidget(self.save_btn)
-
-            options_vbox = QW.QVBoxLayout()
-            options_vbox.addLayout(algm_form)
-            options_vbox.addWidget(self.invertMask_cbox)
-            options_vbox.addWidget(self.invertROI_cbox)
-            options_vbox.addWidget(self.kernelSel)
-            options_vbox.addLayout(delPixAs_form)
-            options_vbox.addLayout(saveReset_hbox)
-            options_group = cObj.GroupArea(options_vbox, 'Preferences')
-
-
-        # Adjust Main Layout
-            left_box = QW.QVBoxLayout()
-            left_box.addWidget(TOC_group)
-            left_box.addWidget(options_group)
-
-            mainSplit = cObj.SplitterGroup((left_box, preview_group), # use SplitterLayout
-                                           (1, 2))
-            mainLayout = QW.QHBoxLayout()
-            mainLayout.addWidget(mainSplit)
-            self.setLayout(mainLayout)
-
-
-
-        def lock_zoom(self):
-            lock = self.sender().isChecked()
-            self.origCanvas.toggle_zoomLock(lock)
-            self.refCanvas.toggle_zoomLock(lock)
-
-        def toggle_roiSel(self, toggled):
-            if not toggled: self.roi = None
-            self.rectSel.set_active(toggled)
-            self.rectSel.set_visible(toggled)
-            self.refCanvas.enablePicking(toggled)
-            self.update_phaseView()
-
-        def select_roi (self, eclick, erelease):
-            mapShape = self.minmap.shape
-            extents = self.rectSel.fixed_extents(mapShape)
-            if extents is None : return
-            self.roi = extents
-            self.update_phaseView()
-            self.rectSel.updateCursor()
-
-        def check_ROIwarn(self):
-            algm = self.algm_combox.currentText()
-            if algm == 'Fill holes' and self.rectSel.active:
-                self.algmWarn.show()
-            else:
-                self.algmWarn.hide()
-
-
-
-        def replace_excluded(self, array, strategy):
-            mask = array == 'nan' # np.nan becomes 'nan' in a string array
-
-            if strategy == 'Nearest':
-                i = nd.distance_transform_edt(mask,
-                                              return_distances=False,
-                                              return_indices=True)
-                array = array[tuple(i)]
-
-            elif strategy == 'ND':
-                array[mask] = '_ND_'
-
-            return array
-
-        def refinePhase(self):
-            phase = self.TOC.get_checked().text()
-            mask = self.minmap == phase
-            edits, _ = self._varianceMatrix(self._refine(mask), mask)
-            removedAs = self.delPixAs_combox.currentText()
-        # Get rid of excluded pixels
-            self.minmap[edits == -1] = np.nan
-            self.minmap = self.replace_excluded(self.minmap, removedAs)
-        # Add the new pixels
-            self.minmap[edits == 2] = phase
-
-            self.update_phaseView()
-
-        def resetPhase(self):
-            phase = self.TOC.get_checked().text()
-            bkp = self.parent._backup
-            mask = (bkp == phase) | (self.minmap == phase)
-            self.minmap = np.where(mask, bkp, self.minmap)
-            self.update_phaseView()
-
-        def resetAll(self):
-            choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                   'Do you really want to discard all the edits?',
-                                                   QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                   QW.QMessageBox.No)
-            if choice== QW.QMessageBox.Yes:
-                self.minmap = self.parent._backup.copy()
-                self.update_phaseView()
-
-        def _compute_ROImask(self, mapShape):
-            if self.roi is None:
-                r0,c0 = 0, 0
-                r1,c1 = mapShape
-            else:
-                r0,r1,c0,c1 = self.roi
-            roi_mask = np.zeros(mapShape, dtype=bool)
-            roi_mask[r0:r1, c0:c1] = True
-            # Invert ROI if required
-            if self.invertROI_cbox.isChecked():
-                roi_mask = np.invert(roi_mask)
-            return roi_mask
-
-        def _refine(self, ph_mask):
-        # Get all of the morphological parameters
-            algm = self.algm_combox.currentText()
-            invert = self.invertMask_cbox.isChecked()
-            struct = self.kernelSel.get_structure()
-            roi_mask = self._compute_ROImask(ph_mask.shape)
-            if invert: ph_mask = np.invert(ph_mask)
-        # 'Fill holes' algorithm do not support ROI mask
-            if algm == 'Fill holes':
-                refined = self.algmDict[algm](ph_mask, struct)
-            else:
-                refined = self.algmDict[algm](ph_mask, struct, mask=roi_mask)
-
-        # The inversion is only for refinement sake, therefore we invert back the result
-            if invert : refined = np.invert(refined)
-            return refined
-
-        def _varianceMatrix(self, new, old):
-            new = new.astype('int8')
-            old = old.astype('int8')
-            res = new - old + new
-            colors = [v for k,v in self.varianceRGB.items() if k in np.unique(res)]
-            return res, colors
-
-        def update_phaseView(self):
-            phase = self.TOC.get_checked().text()
-            mask = self.minmap == phase
-            edits, colors = self._varianceMatrix(self._refine(mask), mask)
-            self.check_ROIwarn()
-
-            nPix_orig = np.count_nonzero(mask)
-            nPix_edits = np.count_nonzero(edits>0)
-            self.origCanvas.update_canvas(f'{phase} = {nPix_orig}', mask)
-            self.refCanvas.update_canvas(f'{phase} = {nPix_edits}',
-                                         edits, colors = colors)
-
-
-        def saveEdits(self):
-            outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
-                                                        pref.get_dirPath('out'),
-                                                        '''Compressed ASCII file (*.gz)
-                                                           ASCII file (*.txt)''')
-            if outpath:
-                pref.set_dirPath('out', os.path.dirname(outpath))
-                np.savetxt(outpath, self.minmap, fmt='%s')
-                autoload = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                   'Do you want to load the result in the "Mineral Map Tab"?',
-                                                   QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                   QW.QMessageBox.Yes)
-                if autoload == QW.QMessageBox.Yes:
-                    self.mainParent._minmaptab.loadMaps([outpath])
-
-
+    
+ 
+
+# class PhaseRefinerOLD(QW.QWidget):
+
+#     def __init__(self, minmap_array, parent):
+#         self.parent = parent
+#         super(PhaseRefinerOLD, self).__init__()
+#         self.setWindowTitle('Phase Refiner')
+#         self.setWindowIcon(QIcon('Icons/refine.png'))
+#         self.setAttribute(Qt.WA_QuitOnClose, False)
+#         self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+#         self.minmap = minmap_array
+#         self.phases = np.unique(self.minmap)
+#         self._backup = self.minmap.copy()
+
+#     # Build Tab Widget
+#         self._basicTab = self.BasicRefiner(self)
+#         self._advancedTab = self.AdvancedRefiner(self)
+
+#         self.tabWidget = QW.QTabWidget()
+#         self.setStyleSheet('''QTabBar {color: black;}'''
+#                            '''QTabWidget {background-color: rgb(169, 185, 188);}''')
+#         self.tabWidget.addTab(self._basicTab, 'Basic')
+#         self.tabWidget.addTab(self._advancedTab, 'Advanced')
+
+#     # Adjust Main Layout
+#         mainLayout = QW.QHBoxLayout()
+#         mainLayout.addWidget(self.tabWidget)
+#         self.setLayout(mainLayout)
+
+#         self.adjustSize()
+
+#     def closeEvent(self, event):
+#         choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                          "Do you really want to close the Phase Refiner?",
+#                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                          QW.QMessageBox.No)
+#         if choice == QW.QMessageBox.Yes:
+#             event.accept()
+#         else:
+#             event.ignore()
+
+
+#     class BasicRefiner(QW.QWidget):
+
+#         def __init__(self, parent):
+
+#             self.parent = parent
+#             super(parent.BasicRefiner, self).__init__()
+
+#             self.phases = self.parent.phases
+#             self.minmap = self.parent.minmap
+#             self.refined = self.minmap.copy()
+
+#             self.originalModeDict = dict(zip(*CF.get_mode(self.minmap, ordered=True)))
+#             self.refinedModeDict = self.originalModeDict.copy()
+
+#             self.mainParent = self.parent.parent
+
+#             self.init_ui()
+
+#         def init_ui(self):
+
+#         # Kernel size selector widget
+#             self.kernelSel = cObj.KernelSelector()
+
+#         # Preserve image borders checkbox
+#             self.psvBorders_cbox = QW.QCheckBox('Preserve borders')
+#             self.psvBorders_cbox.setToolTip('The borders thickness will be choosen according to the kernel size')
+
+#         # Nan value selector combobox
+#             self.nanVal_combox = QW.QComboBox()
+#             self.nanVal_combox.addItem('None')
+#             self.nanVal_combox.addItems(self.phases)
+#             self.nanVal_combox.setToolTip('Treat the selected phase as No Data')
+#             self.nanVal_combox.currentTextChanged.connect(
+#                 lambda txt: self.nanTol_spbox.setEnabled(txt!='None'))
+
+#         # Nan tolerance selector double spinbox
+#             self.nanTol_spbox = QW.QDoubleSpinBox()
+#             self.nanTol_spbox.setDecimals(2)
+#             self.nanTol_spbox.setValue(0.5)
+#             self.nanTol_spbox.setRange(0, 0.99)
+#             self.nanTol_spbox.setSingleStep(0.1)
+#             self.nanTol_spbox.setToolTip('If the amount of NaN pixels in Kernel are bigger than this value, '\
+#                                          'the output will be forced to be the NaN value')
+#             self.nanTol_spbox.setEnabled(False)
+
+#         # Apply button
+#             self.apply_btn = QW.QPushButton('Apply')
+#             self.apply_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                              font-weight: bold''')
+#             self.apply_btn.clicked.connect(self.applyFilter)
+
+#         # Save button
+#             self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
+#             self.save_btn.setEnabled(False)
+#             self.save_btn.clicked.connect(self.save)
+
+#         # Adjust preferences group
+#             nan_form = QW.QFormLayout()
+#             nan_form.addRow('NaN value', self.nanVal_combox)
+#             nan_form.addRow('NaN tolerance percentage', self.nanTol_spbox)
+
+#             btn_hbox = QW.QHBoxLayout()
+#             btn_hbox.addWidget(self.apply_btn)
+#             btn_hbox.addWidget(self.save_btn)
+
+#             pref_vbox = QW.QVBoxLayout()
+#             pref_vbox.addWidget(self.kernelSel)
+#             pref_vbox.addWidget(self.psvBorders_cbox)
+#             pref_vbox.addLayout(nan_form)
+#             pref_vbox.addLayout(btn_hbox)
+#             pref_group = cObj.GroupArea(pref_vbox, 'Preferences')
+
+#         # Original map canvas + NavTbar
+#             self.origCanvas = cObj.DiscreteClassCanvas(self, tight=True)
+#             self.origCanvas.update_canvas('Original', self.minmap,
+#                                           colors = self.mainParent._minmaptab.MinMapView.curr_colors)
+#             self.origCanvas.setMinimumSize(100, 100)
+#             self.origNTbar = cObj.NavTbar(self.origCanvas, self)
+#             self.origNTbar.fixHomeAction()
+#             self.origNTbar.removeToolByIndex([3, 4, 8, 9])
+
+#         # Original map Mode Bar Chart
+#             self.origMode = cObj.BarCanvas(self, size=(5.0, 3.5))
+#             self._updateModePlot('Original')
+
+#         # Refined map canvas + NavTbar
+#             self.refCanvas = cObj.DiscreteClassCanvas(self, tight=True)
+#             self.refCanvas.setMinimumSize(100, 100)
+#             self.refCanvas.update_canvas('Refined', self.minmap,
+#                                           colors = self.origCanvas.curr_colors)
+#             CF.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
+#             self.refNTbar = cObj.NavTbar(self.refCanvas, self)
+#             self.refNTbar.fixHomeAction()
+#             self.refNTbar.removeToolByIndex([3, 4, 8, 9])
+
+#         # Refined map Mode Bar Chart
+#             self.refMode = cObj.BarCanvas(self, size=(5.0, 3.5))
+#             self._updateModePlot('Refined')
+
+#         # Legend List widget
+#             self.legend = cObj.CanvasLegend(self.origCanvas, amounts=False,
+#                                             childrenCanvas=[self.refCanvas])
+#             self.legend.itemColorChanged.connect(
+#                 lambda: self._updateModePlot('Original'))
+#             self.legend.itemColorChanged.connect(
+#                 lambda: self._updateModePlot('Refined'))
+
+#         # Adjust Main Layout
+#             left_area = QW.QVBoxLayout()
+#             left_area.addWidget(self.legend)
+#             left_area.addWidget(pref_group)
+
+#             plot_area = QW.QGridLayout()
+#             for row, (w_orig, w_ref) in enumerate((
+#                 (self.origNTbar,  self.refNTbar),
+#                 (self.origCanvas, self.refCanvas),
+#                 (self.origMode,   self.refMode))):
+#                 plot_area.addWidget(w_orig, row, 0)
+#                 plot_area.addWidget(w_ref,  row, 1)
+#             plot_area.setRowStretch(1, 2)
+#             plot_area.setRowStretch(2, 1)
+
+#             main_split = cObj.SplitterGroup((left_area, plot_area), (1, 2)) # use SplitterLayout
+
+#             mainLayout = QW.QHBoxLayout()
+#             mainLayout.addWidget(main_split)
+#             self.setLayout(mainLayout)
+
+
+#         def _updateRefinedCanvas(self, lbl_arr):
+#             self.refCanvas.update_canvas('Refined', lbl_arr)
+#             self.legend._transferColors()
+#             self._updateModePlot('Refined')
+#             # lbl, mode = CF.get_mode(lbl_arr, ordered=True)
+#             # self.refMode.update_canvas('Refined Mineral Mode', mode, lbl)
+
+#         def _updateModePlot(self, plot):
+#             if plot == 'Refined':
+#                 canvas = self.refMode
+#                 modeDict = self.refinedModeDict
+#             elif plot == 'Original':
+#                 canvas = self.origMode
+#                 modeDict = self.originalModeDict
+#             else : raise NameError(f'{plot}')
+
+#             lbl, mode = zip(*modeDict.items())
+#             # Use the current colors of original canvas, which includes always all the classes
+#             col_dict = dict(zip(self.phases, self.origCanvas.curr_colors))
+#             # The sort_dict_by_list func excludes from col_dict the keys not in lbl (see documentation)
+#             col_dict = CF.sort_dict_by_list(col_dict, lbl)
+#             canvas.update_canvas(f'{plot} Mineral Mode', mode, lbl,
+#                                  colors=list(col_dict.values()))
+
+#         # def get_arrayCenter(self, arr):
+#         #     size = len(arr)
+#         #     idx = size//2
+#         #     # if size % 2 == 0:
+#         #     #     idx += (size**0.5)//2
+#         #     center = arr[int(idx)]
+#         #     return center
+
+#         def preserve_borders(self, orig, filt, tck):
+#             # tck = border thickness
+#             if tck <= 0:
+#                 return filt
+#             out_mask = np.zeros(orig.shape)
+#             out_mask[tck:-tck, tck:-tck] = 1
+#             out = np.where(out_mask, filt, orig)
+#             return out
+
+#         def max_freq(self, arr, nan=None, nan_tolerance=0.5):
+#             arr = arr.astype(int)
+#             nan_cnt = np.count_nonzero(arr==nan)
+#             if nan_cnt > len(arr) * nan_tolerance:
+#                 return nan
+
+#             f = np.bincount(arr[arr!=nan])
+#             out = f.argmax()
+#             # max_f = np.where(f == f.max())[0]
+#             # if len(max_f) > 1:
+#             #     center = self.get_arrayCenter(arr)
+#             #     if center in max_f:
+#             #         out = center
+
+#             return out
+
+#         def applyFilter(self):
+#             pbar = cObj.PopUpProgBar(self, 5, 'Applying filter',
+#                                      cancel=False, forceShow=True)
+#             arr = self.origCanvas.data
+#             transDict = self.origCanvas.dataDict
+#             kernel = self.kernelSel.get_structure()
+#             excl_borders = self.psvBorders_cbox.isChecked()
+#             nan_str = self.nanVal_combox.currentText()
+#             nan = None if nan_str=='None' else transDict[nan_str]
+#             nan_tol = self.nanTol_spbox.value()
+#             pbar.setValue(1)
+
+#             freq = nd.generic_filter(arr, function=self.max_freq, footprint=kernel, mode='nearest',
+#                                      extra_keywords={'nan': nan, 'nan_tolerance': nan_tol})
+#             if excl_borders:
+#                 border_tck = kernel.shape[0] // 2
+#                 freq = self.preserve_borders(arr, freq, border_tck)
+#             pbar.setValue(2)
+
+#             self.refined = CF.decode_labels(freq, transDict)
+#             pbar.setValue(3)
+
+#             self.refinedModeDict = dict(zip(*CF.get_mode(self.refined, ordered=True)))
+#             pbar.setValue(4)
+
+#             self._updateRefinedCanvas(self.refined)
+#             self.save_btn.setEnabled(True)
+#             pbar.setValue(5)
+
+#         def save(self):
+#             outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
+#                                                         pref.get_dirPath('out'),
+#                                                         '''Compressed ASCII file (*.gz)
+#                                                            ASCII file (*.txt)''')
+#             if outpath:
+#                 pref.set_dirPath('out', os.path.dirname(outpath))
+#                 np.savetxt(outpath, self.refined, fmt='%s')
+#                 autoload = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                                    'Do you want to load the result in the "Mineral Map Tab"?',
+#                                                    QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                                    QW.QMessageBox.Yes)
+#                 if autoload == QW.QMessageBox.Yes:
+#                     self.mainParent._minmaptab.loadMaps([outpath])
+
+
+#     class AdvancedRefiner(QW.QWidget):
+
+#         def __init__(self, parent):
+
+#             self.parent = parent
+#             super(parent.AdvancedRefiner, self).__init__()
+
+#             self.minmap = self.parent.minmap
+#             self.phases = self.parent.phases
+#             self.mainParent = self.parent.parent
+
+#             self.algmDict = {'Erosion + Reconstruction' : lambda x, s, mask: nd.binary_propagation(
+#                                                                              nd.binary_erosion(x, s, mask=mask),
+#                                                                              structure=s, mask=x),
+#                              'Opening (Erosion + Dilation)' : nd.binary_opening,
+#                              'Closing (Dilation + Erosion)' : nd.binary_closing,
+#                              'Erosion' :    nd.binary_erosion,
+#                              'Dilation' :   nd.binary_dilation,
+#                              'Fill holes' : nd.binary_fill_holes}
+
+#             self.varianceRGB = {-1 : (255,0,0),      # -> -1 new background pixel
+#                                  0 : (0,0,0),        # ->  0 same background pixel
+#                                  1 : (255,255,255),  # ->  1 same phase pixel
+#                                  2 : (0,255,0)}      # ->  2 new phase pixel
+
+#             self.roi = None
+
+#             self.init_ui()
+#             self.update_phaseView()
+
+
+#         def init_ui(self):
+
+#         # Mineral phases TOC
+#             self.TOC = cObj.RadioBtnLayout(self.phases)
+#             for btn in self.TOC.get_buttonList():
+#                 btn.clicked.connect(self.update_phaseView)
+#             TOC_group = cObj.GroupScrollArea(self.TOC, 'Mineral Phases')
+#             TOC_group.setStyleSheet('border: 0px;')
+
+#         # Reset original phase button
+#             self.resetPhase_btn = QW.QPushButton('Reset')
+#             self.resetPhase_btn.setStyleSheet('''background-color: red;
+#                                                  font-weight: bold;
+#                                                  color: white''')
+#             self.resetPhase_btn.setToolTip('Discard all refinement operations for this phase')
+#             self.resetPhase_btn.clicked.connect(self.resetPhase)
+
+#         # Original phase preview + NavTbar
+#             self.origCanvas = cObj.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
+#             self.origCanvas.fig.suptitle('Original', size='x-large')
+#             self.origCanvas.setMinimumSize(100, 100)
+
+#             self.origNTbar = cObj.NavTbar(self.origCanvas, self)
+#             self.origNTbar.fixHomeAction()
+#             self.origNTbar.removeToolByIndex([3, 4, 8, 9, 12])
+
+#         # Refine phase button
+#             self.refinePhase_btn = QW.QPushButton('Apply')
+#             self.refinePhase_btn.setStyleSheet('''background-color: rgb(50,205,50);
+#                                                   font-weight: bold''')
+#             self.refinePhase_btn.setToolTip('Refine the phase')
+#             self.refinePhase_btn.clicked.connect(self.refinePhase)
+
+#         # Refined phase preview + NavTbar
+#             self.refCanvas = cObj.DiscreteClassCanvas(self, tight=True)
+#             self.refCanvas.fig.suptitle('Refined', size='x-large')
+#             self.refCanvas.setMinimumSize(100, 100)
+#             CF.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
+
+#             self.refNTbar = cObj.NavTbar(self.refCanvas, self)
+#             self.refNTbar.fixHomeAction()
+#             self.refNTbar.removeToolByIndex([3, 4, 8, 9, 12])
+
+#         # Region Of Interest Selector + Zoom Lock Actions in refined phase NavTbar
+#             self.roiSelAction = QW.QAction(QIcon('Icons/ROI_selection.png'),
+#                                           'Select Region Of Interest', self.refNTbar)
+#             self.roiSelAction.setCheckable(True)
+#             self.roiSelAction.toggled.connect(self.toggle_roiSel)
+
+#             self.zoomLockAction = QW.QAction(QIcon('Icons/lockZoom.png'),
+#                                             'Lock zoom', self.refNTbar)
+#             self.zoomLockAction.setCheckable(True)
+#             self.zoomLockAction.triggered.connect(self.lock_zoom)
+
+#             self.refNTbar.insertActions(10, (self.zoomLockAction, 
+#                                              self.roiSelAction))
+
+#         # ROI warning icon
+#             self.algmWarn = QW.QLabel()
+#             self.algmWarn.setPixmap(QG.QPixmap('Icons/warnIcon.png').scaled(30, 30,
+#                                                                          Qt.KeepAspectRatio))
+#             self.algmWarn.setSizePolicy(QW.QSizePolicy.Maximum,
+#                                         QW.QSizePolicy.Maximum)
+#             self.algmWarn.setToolTip('Warning: the selected algorithm ignores the Region Of Interest.')
+#             self.algmWarn.hide()
+
+#         # Rectangle selector widget
+#             self.rectSel = cObj.RectSel(self.refCanvas.ax, self.select_roi, btns=[1])
+
+#         # Preview Area group
+#             origTbar_hbox = QW.QHBoxLayout()
+#             origTbar_hbox.addWidget(self.resetPhase_btn, alignment=Qt.AlignLeft)
+#             origTbar_hbox.addWidget(self.origNTbar, alignment=Qt.AlignLeft)
+#             origTbar_hbox.addStretch()
+#             orig_vbox = QW.QVBoxLayout()
+#             orig_vbox.addLayout(origTbar_hbox)
+#             orig_vbox.addWidget(self.origCanvas)
+
+#             refTbar_hbox = QW.QHBoxLayout()
+#             refTbar_hbox.addWidget(self.refinePhase_btn, alignment=Qt.AlignLeft)
+#             refTbar_hbox.addWidget(self.refNTbar, alignment=Qt.AlignLeft)
+#             refTbar_hbox.addStretch()
+#             refTbar_hbox.addWidget(self.algmWarn, alignment=Qt.AlignRight)
+#             ref_vbox = QW.QVBoxLayout()
+#             ref_vbox.addLayout(refTbar_hbox)
+#             ref_vbox.addWidget(self.refCanvas)
+
+#             preview_hbox = QW.QHBoxLayout()
+#             preview_hbox.addLayout(orig_vbox)
+#             preview_hbox.addLayout(ref_vbox)
+#             preview_group = cObj.GroupArea(preview_hbox, 'Preview')
+
+#         # Morphological tool algorithms combobox
+#             self.algm_combox = QW.QComboBox()
+#             self.algm_combox.addItems(self.algmDict.keys())
+#             self.algm_combox.currentTextChanged.connect(self.update_phaseView)
+#             algm_form = QW.QFormLayout()
+#             algm_form.addRow('Algorithm', self.algm_combox)
+
+#         # Invert mask checkbox
+#             self.invertMask_cbox = QW.QCheckBox('Invert mask')
+#             self.invertMask_cbox.stateChanged.connect(self.update_phaseView)
+
+#         # Invert ROI checkbox
+#             self.invertROI_cbox = QW.QCheckBox('Invert ROI')
+#             self.invertROI_cbox.stateChanged.connect(self.update_phaseView)
+
+#         # Kernel size selector widget
+#             self.kernelSel = cObj.KernelSelector()
+#             self.kernelSel.structureChanged.connect(self.update_phaseView)
+
+#         # Removed pixels behaviour combobox
+#             self.delPixAs_combox = QW.QComboBox()
+#             self.delPixAs_combox.addItems(['Nearest',
+#                                            'ND'])
+#             self.delPixAs_combox.setToolTip('Indicates how to reclassify pixels deleted by the refinement algorithm.')
+#             delPixAs_form = QW.QFormLayout()
+#             delPixAs_form.addRow('Removed Pixels as:', self.delPixAs_combox)
+
+#         # Reset all edits button
+#             self.resetAll_btn = QW.QPushButton(QIcon('Icons/generic_del.png'),
+#                                                'Reset All')
+#             self.resetAll_btn.setToolTip('Discard all edits')
+#             self.resetAll_btn.clicked.connect(self.resetAll)
+
+#         # Save edits button
+#             self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
+#             self.save_btn.clicked.connect(self.saveEdits)
+
+#         # Adjust options group
+#             saveReset_hbox = QW.QHBoxLayout()
+#             saveReset_hbox.addWidget(self.resetAll_btn)
+#             saveReset_hbox.addWidget(self.save_btn)
+
+#             options_vbox = QW.QVBoxLayout()
+#             options_vbox.addLayout(algm_form)
+#             options_vbox.addWidget(self.invertMask_cbox)
+#             options_vbox.addWidget(self.invertROI_cbox)
+#             options_vbox.addWidget(self.kernelSel)
+#             options_vbox.addLayout(delPixAs_form)
+#             options_vbox.addLayout(saveReset_hbox)
+#             options_group = cObj.GroupArea(options_vbox, 'Preferences')
+
+
+#         # Adjust Main Layout
+#             left_box = QW.QVBoxLayout()
+#             left_box.addWidget(TOC_group)
+#             left_box.addWidget(options_group)
+
+#             mainSplit = cObj.SplitterGroup((left_box, preview_group), # use SplitterLayout
+#                                            (1, 2))
+#             mainLayout = QW.QHBoxLayout()
+#             mainLayout.addWidget(mainSplit)
+#             self.setLayout(mainLayout)
+
+
+
+#         def lock_zoom(self):
+#             lock = self.sender().isChecked()
+#             self.origCanvas.toggle_zoomLock(lock)
+#             self.refCanvas.toggle_zoomLock(lock)
+
+#         def toggle_roiSel(self, toggled):
+#             if not toggled: self.roi = None
+#             self.rectSel.set_active(toggled)
+#             self.rectSel.set_visible(toggled)
+#             self.refCanvas.enablePicking(toggled)
+#             self.update_phaseView()
+
+#         def select_roi (self, eclick, erelease):
+#             mapShape = self.minmap.shape
+#             extents = self.rectSel.fixed_extents(mapShape)
+#             if extents is None : return
+#             self.roi = extents
+#             self.update_phaseView()
+#             self.rectSel.updateCursor()
+
+#         def check_ROIwarn(self):
+#             algm = self.algm_combox.currentText()
+#             if algm == 'Fill holes' and self.rectSel.active:
+#                 self.algmWarn.show()
+#             else:
+#                 self.algmWarn.hide()
+
+
+
+#         def replace_excluded(self, array, strategy):
+#             mask = array == 'nan' # np.nan becomes 'nan' in a string array
+
+#             if strategy == 'Nearest':
+#                 i = nd.distance_transform_edt(mask,
+#                                               return_distances=False,
+#                                               return_indices=True)
+#                 array = array[tuple(i)]
+
+#             elif strategy == 'ND':
+#                 array[mask] = '_ND_'
+
+#             return array
+
+#         def refinePhase(self):
+#             phase = self.TOC.get_checked().text()
+#             mask = self.minmap == phase
+#             edits, _ = self._varianceMatrix(self._refine(mask), mask)
+#             removedAs = self.delPixAs_combox.currentText()
+#         # Get rid of excluded pixels
+#             self.minmap[edits == -1] = np.nan
+#             self.minmap = self.replace_excluded(self.minmap, removedAs)
+#         # Add the new pixels
+#             self.minmap[edits == 2] = phase
+
+#             self.update_phaseView()
+
+#         def resetPhase(self):
+#             phase = self.TOC.get_checked().text()
+#             bkp = self.parent._backup
+#             mask = (bkp == phase) | (self.minmap == phase)
+#             self.minmap = np.where(mask, bkp, self.minmap)
+#             self.update_phaseView()
+
+#         def resetAll(self):
+#             choice = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                                    'Do you really want to discard all the edits?',
+#                                                    QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                                    QW.QMessageBox.No)
+#             if choice== QW.QMessageBox.Yes:
+#                 self.minmap = self.parent._backup.copy()
+#                 self.update_phaseView()
+
+#         def _compute_ROImask(self, mapShape):
+#             if self.roi is None:
+#                 r0,c0 = 0, 0
+#                 r1,c1 = mapShape
+#             else:
+#                 r0,r1,c0,c1 = self.roi
+#             roi_mask = np.zeros(mapShape, dtype=bool)
+#             roi_mask[r0:r1, c0:c1] = True
+#             # Invert ROI if required
+#             if self.invertROI_cbox.isChecked():
+#                 roi_mask = np.invert(roi_mask)
+#             return roi_mask
+
+#         def _refine(self, ph_mask):
+#         # Get all of the morphological parameters
+#             algm = self.algm_combox.currentText()
+#             invert = self.invertMask_cbox.isChecked()
+#             struct = self.kernelSel.get_structure()
+#             roi_mask = self._compute_ROImask(ph_mask.shape)
+#             if invert: ph_mask = np.invert(ph_mask)
+#         # 'Fill holes' algorithm do not support ROI mask
+#             if algm == 'Fill holes':
+#                 refined = self.algmDict[algm](ph_mask, struct)
+#             else:
+#                 refined = self.algmDict[algm](ph_mask, struct, mask=roi_mask)
+
+#         # The inversion is only for refinement sake, therefore we invert back the result
+#             if invert : refined = np.invert(refined)
+#             return refined
+
+#         def _varianceMatrix(self, new, old):
+#             new = new.astype('int8')
+#             old = old.astype('int8')
+#             res = new - old + new
+#             colors = [v for k,v in self.varianceRGB.items() if k in np.unique(res)]
+#             return res, colors
+
+#         def update_phaseView(self):
+#             phase = self.TOC.get_checked().text()
+#             mask = self.minmap == phase
+#             edits, colors = self._varianceMatrix(self._refine(mask), mask)
+#             self.check_ROIwarn()
+
+#             nPix_orig = np.count_nonzero(mask)
+#             nPix_edits = np.count_nonzero(edits>0)
+#             self.origCanvas.update_canvas(f'{phase} = {nPix_orig}', mask)
+#             self.refCanvas.update_canvas(f'{phase} = {nPix_edits}',
+#                                          edits, colors = colors)
+
+
+#         def saveEdits(self):
+#             outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
+#                                                         pref.get_dirPath('out'),
+#                                                         '''Compressed ASCII file (*.gz)
+#                                                            ASCII file (*.txt)''')
+#             if outpath:
+#                 pref.set_dirPath('out', os.path.dirname(outpath))
+#                 np.savetxt(outpath, self.minmap, fmt='%s')
+#                 autoload = QW.QMessageBox.question(self, 'X-Min Learn',
+#                                                    'Do you want to load the result in the "Mineral Map Tab"?',
+#                                                    QW.QMessageBox.Yes | QW.QMessageBox.No,
+#                                                    QW.QMessageBox.Yes)
+#                 if autoload == QW.QMessageBox.Yes:
+#                     self.mainParent._minmaptab.loadMaps([outpath])
 
 
 
@@ -9391,41 +10607,4 @@ class DataViewer(QW.QWidget):
         menu = self.canvas.get_navigation_context_menu(self.navTbar)
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QG.QCursor.pos())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
