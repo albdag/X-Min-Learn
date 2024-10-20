@@ -1535,16 +1535,9 @@ class ModeViewer(cObj.StyledTabWidget):
             New class name.
 
         '''
-    # Get mineral map data
-        minmap = self._current_data_object.get('data')
-
-    # Exit function if name is already taken
-        old_name = legend_item.text(1)
-        if minmap.has_phase(new_name):
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'{new_name} is already taken')
-    
     # Rename the phase in the mineral map
+        minmap = self._current_data_object.get('data')
+        old_name = legend_item.text(1)
         minmap.rename_phase(old_name, new_name)
             
     # Request update scene
@@ -1570,21 +1563,9 @@ class ModeViewer(cObj.StyledTabWidget):
             New name for the merged class.
 
         '''
-    # Get mineral map data
-        minmap = self._current_data_object.get('data')
-
     # Merge phases in the mineral map
+        minmap = self._current_data_object.get('data')
         minmap.merge_phases(classes, new_name)
-
-    # # Update the image canvas
-    #     mmap, enc, col = minmap.get_plot_data()
-    #     self.map_canvas.draw_discretemap(mmap, enc, col)
-
-    # # Update the mode canvas
-    #     self._update_mode_canvas(minmap)
-
-    # # Update the legend
-    #     self.legend.update(legend_item, new_name)
 
     # Request update scene
         self.updateSceneRequested.emit(self._current_data_object)

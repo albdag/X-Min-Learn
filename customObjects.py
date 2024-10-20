@@ -708,17 +708,34 @@ class Legend(QW.QTreeWidget):
             The item that requests to be renamed.
 
         '''
+    # Deny renaming protected '_ND'_ class
         old_name = item.text(1)
+        if old_name == '_ND_':
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'This class cannot be renamed')
+    
+    # Do nothing if the dialog is canceled or the class is not renamed
         name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
                                            'Rename class (max. 8 ASCII '\
                                            'characters):', text=f'{old_name}')
         if not ok or name == old_name:
             return
-    # Proceed only if the new name is an ASCII <= 8 characters string
+        
+    # Deny renaming to protected '_ND_' class
+        elif name == '_ND_':
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           '"_ND_" is a protected class name') 
+        
+    # Deny renaming if the name already exists
+        elif self.hasClass(name):
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           f'{name} is already taken')
+
+    # Deny renaming if the new name is not an ASCII <= 8 characters string
         elif 0 < len(name) <= 8 and name.isascii():
             self.itemRenameRequested.emit(item, name)
         else:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Invalid name.')
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Invalid name')
 
 
     def renameClass(self, item: QW.QTreeWidgetItem, name: str):
@@ -742,18 +759,37 @@ class Legend(QW.QTreeWidget):
         Request to merge two or more mineral classes.
 
         '''
+    # Do nothing if less than 2 classes are selected
         classes = [i.text(1) for i in self.selectedItems()]
-        if len(classes) > 1:
-            text = f'Merge {classes} in a new class (max. 8 ASCII characters):'
-            name, ok = QW.QInputDialog.getText(self, 'X-Min Learn', text)
-            if not ok:
-                return
-        # Proceed only if the new name is an ASCII <= 8 characters string
-            elif 0 < len(name) <= 8 and name.isascii():
-                self.itemsMergeRequested.emit(classes, name)
-            else:
-                return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                               'Invalid name.')
+        if len(classes) < 2:
+            return
+        
+    # Deny renaming protected '_ND'_ class
+        if '_ND_' in classes:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           '"_ND_" class cannot be merged')
+        
+    # Do nothing if the dialog is canceled
+        text = f'Merge {classes} in a new class (max. 8 ASCII characters):'
+        name, ok = QW.QInputDialog.getText(self, 'X-Min Learn', text)
+        if not ok:
+            return
+        
+    # Deny renaming to protected '_ND_' class
+        elif name == '_ND_':
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           '"_ND_" is a protected class name') 
+    
+    # Deny renaming if the name already exists (excluding selected classes)
+        elif name not in classes and self.hasClass(name):
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           f'{name} is already taken')
+
+    # Deny renaming if the new name is not an ASCII <= 8 characters string
+        elif 0 < len(name) <= 8 and name.isascii():
+            self.itemsMergeRequested.emit(classes, name)
+        else:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Invalid name')
 
 
     def requestItemHighlight(self, toggled: bool, item: QW.QTreeWidgetItem):
@@ -839,11 +875,9 @@ class Legend(QW.QTreeWidget):
             Whether the legend already contains a class with the given name.
 
         '''
-        for idx in range(self.topLevelItemCount()):
-            item = self.topLevelItem(idx)
-            if item.text(1) == name:
-                return True
-        return False
+        n_classes = self.topLevelItemCount()
+        class_names = [self.topLevelItem(i).text(1) for i in range(n_classes)]
+        return name in class_names
 
 
     def update(self, mineral_map: MineralMap):

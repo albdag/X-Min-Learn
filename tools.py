@@ -1995,27 +1995,13 @@ class MineralClassifier(DraggableTool):
             New class name.
 
         '''
-    # Deny renaming as "_ND_"
-        if new_name == '_ND_':
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           '"_ND_" is a protected name') 
-
-    # Deny renaming the _ND_ class
-        old_name = legend_item.text(1)
-        if old_name == '_ND_':
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           '"_ND_" class cannot be renamed')
-        
-    # Deny renaming if name is already taken
+    # Rename phase in the current mineral map 
         item = self.minmaps_list.currentItem()
-        minmap = item.get('data') 
-        if minmap.has_phase(new_name):
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'{new_name} is already taken')
-
-    # If we get here, allow renaming. Re-draw mineral map, legend, barplot and
-    # silhouette plot
+        minmap = item.get('data')
+        old_name = legend_item.text(1)
         minmap.rename_phase(old_name, new_name)
+    
+    # Re-draw mineral map, legend, barplot and silhouette plot
         self.showMineralMap(item)
 
 
@@ -7471,18 +7457,13 @@ class PhaseRefiner(DraggableTool):
         new_name : str
             New class name.
 
-        '''
-    # Deny renaming if the name already exists
-        old_name = legend_item.text(1)
-        if self.minmap.has_phase(new_name):
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'{new_name} is already taken')
-        
+        '''       
     # Renamed phase is also the currently selected phase, so the current phase
     # attribute must be updated to avoid errors.
         self._phase = new_name
 
     # Rename phase in original and current mineral maps
+        old_name = legend_item.text(1)
         if self._minmap_backup.has_phase(old_name):
             self._minmap_backup.rename_phase(old_name, new_name)
         if self.minmap.has_phase(old_name):
