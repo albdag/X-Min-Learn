@@ -7767,6 +7767,11 @@ class PhaseRefiner(DraggableTool):
     # Force edit legend amounts
         self.updateLegendAmounts()
 
+    # Clear NoData combobox if its currently selected NaN phase was removed
+    # from the mineral map after this refinement operation. 
+        if not self.minmap.has_phase(self.nd_combox.currentText()):
+            self.nd_combox.clear()
+
 
     def refineBasic(self):
         '''
