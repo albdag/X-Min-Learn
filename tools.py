@@ -7778,8 +7778,8 @@ class PhaseRefiner(DraggableTool):
                                  forceShow=True)
 
     # Compute basic refinement operations. An encoded refined map is returned.
-        refined_encoded = self.computeBasicRefinement()
         pbar.setValue(1)
+        refined_encoded = self.computeBasicRefinement()
 
     # Decode the refined mineral map
         refined = np.empty(refined_encoded.shape, dtype=self.minmap._DTYPE_STR)
