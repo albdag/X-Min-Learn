@@ -1990,6 +1990,86 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
     # Set the toolbar style-sheet
         self.setStyleSheet(pref.SS_toolbar)
 
+    
+    @classmethod
+    def imageCanvasDefault(cls, canvas: ImageCanvas, parent: QObject|None=None,
+                           orient=Qt.Horizontal):
+        '''
+        Quick convenient method to instantiate a Navigation Toolbar attached to
+        an ImageCanvas with default actions and fixed home action. 
+
+        Parameters
+        ----------
+        canvas : ImageCanvas
+            The image canvas object linked to the navigation toolbar. 
+        parent : QObject or None, optional
+            Parent widget of the toolbar in the GUI. The default is None.
+        orient : Qt.Orientation, optional
+            The orientation of the navigation toolbar. The default is
+            Qt.Horizontal.
+
+        Returns
+        -------
+        NavTbar
+            A new instance of Navigation Toolbar.
+
+        '''
+        navtbar = cls(canvas, parent, orient)
+        navtbar.fixHomeAction()
+        navtbar.removeToolByIndex([3, 4, 8, 9])
+        return navtbar
+    
+
+    @classmethod
+    def barCanvasDefault(cls, canvas: BarCanvas, parent: QObject|None=None,
+                         orient=Qt.Horizontal):
+        '''
+        Quick convenient method to instantiate a Navigation Toolbar attached to
+        a BarCanvas with default actions and the custom show label percentage
+        action. 
+
+        Parameters
+        ----------
+        canvas : BarCanvas
+            The barplot canvas object linked to the navigation toolbar. 
+        parent : QObject or None, optional
+            Parent widget of the toolbar in the GUI. The default is None.
+        orient : Qt.Orientation, optional
+            The orientation of the navigation toolbar. The default is
+            Qt.Horizontal.
+
+        Returns
+        -------
+        NavTbar
+            A new instance of Navigation Toolbar.
+
+        '''
+        navtbar = cls(canvas, parent, orient, coords=False)
+        navtbar.removeToolByIndex(list(range(2, 10)))
+        navtbar.insertLabelizeAction(10)
+        return navtbar
+    
+
+    def insertLabelizeAction(self, before_idx: int):
+        '''
+        Convenient function to include the labelize action to a Navigation 
+        Toolbar which is linked to a BarCanvas.
+
+        Parameters
+        ----------
+        before_idx : int
+            Before action index.
+
+        '''
+    # Do nothing if the linked canvas object is not a barplot canvas
+        if not isinstance(self.canvas, BarCanvas):
+            return
+        
+        self.lbl_action = QAction(QIcon(r'Icons/labelize.png'), 'Show amounts')
+        self.lbl_action.setCheckable(True)
+        self.lbl_action.toggled.connect(self.canvas.show_amounts)
+        self.insertAction(before_idx, self.lbl_action)
+
 
     def fixHomeAction(self):
         '''
@@ -2103,7 +2183,6 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
         old_h = event.oldSize().height()
         if new_h > old_h and self.orient == Qt.Horizontal:
             self.setMinimumHeight(new_h)
-
 
 
 

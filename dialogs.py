@@ -94,9 +94,7 @@ class AutoRoiDetector(QW.QDialog):
         self.canvas = plots.ImageCanvas()
     
     # NPV canvas Navigation Toolbar 
-        self.navtbar = plots.NavTbar(self.canvas, self)
-        self.navtbar.fixHomeAction()
-        self.navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # Search ROIs button
         self.search_btn = cObj.StyledButton(QIcon(r'Icons/roi_detection.png'),

@@ -1312,14 +1312,8 @@ class MineralClassifier(DraggableTool):
         self.barplot.setMinimumSize(200, 350)
     
     # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
-        self.barplot_navtbar = plots.NavTbar(self.barplot, self, coords=False)
-        self.barplot_navtbar.removeToolByIndex(list(range(2, 10)))
-
-    # Show labels percent in bar canvas Navigation Toolbar (Action)
-        self.show_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                          'Show amounts', self.barplot_navtbar)
-        self.show_lbl_action.setCheckable(True)
-        self.barplot_navtbar.insertAction(10, self.show_lbl_action)
+        self.barplot_navtbar = plots.NavTbar.barCanvasDefault(
+            self.barplot, self)
 
     # Silhouette canvas (Silhouette Canvas)
         self.silscore_canvas = plots.SilhouetteCanvas(wheel_zoom=False, 
@@ -1375,9 +1369,8 @@ class MineralClassifier(DraggableTool):
         self.maps_viewer.setMinimumWidth(250)
 
     # Viewer Navigation Toolbar (Navigation Toolbar)
-        self.viewer_navtbar = plots.NavTbar(self.maps_viewer, self)
-        self.viewer_navtbar.fixHomeAction()
-        self.viewer_navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.viewer_navtbar = plots.NavTbar.imageCanvasDefault(
+            self.maps_viewer, self)
 
     # Confidence value input (SpinBox)
         self.conf_spbox = QW.QSpinBox()
@@ -1546,9 +1539,6 @@ class MineralClassifier(DraggableTool):
         self.legend.colorChangeRequested.connect(self.changeClassColor)
         self.legend.itemRenameRequested.connect(self.renameClass)
         self.legend.itemHighlightRequested.connect(self.highlightClass)
-
-    # Show classes amounts in the bar plot
-        self.show_lbl_action.toggled.connect(self.barplot.show_amounts)
 
     # Run mineral classification when classify button is clicked
         self.classify_btn.clicked.connect(self.startClassification)
@@ -7094,9 +7084,8 @@ class PhaseRefiner(DraggableTool):
         self.orig_canvas_basic.setMinimumSize(500, 500)
         
     # Navigation toolbar of original map canvas (NavTbar)
-        self.orig_navtbar_basic = plots.NavTbar(self.orig_canvas_basic, self)
-        self.orig_navtbar_basic.removeToolByIndex([3, 4, 8, 9])
-        self.orig_navtbar_basic.fixHomeAction()
+        self.orig_navtbar_basic = plots.NavTbar.imageCanvasDefault(
+            self.orig_canvas_basic, self)
         
     # Current map canvas (Image Canvas) 
         self.curr_canvas_basic = plots.ImageCanvas(cbar=False)
@@ -7105,39 +7094,24 @@ class PhaseRefiner(DraggableTool):
         self.curr_canvas_basic.share_axis(self.orig_canvas_basic.ax)
 
     # Navigation toolbar of current map canvas (NavTbar) 
-        self.curr_navtbar_basic = plots.NavTbar(self.curr_canvas_basic, self)
-        self.curr_navtbar_basic.removeToolByIndex([3, 4, 8, 9])
-        self.curr_navtbar_basic.fixHomeAction()
+        self.curr_navtbar_basic = plots.NavTbar.imageCanvasDefault(
+            self.curr_canvas_basic, self)
 
     # Original map mode barplot (BarCanvas)
         self.orig_barplot = plots.BarCanvas(wheel_pan=False, wheel_zoom=False)
         self.orig_barplot.setMinimumHeight(200)
 
     # Navigation toolbar of the original map mode barplot (NavTbar)
-        self.orig_barplot_navtbar = plots.NavTbar(self.orig_barplot, self, 
-                                                  Qt.Vertical, coords=False)
-        self.orig_barplot_navtbar.removeToolByIndex(list(range(2, 10)))
-    
-    # Show labels percent in NavTbar of original map mode barplot (Action)
-        self.orig_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                          'Show amounts')
-        self.orig_lbl_action.setCheckable(True)
-        self.orig_barplot_navtbar.insertAction(10, self.orig_lbl_action)
+        self.orig_barplot_navtbar = plots.NavTbar.barCanvasDefault(
+            self.orig_barplot, self, orient=Qt.Vertical)
 
     # Current map mode barplot (BarCanvas)
         self.curr_barplot = plots.BarCanvas(wheel_pan=False, wheel_zoom=False)
         self.curr_barplot.setMinimumHeight(200)
 
     # Navigation toolbar of the current map mode barplot (NavTbar)
-        self.curr_barplot_navtbar = plots.NavTbar(self.curr_barplot, self, 
-                                                  Qt.Vertical, coords=False)
-        self.curr_barplot_navtbar.removeToolByIndex(list(range(2, 10)))
-    
-    # Show labels percent in NavTbar of current map mode barplot (Action)
-        self.curr_lbl_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                          'Show amounts')
-        self.curr_lbl_action.setCheckable(True)
-        self.curr_barplot_navtbar.insertAction(10, self.curr_lbl_action)
+        self.curr_barplot_navtbar = plots.NavTbar.barCanvasDefault(
+            self.curr_barplot, self, orient=Qt.Vertical)
 
     # Basic Refiner rendering group
         basic_refiner_grid = QW.QGridLayout()
@@ -7162,9 +7136,8 @@ class PhaseRefiner(DraggableTool):
         self.curr_canvas_advan.setMinimumSize(500, 500)
     
     # Navigation toolbar of current map canvas (NavTbar) 
-        self.curr_navtbar_advan = plots.NavTbar(self.curr_canvas_advan, self)
-        self.curr_navtbar_advan.removeToolByIndex([3, 4, 8, 9])
-        self.curr_navtbar_advan.fixHomeAction()
+        self.curr_navtbar_advan = plots.NavTbar.imageCanvasDefault(
+            self.curr_canvas_advan, self)
 
     # Reset current phase (Action) [-> Navigation toolbar of current map]
         self.reset_phase_action = QW.QAction(QIcon(r'Icons/refresh.png'), 
@@ -7179,9 +7152,8 @@ class PhaseRefiner(DraggableTool):
         self.prev_canvas_advan.share_axis(self.curr_canvas_advan.ax)
 
     # Navigation toolbar of preview map canvas (NavTbar)
-        self.prev_navtbar_advan = plots.NavTbar(self.prev_canvas_advan, self)
-        self.prev_navtbar_advan.removeToolByIndex([3, 4, 8, 9])
-        self.prev_navtbar_advan.fixHomeAction()
+        self.prev_navtbar_advan = plots.NavTbar.imageCanvasDefault(
+            self.prev_canvas_advan, self)
         
     # Draw ROI (Action) [-> Navigation toolbar of preview map]
         self.draw_roi_action = QW.QAction(QIcon(r'Icons/roi.png'), 'Draw ROI')
@@ -7330,10 +7302,6 @@ class PhaseRefiner(DraggableTool):
 
     # Refiner mode swapping 
         self.mode_tabwid.currentChanged.connect(self.onRefinerModeSwapped)
-
-    # Barplots show label actions [Basic Refiner]
-        self.orig_lbl_action.toggled.connect(self.orig_barplot.show_amounts)
-        self.curr_lbl_action.toggled.connect(self.curr_barplot.show_amounts)
 
     # Advanced toolbar actions (reset phase and draw ROI) [Advanced Refiner]
         self.draw_roi_action.toggled.connect(self.toggleRoiSelector)
@@ -10558,9 +10526,7 @@ class DataViewer(QW.QWidget):
         self.canvas.setMinimumWidth(500)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar(self.canvas, self)
-        self.navTbar.fixHomeAction()
-        self.navTbar.removeToolByIndex([3, 4, 8, 9])
+        self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # Go To Pixel Widget
         self.go2Pix = cObj.PixelFinder(self.canvas)

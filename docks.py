@@ -1345,14 +1345,7 @@ class ModeViewer(cObj.StyledTabWidget):
         self.canvas.setMinimumSize(200, 350)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar(self.canvas, self, coords=False)
-        self.navTbar.removeToolByIndex(list(range(2,10)))
-
-    # Show Labels Action in Navigation Toolbar (Show class %)
-        self.showLabels_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                            'Show amounts', self.navTbar)
-        self.showLabels_action.setCheckable(True)
-        self.navTbar.insertAction(10, self.showLabels_action)
+        self.navTbar = plots.NavTbar.barCanvasDefault(self.canvas, self)
     
     # Wrap canvas and navigation toolbar in a vertical box layout
         plot_vbox = QW.QVBoxLayout()
@@ -1374,9 +1367,6 @@ class ModeViewer(cObj.StyledTabWidget):
 
     # Show context menu on the mode canvas after a right-click event
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
-
-    # Show classes amounts in the mode canvas
-        self.showLabels_action.toggled.connect(self.canvas.show_amounts)
 
     # Connect legend signals
         self.legend.colorChangeRequested.connect(self.onColorChanged)
@@ -1789,14 +1779,7 @@ class RoiEditor(QW.QWidget):
         self.barCanvas.setMinimumSize(300, 300)
 
     # Bar plot Navigation toolbar
-        self.navTbar = plots.NavTbar(self.barCanvas, self, coords=False)
-        self.navTbar.removeToolByIndex(list(range(2, 10)))
-
-    # Show labels action (show class %) [-> Navigation Toolbar]
-        self.showlabels_action = QW.QAction(QIcon('Icons/labelize.png'),
-                                            'Show Amounts', self.navTbar)
-        self.showlabels_action.setCheckable(True)
-        self.navTbar.insertAction(10, self.showlabels_action)
+        self.navTbar = plots.NavTbar.barCanvasDefault(self.barCanvas, self)
         
     # Wrap bar plot and its navigation toolbar in a vbox layout
         barplot_vbox = QW.QVBoxLayout()
@@ -1868,9 +1851,6 @@ class RoiEditor(QW.QWidget):
     # Connect table signals (ROI selected & ROI name edited)
         self.table.itemSelectionChanged.connect(self.updatePatchSelection)
         self.table.itemChanged.connect(self.editRoiName)
-
-    # Show percentage amounts in the bar plot
-        self.showlabels_action.toggled.connect(self.barCanvas.show_amounts)
 
     # Show custom context menu when right-clicking on the table
         self.table.customContextMenuRequested.connect(
@@ -2641,9 +2621,7 @@ class ProbabilityMapViewer(QW.QWidget):
         self.canvas.setMinimumSize(300, 300)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar(self.canvas, self)
-        self.navTbar.fixHomeAction()
-        self.navTbar.removeToolByIndex([3, 4, 8, 9])
+        self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # View Range toolbar
         self.rangeTbar = cObj.StyledToolbar('Probability range toolbar')
@@ -2835,9 +2813,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.canvas.setMinimumSize(300, 300)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar(self.canvas, self)
-        self.navTbar.fixHomeAction()
-        self.navTbar.removeToolByIndex([3, 4, 8, 9])
+        self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # R-G-B-A Path Labels
         self.rgba_lbls = [cObj.PathLabel(full_display=False) for _ in range(4)]
