@@ -5323,9 +5323,8 @@ class ModelLearner(DraggableTool):
         self.train_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Annotation as percentage action [--> Train CM Navigation ToolBar]
-        self.train_cm_perc_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                               'Annotations as percentage',
-                                               self.train_cm_navtbar)
+        self.train_cm_perc_action = QW.QAction(
+            QIcon(r'Icons/labelize.png'), 'Annotations as percentage')
         self.train_cm_perc_action.setCheckable(True)
         self.train_cm_perc_action.setChecked(True)
         self.train_cm_navtbar.insertAction(2, self.train_cm_perc_action)
@@ -5349,9 +5348,8 @@ class ModelLearner(DraggableTool):
         self.valid_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Annotation as percentage action [--> Validation CM NavigationToolBar]
-        self.valid_cm_perc_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                               'Annotations as percentage',
-                                               self.valid_cm_navtbar)
+        self.valid_cm_perc_action = QW.QAction(
+            QIcon(r'Icons/labelize.png'), 'Annotations as percentage')
         self.valid_cm_perc_action.setCheckable(True)
         self.valid_cm_perc_action.setChecked(True)
         self.valid_cm_navtbar.insertAction(2, self.valid_cm_perc_action)
@@ -5373,9 +5371,8 @@ class ModelLearner(DraggableTool):
         self.test_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Annotation as percentage action [--> Test CM NavigationToolBar]
-        self.test_cm_perc_action = QW.QAction(QIcon(r'Icons/labelize.png'),
-                                              'Annotations as percentage',
-                                              self.test_cm_navtbar)
+        self.test_cm_perc_action = QW.QAction(
+            QIcon(r'Icons/labelize.png'), 'Annotations as percentage')
         self.test_cm_perc_action.setCheckable(True)
         self.test_cm_perc_action.setChecked(True)
         self.test_cm_navtbar.insertAction(2, self.test_cm_perc_action)
@@ -7140,8 +7137,8 @@ class PhaseRefiner(DraggableTool):
             self.curr_canvas_advan, self)
 
     # Reset current phase (Action) [-> Navigation toolbar of current map]
-        self.reset_phase_action = QW.QAction(QIcon(r'Icons/refresh.png'), 
-                                             'Reset current phase')
+        self.reset_phase_action = QW.QAction(
+            QIcon(r'Icons/refresh.png'), 'Reset current phase')
         self.curr_navtbar_advan.insertSeparator(10)
         self.curr_navtbar_advan.insertAction(10, self.reset_phase_action)
         

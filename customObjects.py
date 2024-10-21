@@ -555,31 +555,34 @@ class Legend(QW.QTreeWidget):
         menu = StyledMenu()
 
     # Rename class
-        rename = QW.QAction(QG.QIcon('Icons/rename.png'), 'Rename')
-        rename.triggered.connect(lambda: self.requestClassRename(i))
+        menu.addAction(QG.QIcon(r'Icons/rename.png'), 'Rename',
+                       lambda: self.requestClassRename(i))
 
     # Merge classes
-        merge = QW.QAction('Merge')
+        merge = menu.addAction('Merge', self.requestClassMerge)
         merge.setEnabled(len(self.selectedItems()) > 1)
-        merge.triggered.connect(self.requestClassMerge)
 
+    # Separator
+        menu.addSeparator()
+ 
     # Copy current color HEX string
-        copy_color = QW.QAction('Copy color string')
-        copy_color.triggered.connect(lambda: self.copyColorHexToClipboard(i))
+        menu.addAction(
+            'Copy color string', lambda: self.copyColorHexToClipboard(i))
 
     # Change color
-        set_color = QW.QAction(QG.QIcon('Icons/palette.png'), 'Set color')
-        set_color.triggered.connect(lambda: self.requestColorChange(i))
+        menu.addAction(QG.QIcon(r'Icons/palette.png'), 'Set color',
+                       lambda: self.requestColorChange(i))
 
     # Randomize color
-        rand_color = QW.QAction(QG.QIcon('Icons/randomize_color.png'),
-                                'Randomize color')
-        rand_color.triggered.connect(lambda: self.requestRandomColorChange(i))
+        menu.addAction(QG.QIcon(r'Icons/randomize_color.png'), 'Random color',
+                       lambda: self.requestRandomColorChange(i))
 
     # Randomize palette
-        rand_palette = QW.QAction(QG.QIcon('Icons/randomize_color.png'),
-                                  'Randomize full colormap')
-        rand_palette.triggered.connect(self.randomPaletteRequested.emit)
+        menu.addAction(QG.QIcon(r'Icons/randomize_color.png'), 'Randomize all',
+                       self.randomPaletteRequested.emit)
+        
+    # Separator
+        menu.addSeparator()
 
     # Higlight item
         highlight = QW.QAction(QG.QIcon(r'Icons/highlight.png'), 'Highlight')
@@ -588,18 +591,8 @@ class Legend(QW.QTreeWidget):
         highlight.toggled.connect(lambda t: self.requestItemHighlight(t, i))
 
     # Extract mask
-        extract_mask = QW.QAction('Extract mask')
-        extract_mask.triggered.connect(self.requestMaskFromClass)
-
-
-    # Add actions to menu
-        menu.addAction(rename)
-        menu.addAction(merge)
-        menu.addSeparator()
-        menu.addActions([copy_color, set_color, rand_color, rand_palette])
-        menu.addSeparator()
-        menu.addAction(highlight)
-        menu.addAction(extract_mask)
+        menu.addAction(QG.QIcon(r'Icons/mask.png'), 'Extract mask', 
+                       self.requestMaskFromClass)
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QG.QCursor.pos())
@@ -3200,25 +3193,23 @@ class DocumentBrowser(QW.QWidget):
         self.tbar.addWidget(self.search_box)
 
     # Search Up Action
-        self.search_up_action = QW.QAction(QG.QIcon(r'Icons/up.png'), 
-                                           'Search up', self.tbar)
+        self.search_up_action = self.tbar.addAction(
+            QG.QIcon(r'Icons/up.png'), 'Search up')
 
     # Search Down Action
-        self.search_down_action = QW.QAction(QG.QIcon(r'Icons/down.png'),
-                                             'Search down', self.tbar)
+        self.search_down_action = self.tbar.addAction(
+            QG.QIcon(r'Icons/down.png'), 'Search down')
 
     # Zoom in Action
-        self.zoom_in_action = QW.QAction(QG.QIcon(r'Icons/zoom_in.png'), 
-                                         'Zoom in', self.tbar)
+        self.zoom_in_action = self.tbar.addAction(
+            QG.QIcon(r'Icons/zoom_in.png'), 'Zoom in')
 
     # Zoom out Action
-        self.zoom_out_action = QW.QAction(QG.QIcon(r'Icons/zoom_out.png'), 
-                                          'Zoom out', self.tbar)
+        self.zoom_out_action = self.tbar.addAction(
+            QG.QIcon(r'Icons/zoom_out.png'), 'Zoom out')
 
-    # Add Actions to toolbar
-        self.tbar.addActions((self.search_up_action, self.search_down_action))
-        self.tbar.addSeparator()
-        self.tbar.addActions((self.zoom_in_action, self.zoom_out_action))
+    # Insert toolbar separator
+        self.tbar.insertSeparator(self.zoom_in_action)
 
     # Adjust Main Layout
         layout = QW.QVBoxLayout()

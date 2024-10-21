@@ -143,32 +143,31 @@ class MainWindow(QW.QMainWindow):
         self.close_action.setShortcut('Ctrl+Q')
 
     # Import X-Ray Maps Action 
-        self.load_inmaps_action = QW.QAction(QG.QIcon(r'Icons/inmap.png'),
-                                             '&Input Maps')
+        self.load_inmaps_action = QW.QAction(
+            QG.QIcon(r'Icons/inmap.png'), '&Input Maps')
         self.load_inmaps_action.setShortcut('Ctrl+I')
 
     # Import Mineral Maps Action
-        self.load_minmaps_action = QW.QAction(QG.QIcon(r'Icons/minmap.png'),
-                                              '&Mineral Maps')
+        self.load_minmaps_action = QW.QAction(
+            QG.QIcon(r'Icons/minmap.png'), '&Mineral Maps')
         self.load_minmaps_action.setShortcut('Ctrl+M')
 
     # Import Masks Action
-        self.load_masks_action = QW.QAction(QG.QIcon(r'Icons/mask.png'),
-                                            'Masks')
+        self.load_masks_action = QW.QAction(
+            QG.QIcon(r'Icons/mask.png'), 'Masks')
 
     # Launch Preferences Action
-        self.pref_action = QW.QAction(QG.QIcon('Icons/wrench.png'),
-                                      '&Preferences')
+        self.pref_action = QW.QAction(
+            QG.QIcon(r'Icons/wrench.png'), '&Preferences')
         self.pref_action.setShortcut('Ctrl+P')
 
     # Launch Convert Grayscale to ASCII Action
         self.conv2ascii_action = QW.QAction('Grayscale to Input Map')
-        self.conv2ascii_action.setStatusTip('Convert grayscale image to '\
-                                            'input map')
+        self.conv2ascii_action.setStatusTip('Convert image to Input Map')
 
     # Launch Convert RGB to Mineral Maps Action
         self.conv2mmap_action = QW.QAction('RGB to Mineral Map')
-        self.conv2mmap_action.setStatusTip('Convert RGB image to Mineral Map')
+        self.conv2mmap_action.setStatusTip('Convert image to Mineral Map')
 
     # Launch Build Dummy Maps Action
         self.dummy_map_action = QW.QAction('Generate &Dummy Maps')
@@ -184,26 +183,26 @@ class MainWindow(QW.QMainWindow):
         self.merge_ds_action.setStatusTip('Merge multiple datasets')
 
     # Launch Dataset Builder Action
-        self.ds_builder_action = QW.QAction(QG.QIcon(r'Icons/compile_dataset.png'),
-                                            'Dataset &Builder')
+        self.ds_builder_action = QW.QAction(
+            QG.QIcon(r'Icons/compile_dataset.png'), 'Dataset &Builder')
         self.ds_builder_action.setShortcut('Ctrl+Alt+B')
         self.ds_builder_action.setStatusTip('Compile ground truth datasets')
 
     # Launch Model Learner Action
-        self.model_learner_action = QW.QAction(QG.QIcon(r'Icons/merge.png'),
-                                               'Model &Learner')
+        self.model_learner_action = QW.QAction(
+            QG.QIcon(r'Icons/merge.png'), 'Model &Learner')
         self.model_learner_action.setShortcut('Ctrl+Alt+L')
         self.model_learner_action.setStatusTip('Build machine learning models')
 
     # Launch Mineral Classifier Action
-        self.classifier_action = QW.QAction(QG.QIcon(r'Icons/classify.png'),
-                                            'Mineral &Classifier', self)
+        self.classifier_action = QW.QAction(
+            QG.QIcon(r'Icons/classify.png'), 'Mineral &Classifier')
         self.classifier_action.setShortcut('Ctrl+Alt+C')
         self.classifier_action.setStatusTip('Predict mineral maps')
 
     # Launch Phase Refiner Action
-        self.refiner_action = QW.QAction(QG.QIcon(r'Icons/refine.png'),
-                                         'Phase &Refiner', self)
+        self.refiner_action = QW.QAction(
+            QG.QIcon(r'Icons/refine.png'), 'Phase &Refiner')
         self.refiner_action.setShortcut('Ctrl+Alt+R')
         self.refiner_action.setStatusTip('Refine mineral maps')
 
@@ -215,10 +214,9 @@ class MainWindow(QW.QMainWindow):
         self.tools_toolbar.setFloatable(False)
         self.tools_toolbar.setStyleSheet(pref.SS_mainToolbar)
         # import data actions (button menu), followed by a separator
-        self.tools_toolbar.addActions((self.ds_builder_action, 
-                                       self.model_learner_action, 
-                                       self.classifier_action, 
-                                       self.refiner_action))
+        self.tools_toolbar.addActions(
+            (self.ds_builder_action, self.model_learner_action,
+             self.classifier_action, self.refiner_action))
         # separator followed by preference dialog
         # other future tools (e.g. map algebra calculator)
     
@@ -241,23 +239,23 @@ class MainWindow(QW.QMainWindow):
 
     # File Menu
         file_menu = menu_bar.addMenu('&File')
-        import_submenu = file_menu.addMenu(QG.QIcon(r'Icons/import.png'),
-                                           '&Import...')
-        import_submenu.addActions((self.load_inmaps_action, 
-                                   self.load_minmaps_action,
-                                   self.load_masks_action))
+        import_submenu = file_menu.addMenu(
+            QG.QIcon(r'Icons/import.png'), '&Import...')
+        import_submenu.addActions(
+            (self.load_inmaps_action, self.load_minmaps_action,
+              self.load_masks_action))
         file_menu.addActions((self.pref_action, self.close_action))
 
     # Dataset Menu
         dataset_menu = menu_bar.addMenu('&Dataset')
-        dataset_menu.addActions((self.ds_builder_action, 
-                                 self.subsample_ds_action, 
-                                 self.merge_ds_action))
+        dataset_menu.addActions(
+            (self.ds_builder_action, self.subsample_ds_action, 
+             self.merge_ds_action))
         
     # Classification Menu
         class_menu = menu_bar.addMenu('&Classification')
-        class_menu.addActions((self.classifier_action, 
-                               self.model_learner_action))
+        class_menu.addActions(
+            (self.classifier_action, self.model_learner_action))
 
     # Post-classification Menu
         postclass_menu = menu_bar.addMenu('&Post-classification')
@@ -266,8 +264,8 @@ class MainWindow(QW.QMainWindow):
     # Utility Menu
         utility_menu = menu_bar.addMenu('&Utility')
         convert_submenu = utility_menu.addMenu('&Convert')
-        convert_submenu.addActions((self.conv2ascii_action, 
-                                    self.conv2mmap_action))
+        convert_submenu.addActions(
+            (self.conv2ascii_action, self.conv2mmap_action))
         utility_menu.addAction(self.dummy_map_action)
 
     # View Menu
@@ -276,7 +274,7 @@ class MainWindow(QW.QMainWindow):
         panes_submenu.addActions(self.panes_tva)
         view_menu.addSeparator()
         view_menu.addActions((self.panes_toolbar.toggleViewAction(),
-                             self.tools_toolbar.toggleViewAction()))
+                              self.tools_toolbar.toggleViewAction()))
         
 
     def _connect_slots(self):

@@ -180,157 +180,138 @@ class DataManager(QW.QTreeWidget):
         item = self.itemAt(point)
         group = self.getItemParentGroup(item)
 
-    # Context menu on void (<point> is not on an item)
+    # CONTEXT MENU ON VOID (<point> is not on an item)
         if item is None:
 
         # Add new group
-            new_group = QW.QAction(QIcon(r'Icons/generic_add.png'), 
-                                   'New sample')
-            new_group.triggered.connect(self.addGroup)
+            menu.addAction(QIcon(r'Icons/generic_add.png'), 'New sample',
+                           self.addGroup)
+        
+        # Separator
+            menu.addSeparator()
 
         # Clear all
-            clear_all = QW.QAction(QIcon(r'Icons/remove.png'), 'Delete all')
-            clear_all.triggered.connect(self.clearAll)
+            menu.addAction(QIcon(r'Icons/remove.png'), 'Delete all', 
+                           self.clearAll)
 
-            menu.addAction(new_group)
-            menu.addSeparator()
-            menu.addAction(clear_all)
-
-    # Context menu on group
+    # CONTEXT MENU ON GROUP
         elif isinstance(item, cObj.DataGroup):
 
         # Load data submenu
             load_submenu = menu.addMenu(QIcon(r'Icons/import.png'), 'Load...')
-        # - input maps
-            load_inmaps = QW.QAction(QIcon(r'Icons/inmap.png'), 'Input maps')
-            load_inmaps.triggered.connect(lambda: self.loadInputMaps(item))
-        # - mineral maps
-            load_minmaps = QW.QAction(QIcon(r'Icons/minmap.png'), 
-                                      'Mineral maps')
-            load_minmaps.triggered.connect(lambda: self.loadMineralMaps(item))
-        # - masks
-            load_masks = QW.QAction(QIcon(r'Icons/mask.png'), 'Masks')
-            load_masks.triggered.connect(lambda: self.loadMasks(item))
+        # - Input maps
+            load_submenu.addAction(QIcon(r'Icons/inmap.png'), 'Input maps', 
+                                   lambda: self.loadInputMaps(item))
+        # - Mineral maps
+            load_submenu.addAction(QIcon(r'Icons/minmap.png'), 'Mineral maps',
+                                   lambda: self.loadMineralMaps(item))
+        # - Masks
+            load_submenu.addAction(QIcon(r'Icons/mask.png'), 'Masks',
+                                   lambda: self.loadMasks(item))
+            
+        # Separator
+            menu.addSeparator()
 
         # Rename group
-            rename_group = QW.QAction(QIcon(r'Icons/rename.png'), 'Rename')
-            rename_group.triggered.connect(lambda: self.onEdit(item))
+            menu.addAction(QIcon(r'Icons/rename.png'), 'Rename',
+                           lambda: self.onEdit(item))
 
         # Clear group
-            clear_group = QW.QAction(QIcon(r'Icons/clear.png'), 'Clear')
-            clear_group.triggered.connect(self.clearGroup)
+            menu.addAction(QIcon(r'Icons/clear.png'), 'Clear', self.clearGroup)
 
         # Delete group
-            del_group = QW.QAction(QIcon(r'Icons/remove.png'), 'Delete')
-            del_group.triggered.connect(self.delGroup)
+            menu.addAction(QIcon(r'Icons/remove.png'), 'Delete', self.delGroup)
 
-            load_submenu.addActions((load_inmaps, load_minmaps, load_masks))
-            menu.addSeparator()
-            menu.addActions((rename_group, clear_group, del_group))
-
-    # Context menu on subgroup
+    # CONTEXT MENU ON SUBGROUP
         elif isinstance(item, cObj.DataSubGroup):
 
         # Load data
-            load_data = QW.QAction(QIcon(r'Icons/generic_add.png'), 
-                                   'Load data')
-            load_data.triggered.connect(lambda: self.loadData(item))
-
-            menu.addAction(load_data)
+            menu.addAction(QIcon(r'Icons/generic_add.png'), 'Load', 
+                           lambda: self.loadData(item))
+        
+        # Separator
             menu.addSeparator()
 
-        # Specific actions for Masks subgroup
+        # Specific actions for MASKS subgroup
             if item.name == 'Masks':
 
             # Check all masks
-                chk_mask = QW.QAction('Check all')
+                chk_mask = menu.addAction('Check all')
                 chk_mask.setEnabled(not item.isEmpty())
                 chk_mask.triggered.connect(lambda: self.checkMasks(1, group))
 
             # Uncheck all masks
-                unchk_mask = QW.QAction('Uncheck all')
+                unchk_mask = menu.addAction('Uncheck all')
                 unchk_mask.setEnabled(not item.isEmpty())
                 unchk_mask.triggered.connect(lambda: self.checkMasks(0, group))
 
-                menu.addActions((chk_mask, unchk_mask))
+            # Separator
                 menu.addSeparator()
 
         # Clear subgroup
-            clear_subgroup = QW.QAction(QIcon(r'Icons/clear.png'), 'Clear')
+            clear_subgroup = menu.addAction(QIcon(r'Icons/clear.png'), 'Clear')
             clear_subgroup.triggered.connect(item.clear)
             clear_subgroup.triggered.connect(self.clearView)
 
-
-            menu.addAction(clear_subgroup)
-
-    # Context menu on data objects
+    # CONTEXT MENU ON DATA OBJECTS
         elif isinstance(item, cObj.DataObject):
-        # Generic actions, useful for any data type
 
         # Rename item
-            rename_item = QW.QAction(QIcon(r'Icons/rename.png'), 'Rename')
-            rename_item.triggered.connect(lambda: self.onEdit(item))
+            menu.addAction(QIcon(r'Icons/rename.png'), 'Rename',
+                           lambda: self.onEdit(item))
 
         # Delete item
-            del_item = QW.QAction(QIcon(r'Icons/remove.png'), 'Remove')
-            del_item.triggered.connect(self.delData)
+            menu.addAction(QIcon(r'Icons/remove.png'), 'Remove', self.delData)
+
+        # Separator
+            menu.addSeparator()
 
         # Refresh data source
-            refresh_source = QW.QAction(QIcon(r'Icons/refresh.png'),
-                                        'Refresh data source')
-            refresh_source.triggered.connect(self.refreshDataSource)
+            menu.addAction(QIcon(r'Icons/refresh.png'), 'Refresh data source',
+                           self.refreshDataSource)
 
         # Save
-            save_item = QW.QAction(QIcon(r'Icons/save.png'), 'Save')
-            save_item.triggered.connect(lambda: self.saveData(item))
+            menu.addAction(QIcon(r'Icons/save.png'), 'Save',
+                           lambda: self.saveData(item))
 
         # Save As
-            save_item_as = QW.QAction(QIcon(r'Icons/save_as.png'), 
-                                      'Save As...')
-            save_item_as.triggered.connect(lambda: self.saveData(item, False))
+            menu.addAction(QIcon(r'Icons/save_as.png'), 'Save As...',
+                           lambda: self.saveData(item, False))
 
-            menu.addActions((rename_item, del_item))
-            menu.addSeparator()
-            menu.addActions((refresh_source, save_item, save_item_as))
+        # Separator
             menu.addSeparator()
 
-        # Specific actions when item holds Input Maps
+        # Specific actions when item holds INPUT MAPS
             if item.holdsInputMap():
 
             # Invert Map
-                invert_map = QW.QAction(QIcon(r'Icons/invert.png'),
-                                        'Invert map')
-                invert_map.triggered.connect(self.invertInputMap)
-                menu.addAction(invert_map)
+                menu.addAction(QIcon(r'Icons/invert.png'), 'Invert',
+                               self.invertInputMap)
 
             # RGBA submenu
-                rgba_submenu = menu.addMenu('Set as RGBA channel...')
-                rgba_submenu.setIcon(QIcon(r'Icons/rgba_2.png'))
+                rgba_submenu = menu.addMenu(QIcon(r'Icons/rgba_2.png'),
+                                            'Set as RGBA channel...')
                 for c in ('R', 'G', 'B', 'A'):
-                    rgba_submenu.addAction(f'{c} channel',
-                                    lambda c=c: self.rgbaChannelSet.emit(c))
+                    rgba_submenu.addAction(
+                        f'{c} channel', lambda c=c: self.rgbaChannelSet.emit(c))
 
-        # Specific actions when item holds Mineral Maps
+        # Specific actions when item holds MINERAL MAPS
             elif item.holdsMineralMap():
 
             # Export Array
-                export_array = QW.QAction(QIcon(r'Icons/export.png'), 'Export')
-                export_array.triggered.connect(
-                    lambda: self.exportMineralMap(item))
-                menu.addAction(export_array)
+                menu.addAction(QIcon(r'Icons/export.png'), 'Export map',
+                               lambda: self.exportMineralMap(item))
 
-        # Specific actions when item holds Mineral Maps
+        # Specific actions when item holds MASKS
             elif item.holdsMask():
 
             # Invert mask
-                invert_mask = QW.QAction(QIcon(r'Icons/invert.png'),
-                                         'Invert mask')
-                invert_mask.triggered.connect(self.invertMask)
-                menu.addAction(invert_mask)
+                menu.addAction(QIcon(r'Icons/invert.png'), 'Invert mask',
+                               self.invertMask)
 
             # Merge masks sub-menu
                 mergemask_submenu = menu.addMenu('Merge masks')
-                mergemask_submenu.addAction('Union',
+                mergemask_submenu.addAction('Union', 
                                             lambda: self.mergeMasks(group,'U'))
                 mergemask_submenu.addAction('Intersection',
                                             lambda: self.mergeMasks(group,'I'))
@@ -339,7 +320,8 @@ class DataManager(QW.QTreeWidget):
 
 
     # Deal with anything else, just for safety reasons
-        else: return
+        else: 
+            return
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
@@ -978,9 +960,8 @@ class HistogramViewer(QW.QWidget):
         self.navTbar.removeToolByIndex([3, 4, 8, 9])
 
     # Toggle log scale [-> NavTbar Action]
-    # set a proper icon
         self.logscale_action = QW.QAction(QIcon(r'Icons/logscale.png'),
-                                          'Log scale', self.navTbar)
+                                          'Log scale')
         self.logscale_action.setCheckable(True)
         self.logscale_action.setChecked(True)
         self.navTbar.insertAction(2, self.logscale_action)
@@ -989,17 +970,14 @@ class HistogramViewer(QW.QWidget):
         self.scaler_tbar = cObj.StyledToolbar('Histogram scaler toolbar')
 
     # Toggle scaler action [-> Heatmap scaler toolbar]
-        self.scaler_action = QW.QAction(QIcon(r'Icons/range.png'),
-                                        'Enable scaler', self.scaler_tbar)
+        self.scaler_action = self.scaler_tbar.addAction(
+            QIcon(r'Icons/range.png'), 'Enable scaler')
         self.scaler_action.setCheckable(True)
     
     # Extract mask action [-> Heatmap scaler toolbar]
-        self.mask_action = QW.QAction(QIcon(r'Icons/add_mask.png'), 
-                                      'Extract mask', self.scaler_tbar)
+        self.mask_action = self.scaler_tbar.addAction(
+            QIcon(r'Icons/add_mask.png'), 'Extract mask')
         self.mask_action.setEnabled(False)
-
-    # Add actions to Heatmap scaler toolbar
-        self.scaler_tbar.addActions((self.scaler_action, self.mask_action))
 
     # Min and Max scaler values input widgets [-> Heatmap scaler toolbar]
         self.scaler_vmin = QW.QSpinBox()
@@ -1686,71 +1664,56 @@ class RoiEditor(QW.QWidget):
         self.toolbar = cObj.StyledToolbar('ROI toolbar')
 
     # Load ROI map [-> Toolbar Action]
-        self.load_action = QW.QAction(QIcon(r'Icons/import.png'),
-                                      'Import ROI map', self.toolbar)
+        self.load_action = self.toolbar.addAction(
+            QIcon(r'Icons/import.png'), 'Import ROI map')
 
     # Save ROI map [-> Toolbar Action]
-        self.save_action = QW.QAction(QIcon(r'Icons/save.png'),
-                                      'Save ROI map', self.toolbar)
+        self.save_action = self.toolbar.addAction(
+            QIcon(r'Icons/save.png'), 'Save ROI map')
 
     # Save ROI map as... [-> Toolbar Action]
-        self.saveas_action = QW.QAction(QIcon(r'Icons/save_as.png'),
-                                        'Save ROI map as...', self.toolbar)
+        self.saveas_action = self.toolbar.addAction(
+            QIcon(r'Icons/save_as.png'), 'Save ROI map as')
         
     # Auto detect ROI [-> Toolbar Action]
-        self.autoroi_action = QW.QAction(QIcon(r'Icons/roi_detection.png'),
-                                         'Auto detect ROI', self.toolbar)
+        self.autoroi_action = self.toolbar.addAction(
+            QIcon(r'Icons/roi_detection.png'), 'Auto detect ROI')
         
     # Auto detect ROI dialog
         self.autoroi_dial = dial.AutoRoiDetector()
 
     # Toggle ROI selection [-> Toolbar Action]
-        self.draw_action = QW.QAction(QIcon(r'Icons/roi_selection.png'),
-                                      'Draw ROI', self.toolbar)
+        self.draw_action = self.toolbar.addAction(
+            QIcon(r'Icons/roi_selection.png'), 'Draw ROI')
         self.draw_action.setCheckable(True)
 
     # Add ROI [-> Toolbar Action]
-        self.addroi_action = QW.QAction(QIcon(r'Icons/add_roi.png'),
-                                        'Add ROI', self.toolbar)
+        self.addroi_action = self.toolbar.addAction(
+            QIcon(r'Icons/add_roi.png'), 'Add ROI')
         self.addroi_action.setEnabled(False)
 
     # Extract mask [-> Toolbar Action]
-        self.extr_mask_action = QW.QAction(QIcon(r'Icons/add_mask.png'), 
-                                           'Extract selection mask', 
-                                           self.toolbar)
+        self.extr_mask_action = self.toolbar.addAction(
+            QIcon(r'Icons/add_mask.png'), 'Extract selection mask')
         self.extr_mask_action.setEnabled(False)
-        
-    # ROI visual preferences action [-> Toolbar Action]
-        self.pref_action = QW.QAction(QIcon(r'Icons/gear.png'), 
-                                      'ROI preferences', self.toolbar)
-        
-    # ROI Preferences menu [-> ROI preferences action -> Toolbar Action]
-        pref_menu = QW.QMenu()
-        pref_menu.setStyleSheet(pref.SS_menu)
 
-    # - Set ROI outline color action [-> ROI Preferences menu]
-        self.roicolor_action = QW.QAction('Color...', pref_menu)
-    # - Set ROI outline selection color action [-> ROI Preferences menu]
-        self.roiselcolor_action = QW.QAction('Selection color...', pref_menu)
-    # - Toggle filled ROI color action [-> ROI Preferences menu]
-        self.roifilled_action = QW.QAction('Fill color', pref_menu)
+    # ROI visual preferences [-> Toolbar Menu-Action]
+        pref_menu = cObj.StyledMenu()
+    # - Set ROI outline color action
+        self.roicolor_action = pref_menu.addAction('Color...')
+    # - Set ROI outline selection color action 
+        self.roiselcolor_action = pref_menu.addAction('Selection color...')
+    # - Toggle filled ROI color action 
+        self.roifilled_action = pref_menu.addAction('Filled')
         self.roifilled_action.setCheckable(True)
         self.roifilled_action.setChecked(self.roi_filled)
-
-    # Add actions to ROI preferences menu
-        pref_menu.addActions((self.roicolor_action, self.roiselcolor_action, 
-                              self.roifilled_action))
-
-    # Add ROI preferences menu to ROI preferences action
+    # - Add menu-action to toolbar
+        self.pref_action = QW.QAction(QIcon(r'Icons/gear.png'), 'ROI settings')
         self.pref_action.setMenu(pref_menu)
+        self.toolbar.addAction(self.pref_action)
 
-    # Add actions to the toolbar
-        self.toolbar.addActions((self.load_action, self.save_action,
-                                 self.saveas_action))
-        self.toolbar.addSeparator()
-        self.toolbar.addActions((self.autoroi_action, self.draw_action, 
-                                 self.addroi_action, self.extr_mask_action, 
-                                 self.pref_action))
+    # Insert separator into the toolbar
+        self.toolbar.insertSeparator(self.autoroi_action)
 
     # Loaded ROI map path (Path Label)
         self.mappath = cObj.PathLabel(full_display=False)
@@ -1828,7 +1791,6 @@ class RoiEditor(QW.QWidget):
         self.autoroi_dial.requestRoiMap.connect(
             lambda: self.autoroi_dial.set_current_roimap(self.current_roimap))
         self.autoroi_dial.drawingRequested.connect(self.addAutoRoi)
-
 
     # Toggle on/off the Rectangle Selector
         self.draw_action.toggled.connect(self.toggleRectSelect)
@@ -1926,18 +1888,14 @@ class RoiEditor(QW.QWidget):
         menu.setStyleSheet(pref.SS_menu)
 
     # Extract mask from selected ROIs
-        extract_mask = QW.QAction(QIcon(r'Icons/add_mask.png'), 
-                                  'Extract ROI mask')
-        extract_mask.triggered.connect(self.extractMaskFromRois)
+        menu.addAction(QIcon(r'Icons/add_mask.png'), 'ROI mask',
+                       self.extractMaskFromRois)
+        
+    # Separator
+        menu.addSeparator()
 
     # Remove selected ROIs
-        remove = QW.QAction(QIcon(r'Icons/remove.png'), 'Remove')
-        remove.triggered.connect(self.removeRoi)
-
-    # Add actions to menu
-        menu.addAction(extract_mask)
-        menu.addSeparator()
-        menu.addAction(remove)
+        menu.addAction(QIcon(r'Icons/remove.png'), 'Remove', self.removeRoi)
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
@@ -2632,17 +2590,14 @@ class ProbabilityMapViewer(QW.QWidget):
         self.rangeTbar = cObj.StyledToolbar('Probability range toolbar')
 
     # Toggle range selection [-> View Range Toolbar]
-        self.toggle_range_action = QW.QAction(QIcon(r'Icons/range.png'), 
-                                              'Set range', self.rangeTbar)
+        self.toggle_range_action = self.rangeTbar.addAction(
+            QIcon(r'Icons/range.png'), 'Set range')
         self.toggle_range_action.setCheckable(True)
 
     # Extract mask from range [-> View Range Toolbar]
-        self.mask_action = QW.QAction(QIcon(r'Icons/add_mask.png'), 
-                                      "Extract mask", self.rangeTbar)
+        self.mask_action = self.rangeTbar.addAction(
+            QIcon(r'Icons/add_mask.png'), 'Extract mask')
         self.mask_action.setEnabled(False)
-
-    # Add actions to View Range Toolbar
-        self.rangeTbar.addActions([self.toggle_range_action, self.mask_action])
 
     # Range values inputs [-> View Range Toolbar]
         self.min_input = QW.QDoubleSpinBox()
@@ -2854,13 +2809,15 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Clear channel sub-menu
         clear_submenu = menu.addMenu('Clear channel...')
-
+    # - Clear each individual channel
         for c in self.channels:
-            clear_submenu.addAction(f'{c} channel',
-                                    lambda c=c: self.clear_channel(c))
+            clear_submenu.addAction(
+                f'{c} channel', lambda c=c: self.clear_channel(c))
+    # - Separator
         clear_submenu.addSeparator()
-        clear_submenu.addAction('Clear all',
-                                lambda: self.clear_channel(*self.channels))
+    # - Clear all channels
+        clear_submenu.addAction(
+            'Clear all', lambda: self.clear_channel(*self.channels))
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
