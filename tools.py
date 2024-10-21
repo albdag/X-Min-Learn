@@ -1345,9 +1345,9 @@ class MineralClassifier(DraggableTool):
         self.pre_train_tab = self.PreTrainedClassifierTab()
         self.roi_based_tab = self.RoiBasedClassifierTab()
         self.unsuperv_tab = self.UnsupervisedClassifierTab()
-        self.classifier_tabwid.addTab(self.pre_train_tab, title='Pre-trained')
-        self.classifier_tabwid.addTab(self.roi_based_tab, title='ROI-based')
-        self.classifier_tabwid.addTab(self.unsuperv_tab, title='Unsupervised')
+        self.classifier_tabwid.addTab(self.pre_train_tab, title='PRE-TRAINED')
+        self.classifier_tabwid.addTab(self.roi_based_tab, title='ROI-BASED')
+        self.classifier_tabwid.addTab(self.unsuperv_tab, title='UNSUPERVISED')
 
     # Classification progress bar (Descriptive ProgressBar)
         self.progbar = cObj.DescriptiveProgressBar()
@@ -1458,11 +1458,11 @@ class MineralClassifier(DraggableTool):
         self.data_tabwid.tabBar().setExpanding(True)
         self.data_tabwid.tabBar().setDocumentMode(True)
         self.data_tabwid.addTab(self.inmaps_selector, QIcon(r'Icons/inmap.png'), 
-                                title='Input maps')
+                                title='INPUT MAPS')
         self.data_tabwid.addTab(mask_data_grid, QIcon(r'Icons/mask.png'), 
-                                title='Mask')
+                                title='MASK')
         self.data_tabwid.addTab(output_data_grid, QIcon(r'Icons/minmap.png'), 
-                                title='Output maps')
+                                title='OUTPUT MAPS')
         data_group = cObj.CollapsibleArea(self.data_tabwid, 'Data panel',
                                           collapsed=False)
 
@@ -5302,9 +5302,9 @@ class ModelLearner(DraggableTool):
         learn_plot_tabwid.tabBar().setDocumentMode(True)
         learn_plot_tabwid.tabBar().setExpanding(True)
         learn_plot_tabwid.addTab(loss_grid, QIcon(r'Icons/loss.png'),
-                                 'Loss plot')
+                                 'LOSS PLOT')
         learn_plot_tabwid.addTab(accuracy_grid, QIcon(r'Icons/accuracy.png'),
-                                 'Accuracy plot')
+                                 'ACCURACY PLOT')
         learn_group = cObj.GroupArea(learn_plot_tabwid, 'Learning progression')
 
 #  -------------------------------------------------------------------------  #
@@ -5424,11 +5424,11 @@ class ModelLearner(DraggableTool):
         confmat_tabwid.tabBar().setDocumentMode(True)
         confmat_tabwid.tabBar().setExpanding(True)
         confmat_tabwid.addTab(tr_cm_grid, QIcon(r'Icons/train_set.png'), 
-                         'Train set')
+                         'TRAIN SET')
         confmat_tabwid.addTab(vd_cm_grid, QIcon(r'Icons/valid_set.png'), 
-                         'Validation set')
+                         'VALIDATION SET')
         confmat_tabwid.addTab(ts_cm_grid, QIcon(r'Icons/test_set.png'), 
-                         'Test set')
+                         'TEST SET')
         confmat_group = cObj.GroupArea(confmat_tabwid, 'Model evaluation')
 
 #  -------------------------------------------------------------------------  #
