@@ -1246,6 +1246,11 @@ class HistogramViewer(QW.QWidget):
         None.
 
         '''
+    # Do nothing if no map is displayed in the maps canvas
+        if self.maps_canvas.is_empty():
+            return
+    
+    # Get histogram scaler extents
         vmin, vmax = self.scaler.extents
         vmin, vmax = round(vmin), round(vmax)
 
