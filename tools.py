@@ -19,9 +19,11 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
 from _base import InputMap, MineralMap, RoiMap, Mask, InputMapStack
-import conv_functions as CF
-import customObjects as cObj
-import ML_tools
+import convenient_functions as cf
+import custom_widgets as CW
+import dataset_tools as dtools
+import image_analysis_tools as iatools
+import machine_learning_tools as mltools
 import plots
 import preferences as pref
 import threads
@@ -198,7 +200,7 @@ class Preferences(QW.QWidget):
         general_form = QW.QFormLayout()
         general_form.addRow('Set font size', self.fontsize_spbox)
         general_form.addRow('Dynamic Handlebars', self.dynSplit_cbox)
-        self.generalTab = cObj.GroupScrollArea(general_form, 'General settings')
+        self.generalTab = CW.GroupScrollArea(general_form, 'General settings')
 
     # PLOTS SETTINGS
 
@@ -227,7 +229,7 @@ class Preferences(QW.QWidget):
         plots_form.addRow('Shared zoom', self.shareaxis_cbox)
         plots_form.addRow('Toolbars size', self.NTBsize_slider)
         plots_form.addRow('Legend decimals', self.legendDec_spbox)
-        self.plotsTab = cObj.GroupScrollArea(plots_form, 'Plots settings')
+        self.plotsTab = CW.GroupScrollArea(plots_form, 'Plots settings')
 
 
     # CLASSIFICATION SETTINGS
@@ -239,7 +241,7 @@ class Preferences(QW.QWidget):
 
         # Training areas color button
         col_rgb = self._trAreasCol
-        self.trAreasCol_btn = QW.QPushButton(cObj.RGBIcon(col_rgb), str(col_rgb))
+        self.trAreasCol_btn = QW.QPushButton(CW.RGBIcon(col_rgb), str(col_rgb))
         self.trAreasCol_btn.clicked.connect(self._changeIconColor)
 
         # Training areas filled checkbox
@@ -248,26 +250,26 @@ class Preferences(QW.QWidget):
 
         # Training areas selection color button
         sel_rgb = self._trAreasSel
-        self.trAreasSel_btn = QW.QPushButton(cObj.RGBIcon(sel_rgb), str(sel_rgb))
+        self.trAreasSel_btn = QW.QPushButton(CW.RGBIcon(sel_rgb), str(sel_rgb))
         self.trAreasSel_btn.clicked.connect(self._changeIconColor)
 
 
         # Model learner sub-group
-        modLearn_group = cObj.GroupArea(self.extLog_cbox, 'Model Learner')
+        modLearn_group = CW.GroupArea(self.extLog_cbox, 'Model Learner')
 
         # Training Areas sub-group
         trAreas_form = QW.QFormLayout()
         trAreas_form.addRow('Color', self.trAreasCol_btn)
         trAreas_form.addRow(self.trAreasFill_cbox)
         trAreas_form.addRow('Selection color', self.trAreasSel_btn)
-        trAreas_group = cObj.GroupArea(trAreas_form, 'Training Areas')
+        trAreas_group = CW.GroupArea(trAreas_form, 'Training Areas')
 
 
         # Model Learner Tab
         class_vbox = QW.QVBoxLayout()
         class_vbox.addWidget(modLearn_group)
         class_vbox.addWidget(trAreas_group)
-        self.classTab = cObj.GroupScrollArea(class_vbox, 'Classification settings')
+        self.classTab = CW.GroupScrollArea(class_vbox, 'Classification settings')
 
 
     # TAB WIDGET
@@ -323,7 +325,7 @@ class Preferences(QW.QWidget):
         col = QW.QColorDialog.getColor()
         if col.isValid():
             rgb = tuple(col.getRgb()[:-1])
-            self.sender().setIcon(cObj.RGBIcon(rgb))
+            self.sender().setIcon(CW.RGBIcon(rgb))
             self.sender().setText(str(rgb))
 
     def set_fontSize(self):
@@ -332,34 +334,34 @@ class Preferences(QW.QWidget):
 
     def dynamicSplitter(self):
         self._dynSplitter = self.dynSplit_cbox.isChecked()
-        for i, spt in enumerate(cObj.SplitterGroup.instances):
+        for i, spt in enumerate(CW.SplitterGroup.instances):
             try:
                 spt.setOpaqueResize(self._dynSplitter)
             except (ReferenceError, RuntimeError):
-                del cObj.SplitterGroup.instances[i]
+                del CW.SplitterGroup.instances[i]
 
     def shareAxis(self):
         self._shareaxis = self.shareaxis_cbox.isChecked()
         xmapsview = self.parent._xmapstab.XMapsView
         minmapview = self.parent._minmaptab.MinMapView
-        CF.shareAxis(xmapsview.ax, minmapview.ax, self._shareaxis)
+        cf.shareAxis(xmapsview.ax, minmapview.ax, self._shareaxis)
 
     def set_NTbarSize(self): # deprecated! make it change after app restart
         self._NTBsize = self.NTBsize_slider.value()
-        for i, ntb in enumerate(cObj.NavTbar.instances):
+        for i, ntb in enumerate(CW.NavTbar.instances):
             try:
                 ntb.setIconSize(QC.QSize(self._NTBsize, self._NTBsize))
             except (ReferenceError, RuntimeError):
-                del cObj.NavTbar.instances[i]
+                del CW.NavTbar.instances[i]
 
     def set_legendDec(self):
         self._legendDec = self.legendDec_spbox.value()
-        for i, leg in enumerate(cObj.CanvasLegend.instances):
+        for i, leg in enumerate(CW.CanvasLegend.instances):
             try:
                 leg.setPrecision(self._legendDec)
                 leg.update()
             except (ReferenceError, RuntimeError):
-                del cObj.CanvasLegend.instances[i]
+                del CW.CanvasLegend.instances[i]
 
 
     def extendedLog(self):
@@ -439,7 +441,7 @@ class Image2Ascii(QW.QWidget):
         self.del_btn.clicked.connect(self.removeImgs)
 
     # Loaded images visualizer list
-        self.loadedList = cObj.StyledListWidget()
+        self.loadedList = CW.StyledListWidget()
 
     # Auto-load result checkbox
         self.autoLoad_cbox = QW.QCheckBox('Auto-load')
@@ -470,7 +472,7 @@ class Image2Ascii(QW.QWidget):
         options_form.addRow(self.splitChannels_cbox)
         options_form.addRow('Output File Format', self.ext_combox)
         options_form.addRow(self.convert_btn)
-        options_group = cObj.GroupArea(options_form, 'Options')
+        options_group = CW.GroupArea(options_form, 'Options')
 
     # Adjust Main Layout
         main_grid = QW.QGridLayout()
@@ -522,16 +524,16 @@ class Image2Ascii(QW.QWidget):
 
             for n, p in enumerate(self.loadedImgs):
                 try:
-                    arr = CF.map2ASCII(p)
+                    arr = cf.map2ASCII(p)
                     if arr.ndim == 3 and self.splitChannels_cbox.isChecked():
                         channels = np.split(arr, arr.shape[-1], axis=2)
-                        fname = CF.path2filename(p)
+                        fname = cf.path2filename(p)
                         for n_ch, ch in enumerate(channels, start=1):
-                            outpath = os.path.join(outdir, CF.extend_filename(fname, f'_ch{n_ch}', ext))
+                            outpath = os.path.join(outdir, cf.extend_filename(fname, f'_ch{n_ch}', ext))
                             np.savetxt(outpath, np.squeeze(ch), delimiter=' ', fmt='%d')
                             outfiles.append(outpath) # prepare the out file to autoload
                     else:
-                        fname = CF.path2filename(p)
+                        fname = cf.path2filename(p)
                         outpath = os.path.join(outdir, fname + ext)
                         np.savetxt(outpath, arr, delimiter=' ', fmt='%d')
                         outfiles.append(outpath) # prepare the out file to autoload
@@ -546,7 +548,7 @@ class Image2Ascii(QW.QWidget):
                                            'All images were converted with success.')
             else:
                 failed, errMsg = zip(*errLog)
-                cObj.RichMsgBox(self, QW.QMessageBox.Warning, 'X-Min Learn',
+                CW.RichMsgBox(self, QW.QMessageBox.Warning, 'X-Min Learn',
                                 f'The following images failed the convertion:\n\n{failed}',
                                 detailedText='\n'.join(err.args[0] for err in errMsg))
 
@@ -578,7 +580,7 @@ class Image2Minmap(QW.QWidget):
         self.import_btn.clicked.connect(self.importImg)
 
     # Image pathlabel
-        self.imgPath = cObj.PathLabel()
+        self.imgPath = CW.PathLabel()
 
     # Convert button
         self.convert_btn = QW.QPushButton('Convert')
@@ -591,16 +593,16 @@ class Image2Minmap(QW.QWidget):
         self.progBar = QW.QProgressBar()
 
     # Image visualizer canvas
-        self.imgView = cObj.DiscreteClassCanvas(self, size=(5, 3.75))
+        self.imgView = CW.DiscreteClassCanvas(self, size=(5, 3.75))
         self.imgView.setMinimumSize(100,100)
 
     # Image visualizer NavTbar
-        self.imgViewNtbar = cObj.NavTbar(self.imgView, self)
+        self.imgViewNtbar = CW.NavTbar(self.imgView, self)
         self.imgViewNtbar.removeToolByIndex([3, 4, 8, 9, 10, 11])
         self.imgViewNtbar.fixHomeAction()
 
     # Image legend
-        self.legend = cObj.CanvasLegend(self.imgView)
+        self.legend = CW.CanvasLegend(self.imgView)
 
     # Auto-load result checkbox
         self.autoLoad_cbox = QW.QCheckBox('Auto-load')
@@ -608,7 +610,7 @@ class Image2Minmap(QW.QWidget):
         self.autoLoad_cbox.setChecked(True)
 
     # Save button
-        self.save_btn = cObj.IconButton(r'Icons\save.png', 'Save')
+        self.save_btn = CW.IconButton(r'Icons\save.png', 'Save')
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self.save_minmap)
 
@@ -627,10 +629,10 @@ class Image2Minmap(QW.QWidget):
         view_vbox = QW.QVBoxLayout()
         view_vbox.addWidget(self.imgViewNtbar)
         view_vbox.addWidget(self.imgView)
-        view_group = cObj.GroupArea(view_vbox)
+        view_group = CW.GroupArea(view_vbox)
 
     # Adjust main Layout
-        main_hsplit = cObj.SplitterGroup((options_grid, view_group), (1, 3)) # use splitter layout instead
+        main_hsplit = CW.SplitterGroup((options_grid, view_group), (1, 3)) # use splitter layout instead
         mainLayout = QW.QHBoxLayout()
         mainLayout.addWidget(main_hsplit)
         self.setLayout(mainLayout)
@@ -663,7 +665,7 @@ class Image2Minmap(QW.QWidget):
         if img_path == '' : return
 
     # Convert image to array
-        arr = CF.map2ASCII(img_path)
+        arr = cf.map2ASCII(img_path)
 
     # Get array shape
         row, col, chan = arr.shape
@@ -674,7 +676,7 @@ class Image2Minmap(QW.QWidget):
 
     # Convert RGBA array to RGB
         elif chan == 4:
-            arr = CF.rgba2rgb(arr)
+            arr = iatools.rgba2rgb(arr)
 
     # Reshape the array to get unique RGB values
         arr = arr.reshape(-1, 3)
@@ -795,9 +797,9 @@ class DummyMapsBuilder(QW.QWidget):
         self.save_btn.clicked.connect(self.save_dummyMap)
 
     # Preview histogram canvas + Navigation Toolbar
-        self.histChart = cObj.HistogramCanvas(self, size=(5.6, 7.5))
+        self.histChart = CW.HistogramCanvas(self, size=(5.6, 7.5))
         self.histChart.setMinimumSize(100, 100)
-        self.histChart_NTbar = cObj.NavTbar(self.histChart, self)
+        self.histChart_NTbar = CW.NavTbar(self.histChart, self)
         self.histChart_NTbar.removeToolByIndex([3, 4, 8, 9])
 
     # Adjust main layout
@@ -821,7 +823,7 @@ class DummyMapsBuilder(QW.QWidget):
 
         mainLayout = QW.QVBoxLayout()
         mainLayout.addWidget(self.toolInfo_lbl)
-        mainLayout.addWidget(cObj.GroupArea(gridLayout))
+        mainLayout.addWidget(CW.GroupArea(gridLayout))
         self.setLayout(mainLayout)
 
 
@@ -852,175 +854,7 @@ class DummyMapsBuilder(QW.QWidget):
 
 
 
-class SubSampleDataset(QW.QWidget):
-    def __init__(self, parent=None):
-        self.parent = parent
-        super(SubSampleDataset, self).__init__()
-        self.setWindowTitle('Sub-sample Dataset')
-        self.setWindowIcon(QIcon('Icons/gear.png'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
 
-        self.loadedDataset = None
-        self.classCounter = dict()
-
-        self.init_ui()
-        self.adjustSize()
-
-    def init_ui(self):
-        # Import Dataset Button
-        self.import_btn = QW.QPushButton(QIcon('Icons/load.png'), 'Import')
-        self.import_btn.clicked.connect(self.import_dataset)
-
-        # Original dataset decimal character selector
-        self.in_CSVdec = cObj.DecimalPointSelector()
-        in_CSVdec_form = QW.QFormLayout()
-        in_CSVdec_form.addRow('CSV decimal point', self.in_CSVdec)
-
-        # Original dataset path
-        self.dataset_path = cObj.PathLabel('', 'No dataset loaded')
-
-        # Sub-sampled dataset decimal character selector
-        self.out_CSVdec = cObj.DecimalPointSelector()
-        out_CSVdec_form = QW.QFormLayout()
-        out_CSVdec_form.addRow('CSV decimal point', self.out_CSVdec)
-
-        # Sub-sampled dataset separator selector
-        self.out_CSVsep = cObj.SeparatorSymbolSelector()
-        out_CSVsep_form = QW.QFormLayout()
-        out_CSVsep_form.addRow('CSV separator', self.out_CSVsep)
-
-        # Save button
-        self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
-        self.save_btn.setEnabled(False)
-        self.save_btn.clicked.connect(self.save_subSample)
-
-        # Imported dataset info area
-        self.dataset_info = QW.QTextEdit()
-        self.dataset_info.setReadOnly(True)
-
-        # Class Selector Twin List Widgets
-        self.orig_class = cObj.StyledListWidget()
-        self.subSampled_class = cObj.StyledListWidget()
-        for qList in (self.orig_class, self.subSampled_class):
-            qList.setAcceptDrops(True)
-            qList.setDragEnabled(True)
-            qList.setDefaultDropAction(Qt.MoveAction)
-            qList.itemClicked.connect(self.show_classCount)
-
-        orig_classGA = cObj.GroupArea(self.orig_class,
-                                      'Original Dataset classes')
-        subSampled_classGA = cObj.GroupArea(self.subSampled_class,
-                                            'Sub-sampled Dataset classes')
-
-        # Help Label
-        self.help_lbl = QW.QLabel('Drag & Drop to include/exclude classes')
-        # self.help_lbl.setMaximumHeight(20)
-        self.help_lbl.setSizePolicy(QW.QSizePolicy.Expanding,
-                                    QW.QSizePolicy.Fixed)
-
-        # Class Counter Label
-        self.counter_lbl = QW.QLabel()
-        # self.counter_lbl.setMaximumHeight(20)
-        self.counter_lbl.setSizePolicy(QW.QSizePolicy.Expanding,
-                                       QW.QSizePolicy.Fixed)
-
-        # Adjust Layout
-        inFile_vbox = QW.QVBoxLayout()
-        inFile_vbox.addWidget(self.import_btn)
-        inFile_vbox.addLayout(in_CSVdec_form)
-        inFile_vbox.addWidget(self.dataset_path)
-        inFile_GA = cObj.GroupArea(inFile_vbox, 'Original Dataset')
-
-        outFile_vbox = QW.QVBoxLayout()
-        outFile_vbox.addLayout(out_CSVdec_form)
-        outFile_vbox.addLayout(out_CSVsep_form)
-        outFile_vbox.addWidget(self.save_btn)
-        outFile_GA = cObj.GroupArea(outFile_vbox, 'Sub-sampled Dataset')
-
-        upper_hbox = QW.QHBoxLayout()
-        upper_hbox.addWidget(inFile_GA, alignment = Qt.AlignLeft)
-        upper_hbox.addWidget(outFile_GA, alignment = Qt.AlignRight)
-
-        central_hbox = QW.QHBoxLayout()
-        central_hbox.addWidget(orig_classGA, alignment = Qt.AlignLeft)
-        central_hbox.addWidget(subSampled_classGA, alignment = Qt.AlignRight)
-
-        lower_hbox = QW.QHBoxLayout()
-        lower_hbox.addWidget(self.help_lbl, alignment = Qt.AlignLeft)
-        lower_hbox.addWidget(self.counter_lbl, alignment = Qt.AlignRight)
-
-        mainLayout = QW.QVBoxLayout()
-        mainLayout.addLayout(upper_hbox, 2)
-        mainLayout.addWidget(self.dataset_info, 3)
-        mainLayout.addLayout(central_hbox, 3)
-        mainLayout.addLayout(lower_hbox, 1)
-        self.setLayout(mainLayout)
-
-    def import_dataset(self):
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Import Dataset',
-                                                 pref.get_dirPath('in'),
-                                                 'Comma Separated Value (*.csv)')
-        if path:
-            pref.set_dirPath('in', os.path.dirname(path))
-            dec = self.in_CSVdec.currentText()
-            self.loadedDataset = cObj.CsvChunkReader(dec, pBar=True).read(path)
-
-            ylab = self.loadedDataset.columns[-1]
-            self.loadedDataset[ylab] = self.loadedDataset[ylab].astype(str) # be sure that last column is labels
-            cnt = self.loadedDataset[ylab].value_counts()
-            self.classCounter = dict(zip(cnt.index, cnt))
-
-            self.update_datasetPath(path)
-            self.update_datasetInfo()
-            self.update_classLists()
-            self.counter_lbl.clear()
-            self.save_btn.setEnabled(True)
-
-    def update_datasetPath(self, path):
-        self.dataset_path.set_displayName(CF.path2filename(path))
-        self.dataset_path.set_fullpath(path)
-
-    def update_datasetInfo(self):
-        infoText = f'DATAFRAME PREVIEW\n\n{repr(self.loadedDataset)}'
-        self.dataset_info.setText(infoText)
-
-    def update_classLists(self):
-        self.subSampled_class.clear()
-        self.orig_class.clear()
-        self.orig_class.addItems(sorted(self.classCounter.keys()))
-
-    def show_classCount(self, item):
-        # item = self.sender().currentItem()
-        if item is not None:
-            current_class = item.text()
-            count = self.classCounter[current_class]
-            self.counter_lbl.setText(f'{current_class} = {count}')
-
-
-    def save_subSample(self):
-        item_count = self.subSampled_class.count()
-        if item_count == 0:
-            QW.QMessageBox.critical(self, 'X-Min Learn',
-            'No classes selected: the sub-sampled dataset would be empty')
-            return
-
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save sub-sampled dataset',
-                                                    pref.get_dirPath('out'),
-                                                    'Comma Separated Values (*.csv)')
-        if outpath:
-            pref.set_dirPath('in', os.path.dirname(outpath))
-            progBar = cObj.PopUpProgBar(self, 1, 'Saving dataset', cancel=False)
-            progBar.setValue(0)
-            ylab = self.loadedDataset.columns[-1]
-            targets = [self.subSampled_class.item(i).text() for i in range(item_count)]
-            subSample = self.loadedDataset[self.loadedDataset[ylab].isin(targets)]
-            dec = self.out_CSVdec.currentText()
-            sep = self.out_CSVsep.currentText()
-            subSample.to_csv(outpath, sep=sep, index=False, decimal=dec)
-            progBar.setValue(1)
-            QW.QMessageBox.information(self, 'X-Min Learn',
-                                       'Dataset saved with success')
 
 
 class MergeDatasets(QW.QWidget):
@@ -1041,18 +875,18 @@ class MergeDatasets(QW.QWidget):
     def init_ui(self):
 
         # Add datasets button
-        self.addDS_btn = cObj.IconButton('Icons/generic_add.png')
+        self.addDS_btn = CW.IconButton('Icons/generic_add.png')
         self.addDS_btn.clicked.connect(self.add_datasets)
 
         # Input datasets CSV decimal selector button
-        self.in_CSVdec = cObj.DecimalPointSelector()
+        self.in_CSVdec = CW.DecimalPointSelector()
 
         # Input datasets list viewer
-        self.loadedDS_area = cObj.StyledListWidget(ext_selection=False)
+        self.loadedDS_area = CW.StyledListWidget(ext_selection=False)
         self.loadedDS_area.itemClicked.connect(self.show_inDSpreview)
 
         # Remove selected datasets button
-        self.delDS_btn = cObj.IconButton('Icons/generic_del.png')
+        self.delDS_btn = CW.IconButton('Icons/generic_del.png')
         self.delDS_btn.setToolTip('Remove selected datasets.')
         self.delDS_btn.clicked.connect(self.remove_datasets)
 
@@ -1071,10 +905,10 @@ class MergeDatasets(QW.QWidget):
         self.merge_info.setReadOnly(True)
 
         # Merged dataset decimal character selector
-        self.out_CSVdec = cObj.DecimalPointSelector()
+        self.out_CSVdec = CW.DecimalPointSelector()
 
         # Merged dataset separator selector
-        self.out_CSVsep = cObj.SeparatorSymbolSelector()
+        self.out_CSVsep = CW.SeparatorSymbolSelector()
 
         # Save merged dataset button
         self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
@@ -1095,7 +929,7 @@ class MergeDatasets(QW.QWidget):
         inDS_vbox.addLayout(importDS_form)
         inDS_vbox.addWidget(self.loadedDS_area)
         inDS_vbox.addLayout(delMerge_hbox)
-        inDS_vbox.addWidget(cObj.GroupArea(self.inDS_info, 'Selected dataset preview'), 2)
+        inDS_vbox.addWidget(CW.GroupArea(self.inDS_info, 'Selected dataset preview'), 2)
 
         # Adjust right vBox Layout
         outCSV_form = QW.QFormLayout()
@@ -1105,7 +939,7 @@ class MergeDatasets(QW.QWidget):
         outCSV_form.setFieldGrowthPolicy(outCSV_form.FieldsStayAtSizeHint)
 
         outDS_vbox = QW.QVBoxLayout()
-        outDS_vbox.addWidget(cObj.GroupArea(self.merge_info, 'Merged dataset preview'), 2)
+        outDS_vbox.addWidget(CW.GroupArea(self.merge_info, 'Merged dataset preview'), 2)
         outDS_vbox.addLayout(outCSV_form)
         outDS_vbox.addWidget(self.save_btn)
 
@@ -1121,10 +955,10 @@ class MergeDatasets(QW.QWidget):
         one_file = not (len(paths) - 1)
 
         if not one_file:
-            pBar = cObj.PopUpProgBar(self, len(paths), 'Reading datasets')
+            pBar = CW.PopUpProgBar(self, len(paths), 'Reading datasets')
 
         for n, p in enumerate(paths, start=1):
-            d = cObj.CsvChunkReader(dec, pBar=one_file).read(p)
+            d = CW.CsvChunkReader(dec, pBar=one_file).read(p)
             datasets.append(d)
             if not one_file: pBar.setValue(n)
         return datasets
@@ -1175,7 +1009,7 @@ class MergeDatasets(QW.QWidget):
 
             # Check for datasets column NAME fitting
             # sorted allows to accept same column names with different order
-            col_names = sorted(CF.most_frequent([df.columns.to_list() for df in self.loadedDS]))
+            col_names = sorted(cf.most_frequent([df.columns.to_list() for df in self.loadedDS]))
 
             for i, ds in enumerate(self.loadedDS):
                 if sorted(ds.columns.to_list()) != col_names:
@@ -1257,14 +1091,14 @@ class MineralClassifier(DraggableTool):
 #  -------------------------------------------------------------------------  #
         
     # Input maps selector 
-        self.inmaps_selector = cObj.SampleMapsSelector('inmaps')
+        self.inmaps_selector = CW.SampleMapsSelector('inmaps')
 
     # Remove mask button (StyledButton)
-        self.del_mask_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+        self.del_mask_btn = CW.StyledButton(QIcon(r'Icons/clear.png'))
         self.del_mask_btn.setToolTip('Remove current mask')
 
     # Loaded mask (Path Label)
-        self.mask_pathlbl = cObj.PathLabel(full_display=False)
+        self.mask_pathlbl = CW.PathLabel(full_display=False)
 
     # Load mask from file choice (RadioButton) [Default choice]
         self.mask_radbtn_1 = QW.QRadioButton('Load from file')
@@ -1272,7 +1106,7 @@ class MineralClassifier(DraggableTool):
         self.mask_radbtn_1.setChecked(True)
     
     # Load mask from file (Styled Button)
-        self.load_mask_btn = cObj.StyledButton(QIcon(r'Icons/import.png'), 
+        self.load_mask_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 
                                                'Load')
         
     # Get mask from class choice (RadioButton)
@@ -1280,11 +1114,11 @@ class MineralClassifier(DraggableTool):
         self.mask_radbtn_2.setStyleSheet(pref.SS_radioButton)
 
     # Minmap selector to get mask from (Auto Update Combobox)
-        self.minmap_combox = cObj.AutoUpdateComboBox()
+        self.minmap_combox = CW.AutoUpdateComboBox()
         self.minmap_combox.setEnabled(False)
 
     # Mineral Class selector to get mask from (Combobox)
-        self.class_combox = cObj.StyledComboBox()
+        self.class_combox = CW.StyledComboBox()
         self.class_combox.setEnabled(False)
 
     # Mineral maps list (Tree Widget)
@@ -1295,15 +1129,15 @@ class MineralClassifier(DraggableTool):
         self.minmaps_list.setMinimumHeight(150)
 
     # Save mineral map (Styled Button)
-        self.save_minmap_btn = cObj.StyledButton(QIcon(r'Icons/save_as.png'))
+        self.save_minmap_btn = CW.StyledButton(QIcon(r'Icons/save_as.png'))
         self.save_minmap_btn.setToolTip('Save mineral map as...')
 
     # Delete mineral map (Styled Button)
-        self.del_minmap_btn = cObj.StyledButton(QIcon(r'Icons/remove.png'))
+        self.del_minmap_btn = CW.StyledButton(QIcon(r'Icons/remove.png'))
         self.del_minmap_btn.setToolTip('Remove mineral map')
 
     # Mineral maps legend (Legend)
-        self.legend = cObj.Legend()
+        self.legend = CW.Legend()
         self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
 
     # Mineral maps bar canvas (BarCanvas)
@@ -1326,20 +1160,20 @@ class MineralClassifier(DraggableTool):
         self.silscore_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Silhouette average score (QLabel)
-        self.silscore_lbl = cObj.FramedLabel('None')
+        self.silscore_lbl = CW.FramedLabel('None')
         
     # Calinski-Harabasz Index (CHI) score (QLabel)
-        self.chiscore_lbl = cObj.FramedLabel('None')
+        self.chiscore_lbl = CW.FramedLabel('None')
 
     # Davies-Bouldin Index (DBI) score (QLabel)
-        self.dbiscore_lbl = cObj.FramedLabel('None')
+        self.dbiscore_lbl = CW.FramedLabel('None')
 
 #  -------------------------------------------------------------------------  #
 #                              CLASSIFIER PANEL 
 #  -------------------------------------------------------------------------  #
 
     # Classifier panel (Styled Tab Widget)
-        self.classifier_tabwid = cObj.StyledTabWidget()
+        self.classifier_tabwid = CW.StyledTabWidget()
         self.classifier_tabwid.tabBar().setDocumentMode(True)
         self.classifier_tabwid.tabBar().setExpanding(True)
         self.pre_train_tab = self.PreTrainedClassifierTab()
@@ -1350,15 +1184,15 @@ class MineralClassifier(DraggableTool):
         self.classifier_tabwid.addTab(self.unsuperv_tab, title='UNSUPERVISED')
 
     # Classification progress bar (Descriptive ProgressBar)
-        self.progbar = cObj.DescriptiveProgressBar()
+        self.progbar = CW.DescriptiveProgressBar()
 
     # Classify button (Styled Button)
-        self.classify_btn = cObj.StyledButton(text='CLASSIFY',
+        self.classify_btn = CW.StyledButton(text='CLASSIFY',
                                               bg_color=pref.BTN_GREEN)
         self.classify_btn.setEnabled(False)
 
     # Interrupt classification process button (StyledButton)
-        self.stop_btn = cObj.StyledButton(text='STOP', bg_color=pref.BTN_RED)
+        self.stop_btn = CW.StyledButton(text='STOP', bg_color=pref.BTN_RED)
 
 #  -------------------------------------------------------------------------  #
 #                                VIEWER PANEL 
@@ -1436,7 +1270,7 @@ class MineralClassifier(DraggableTool):
         scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 5, 0)
         scores_grid.addWidget(self.dbiscore_lbl, 5, 1)
 
-        graph_tabwid = cObj.StyledTabWidget()
+        graph_tabwid = CW.StyledTabWidget()
         graph_tabwid.addTab(self.legend, QIcon(r'Icons/legend.png'), None)
         graph_tabwid.addTab(barplot_vbox, QIcon(r'Icons/plot.png'), None)
         graph_tabwid.addTab(scores_grid, QIcon(r'Icons/scores.png'), None)
@@ -1454,7 +1288,7 @@ class MineralClassifier(DraggableTool):
         output_data_grid.setColumnStretch(2, 1)
         
         # - Panel layout
-        self.data_tabwid = cObj.StyledTabWidget()
+        self.data_tabwid = CW.StyledTabWidget()
         self.data_tabwid.tabBar().setExpanding(True)
         self.data_tabwid.tabBar().setDocumentMode(True)
         self.data_tabwid.addTab(self.inmaps_selector, QIcon(r'Icons/inmap.png'), 
@@ -1463,7 +1297,7 @@ class MineralClassifier(DraggableTool):
                                 title='MASK')
         self.data_tabwid.addTab(output_data_grid, QIcon(r'Icons/minmap.png'), 
                                 title='OUTPUT MAPS')
-        data_group = cObj.CollapsibleArea(self.data_tabwid, 'Data panel',
+        data_group = CW.CollapsibleArea(self.data_tabwid, 'Data panel',
                                           collapsed=False)
 
     # Classifier panel layout
@@ -1472,7 +1306,7 @@ class MineralClassifier(DraggableTool):
         class_grid.addWidget(self.progbar, 1, 0, 1, -1)
         class_grid.addWidget(self.classify_btn, 2, 0)
         class_grid.addWidget(self.stop_btn, 2, 1)
-        class_group = cObj.CollapsibleArea(class_grid, 'Classifier panel')
+        class_group = CW.CollapsibleArea(class_grid, 'Classifier panel')
 
     # Viewer panel layout
         viewer_grid = QW.QGridLayout()
@@ -1481,7 +1315,7 @@ class MineralClassifier(DraggableTool):
         viewer_grid.addWidget(conf_lbl, 2, 0, 1, -1)
         viewer_grid.addWidget(self.conf_spbox, 3, 0)
         viewer_grid.addWidget(self.conf_slider, 3, 1)
-        viewer_group = cObj.GroupArea(viewer_grid, 'Viewer panel')
+        viewer_group = CW.GroupArea(viewer_grid, 'Viewer panel')
 
     # Main layout
         left_vbox = QW.QVBoxLayout()
@@ -1489,9 +1323,9 @@ class MineralClassifier(DraggableTool):
         left_vbox.addWidget(class_group)
         left_vbox.addWidget(data_group)
         left_vbox.addStretch(1)
-        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
 
-        main_layout = cObj.SplitterLayout()
+        main_layout = CW.SplitterLayout()
         main_layout.addWidget(left_scroll)
         main_layout.addWidget(viewer_group)
         self.setLayout(main_layout)
@@ -1631,7 +1465,7 @@ class MineralClassifier(DraggableTool):
         menu.exec(QG.QCursor.pos())
 
 
-    def showInputMap(self, item: cObj.DataObject | None):
+    def showInputMap(self, item: CW.DataObject | None):
         '''
         Display input map item data in the maps viewer. If a mask is loaded, 
         the input map is masked accordingly.
@@ -1683,7 +1517,7 @@ class MineralClassifier(DraggableTool):
                 mask = Mask.load(path)     
             except Exception as e:
                 mask = None 
-                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                 'X-Min Learn', f'Unexpected file:\n{path}.',
                                 detailedText=repr(e))
             finally:
@@ -1766,8 +1600,8 @@ class MineralClassifier(DraggableTool):
         filled = pref.get_setting('class/trAreasFill', False, bool)
 
         for name, bbox in roimap.roilist:
-            patch = cObj.RoiPatch(bbox, CF.RGB2float([color]), filled)
-            text = cObj.RoiAnnotation(name, patch)
+            patch = plots.RoiPatch(bbox, plots.rgb_to_float([color]), filled)
+            text = plots.RoiAnnotation(name, patch)
             self.maps_viewer.ax.add_patch(patch)
             self.maps_viewer.ax.add_artist(text)
 
@@ -1780,13 +1614,13 @@ class MineralClassifier(DraggableTool):
 
         '''
         for child in self.maps_viewer.ax.get_children():
-            if isinstance(child, (cObj.RoiPatch, cObj.RoiAnnotation)):
+            if isinstance(child, (plots.RoiPatch, plots.RoiAnnotation)):
                 child.remove()
 
         self.maps_viewer.draw_idle()
 
 
-    def showMineralMap(self, item: cObj.DataObject | None):
+    def showMineralMap(self, item: CW.DataObject | None):
         '''
         Display mineral map item data in the maps viewer and update the legend,
         the bar plot and the clustering scores.
@@ -1859,7 +1693,7 @@ class MineralClassifier(DraggableTool):
                 minmap.save(path)
             except Exception as e:
                 text = 'An error occurred while saving the file'
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', text, 
                                        detailedText=repr(e))
 
@@ -2110,7 +1944,7 @@ class MineralClassifier(DraggableTool):
         # Create a new item in minmaps list and populate it with a Mineral Map
             mineral_map = MineralMap(mmap, pmap)
             mineral_map.set_clustering_scores(sil_avg, sil_clust, chi, dbi)
-            item = cObj.DataObject(mineral_map)
+            item = CW.DataObject(mineral_map)
             dt = datetime.now().strftime("%Y%m%d-%H%M%S")
             item.setText(0, f'{self._current_classifier.name} [{dt}]')
             self.minmaps_list.addTopLevelItem(item)
@@ -2122,7 +1956,7 @@ class MineralClassifier(DraggableTool):
 
         else:
             e = result[0]
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                             'Classification failed.', detailedText=repr(e))
 
         self._endClassification(success)
@@ -2218,15 +2052,15 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Load Model (Styled Button)
-            self.load_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
+            self.load_btn = CW.StyledButton(QIcon(r'Icons/import.png'),
                                               'Load model')
             self.load_btn.setToolTip('Load a pre-trained ML model')
 
         # Loaded model path (Path Label)
-            self.model_path = cObj.PathLabel(full_display=False)
+            self.model_path = CW.PathLabel(full_display=False)
 
         # Loaded model information (Document Browser)
-            self.model_info = cObj.DocumentBrowser()
+            self.model_info = CW.DocumentBrowser()
             self.model_info.setDefaultPlaceHolderText(
                 'Unable to retrieve model information.')
 
@@ -2258,9 +2092,9 @@ class MineralClassifier(DraggableTool):
             if path:
                 pref.set_dirPath('in', os.path.dirname(path))
                 try:
-                    self.model = ML_tools.EagerModel.load(path)
+                    self.model = mltools.EagerModel.load(path)
                 except Exception as e:
-                    return cObj.RichMsgBox(self, QW.QMessageBox.Critical,
+                    return CW.RichMsgBox(self, QW.QMessageBox.Critical,
                                            'X-Min Learn', 'Incompatible model',
                                            detailedText = repr(e))
                 self.model_path.setPath(path)
@@ -2311,7 +2145,7 @@ class MineralClassifier(DraggableTool):
         # add a user-friendly popup to link each map to required feat instead (enhancement)
             ordered_indices = []
             for feat in self.model.features:
-                if not CF.guessMap(feat, maps_names, caseSens=True):
+                if not cf.guessMap(feat, maps_names, caseSens=True):
                     QW.QMessageBox.critical(self, 'X-Min Learn',
                                             f'Unable to identify {feat} map.')
                     return None
@@ -2320,7 +2154,7 @@ class MineralClassifier(DraggableTool):
 
             input_stack.reorder(ordered_indices)
 
-            return ML_tools.ModelBasedClassifier(input_stack, self.model)
+            return mltools.ModelBasedClassifier(input_stack, self.model)
 
 
     class RoiBasedClassifierTab(QW.QWidget):
@@ -2358,16 +2192,16 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Load ROI map (Styled Button)
-            self.load_btn = cObj.StyledButton(QIcon('Icons/load.png'),
+            self.load_btn = CW.StyledButton(QIcon('Icons/load.png'),
                                               'Load ROI map')
             self.load_btn.setToolTip('Load training ROI data')
 
         # Remove (unload) ROI map (Styled Button)
-            self.unload_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+            self.unload_btn = CW.StyledButton(QIcon(r'Icons/clear.png'))
             self.unload_btn.setToolTip('Remove ROI map')
             
         # Loaded model path (Path Label)
-            self.roimap_path = cObj.PathLabel(full_display=False)
+            self.roimap_path = CW.PathLabel(full_display=False)
 
         # Include pixel proximity (Checkbox)
             self.pixprox_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
@@ -2381,7 +2215,7 @@ class MineralClassifier(DraggableTool):
             self.multithread_cbox.setChecked(False)
 
         # Algorithm selection (Styled ComboBox)
-            self.algm_combox = cObj.StyledComboBox()
+            self.algm_combox = CW.StyledComboBox()
             self.algm_combox.addItems(self._algorithms)
 
         # Algorithms Panel (Stacked Widget)
@@ -2390,11 +2224,11 @@ class MineralClassifier(DraggableTool):
 
         #----------------K-NEAREST NEIGHBORS ALGORITHM WIDGETS----------------#
         # N. of neighbors  (Styled Spin Box)
-            self.knn_nneigh_spbox = cObj.StyledSpinBox(1, 100)
+            self.knn_nneigh_spbox = CW.StyledSpinBox(1, 100)
             self.knn_nneigh_spbox.setValue(5)
 
         # Weight of neighbors (Styled Combo Box)
-            self.knn_weight_combox = cObj.StyledComboBox()
+            self.knn_weight_combox = CW.StyledComboBox()
             self.knn_weight_combox.addItems(['Uniform', 'Distance'])
             self.knn_weight_combox.setToolTip(
                 'Neighbors weight should be uniform or distance-based?')
@@ -2403,7 +2237,7 @@ class MineralClassifier(DraggableTool):
             knn_layout = QW.QFormLayout()
             knn_layout.addRow('N. of neighbours', self.knn_nneigh_spbox)
             knn_layout.addRow('Neighbors weight', self.knn_weight_combox)
-            knn_group = cObj.GroupArea(knn_layout, 'K-Nearest Neighbors')
+            knn_group = CW.GroupArea(knn_layout, 'K-Nearest Neighbors')
             
             self.algm_panel.addWidget(knn_group)
         #---------------------------------------------------------------------#
@@ -2452,7 +2286,7 @@ class MineralClassifier(DraggableTool):
                                                      'ROI maps (*.rmp)')
             if path:
                 pref.set_dirPath('in', os.path.dirname(path))
-                pbar = cObj.PopUpProgBar(self, 3, 'Loading data', cancel=False)
+                pbar = CW.PopUpProgBar(self, 3, 'Loading data', cancel=False)
                 pbar.setValue(0)
 
             # Try loading the ROI map. Exit function if something goes wrong
@@ -2461,7 +2295,7 @@ class MineralClassifier(DraggableTool):
                     pbar.increase()
                 except Exception as e:
                     pbar.reset()
-                    return cObj.RichMsgBox(self, QW.QMessageBox.Critical,
+                    return CW.RichMsgBox(self, QW.QMessageBox.Critical,
                                         'X-Min Learn', f'Unexpected file:\n{path}',
                                         detailedText = repr(e))
 
@@ -2548,7 +2382,7 @@ class MineralClassifier(DraggableTool):
                 njobs = -1 if self.multithread_cbox.checkState() else 1
                 args = (input_stack, roimap, nneigh, weight)
                 kwargs = {'n_jobs': njobs, 'pixel_proximity': prox}
-                return ML_tools.KNearestNeighbors(*args, **kwargs)
+                return mltools.KNearestNeighbors(*args, **kwargs)
 
             else:
                 return None
@@ -2585,7 +2419,7 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Seed generator widget
-            self.seed_generator = cObj.RandomSeedGenerator()
+            self.seed_generator = CW.RandomSeedGenerator()
 
         # Compute silhouette score (Checkbox)
             self.silscore_cbox = QW.QCheckBox('Silhouette score')
@@ -2593,7 +2427,7 @@ class MineralClassifier(DraggableTool):
             self.silscore_cbox.setToolTip('This may take some time')
 
         # Silhouette score subset ratio (StyledSpinbox)
-            self.silscore_ratio_spbox = cObj.StyledSpinBox()
+            self.silscore_ratio_spbox = CW.StyledSpinBox()
             self.silscore_ratio_spbox.setSuffix(' %')
             self.silscore_ratio_spbox.setValue(25)
             ratio_ttip = 'Analyze a portion of data to reduce computation time'
@@ -2619,7 +2453,7 @@ class MineralClassifier(DraggableTool):
             self.multithread_cbox.setChecked(False)
 
         # Algorithm selection (Styled ComboBox)
-            self.algm_combox = cObj.StyledComboBox()
+            self.algm_combox = CW.StyledComboBox()
             self.algm_combox.addItems(self._algorithms)
 
         # Algorithms Panel (Stacked Widget)
@@ -2628,13 +2462,13 @@ class MineralClassifier(DraggableTool):
 
         #--------------------- K-MEANS ALGORITHM WIDGETS ---------------------#
         # N. of clusters
-            self.kmeans_nclust_spbox = cObj.StyledSpinBox(min_value=2)
+            self.kmeans_nclust_spbox = CW.StyledSpinBox(min_value=2)
             self.kmeans_nclust_spbox.setValue(8)
 
         # Add K-Means widgets to the Algorithm Panel
             kmeans_layout = QW.QFormLayout()
             kmeans_layout.addRow('N. of clusters', self.kmeans_nclust_spbox)
-            kmeans_group = cObj.GroupArea(kmeans_layout, 'K-Means')
+            kmeans_group = CW.GroupArea(kmeans_layout, 'K-Means')
 
             self.algm_panel.addWidget(kmeans_group)
         #---------------------------------------------------------------------#
@@ -2646,7 +2480,7 @@ class MineralClassifier(DraggableTool):
             scores_grid.addWidget(self.silscore_ratio_spbox, 0, 2)
             scores_grid.addWidget(self.chiscore_cbox, 1, 0, 1, -1)
             scores_grid.addWidget(self.dbiscore_cbox, 2, 0, 1, -1)
-            scores_group = cObj.GroupArea(scores_grid, 'Clustering scores',
+            scores_group = CW.GroupArea(scores_grid, 'Clustering scores',
                                           checkable=True)
             scores_group.setChecked(False)
 
@@ -2727,7 +2561,7 @@ class MineralClassifier(DraggableTool):
             if algm == 'K-Means':
                 n_clust = self.kmeans_nclust_spbox.value()
                 args = (input_stack, seed, n_clust)
-                return ML_tools.KMeans(*args, **kwargs)
+                return mltools.KMeans(*args, **kwargs)
 
             else:
                 return None
@@ -2769,10 +2603,10 @@ class MineralClassifier(DraggableTool):
 
 #     def init_ui(self):
 #     # Input Maps Checkboxes
-#         self.CboxMaps = cObj.CBoxMapLayout(self.XMapsPath)
+#         self.CboxMaps = CW.CBoxMapLayout(self.XMapsPath)
 #         # If a threading is running, the next line blocks interactions with cboxes
 #         self.CboxMaps.cboxPressed.connect(lambda: self._extThreadRunning())
-#         maps_scroll = cObj.GroupScrollArea(self.CboxMaps, 'Input Maps')
+#         maps_scroll = CW.GroupScrollArea(self.CboxMaps, 'Input Maps')
 
 #     # Algorithm combo box
 #         self.algm_combox = QW.QComboBox()
@@ -2789,13 +2623,13 @@ class MineralClassifier(DraggableTool):
 #         self.loadModel_btn.clicked.connect(self.loadModel)
 
 #         # (Loaded model path)
-#         self.model_path = cObj.PathLabel('')
+#         self.model_path = CW.PathLabel('')
 
 #         # (Adjust Pre-Trained model Group Layout)
 #         preTrained_vbox = QW.QVBoxLayout()
 #         preTrained_vbox.addWidget(self.loadModel_btn)
 #         preTrained_vbox.addWidget(self.model_path)
-#         preTrained_group = cObj.GroupArea(preTrained_vbox, 'Algorithm Preferences')
+#         preTrained_group = CW.GroupArea(preTrained_vbox, 'Algorithm Preferences')
 
 #     # KNN algorithm preferences group
 #         # (Number of neighbours spinbox)
@@ -2819,7 +2653,7 @@ class MineralClassifier(DraggableTool):
 #         KNN_form.addRow('N. of Neighbours', self.nNeigh_spbox)
 #         KNN_form.addRow('Weigths', self.wgtKNN_combox)
 #         KNN_form.addRow(self.KNNproximity_cbox)
-#         KNN_group = cObj.GroupArea(KNN_form, 'Algorithm Preferences')
+#         KNN_group = CW.GroupArea(KNN_form, 'Algorithm Preferences')
 
 #     # K-Means algorithm preferences
 #         # (Number of classes spinbox)
@@ -2833,7 +2667,7 @@ class MineralClassifier(DraggableTool):
 #         self.seedInput.setText(str(np.random.randint(0, 10**8)))
 
 #         # (Randomize seed button)
-#         self.randseed_btn = cObj.IconButton('Icons/dice.png')
+#         self.randseed_btn = CW.IconButton('Icons/dice.png')
 #         self.randseed_btn.clicked.connect(
 #             lambda: self.seedInput.setText(str(np.random.randint(0, 10**8))))
 
@@ -2850,7 +2684,7 @@ class MineralClassifier(DraggableTool):
 #         KMeans_grid.addWidget(self.seedInput, 1, 1)
 #         KMeans_grid.addWidget(self.randseed_btn, 1, 2)
 #         KMeans_grid.addWidget(self.kmeansProximity_cbox, 2, 0, 1, 3)
-#         KMeans_group = cObj.GroupArea(KMeans_grid, 'Algorithm Preferences')
+#         KMeans_group = CW.GroupArea(KMeans_grid, 'Algorithm Preferences')
 
 #     # Algorithms Preferences Widget (Stacked Widget)
 #         self.algmPrefs = QW.QStackedWidget()
@@ -2883,7 +2717,7 @@ class MineralClassifier(DraggableTool):
 #         self.minPhase_combox.highlighted.connect(lambda: self._extThreadRunning())
 
 #     # Refresh loaded mineral maps button
-#         self.refreshMinMap_btn = cObj.IconButton('Icons/refresh.png')
+#         self.refreshMinMap_btn = CW.IconButton('Icons/refresh.png')
 #         self.refreshMinMap_btn.clicked.connect(self.refresh_minmaps_combox)
 
 #     # Adjust sub-phase identification group
@@ -2891,28 +2725,28 @@ class MineralClassifier(DraggableTool):
 #         subPhase_form.addRow('Mineral Map', self.minmaps_combox)
 #         subPhase_form.addRow('Phase', self.minPhase_combox)
 #         subPhase_form.addRow('Refresh', self.refreshMinMap_btn)
-#         subPhase_group = cObj.GroupArea(subPhase_form, 'Sub-phase Identification')
+#         subPhase_group = CW.GroupArea(subPhase_form, 'Sub-phase Identification')
 
 
 #     # ==== ALGORITHMS PANELS WIDGETS STACK ==== #
 
 #     # Pre-trained Model Information
-#         self.modelInfo = cObj.DocumentBrowser()
+#         self.modelInfo = CW.DocumentBrowser()
 #         self.modelInfo.set_defaultPlaceHolderText('Unable to retrieve model information.')
 
 
 #     # Training area selector panel
-#         self.trAreaPicker = cObj.TrAreasSelector(self.CboxMaps.Cbox_list, self.XMapsData, self)
+#         self.trAreaPicker = CW.TrAreasSelector(self.CboxMaps.Cbox_list, self.XMapsData, self)
 
 
 #     # CLUSTERING EVALUATION TOOLS
 
 #     # Silhouette score canvas
-#         self.silhouetteCanvas = cObj.SilhouetteScoreCanvas(self, tight=True)
+#         self.silhouetteCanvas = CW.SilhouetteScoreCanvas(self, tight=True)
 #         self.silhouetteCanvas.setMinimumSize(100, 100)
 
 #     # Silhouette Navigation toobar
-#         self.silhouetteNTbar = cObj.NavTbar(self.silhouetteCanvas, self)
+#         self.silhouetteNTbar = CW.NavTbar(self.silhouetteCanvas, self)
 #         self.silhouetteNTbar.removeToolByIndex([3, 4, 5, 6, 8, 9, 10, 12])
 
 #     # Subset percentage spinbox
@@ -2962,20 +2796,20 @@ class MineralClassifier(DraggableTool):
 #         SIL_grid.addWidget(self.silhouetteSeed, 1, 1)
 #         SIL_grid.addWidget(self.startSilhouette_btn, 2, 0, alignment=Qt.AlignLeft)
 #         SIL_grid.addWidget(self.silhouette_pbar, 3, 0, 1, 2)
-#         SIL_group = cObj.GroupArea(SIL_grid, 'Silhouette score')
+#         SIL_group = CW.GroupArea(SIL_grid, 'Silhouette score')
 
 #         otherScores_vbox = QW.QVBoxLayout()
 #         otherScores_vbox.addWidget(self.CHIscore_btn)
 #         otherScores_vbox.addWidget(self.CHIscore_label)
 #         otherScores_vbox.addWidget(self.DBIscore_btn)
 #         otherScores_vbox.addWidget(self.DBIscore_label)
-#         otherScores_group = cObj.GroupArea(otherScores_vbox, 'Other scores')
+#         otherScores_group = CW.GroupArea(otherScores_vbox, 'Other scores')
 
 #         clustering_grid = QW.QGridLayout()
 #         clustering_grid.setRowStretch(1, 1)
 #         clustering_grid.addWidget(self.silhouetteNTbar, 0, 0, 1, 2)
 #         clustering_grid.addWidget(self.silhouetteCanvas, 1, 0, 1, 2)
-#         clustering_grid.addWidget(cObj.LineSeparator(), 2, 0, 1, 2)
+#         clustering_grid.addWidget(CW.LineSeparator(), 2, 0, 1, 2)
 #         clustering_grid.addWidget(SIL_group, 3, 0)
 #         clustering_grid.addWidget(otherScores_group, 3, 1)
 #         self.clustering_group = QW.QWidget()
@@ -2987,36 +2821,36 @@ class MineralClassifier(DraggableTool):
 #         self.algmPanels.addWidget(self.trAreaPicker)
 #         self.algmPanels.addWidget(self.clustering_group)
 #         self.algmPanels.setCurrentIndex(0)
-#         algmPanels_group = cObj.GroupArea(self.algmPanels, 'Algorithm Panel')
+#         algmPanels_group = CW.GroupArea(self.algmPanels, 'Algorithm Panel')
 
 #     # ================================================== #
 
 
 #     # Result shower canvas
-#         self.resultCanvas = cObj.DiscreteClassCanvas(self, size=(10, 10), tight=True)
+#         self.resultCanvas = CW.DiscreteClassCanvas(self, size=(10, 10), tight=True)
 #         self.resultCanvas.setMinimumSize(100,100)
 
 #     # Result canvas navigation toolbar
-#         self.resultNTbar = cObj.NavTbar(self.resultCanvas, self)
+#         self.resultNTbar = CW.NavTbar(self.resultCanvas, self)
 #         self.resultNTbar.removeToolByIndex([3, 4, 8, 9])
 #         self.resultNTbar.fixHomeAction()
 
 #     # Unclassified pixel shower canvas
-#         self.ND_Canvas = cObj.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
+#         self.ND_Canvas = CW.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
 #         self.ND_Canvas.setMinimumSize(100, 100)
-#         CF.shareAxis(self.ND_Canvas.ax, self.resultCanvas.ax, True)
+#         cf.shareAxis(self.ND_Canvas.ax, self.resultCanvas.ax, True)
 
 #     # Unclassified pixel navigation toolbar
-#         self.ND_NTbar = cObj.NavTbar(self.ND_Canvas, self)
+#         self.ND_NTbar = CW.NavTbar(self.ND_Canvas, self)
 #         self.ND_NTbar.fixHomeAction()
 #         self.ND_NTbar.removeToolByIndex([3, 4, 8, 9, 12])
 
 #     # Result canvas legend
-#         self.resultLegend = cObj.CanvasLegend(self.resultCanvas)
+#         self.resultLegend = CW.CanvasLegend(self.resultCanvas)
 #         self.resultLegend.itemColorChanged.connect(self.recolor_plots)
 
 #     # Result bar plot
-#         self.resultBars = cObj.BarCanvas(self)
+#         self.resultBars = CW.BarCanvas(self)
 #         self.resultBars.setMinimumSize(100, 100)
 
 #     # Adjust Result group
@@ -3029,7 +2863,7 @@ class MineralClassifier(DraggableTool):
 #         result_grid.addWidget(self.resultBars, 2, 1, 1, 3)
 #         result_grid.setRowStretch(1, 2)
 #         result_grid.setRowStretch(2, 1)
-#         result_group = cObj.GroupArea(result_grid, 'Classification result')
+#         result_group = CW.GroupArea(result_grid, 'Classification result')
 
 
 #     # Classification confidence spinbox
@@ -3066,7 +2900,7 @@ class MineralClassifier(DraggableTool):
 #         pref_grid.addWidget(self.start_btn, 2, 0)
 #         pref_grid.addWidget(self.save_btn, 2, 1)
 #         pref_grid.addWidget(self.progBar, 3, 0, 1, 2)
-#         pref_group = cObj.GroupArea(pref_grid, 'Preferences')
+#         pref_group = CW.GroupArea(pref_grid, 'Preferences')
 
 #     # Adjust Main Layout
 #         # (Left_vbox)
@@ -3079,7 +2913,7 @@ class MineralClassifier(DraggableTool):
 #         left_vbox.addWidget(pref_group)
 
 #         # (Main Layout)
-#         main_hsplit = cObj.SplitterGroup((left_vbox, algmPanels_group, result_group),
+#         main_hsplit = CW.SplitterGroup((left_vbox, algmPanels_group, result_group),
 #                                          (0, 1, 1))
 #         mainLayout = QW.QHBoxLayout()
 #         mainLayout.addWidget(main_hsplit)
@@ -3114,7 +2948,7 @@ class MineralClassifier(DraggableTool):
 #         if not self._extThreadRunning():
 #             self.minmaps_combox.clear()
 #             self.minmaps_combox.addItem('None')
-#             self.minmaps_combox.addItems([CF.path2filename(p) for p in self.MinMapsPath])
+#             self.minmaps_combox.addItems([cf.path2filename(p) for p in self.MinMapsPath])
 
 #     def mask_maps(self, phase_name):
 #         if self.minPhase_combox.currentIndex() != -1:
@@ -3153,7 +2987,7 @@ class MineralClassifier(DraggableTool):
 #         if path:
 #             pref.set_dirPath('in', os.path.dirname(path))
 #             self.model_path.set_fullpath(path, predict_display=True)
-#             logpath = CF.extend_filename(path, '_log', ext='.txt')
+#             logpath = cf.extend_filename(path, '_log', ext='.txt')
 
 #             # If model log was deleted or moved, ask for rebuilding it
 #             if not os.path.exists(logpath):
@@ -3195,7 +3029,7 @@ class MineralClassifier(DraggableTool):
 #     # Also check for same shape. if <pixel_proximity> is True, x and y coords
 #     # maps will also be computed.
 #         maps = self.getSelectedMapsData(pixel_proximity)
-#         X, ok = CF.MergeMaps(maps, mask=self.maskOn)
+#         X, ok = cf.MergeMaps(maps, mask=self.maskOn)
 #         if not ok:
 #             QW.QMessageBox.critical(self, 'X-Min Learn',
 #                                     'The selected maps have different shapes.')
@@ -3240,8 +3074,8 @@ class MineralClassifier(DraggableTool):
 #             self.silhouetteCanvas.alterColors(self.resultCanvas.get_colorDict(keys='lbl'))
 
 #     def update_resultBars(self, mapData):
-#         lbl, mode = CF.get_mode(mapData, ordered=True)
-#         col_dict = CF.sort_dict_by_list(self.resultCanvas.get_colorDict(keys='lbl'), lbl)
+#         lbl, mode = cf.get_mode(mapData, ordered=True)
+#         col_dict = cf.sort_dict_by_list(self.resultCanvas.get_colorDict(keys='lbl'), lbl)
 #         self.resultBars.update_canvas('Mode', mode, lbl, colors=list(col_dict.values()))
 
 #     def set_confidence(self, conf, pred, prob):
@@ -3325,7 +3159,7 @@ class MineralClassifier(DraggableTool):
 #             QW.QMessageBox.information(self, 'X-Min Learn',
 #                                        'Classification completed succesfully.')
 #         else:
-#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#             CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                 'An error occurred during the classification.',
 #                 detailedText = repr(results[0]))
 
@@ -3342,13 +3176,13 @@ class MineralClassifier(DraggableTool):
 #             if outpath:
 #                 try:
 #                     pref.set_dirPath('out', os.path.dirname(outpath))
-#                     pMap_path = CF.extend_filename(outpath, '_probMap')
+#                     pMap_path = cf.extend_filename(outpath, '_probMap')
 #                     np.savetxt(outpath, self.minMap, fmt='%s')
 #                     np.savetxt(pMap_path, self.probMap, fmt='%.2f')
 #                     QW.QMessageBox.information(self, 'File saved',
 #                                                'File saved with success.')
 #                 except Exception as e:
-#                     cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                     CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                                     'An error occurred while saving the files.',
 #                                     detailedText = repr(e))
 #             # Load automatically the result in MinMap Tab if required
@@ -3386,7 +3220,7 @@ class MineralClassifier(DraggableTool):
 #     # Check for the presence of all required maps
 #         checkedMaps = [c.text() for c in cboxList if c.isChecked()]
 #         for m in requiredMaps:
-#             if not CF.guessMap(m, checkedMaps, caseSens=True):
+#             if not cf.guessMap(m, checkedMaps, caseSens=True):
 #                 self.progBar.reset()
 #                 return QW.QMessageBox.critical(self, 'X-Min Learn',
 #                                                f'Unable to identify {m} map.')
@@ -3394,12 +3228,12 @@ class MineralClassifier(DraggableTool):
 
 #     # Reorder the input maps to fit the required maps order
 #         cboxDict = {c.text() : self.XMapsData[int(c.objectName())] for c in cboxList}
-#         orderedMaps = CF.sort_dict_by_list(cboxDict, requiredMaps)
+#         orderedMaps = cf.sort_dict_by_list(cboxDict, requiredMaps)
 #         self.progBar.setValue(3)
 
 #     # Merge maps into a single 2D array (shape = nPixels x nmaps)
 #         maps_data = orderedMaps.values()
-#         X, ok = CF.MergeMaps(maps_data, mask=self.maskOn)
+#         X, ok = cf.MergeMaps(maps_data, mask=self.maskOn)
 #         if not ok:
 #             self.progBar.reset()
 #             return QW.MessageBox.critical(self, 'Different shapes detected',
@@ -3413,7 +3247,7 @@ class MineralClassifier(DraggableTool):
 #             self.progBar.setValue(5)
 
 #         # Convert labels IDs to class names
-#             pred = CF.decode_labels(predID, Y_dict)
+#             pred = cf.decode_labels(predID, Y_dict)
 #             self.progBar.setValue(6)
 
 #             success = True
@@ -3463,7 +3297,7 @@ class MineralClassifier(DraggableTool):
 #     # Merge all selected maps into a single 2D array (nPixels x nMaps).
 #     # Also check for same shape.
 #         maps = self.getSelectedMapsData(coord_maps=proximity)
-#         X, ok = CF.MergeMaps(maps, mask=self.maskOn)
+#         X, ok = cf.MergeMaps(maps, mask=self.maskOn)
 #         self.progBar.setValue(1)
 #         if not ok:
 #             self.progBar.reset()
@@ -3551,7 +3385,7 @@ class MineralClassifier(DraggableTool):
 #             self.silhouette_pbar.setValue(5)
 
 #         else:
-#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#             CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                             'Silhouette score computation failed',
 #                             detailedText = repr(results[0]))
 
@@ -3634,7 +3468,7 @@ class DatasetBuilder(DraggableTool):
         elem_grid = QW.QGridLayout()
         n_cols = 8
         for x in range(len(elements)):
-            elem_btn = cObj.StyledButton(text=elements[x])
+            elem_btn = CW.StyledButton(text=elements[x])
             elem_btn.clicked.connect(self.add_inputFeature)
             row, col = x//n_cols, x%n_cols
             elem_grid.addWidget(elem_btn, row, col)
@@ -3642,7 +3476,7 @@ class DatasetBuilder(DraggableTool):
         # fixed_column_width = 50
         # # for col in range(n_cols):
         # #     elem_grid.setColumnMinimumWidth(col, fixed_column_width)
-        elem_scroll = cObj.GroupScrollArea(elem_grid)
+        elem_scroll = CW.GroupScrollArea(elem_grid)
 
     # Custom feature entry (Line Edit)
         self.customEntry_lbl = QW.QLineEdit()
@@ -3651,14 +3485,14 @@ class DatasetBuilder(DraggableTool):
         self.customEntry_lbl.returnPressed.connect(self.add_inputFeature)
 
     # Selected elements list (Styled List Widget)
-        self.featureList = cObj.StyledListWidget()
+        self.featureList = CW.StyledListWidget()
 
     # Elements list option buttons (--> in HBoxLayout)
-        self.delElem_btn = cObj.StyledButton(QIcon('Icons/generic_del.png'))
+        self.delElem_btn = CW.StyledButton(QIcon('Icons/generic_del.png'))
         self.delElem_btn.setToolTip('Remove selected elements')
         self.delElem_btn.clicked.connect(self.del_inputFeature)
 
-        self.refresh_btn = cObj.StyledButton(QIcon('Icons/forward.png'))
+        self.refresh_btn = CW.StyledButton(QIcon('Icons/forward.png'))
         self.refresh_btn.setToolTip('Refresh Dataset Designer')
         self.refresh_btn.setEnabled(False)
         self.refresh_btn.clicked.connect(self.refresh_designer)
@@ -3670,21 +3504,21 @@ class DatasetBuilder(DraggableTool):
     # Dataset designer 1 (X features) & Dataset designer 2 (Y ground truth labels)
         self.xfeat_designer = self.XDatasetDesigner(self)
         self.ylab_designer = self.YDatasetDesigner(self)
-        table_hsplit = cObj.SplitterGroup((self.xfeat_designer, self.ylab_designer),
+        table_hsplit = CW.SplitterGroup((self.xfeat_designer, self.ylab_designer),
                                         (6, 1))
 
     # Dataset Designer option buttons (--> in HBoxLayout)
-        self.addRow_btn = cObj.StyledButton(QIcon('Icons/add_tableRow.png'),
+        self.addRow_btn = CW.StyledButton(QIcon('Icons/add_tableRow.png'),
                                             'Add row')
         self.addRow_btn.setEnabled(False)
         self.addRow_btn.clicked.connect(self.add_row)
 
-        self.delRow_btn = cObj.StyledButton(QIcon('Icons/del_tableRow.png'),
+        self.delRow_btn = CW.StyledButton(QIcon('Icons/del_tableRow.png'),
                                             'Remove row')
         self.delRow_btn.setEnabled(False)
         self.delRow_btn.clicked.connect(self.del_row)
 
-        self.compile_btn = cObj.StyledButton(QIcon('Icons/compile_dataset.png'),
+        self.compile_btn = CW.StyledButton(QIcon('Icons/compile_dataset.png'),
                                              'Compile Dataset')
         self.compile_btn.setEnabled(False)
         self.compile_btn.clicked.connect(self.compile_dataset)
@@ -3696,16 +3530,16 @@ class DatasetBuilder(DraggableTool):
         table_btns.addWidget(self.compile_btn)
 
     # Class Refinement List (Styled List Widget)
-        self.refineList = cObj.StyledListWidget()
+        self.refineList = CW.StyledListWidget()
 
     # Class Refinement Option buttons (--> in VBoxLayout)
-        self.renameClass_btn = cObj.StyledButton(text='Rename class')
+        self.renameClass_btn = CW.StyledButton(text='Rename class')
         self.renameClass_btn.clicked.connect(self.rename_class)
 
-        self.deleteClass_btn = cObj.StyledButton(text='Delete class')
+        self.deleteClass_btn = CW.StyledButton(text='Delete class')
         self.deleteClass_btn.clicked.connect(self.delete_class)
 
-        self.mergeClass_btn = cObj.StyledButton(text='Merge classes')
+        self.mergeClass_btn = CW.StyledButton(text='Merge classes')
         self.mergeClass_btn.clicked.connect(self.merge_class)
 
         refine_btns = QW.QVBoxLayout()
@@ -3717,15 +3551,15 @@ class DatasetBuilder(DraggableTool):
         self.previewArea = QW.QTextEdit('')
         self.previewArea.setReadOnly(True)
         self.previewArea.setHorizontalScrollBar(
-            cObj.StyledScrollBar(Qt.Horizontal))
+            CW.StyledScrollBar(Qt.Horizontal))
         self.previewArea.setVerticalScrollBar(
-            cObj.StyledScrollBar(Qt.Vertical))
+            CW.StyledScrollBar(Qt.Vertical))
 
     # CSV decimal point selector (Combo Box)
-        self.decimal_combox = cObj.DecimalPointSelector()
+        self.decimal_combox = CW.DecimalPointSelector()
 
     # CSV separator character selector (Combo Box)
-        self.separator_combox = cObj.SeparatorSymbolSelector()
+        self.separator_combox = CW.SeparatorSymbolSelector()
 
     # Split large dataset option (Checkbox)
         self.splitFile_cbox = QW.QCheckBox('Split dataset')
@@ -3735,7 +3569,7 @@ class DatasetBuilder(DraggableTool):
         self.splitFile_cbox.setToolTip(tip)
 
     # Save dataset button
-        self.saveCSV_btn = cObj.StyledButton(QIcon('Icons/save.png'),
+        self.saveCSV_btn = CW.StyledButton(QIcon('Icons/save.png'),
                                              'Save dataset')
         self.saveCSV_btn.clicked.connect(self.save_dataset)
         self.saveCSV_btn.setEnabled(False)
@@ -3746,23 +3580,23 @@ class DatasetBuilder(DraggableTool):
         infeat_vbox.addWidget(self.customEntry_lbl)
         infeat_vbox.addWidget(self.featureList)
         infeat_vbox.addLayout(elemOptions_hbox)
-        infeat_vsplit = cObj.SplitterGroup((elem_scroll, infeat_vbox), (0, 1),
+        infeat_vsplit = CW.SplitterGroup((elem_scroll, infeat_vbox), (0, 1),
                                            orient=Qt.Vertical)
-        infeat_group = cObj.GroupArea(infeat_vsplit, 'Input features')
+        infeat_group = CW.GroupArea(infeat_vsplit, 'Input features')
     # Dataset designer group
         designer_vbox = QW.QVBoxLayout()
         designer_vbox.addWidget(table_hsplit)
         designer_vbox.addLayout(table_btns)
-        designer_group = cObj.GroupArea(designer_vbox, 'Dataset Designer')
+        designer_group = CW.GroupArea(designer_vbox, 'Dataset Designer')
     # Dataset refinement group
         refine_hbox = QW.QHBoxLayout()
         refine_hbox.addWidget(self.refineList)
         refine_hbox.addLayout(refine_btns)
-        refine_group = cObj.GroupArea(refine_hbox, 'Dataset Refinement')
+        refine_group = CW.GroupArea(refine_hbox, 'Dataset Refinement')
     # Dataset preview group
         preview_hbox = QW.QHBoxLayout()
         preview_hbox.addWidget(self.previewArea)
-        preview_group = cObj.GroupArea(preview_hbox, 'Dataset Info')
+        preview_group = CW.GroupArea(preview_hbox, 'Dataset Info')
     # CSV file preferences group
         csvPref_vbox = QW.QVBoxLayout()
         csvPref_vbox.addWidget(QW.QLabel('CSV decimal point'))
@@ -3771,12 +3605,12 @@ class DatasetBuilder(DraggableTool):
         csvPref_vbox.addWidget(self.separator_combox)
         csvPref_vbox.addWidget(self.splitFile_cbox)
         csvPref_vbox.addWidget(self.saveCSV_btn)
-        csvPref_group = cObj.GroupArea(csvPref_vbox, 'File preferences')
+        csvPref_group = CW.GroupArea(csvPref_vbox, 'File preferences')
     # Set main layout
-        top_hsplit = cObj.SplitterGroup((infeat_group, designer_group), (1, 2))
-        bot_hsplit = cObj.SplitterGroup((refine_group, preview_group,
+        top_hsplit = CW.SplitterGroup((infeat_group, designer_group), (1, 2))
+        bot_hsplit = CW.SplitterGroup((refine_group, preview_group,
                                          csvPref_group), (2, 2, 1))
-        main_layout = cObj.SplitterLayout(Qt.Vertical)
+        main_layout = CW.SplitterLayout(Qt.Vertical)
         main_layout.addWidgets((top_hsplit, bot_hsplit), (2, 1))
         self.setLayout(main_layout)
 
@@ -3859,7 +3693,7 @@ class DatasetBuilder(DraggableTool):
         '''
         checked_samples = []
         tot_rows = self.xfeat_designer.rowCount()
-        progBar = cObj.PopUpProgBar(self, tot_rows, 'Compiling Dataset',
+        progBar = CW.PopUpProgBar(self, tot_rows, 'Compiling Dataset',
                                     cancel=False)
 
     # Check 0 --> no samples (0 rows)
@@ -3996,7 +3830,7 @@ class DatasetBuilder(DraggableTool):
                                                   f'Rename {item.text()}:',
                                                   flags=Qt.MSWindowsFixedSizeDialogHint)
             if ok and self.isClassNameAvailable(new_name):
-                progBar = cObj.PopUpProgBar(self, 1, cancel=False)
+                progBar = CW.PopUpProgBar(self, 1, cancel=False)
                 progBar.setValue(0)
                 self.dataset.replace(item.text(), new_name, inplace=True)
                 self._update_unique_classes()
@@ -4016,7 +3850,7 @@ class DatasetBuilder(DraggableTool):
                                              QW.QMessageBox.No)
             if choice == QW.QMessageBox.Yes:
                 targets = [item.text() for item in selected]
-                progBar = cObj.PopUpProgBar(self, 1, cancel=False)
+                progBar = CW.PopUpProgBar(self, 1, cancel=False)
                 progBar.setValue(0)
                 self.dataset = self.dataset[~self.dataset.Class.isin(targets)]
                 self.dataset.reset_index(drop=True, inplace=True)
@@ -4044,7 +3878,7 @@ class DatasetBuilder(DraggableTool):
                                                   'rename them as:',
                                                   flags=Qt.MSWindowsFixedSizeDialogHint)
             if ok and self.isClassNameAvailable(name):
-                progBar = cObj.PopUpProgBar(self, 1, cancel=False)
+                progBar = CW.PopUpProgBar(self, 1, cancel=False)
                 progBar.setValue(0)
                 self.dataset.replace(targets, [name]*len(targets), inplace=True)
                 self._update_unique_classes()
@@ -4073,13 +3907,13 @@ class DatasetBuilder(DraggableTool):
         # Disable the save button during saving operations, then re-enable it
             self.sender().setEnabled(False)
             subsets = np.array_split(self.dataset, nfiles)
-            progBar = cObj.PopUpProgBar(self, len(subsets), 'Saving Dataset')
+            progBar = CW.PopUpProgBar(self, len(subsets), 'Saving Dataset')
 
             for idx, ss in enumerate(subsets, start=1):
                 if progBar.wasCanceled(): 
                     break
                 elif (nfiles - 1): # if there is more than one file to save
-                    path = CF.extend_filename(outpath, str(idx)) 
+                    path = cf.extend_filename(outpath, str(idx)) 
                 else:
                     path = outpath
 
@@ -4092,7 +3926,7 @@ class DatasetBuilder(DraggableTool):
                                               'Dataset saved succesfully.')
 
 
-    class XDatasetDesigner(cObj.StyledTable):
+    class XDatasetDesigner(CW.StyledTable):
         '''
         Table widget for the Dataset Builder tool. It allows the user to import
         input maps data for the automatic compilation of ground truth datasets.
@@ -4133,7 +3967,7 @@ class DatasetBuilder(DraggableTool):
             self.horizontalHeader().setSectionResizeMode(0, 3)
 
         # Special button to fill the entire row of data
-            fillRow_btn = cObj.StyledButton(QIcon('Icons/generic_add_blue.png'))
+            fillRow_btn = CW.StyledButton(QIcon('Icons/generic_add_blue.png'))
             fillRow_btn.setObjectName(str(row)) # to easily access the row
             fillRow_btn.setToolTip('Fill entire row')
             fillRow_btn.clicked.connect(self.smart_fillRow)
@@ -4217,12 +4051,12 @@ class DatasetBuilder(DraggableTool):
                                                         'ASCII maps (*.txt *.gz)')
             if paths:
                 pref.set_dirPath('in', os.path.dirname(paths[0]))
-                progBar = cObj.PopUpProgBar(self, len(paths), 'Loading Maps')
+                progBar = CW.PopUpProgBar(self, len(paths), 'Loading Maps')
                 for n, p in enumerate(paths, start=1):
                     if progBar.wasCanceled(): break
                     try:
-                        name = CF.path2filename(p)
-                        matching_col = CF.guessMap(name, self.col_lbls) # !!! find a more elegant solution
+                        name = cf.path2filename(p)
+                        matching_col = cf.guessMap(name, self.col_lbls) # !!! find a more elegant solution
                     # If a filename matches with a column, then add it
                         if matching_col:
                             row = int(self.sender().objectName())
@@ -4231,7 +4065,7 @@ class DatasetBuilder(DraggableTool):
 
                     except Exception as e:
                         progBar.setWindowModality(Qt.NonModal)
-                        cObj.RichMsgBox(self, QW.QMessageBox.Critical,
+                        CW.RichMsgBox(self, QW.QMessageBox.Critical,
                                         'X-Min Learn',
                                         f'Unexpected ASCII file:\n{p}.',
                                         detailedText = repr(e))
@@ -4263,7 +4097,7 @@ class DatasetBuilder(DraggableTool):
             return rowData
 
 
-    class YDatasetDesigner(cObj.StyledTable):
+    class YDatasetDesigner(CW.StyledTable):
         '''
         Table widget for the Dataset Builder tool. It allows the user to import
         labels in the form of already classified mineral maps data in order to
@@ -4392,12 +4226,12 @@ class DatasetBuilder(DraggableTool):
             self.data = np.array([])
 
         # Add file button
-            self.add_btn = cObj.StyledButton(QIcon('Icons/smooth_add.png'))
+            self.add_btn = CW.StyledButton(QIcon('Icons/smooth_add.png'))
             self.add_btn.setFlat(True)
             self.add_btn.clicked.connect(lambda: self.addMap())
 
         # Remove file button
-            self.del_btn = cObj.StyledButton(QIcon('Icons/smooth_del.png'))
+            self.del_btn = CW.StyledButton(QIcon('Icons/smooth_del.png'))
             self.del_btn.setFlat(True)
             self.del_btn.setEnabled(False)
             self.del_btn.clicked.connect(self.delMap)
@@ -4510,7 +4344,7 @@ class PixelEditor(QW.QWidget):
     def init_ui(self):
 
         # Edited Pixels Preview Area
-        self.editPreview = cObj.HeatMapCanvas(size=(6, 4.5), binary=True, tight=True,
+        self.editPreview = CW.HeatMapCanvas(size=(6, 4.5), binary=True, tight=True,
                                               cbar=False, wheel_zoom=False)
         self.editPreview.setMinimumSize(100, 100)
 
@@ -4528,7 +4362,7 @@ class PixelEditor(QW.QWidget):
         self.showPreview_btn.clicked.connect(self.update_preview)
 
         # Save Button
-        self.save_btn = cObj.IconButton('Icons/save.png', 'Save Edits')
+        self.save_btn = CW.IconButton('Icons/save.png', 'Save Edits')
         self.save_btn.clicked.connect(self.save_edits)
 
         # Training Mode Preferences
@@ -4548,16 +4382,16 @@ class PixelEditor(QW.QWidget):
         trainBox = QW.QVBoxLayout()
         trainBox.addLayout(tolerance)
         trainBox.addWidget(self.proximity_cbox)
-        self.trainGA = cObj.GroupArea(trainBox, 'Training Mode', checkable=True)
+        self.trainGA = CW.GroupArea(trainBox, 'Training Mode', checkable=True)
         self.trainGA.setChecked(False)
         self.trainGA.toggled.connect(self.toggleTrainMode)
         # self.trainGA.setMaximumWidth(180)
 
         # Input Maps Checkbox
-        self.CboxMaps = cObj.CBoxMapLayout(self.XMapsPath)
+        self.CboxMaps = CW.CBoxMapLayout(self.XMapsPath)
         for cbox in self.CboxMaps.Cbox_list:
             cbox.clicked.connect(self.reset_tempResult)
-        MapsGSA = cObj.GroupScrollArea(self.CboxMaps, 'Input Maps')
+        MapsGSA = CW.GroupScrollArea(self.CboxMaps, 'Input Maps')
         # MapsGSA.setMaximumWidth(180)
 
         # Adjust Layout
@@ -4613,7 +4447,7 @@ class PixelEditor(QW.QWidget):
 
     #     mapsfit, shape2D = self.mapsFitting(xmaps_data)
     #     if mapsfit:
-    #         progBar = cObj.PopUpProgBar(self, shape2D[0], 'Computing pixel editing')
+    #         progBar = CW.PopUpProgBar(self, shape2D[0], 'Computing pixel editing')
     #         shape3D = (len(xmaps_data), shape2D[0], shape2D[1])
     #         xmaps_arr = np.array(xmaps_data).reshape(shape3D)
     #         signature = {((x,y), val): xmaps_arr[:, x, y] for (x, y), val in self.editsDict.items()}
@@ -4815,25 +4649,25 @@ class ModelLearner(DraggableTool):
 #                       RANDOM SEED GENERATOR WIDGET
 #  -------------------------------------------------------------------------  #
     # Random seed generator group (Group Area)
-        self.seed_generator = cObj.RandomSeedGenerator()
-        seed_group = cObj.GroupArea(self.seed_generator, 
+        self.seed_generator = CW.RandomSeedGenerator()
+        seed_group = CW.GroupArea(self.seed_generator, 
                                     'Random seed generator')
 
 #  -------------------------------------------------------------------------  #
 #                       GROUND TRUTH DATASET WIDGETS 
 #  -------------------------------------------------------------------------  #
     # Load dataset button (Styled Button)
-        self.load_dataset_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
+        self.load_dataset_btn = CW.StyledButton(QIcon(r'Icons/import.png'),
                                                   'Load dataset')
     # CSV decimal character selector
-        self.csv_dec_selector = cObj.DecimalPointSelector()
+        self.csv_dec_selector = CW.DecimalPointSelector()
 
     # Loaded dataset path (Path Label)
-        self.dataset_path_lbl = cObj.PathLabel(full_display=False,
+        self.dataset_path_lbl = CW.PathLabel(full_display=False,
                                                placeholder='No dataset loaded')
 
     # Loaded dataset preview area (Document Browser)
-        self.dataset_preview = cObj.DocumentBrowser(read_only=True)
+        self.dataset_preview = CW.DocumentBrowser(read_only=True)
         self.dataset_preview.setMinimumHeight(350)
 
     # Ground truth dataset group (Group Area)
@@ -4844,7 +4678,7 @@ class ModelLearner(DraggableTool):
         dataset_grid.addWidget(self.csv_dec_selector, 0, 3)
         dataset_grid.addWidget(self.dataset_path_lbl, 1, 0, 1, -1)
         dataset_grid.addWidget(self.dataset_preview, 2, 0, 1, -1)
-        dataset_group = cObj.CollapsibleArea(dataset_grid, collapsed=False,
+        dataset_group = CW.CollapsibleArea(dataset_grid, collapsed=False,
                                              title='Ground truth dataset')
         
 #  -------------------------------------------------------------------------  #
@@ -4852,15 +4686,15 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Load parent model button (Styled Button)
-        self.load_pmodel_btn = cObj.StyledButton(QIcon(r'Icons/import.png'),
+        self.load_pmodel_btn = CW.StyledButton(QIcon(r'Icons/import.png'),
                                                  'Load model')
         self.load_pmodel_btn.setEnabled(False)
 
     # Remove loaded parent model button (Styled Button)
-        self.unload_pmodel_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+        self.unload_pmodel_btn = CW.StyledButton(QIcon(r'Icons/clear.png'))
 
     # Parent model path (Path Label)
-        self.pmodel_path = cObj.PathLabel(full_display=False, 
+        self.pmodel_path = CW.PathLabel(full_display=False, 
                                           placeholder='No model loaded')
 
     # Parent model group (Group Area)
@@ -4870,7 +4704,7 @@ class ModelLearner(DraggableTool):
         pmodel_grid.addWidget(self.unload_pmodel_btn, 1, 0)
         pmodel_grid.addWidget(self.pmodel_path, 1, 1)
         pmodel_grid.setColumnStretch(1, 2)
-        pmodel_group = cObj.CollapsibleArea(pmodel_grid, 
+        pmodel_group = CW.CollapsibleArea(pmodel_grid, 
                                             title='Update existent model')
 
 #  -------------------------------------------------------------------------  #
@@ -4878,29 +4712,29 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Learning rate input (Styled DoubleSpinBox)
-        self.lr_spbox = cObj.StyledDoubleSpinBox(min_value=0.00001, 
+        self.lr_spbox = CW.StyledDoubleSpinBox(min_value=0.00001, 
                                                  max_value=10., step=0.01,
                                                  decimals=5)
         self.lr_spbox.setValue(0.01)
 
     # Weight decay input (Styled DoubleSpinBox)
-        self.wd_spbox = cObj.StyledDoubleSpinBox(max_value=10., step=0.01,
+        self.wd_spbox = CW.StyledDoubleSpinBox(max_value=10., step=0.01,
                                                  decimals=5)
         self.wd_spbox.setValue(0.)
 
     # Momentum input (Styled DoubleSpinBox)
-        self.mtm_spbox = cObj.StyledDoubleSpinBox(max_value=10., step=0.01,
+        self.mtm_spbox = CW.StyledDoubleSpinBox(max_value=10., step=0.01,
                                                   decimals=5)
         self.mtm_spbox.setValue(0.)
 
     # Epochs input (Styled SpinBox)
-        self.epochs_spbox = cObj.StyledSpinBox(max_value=10**8)
+        self.epochs_spbox = CW.StyledSpinBox(max_value=10**8)
         self.epochs_spbox.setValue(100)
 
     # Batch size (editable Styled Combobox)
         combox_tooltip = 'A batch size of 0 means a single batch'
         default_batch_sizes = map(lambda n: str(2 ** n), range(5, 13))
-        self.batch_combox = cObj.StyledComboBox(tooltip=combox_tooltip)
+        self.batch_combox = CW.StyledComboBox(tooltip=combox_tooltip)
         self.batch_combox.addItem('0')
         self.batch_combox.addItems(default_batch_sizes)
         self.batch_combox.setCurrentIndex(0)
@@ -4916,7 +4750,7 @@ class ModelLearner(DraggableTool):
         hparam_form.addRow('Momentum', self.mtm_spbox)
         hparam_form.addRow('Epochs', self.epochs_spbox)
         hparam_form.addRow('Batch size', self.batch_combox)
-        hparam_group = cObj.CollapsibleArea(hparam_form, 
+        hparam_group = CW.CollapsibleArea(hparam_form, 
                                             title='Hyperparameters')
         
 #  -------------------------------------------------------------------------  #
@@ -4927,19 +4761,19 @@ class ModelLearner(DraggableTool):
         self.feat_mapping_cbox = QW.QCheckBox('Polynomial feature mapping')
 
     # Polynomial mapping degree (Styled SpinBox)
-        self.poly_deg_spbox = cObj.StyledSpinBox(min_value=2, max_value=5)
+        self.poly_deg_spbox = CW.StyledSpinBox(min_value=2, max_value=5)
         self.poly_deg_spbox.setValue(2)
         self.poly_deg_spbox.setEnabled(False)
         self.poly_deg_spbox.setToolTip('Polynomial degree')
 
     # Algorithm (Styled ComboBox)
         algm_list = ['Softmax Regression']
-        self.algm_combox = cObj.StyledComboBox()
+        self.algm_combox = CW.StyledComboBox()
         self.algm_combox.addItems(algm_list)
 
     # Optimization function (Styled ComboBox)
         optim_list = ['SGD']
-        self.optim_combox = cObj.StyledComboBox()
+        self.optim_combox = CW.StyledComboBox()
         self.optim_combox.addItems(optim_list)
 
     # Learning graphic update rate (Line Edit)
@@ -4949,16 +4783,16 @@ class ModelLearner(DraggableTool):
         self.plots_update_rate.setStyleSheet(pref.SS_menu)
 
     # Number of workers (Styled Spinbox)
-        max_workers = ML_tools.num_cores() // 2 # safety
-        self.workers_spbox = cObj.StyledSpinBox(max_value=max_workers)
+        max_workers = mltools.num_cores() // 2 # safety
+        self.workers_spbox = CW.StyledSpinBox(max_value=max_workers)
         self.workers_spbox.setValue(0)
         self.workers_spbox.setToolTip(
             '0 workers means no parallel computation. Used if batch size > 0.')
 
     # Use GPU acceleration (Checkbox)
         self.cuda_cbox = QW.QCheckBox('Use GPU acceleration')
-        self.cuda_cbox.setChecked(ML_tools.cuda_available())
-        self.cuda_cbox.setEnabled(ML_tools.cuda_available())
+        self.cuda_cbox.setChecked(mltools.cuda_available())
+        self.cuda_cbox.setEnabled(mltools.cuda_available())
 
     # Learning preferences group (Group Area)
         pref_form = QW.QFormLayout()
@@ -4969,7 +4803,7 @@ class ModelLearner(DraggableTool):
         pref_form.addRow('Graphics refresh rate', self.plots_update_rate)
         pref_form.addRow('Number of workers', self.workers_spbox)
         pref_form.addRow(self.cuda_cbox)
-        pref_group = cObj.CollapsibleArea(pref_form,
+        pref_group = CW.CollapsibleArea(pref_form,
                                           title='Learning preferences')
 
 #  -------------------------------------------------------------------------  #
@@ -4977,24 +4811,24 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Start learning button (Styled Button)
-        self.start_learn_btn = cObj.StyledButton(text='LEARN', 
+        self.start_learn_btn = CW.StyledButton(text='LEARN', 
                                                  bg_color=pref.BTN_GREEN)
         self.start_learn_btn.setToolTip('Start learning session')
         self.start_learn_btn.setEnabled(False)
 
     # Stop learning button (Styled Button)
-        self.stop_learn_btn = cObj.StyledButton(text='STOP', 
+        self.stop_learn_btn = CW.StyledButton(text='STOP', 
                                                  bg_color=pref.BTN_RED)
         self.stop_learn_btn.setToolTip('Stop learning session')
         self.stop_learn_btn.setEnabled(False)
 
     # Test model button (Styled Button)
-        self.test_model_btn = cObj.StyledButton(QIcon(r'Icons/test.png'), 
+        self.test_model_btn = CW.StyledButton(QIcon(r'Icons/test.png'), 
                                                 'TEST MODEL')
         self.test_model_btn.setEnabled(False)
 
     # Save model button (Styled Button)
-        self.save_model_btn = cObj.StyledButton(QIcon(r'Icons/save.png'), 
+        self.save_model_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 
                                                 'SAVE MODEL')
         self.save_model_btn.setEnabled(False)
 
@@ -5006,22 +4840,22 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Train set ratio selector (Styled SpinBox)
-        self.train_ratio_spbox = cObj.StyledSpinBox(1, 98)
+        self.train_ratio_spbox = CW.StyledSpinBox(1, 98)
         self.train_ratio_spbox.setSuffix(' %')
         self.train_ratio_spbox.setValue(50)
 
     # Validation set ratio selector (Styled SpinBox)
-        self.valid_ratio_spbox = cObj.StyledSpinBox(1, 98)
+        self.valid_ratio_spbox = CW.StyledSpinBox(1, 98)
         self.valid_ratio_spbox.setSuffix(' %')
         self.valid_ratio_spbox.setValue(25)
 
     # Test set ratio selector (Styled SpinBox)
-        self.test_ratio_spbox = cObj.StyledSpinBox(1, 98)
+        self.test_ratio_spbox = CW.StyledSpinBox(1, 98)
         self.test_ratio_spbox.setSuffix(' %')
         self.test_ratio_spbox.setValue(25)
 
     # Split ground truth dataset button (Styled Button)
-        self.split_dataset_btn = cObj.StyledButton(text='SPLIT', 
+        self.split_dataset_btn = CW.StyledButton(text='SPLIT', 
                                                    bg_color=pref.BTN_GREEN)
         self.split_dataset_btn.setToolTip('Split ground truth dataset into '\
                                           'train, validation and test sets')
@@ -5039,28 +4873,28 @@ class ModelLearner(DraggableTool):
         self.subsets_barplot.setMinimumSize(200, 300)
 
     # Train set class visualizer (StyledListWidget)
-        self.train_class_list = cObj.StyledListWidget(ext_selection=False)
+        self.train_class_list = CW.StyledListWidget(ext_selection=False)
         self.train_class_list.setMinimumWidth(100)
 
     # Train set per-class current and total counter labels (FramedLabels)
-        self.train_curr_count_lbl = cObj.FramedLabel('')
-        self.train_tot_count_lbl = cObj.FramedLabel('')
+        self.train_curr_count_lbl = CW.FramedLabel('')
+        self.train_tot_count_lbl = CW.FramedLabel('')
 
     # Validation set class visualizer (StyledListWidget)
-        self.valid_class_list = cObj.StyledListWidget(ext_selection=False)
+        self.valid_class_list = CW.StyledListWidget(ext_selection=False)
         self.valid_class_list.setMinimumWidth(100)
 
     # Validation set per-class current and total counter labels (FramedLabels)
-        self.valid_curr_count_lbl = cObj.FramedLabel('')
-        self.valid_tot_count_lbl = cObj.FramedLabel('')
+        self.valid_curr_count_lbl = CW.FramedLabel('')
+        self.valid_tot_count_lbl = CW.FramedLabel('')
 
     # Test set class visualizer (StyledListWidget)
-        self.test_class_list = cObj.StyledListWidget(ext_selection=False)
+        self.test_class_list = CW.StyledListWidget(ext_selection=False)
         self.test_class_list.setMinimumWidth(100)
 
     # Test set per-class current and total counter labels (FramedLabels)
-        self.test_curr_count_lbl = cObj.FramedLabel('')
-        self.test_tot_count_lbl = cObj.FramedLabel('')
+        self.test_curr_count_lbl = CW.FramedLabel('')
+        self.test_tot_count_lbl = CW.FramedLabel('')
 
     # Split Train, validation, test subset widgets group
         counters_grid = QW.QGridLayout()
@@ -5095,14 +4929,14 @@ class ModelLearner(DraggableTool):
         split_grid.addLayout(counters_grid, 0, 3, -1, 1)
         split_grid.setColumnStretch(3, -1)
         split_grid.setRowStretch(4, -1)
-        split_group = cObj.GroupArea(split_grid, 'Split dataset')
+        split_group = CW.GroupArea(split_grid, 'Split dataset')
 
 #  -------------------------------------------------------------------------  #
 #                       BALANCING OPERATIONS WIDGETS 
 #  -------------------------------------------------------------------------  #
 
     # Balancing help button (StyledButton)
-        self.balancing_help_btn = cObj.StyledButton(QIcon(r'Icons/info.png'))
+        self.balancing_help_btn = CW.StyledButton(QIcon(r'Icons/info.png'))
         self.balancing_help_btn.setMaximumSize(30, 30)
         self.balancing_help_btn.setFlat(True)
         self.balancing_help_btn.setToolTip('More info about dataset balancing')
@@ -5117,17 +4951,17 @@ class ModelLearner(DraggableTool):
         self.os_warn_icon.hide()
 
     # Oversampling algorithm selector (Styled ComboBox)
-        self.os_combox = cObj.StyledComboBox()
+        self.os_combox = CW.StyledComboBox()
         self.os_combox.addItems(self.os_list)
 
     # Oversampling K-neighbours selector (Styled SpinBox)
-        self.k_neigh_spbox = cObj.StyledSpinBox()
+        self.k_neigh_spbox = CW.StyledSpinBox()
         self.k_neigh_spbox.setValue(5)
         self.k_neigh_spbox.setToolTip(
             'Nearest neighbours to construct synthetic samples')
 
     # Oversampling M-neighbours selector (Styled SpinBox)
-        self.m_neigh_spbox = cObj.StyledSpinBox()
+        self.m_neigh_spbox = CW.StyledSpinBox()
         self.m_neigh_spbox.setValue(10)
         self.m_neigh_spbox.setToolTip(
             'Nearest neighbours to determine if a minority sample is in danger')
@@ -5142,16 +4976,16 @@ class ModelLearner(DraggableTool):
         self.us_warn_icon.hide()
 
     # Undersampling algorithm selector (Styled ComboBox)
-        self.us_combox = cObj.StyledComboBox()
+        self.us_combox = CW.StyledComboBox()
         self.us_combox.addItems(self.us_list)
 
     # Undersampling N-neighbours selector (Styled SpinBox)
-        self.n_neigh_spbox = cObj.StyledSpinBox()
+        self.n_neigh_spbox = CW.StyledSpinBox()
         self.n_neigh_spbox.setValue(3)
         self.n_neigh_spbox.setToolTip('Size of the neighbourhood to consider')
 
     # Strategy selector (Styled ComboBox)
-        self.strategy_combox = cObj.StyledComboBox()
+        self.strategy_combox = CW.StyledComboBox()
         self.strategy_combox.addItems(self.balancing_strategies)
 
     # Strategy value (LineEdit)
@@ -5175,7 +5009,7 @@ class ModelLearner(DraggableTool):
 
     # Balancing preview table (Styled Table)
         hl = ('Class', 'Original', 'Current', 'After balancing')
-        self.balancing_table = cObj.StyledTable(0, 4)
+        self.balancing_table = CW.StyledTable(0, 4)
         # ResizeModes: 0=Interactive, 1=Stretch, 2=Fixed, 3=ResizeToContent
         self.balancing_table.horizontalHeader().setSectionResizeMode(3)
         self.balancing_table.horizontalHeader().setStretchLastSection(True)
@@ -5183,22 +5017,22 @@ class ModelLearner(DraggableTool):
         self.balancing_table.setHorizontalHeaderLabels(hl)
 
     # Start balancing button (Styled Button)
-        self.start_balancing_btn = cObj.StyledButton(text='Start', 
+        self.start_balancing_btn = CW.StyledButton(text='Start', 
                                                      bg_color=pref.BTN_GREEN)
         self.start_balancing_btn.setToolTip('Start balancing session')
 
     # Stop balancing button (Styled Button)
-        self.stop_balancing_btn = cObj.StyledButton(text='Stop',
+        self.stop_balancing_btn = CW.StyledButton(text='Stop',
                                                     bg_color=pref.BTN_RED)
         self.stop_balancing_btn.setToolTip('Stop balancing session')
 
     # Cancel balancing button (Styled Button)
-        self.canc_balancing_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'),
+        self.canc_balancing_btn = CW.StyledButton(QIcon(r'Icons/clear.png'),
                                                     'Cancel')
         self.canc_balancing_btn.setToolTip('Cancel balancing results')
 
     # Balancing operations progress bar (Descriptive Progress Bar)
-        self.balancing_pbar = cObj.DescriptiveProgressBar()
+        self.balancing_pbar = CW.DescriptiveProgressBar()
         self.balancing_pbar.setMaximum(5)
 
     # Balancing group 
@@ -5207,7 +5041,7 @@ class ModelLearner(DraggableTool):
         balancing_grid.addWidget(self.balancing_help_btn, 0, 0, Qt.AlignLeft)
         balancing_grid.addWidget(QW.QLabel('Over-Sampling'), 1, 0, 1, 2)
         balancing_grid.addWidget(self.os_warn_icon, 1, 2, Qt.AlignRight)
-        balancing_grid.addWidget(cObj.LineSeparator(lw=2), 2, 0, 1, 3)
+        balancing_grid.addWidget(CW.LineSeparator(lw=2), 2, 0, 1, 3)
         balancing_grid.addWidget(self.os_combox, 3, 0)
         balancing_grid.addWidget(QW.QLabel('K neigh.'), 3, 1, Qt.AlignRight)
         balancing_grid.addWidget(self.k_neigh_spbox, 3, 2)
@@ -5215,12 +5049,12 @@ class ModelLearner(DraggableTool):
         balancing_grid.addWidget(self.m_neigh_spbox, 4, 2)
         balancing_grid.addWidget(QW.QLabel('Under-Sampling'), 6, 0, 1, 2)
         balancing_grid.addWidget(self.us_warn_icon, 6, 2, Qt.AlignRight)
-        balancing_grid.addWidget(cObj.LineSeparator(lw=2), 7, 0, 1, 3)
+        balancing_grid.addWidget(CW.LineSeparator(lw=2), 7, 0, 1, 3)
         balancing_grid.addWidget(self.us_combox, 8, 0)
         balancing_grid.addWidget(QW.QLabel('N neigh.'), 8, 1, Qt.AlignRight)
         balancing_grid.addWidget(self.n_neigh_spbox, 8, 2)
         balancing_grid.addWidget(QW.QLabel('Strategy'), 10, 0, 1, 3)
-        balancing_grid.addWidget(cObj.LineSeparator(lw=2), 11, 0, 1, 3)
+        balancing_grid.addWidget(CW.LineSeparator(lw=2), 11, 0, 1, 3)
         balancing_grid.addWidget(self.strategy_combox, 12, 0, 1, 3)
         balancing_grid.addWidget(QW.QLabel('Unique value'), 13, 0)
         balancing_grid.addWidget(self.strategy_value, 13, 1, 1, 2)
@@ -5235,7 +5069,7 @@ class ModelLearner(DraggableTool):
         balancing_grid.addWidget(self.balancing_table, 0, 4, -1, 1)
         balancing_grid.setColumnStretch(3, -1)
 
-        self.balancing_group = cObj.GroupArea(balancing_grid, checkable=True,
+        self.balancing_group = CW.GroupArea(balancing_grid, checkable=True,
                                               title='Balance train set')
         self.balancing_group.setChecked(False)
         self.balancing_group.setEnabled(False)
@@ -5256,8 +5090,8 @@ class ModelLearner(DraggableTool):
         self.loss_navtbar.fixHomeAction()
 
     # Loss info labels (FramedLabels)
-        self.train_loss_lbl = cObj.FramedLabel('')
-        self.valid_loss_lbl = cObj.FramedLabel('')
+        self.train_loss_lbl = CW.FramedLabel('')
+        self.valid_loss_lbl = CW.FramedLabel('')
 
     # Accuracy curves canvas (CurveCanvas)
         self.accuracy_plot = plots.CurveCanvas('Accuracy plot', 'Epochs',
@@ -5272,8 +5106,8 @@ class ModelLearner(DraggableTool):
         self.accuracy_navtbar.fixHomeAction()
 
     # Accuracy info labels (FramedLabels)
-        self.train_accuracy_lbl = cObj.FramedLabel('')
-        self.valid_accuracy_lbl = cObj.FramedLabel('')
+        self.train_accuracy_lbl = CW.FramedLabel('')
+        self.valid_accuracy_lbl = CW.FramedLabel('')
 
     # Learning progression plots group
         loss_grid = QW.QGridLayout()
@@ -5298,14 +5132,14 @@ class ModelLearner(DraggableTool):
         accuracy_grid.setColumnStretch(1, 1)
         accuracy_grid.setColumnStretch(3, 1)
 
-        learn_plot_tabwid = cObj.StyledTabWidget()
+        learn_plot_tabwid = CW.StyledTabWidget()
         learn_plot_tabwid.tabBar().setDocumentMode(True)
         learn_plot_tabwid.tabBar().setExpanding(True)
         learn_plot_tabwid.addTab(loss_grid, QIcon(r'Icons/loss.png'),
                                  'LOSS PLOT')
         learn_plot_tabwid.addTab(accuracy_grid, QIcon(r'Icons/accuracy.png'),
                                  'ACCURACY PLOT')
-        learn_group = cObj.GroupArea(learn_plot_tabwid, 'Learning progression')
+        learn_group = CW.GroupArea(learn_plot_tabwid, 'Learning progression')
 
 #  -------------------------------------------------------------------------  #
 #                        CONFUSION MATRICES WIDGETS 
@@ -5332,8 +5166,8 @@ class ModelLearner(DraggableTool):
 
 
     # Train F1 scores labels (FramedLabels)
-        self.train_f1_macro_lbl = cObj.FramedLabel('')
-        self.train_f1_weight_lbl = cObj.FramedLabel('')
+        self.train_f1_macro_lbl = CW.FramedLabel('')
+        self.train_f1_weight_lbl = CW.FramedLabel('')
 
     # Validation Confusion Matrix area (ConfMatCanvas)
         self.valid_confmat = plots.ConfMatCanvas('Validation set',
@@ -5356,8 +5190,8 @@ class ModelLearner(DraggableTool):
         self.valid_cm_navtbar.insertSeparator(2)
 
     # Validation F1 scores label (FramedLabels)
-        self.valid_f1_macro_lbl = cObj.FramedLabel('')
-        self.valid_f1_weight_lbl = cObj.FramedLabel('')
+        self.valid_f1_macro_lbl = CW.FramedLabel('')
+        self.valid_f1_weight_lbl = CW.FramedLabel('')
 
     # Test Confusion Matrix (ConfMatCanvas)
         self.test_confmat = plots.ConfMatCanvas('Test set', layout='tight',
@@ -5379,9 +5213,9 @@ class ModelLearner(DraggableTool):
         self.test_cm_navtbar.insertSeparator(2)
 
     # Test score labels (FramedLabels)
-        self.test_accuracy_lbl = cObj.FramedLabel('')
-        self.test_f1_macro_lbl = cObj.FramedLabel('')
-        self.test_f1_weight_lbl = cObj.FramedLabel('')
+        self.test_accuracy_lbl = CW.FramedLabel('')
+        self.test_f1_macro_lbl = CW.FramedLabel('')
+        self.test_f1_weight_lbl = CW.FramedLabel('')
 
     # Confusion matrix group 
         tr_cm_grid = QW.QGridLayout()
@@ -5420,7 +5254,7 @@ class ModelLearner(DraggableTool):
         ts_cm_grid.setColumnStretch(3, 1)
         ts_cm_grid.setColumnStretch(5, 1)
 
-        confmat_tabwid = cObj.StyledTabWidget()
+        confmat_tabwid = CW.StyledTabWidget()
         confmat_tabwid.tabBar().setDocumentMode(True)
         confmat_tabwid.tabBar().setExpanding(True)
         confmat_tabwid.addTab(tr_cm_grid, QIcon(r'Icons/train_set.png'), 
@@ -5429,7 +5263,7 @@ class ModelLearner(DraggableTool):
                          'VALIDATION SET')
         confmat_tabwid.addTab(ts_cm_grid, QIcon(r'Icons/test_set.png'), 
                          'TEST SET')
-        confmat_group = cObj.GroupArea(confmat_tabwid, 'Model evaluation')
+        confmat_group = CW.GroupArea(confmat_tabwid, 'Model evaluation')
 
 #  -------------------------------------------------------------------------  #
 #                              ADJUST LAYOUT 
@@ -5453,7 +5287,7 @@ class ModelLearner(DraggableTool):
         left_vbox.addWidget(pref_group)
         left_vbox.addLayout(main_ctrl_grid)
         left_vbox.addStretch(1)
-        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
 
     # Adjust learning panels layout (right Group Scroll Area)
         right_vbox = QW.QVBoxLayout()
@@ -5462,10 +5296,10 @@ class ModelLearner(DraggableTool):
         right_vbox.addWidget(self.balancing_group)
         right_vbox.addWidget(learn_group)
         right_vbox.addWidget(confmat_group)
-        right_scroll = cObj.GroupScrollArea(right_vbox, frame=False)
+        right_scroll = CW.GroupScrollArea(right_vbox, frame=False)
 
     # Main Layout
-        main_layout = cObj.SplitterLayout()
+        main_layout = CW.SplitterLayout()
         main_layout.addWidgets((left_scroll, right_scroll))
         self.setLayout(main_layout)
         
@@ -5684,35 +5518,40 @@ class ModelLearner(DraggableTool):
         if thr_active:
             text = f'Cannot load dataset while a {thr_name} Session is active'
             return QW.QMessageBox.critical(self, 'X-Min Learn', text)
-        
+    
+    # Do nothing if path is invalid or the dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load dataset',
                                                  pref.get_dirPath('in'),
                                                  'Comma Separated Values (*.csv)')
-        if path:
-            pref.set_dirPath('in', os.path.dirname(path))
+        if not path:
+            return
         
-        # Ask confirmation if a dataset was already processed
-            if self.dataset:
-                text = 'Current progress will be lost. Load a new dataset?'
-                choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                                                QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                QW.QMessageBox.No)
-                if choice == QW.QMessageBox.No:
-                    return
-                else:
-                    self._reset()
+        pref.set_dirPath('in', os.path.dirname(path))
+    
+    # Ask confirmation if a dataset was already processed
+        if self.dataset:
+            text = 'Current progress will be lost. Load a new dataset?'
+            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
+                                            QW.QMessageBox.Yes | QW.QMessageBox.No,
+                                            QW.QMessageBox.No)
+            if choice == QW.QMessageBox.No:
+                return
+            else:
+                self._reset()
 
-        # Load ground truth dataset
-            dec = self.csv_dec_selector.currentText()
-            dataframe = cObj.CsvChunkReader(dec, pBar=True).read(path)
-            self.dataset = ML_tools.GroundTruthDataset(dataframe, path)
-            self.dataset_path_lbl.setPath(path)
-        # Update dataset preview
-            text = f'DATASET PREVIEW\n\n{repr(self.dataset.dataframe)}'
-            self.dataset_preview.setText(text)
-        # Enable "Split dataset" and "Load previous model" buttons
-            self.load_pmodel_btn.setEnabled(True)
-            self.split_dataset_btn.setEnabled(True)
+    # Load ground truth dataset
+        pbar = CW.PulsePopUpProgBar(self, 'Loading dataset')
+        pbar.startPulse()
+        dec = self.csv_dec_selector.currentText()
+        self.dataset = dtools.GroundTruthDataset.load(path, dec, chunks=True)
+        self.dataset_path_lbl.setPath(path)
+    # Update dataset preview
+        text = f'DATASET PREVIEW\n\n{repr(self.dataset.dataframe)}'
+        self.dataset_preview.setText(text)
+    # Enable "Split dataset" and "Load previous model" buttons
+        self.load_pmodel_btn.setEnabled(True)
+        self.split_dataset_btn.setEnabled(True)
+        pbar.stopPulse()
     
 
     def _fixSubsetsRatios(self, new_value: int):
@@ -5779,7 +5618,7 @@ class ModelLearner(DraggableTool):
             self.dataset.reset()
 
     # Split features [X] from targets [Y] expressed as labels
-        pbar = cObj.PopUpProgBar(self, 4, 'Splitting dataset', cancel=False)
+        pbar = CW.PopUpProgBar(self, 4, 'Splitting dataset', cancel=False)
         try:
             self.dataset.split_features_targets(xtype='int32')
             pbar.setValue(1)
@@ -5787,7 +5626,7 @@ class ModelLearner(DraggableTool):
     # Update encoder. Inherit from parent model encoder if present.    
             parent_enc = {}
             if (pmodel_path := self.pmodel_path.fullpath) != '':
-                parent_enc = ML_tools.EagerModel.load(pmodel_path).encoder
+                parent_enc = mltools.EagerModel.load(pmodel_path).encoder
             self.dataset.update_encoder(parent_enc)
             pbar.setValue(2)
 
@@ -5801,7 +5640,7 @@ class ModelLearner(DraggableTool):
 
         except Exception as e:
             pbar.reset()
-            return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                    'Unexpected data type', detailedText=repr(e))
 
     # Update GUI elements
@@ -6000,7 +5839,7 @@ class ModelLearner(DraggableTool):
         note = '\n\n'.join(i) if i else 'No additional info.'
         text = f'You have {len(i)} warning(s). Click "Show Details" for more '\
                 'info. Launch Balancing Session?'
-        msg = cObj.RichMsgBox(self, icon, 'X-Min Learn', text,
+        msg = CW.RichMsgBox(self, icon, 'X-Min Learn', text,
                               QW.QMessageBox.Yes | QW.QMessageBox.No, 
                               QW.QMessageBox.No, detailedText=note)
         
@@ -6070,7 +5909,7 @@ class ModelLearner(DraggableTool):
         
         else:
         # Forward error if balancing operations failed
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                             'Balancing failed', detailedText=repr(result[0]))
             
     # End balancing session in any case
@@ -6129,7 +5968,7 @@ class ModelLearner(DraggableTool):
         # the strategy value to 'Custom multi-value' when the item is edited. 
         # The starting value of this item is initialized as the current class 
         # count (= 3rd column value).
-            i3 = cObj.PercentLineEdit(curr_count, min_perc=1, max_perc=1000)
+            i3 = CW.PercentLineEdit(curr_count, min_perc=1, max_perc=1000)
             i3.valueEdited.connect(
                 lambda: self.strategy_combox.setCurrentText('Custom multi-value'))
             self.balancing_table.setCellWidget(row, 3, i3)
@@ -6275,11 +6114,11 @@ class ModelLearner(DraggableTool):
                 else:
                     self._reset()
            
-            pbar = cObj.PopUpProgBar(self, 3, 'Loading Model')
+            pbar = CW.PopUpProgBar(self, 3, 'Loading Model')
             
             try:
             # Import parent model
-                pmodel = ML_tools.EagerModel.load(path)
+                pmodel = mltools.EagerModel.load(path)
                 pbar.setValue(1)
 
             # Check if parent model shares the same features of loaded dataset
@@ -6314,7 +6153,7 @@ class ModelLearner(DraggableTool):
             except Exception as e:
                 pbar.reset()
                 self.removeParentModel()
-                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                 'The selected model produced an error.',
                                 detailedText=repr(e))
 
@@ -6396,7 +6235,7 @@ class ModelLearner(DraggableTool):
 
         if xor := ((tr_cls ^ vd_cls) | (tr_cls ^ ts_cls) | (vd_cls ^ ts_cls)): 
             err = 'Some classes have 0 instances in one or more subsets.'
-            return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                    err, detailedText=', '.join(xor))
 
     # Update GUI
@@ -6424,7 +6263,7 @@ class ModelLearner(DraggableTool):
 
     # If a parent model is provided, update only some of its variables
         if parent_path:
-            self.model = ML_tools.EagerModel.load(parent_path)
+            self.model = mltools.EagerModel.load(parent_path)
             var_dict = self.model.variables
             var_dict['optimizer'] = optim_name
             var_dict['device'] = device
@@ -6439,7 +6278,7 @@ class ModelLearner(DraggableTool):
 
     # If a parent model is not provided, initialize a new model from scratch
         else:
-            self.model = ML_tools.EagerModel.initialize_empty()
+            self.model = mltools.EagerModel.initialize_empty()
             var_dict = self.model.variables
             var_dict['algorithm'] = algm_name
             var_dict['optimizer'] = optim_name
@@ -6464,16 +6303,16 @@ class ModelLearner(DraggableTool):
     # Map features from linear to polynomial (get original data if degree=1)
         x_train, x_valid = self.dataset.x_train, self.dataset.x_valid
         degree = self.model.poly_degree
-        x_train = ML_tools.map_polinomial_features(x_train, degree)
-        x_valid = ML_tools.map_polinomial_features(x_valid, degree)
+        x_train = mltools.map_polinomial_features(x_train, degree)
+        x_valid = mltools.map_polinomial_features(x_valid, degree)
 
         self.learning_pbar.setValue(2)
 
     # Convert train and validation features and targets to torch Tensors
-        x_train = ML_tools.array2tensor(x_train, 'float32')
-        y_train = ML_tools.array2tensor(self.dataset.y_train, 'uint8')
-        x_valid = ML_tools.array2tensor(x_valid, 'float32')
-        y_valid = ML_tools.array2tensor(self.dataset.y_valid, 'uint8')
+        x_train = mltools.array2tensor(x_train, 'float32')
+        y_train = mltools.array2tensor(self.dataset.y_train, 'uint8')
+        x_valid = mltools.array2tensor(x_valid, 'float32')
+        y_valid = mltools.array2tensor(self.dataset.y_valid, 'uint8')
 
     # Normalize feature data. If standards exist in model variables it means
     # that they are derived from a parent model and therefore they must not be
@@ -6481,13 +6320,13 @@ class ModelLearner(DraggableTool):
     # be calculated.
         if standards := var_dict['standards']:
             x_mean, x_stdev = standards
-            x_train_norm = ML_tools.norm_data(x_train, x_mean, x_stdev,
+            x_train_norm = mltools.norm_data(x_train, x_mean, x_stdev,
                                               return_standards=False)
         else:
-            x_train_norm, x_mean, x_stdev = ML_tools.norm_data(x_train)
+            x_train_norm, x_mean, x_stdev = mltools.norm_data(x_train)
             var_dict['standards'] = (x_mean, x_stdev)
 
-        x_valid_norm = ML_tools.norm_data(x_valid, x_mean, x_stdev,
+        x_valid_norm = mltools.norm_data(x_valid, x_mean, x_stdev,
                                           return_standards=False)
         
         self.learning_pbar.setValue(3)
@@ -6528,9 +6367,9 @@ class ModelLearner(DraggableTool):
 
     # Start the learning thread
         if batch_size:
-            train_loader = ML_tools.DataLoader(x_train_norm, y_train, 
+            train_loader = mltools.DataLoader(x_train_norm, y_train, 
                                                batch_size, workers) 
-            valid_loader = ML_tools.DataLoader(x_valid_norm, y_valid, 
+            valid_loader = mltools.DataLoader(x_valid_norm, y_valid, 
                                                batch_size, workers)
             task = lambda: self.network.batch_learn(train_loader, valid_loader,
                                                     self.optimizer, device)
@@ -6570,12 +6409,12 @@ class ModelLearner(DraggableTool):
             d = self.model.poly_degree
             x_mean, x_stdev = self.model.variables['standards']
             device = self.model.variables['device']
-            x_train = ML_tools.map_polinomial_features(self.dataset.x_train, d)
-            x_valid = ML_tools.map_polinomial_features(self.dataset.x_valid, d)
-            x_train = ML_tools.array2tensor(x_train, 'float32')
-            x_valid = ML_tools.array2tensor(x_valid, 'float32')
-            x_train = ML_tools.norm_data(x_train, x_mean, x_stdev, False)
-            x_valid = ML_tools.norm_data(x_valid, x_mean, x_stdev, False)
+            x_train = mltools.map_polinomial_features(self.dataset.x_train, d)
+            x_valid = mltools.map_polinomial_features(self.dataset.x_valid, d)
+            x_train = mltools.array2tensor(x_train, 'float32')
+            x_valid = mltools.array2tensor(x_valid, 'float32')
+            x_train = mltools.norm_data(x_train, x_mean, x_stdev, False)
+            x_valid = mltools.norm_data(x_valid, x_mean, x_stdev, False)
             train_pred = self.network.predict(x_train.to(device))[1].cpu()
             valid_pred = self.network.predict(x_valid.to(device))[1].cpu()
 
@@ -6588,8 +6427,8 @@ class ModelLearner(DraggableTool):
             for n, avg in enumerate(('macro', 'weighted')):
                 tr_args = (self.dataset.y_train, train_pred, avg)
                 vd_args = (self.dataset.y_valid, valid_pred, avg)
-                f1_tr = f1_scores[0, n] = ML_tools.f1_score(*tr_args)
-                f1_vd = f1_scores[1, n] = ML_tools.f1_score(*vd_args)
+                f1_tr = f1_scores[0, n] = mltools.f1_score(*tr_args)
+                f1_vd = f1_scores[1, n] = mltools.f1_score(*vd_args)
                 self.updateScoreLabel('Train', f'F1_{avg}', f1_tr)
                 self.updateScoreLabel('Validation', f'F1_{avg}', f1_vd)
 
@@ -6623,7 +6462,7 @@ class ModelLearner(DraggableTool):
         else:
             e = result[0]
             text = 'Learning Session failed.'
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn', text,
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn', text,
                             detailedText=repr(e))
 
     # Update Start-Stop-Learn buttons on exit in any case
@@ -6734,7 +6573,7 @@ class ModelLearner(DraggableTool):
 
         if preds is not None:
             lbls, ids = zip(*self.dataset.encoder.items())
-            confmat = ML_tools.confusion_matrix(true, preds, ids)
+            confmat = mltools.confusion_matrix(true, preds, ids)
             canvas.update_canvas(confmat, perc)
             canvas.set_ticks(lbls)
 
@@ -6782,15 +6621,15 @@ class ModelLearner(DraggableTool):
             device = self.model.variables['device']
             x_mean, x_stdev = self.model.variables['standards']
 
-            x_test = ML_tools.map_polinomial_features(self.dataset.x_test, d)
-            x_test = ML_tools.array2tensor(x_test, 'float32')
-            x_test = ML_tools.norm_data(x_test, x_mean, x_stdev, False)
+            x_test = mltools.map_polinomial_features(self.dataset.x_test, d)
+            x_test = mltools.array2tensor(x_test, 'float32')
+            x_test = mltools.norm_data(x_test, x_mean, x_stdev, False)
             test_pred = self.network.predict(x_test.to(device))[1].cpu()
 
             self.learning_pbar.setValue(1)
 
         # Compute test accuracy
-            test_acc = ML_tools.accuracy_score(self.dataset.y_test, test_pred)
+            test_acc = mltools.accuracy_score(self.dataset.y_test, test_pred)
             self.model.variables['accuracy'][2] = test_acc
             self.updateScoreLabel('Test', 'accuracy', test_acc)
             
@@ -6798,7 +6637,7 @@ class ModelLearner(DraggableTool):
 
         # Compute test F1 scores 
             for n, avg in enumerate(('macro', 'weighted')):
-                f1_ts = ML_tools.f1_score(self.dataset.y_test, test_pred, avg)
+                f1_ts = mltools.f1_score(self.dataset.y_test, test_pred, avg)
                 self.updateScoreLabel('Test', f'F1_{avg}', f1_ts)
                 self.model.variables['f1_scores'][2, n] = f1_ts
             
@@ -6833,7 +6672,7 @@ class ModelLearner(DraggableTool):
                 self.model.save(path, log_path, extended_log)
                 QW.QMessageBox.information(self, 'X-Min Learn', 'Model saved.')
             except Exception as e:
-                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                 'An error occurred while saving the model.',
                                  detailedText=repr(e))
                 
@@ -6911,17 +6750,17 @@ class PhaseRefiner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Mineral map selector (SampleMapsSelector)
-        self.minmap_selector = cObj.SampleMapsSelector('minmaps', False)
+        self.minmap_selector = CW.SampleMapsSelector('minmaps', False)
         self.minmap_selector.setMaximumHeight(200)
 
     # Select mineral map (Styled Button)
-        self.select_map_btn = cObj.StyledButton(text='Select map')
+        self.select_map_btn = CW.StyledButton(text='Select map')
 
     # Sample selection group 
         sample_vbox = QW.QVBoxLayout()
         sample_vbox.addWidget(self.minmap_selector)
         sample_vbox.addWidget(self.select_map_btn)
-        sample_group = cObj.CollapsibleArea(sample_vbox, 'Map selection',
+        sample_group = CW.CollapsibleArea(sample_vbox, 'Map selection',
                                             collapsed=False)
 
 #  -------------------------------------------------------------------------  #
@@ -6929,10 +6768,10 @@ class PhaseRefiner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Current selected mineral map (PathLabel)
-        self.selected_map_lbl = cObj.PathLabel(full_display=False)
+        self.selected_map_lbl = CW.PathLabel(full_display=False)
 
     # Legend
-        self.legend = cObj.Legend()
+        self.legend = CW.Legend()
         self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
         self.legend.setMinimumHeight(400)
 
@@ -6940,7 +6779,7 @@ class PhaseRefiner(DraggableTool):
         legend_form = QW.QFormLayout()
         legend_form.addRow('Current map', self.selected_map_lbl)
         legend_form.addRow(self.legend)
-        legend_group = cObj.CollapsibleArea(legend_form, 'Legend', 
+        legend_group = CW.CollapsibleArea(legend_form, 'Legend', 
                                             collapsed=False)
 
 #  -------------------------------------------------------------------------  #
@@ -6950,14 +6789,14 @@ class PhaseRefiner(DraggableTool):
     # Kernel shape selector (Radio Buttons Group)
         shapes = ('square', 'circle', 'diamond')
         shp_icons = [QG.QIcon(rf'Icons/{s}.png') for s in shapes]
-        self.kern_shape_btns = cObj.RadioBtnLayout(['', '', ''], shp_icons, 
+        self.kern_shape_btns = CW.RadioBtnLayout(['', '', ''], shp_icons, 
                                                    orient='horizontal')
         for shp, btn in zip(shapes, self.kern_shape_btns.buttons()):
             btn.setObjectName(shp)
             btn.setToolTip(shp.capitalize())
 
     # Kernel size selector (Styled SpinBox)
-        self.kern_size_spbox = cObj.StyledSpinBox(3, 49, 2)
+        self.kern_size_spbox = CW.StyledSpinBox(3, 49, 2)
         self.kern_size_spbox.setToolTip('Must be an odd value')
 
     # Skip border (Checkbox)
@@ -6970,7 +6809,7 @@ class PhaseRefiner(DraggableTool):
         kern_form.addRow('Shape', self.kern_shape_btns)
         kern_form.addRow('Size', self.kern_size_spbox)
         kern_form.addRow(self.skip_border_cbox)
-        kern_group = cObj.GroupArea(kern_form, 'Kernel')
+        kern_group = CW.GroupArea(kern_form, 'Kernel')
 
 #  -------------------------------------------------------------------------  #
 #                              SETTINGS WIDGETS
@@ -6978,21 +6817,21 @@ class PhaseRefiner(DraggableTool):
 
     # NoData phase selector (AutoUpdate ComboBox) [-> Basic Refiner]
         tip = 'Allows finer control of NoData'
-        self.nd_combox = cObj.AutoUpdateComboBox(tooltip=tip)
+        self.nd_combox = CW.AutoUpdateComboBox(tooltip=tip)
         self.nd_combox.setPlaceholderText('No selection') # Not working in Qt 5.15.2 due to a Qt BUG
 
     # NoData phase clear button (Styled Button) [-> Basic Refiner]
-        self.nd_clear_btn = cObj.StyledButton(QIcon(r'Icons/clear.png'))
+        self.nd_clear_btn = CW.StyledButton(QIcon(r'Icons/clear.png'))
 
     # NoData threshold (Styled DoubleSpinBox) [-> Basic Refiner]
-        self.nd_thresh_spbox = cObj.StyledDoubleSpinBox(max_value=0.99)
+        self.nd_thresh_spbox = CW.StyledDoubleSpinBox(max_value=0.99)
         self.nd_thresh_spbox.setValue(0.5)
         self.nd_thresh_spbox.setToolTip('Output NoData class only if NoData '\
                                         'pixels exceed this ratio in kernel')
         self.nd_thresh_spbox.setEnabled(False)
 
     # Algorithm selection (Styled ComboBox) [-> Advanced Refiner]
-        self.algm_combox = cObj.StyledComboBox()
+        self.algm_combox = CW.StyledComboBox()
         algms = ('Erosion + Reconstruction', 'Opening', 'Closing', 'Erosion', 
                  'Dilation', 'Fill Holes')
         self.algm_combox.addItems(algms)
@@ -7011,7 +6850,7 @@ class PhaseRefiner(DraggableTool):
         self.invert_roi_cbox = QW.QCheckBox('Invert ROI')
 
     # Removed pixels behaviour (Styled ComboBox) [-> Advanced Refiner]
-        self.del_pixels_combox = cObj.StyledComboBox(
+        self.del_pixels_combox = CW.StyledComboBox(
             'How should removed pixels be reclassified?')
         self.del_pixels_combox.addItems(('_ND_', 'Nearest class'))
     
@@ -7025,7 +6864,7 @@ class PhaseRefiner(DraggableTool):
         basic_settings_grid.addWidget(self.nd_thresh_spbox, 1, 1, 1, -1)
         basic_settings_grid.setColumnStretch(0, 1)
         basic_settings_grid.setColumnStretch(1, 1)
-        basic_settings_group = cObj.GroupArea(basic_settings_grid, 'Settings')
+        basic_settings_group = CW.GroupArea(basic_settings_grid, 'Settings')
 
     # [Advanced Refiner] settings group  
         advan_settings_grid = QW.QGridLayout()
@@ -7039,7 +6878,7 @@ class PhaseRefiner(DraggableTool):
         advan_settings_grid.addWidget(self.del_pixels_combox, 3, 2, 1, 1)
         advan_settings_grid.setColumnStretch(0, 1)
         advan_settings_grid.setColumnStretch(2, 1)
-        advan_settings_group = cObj.GroupArea(advan_settings_grid, 'Settings')
+        advan_settings_group = CW.GroupArea(advan_settings_grid, 'Settings')
 
     # Settings container widget (StackedWidget)
         self.settings_stack = QW.QStackedWidget()
@@ -7051,17 +6890,17 @@ class PhaseRefiner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Apply refinement (Styled Button)
-        self.apply_btn = cObj.StyledButton(text='APPLY', 
+        self.apply_btn = CW.StyledButton(text='APPLY', 
                                            bg_color=pref.BTN_GREEN)
         self.apply_btn.setToolTip('Apply filter')
 
     # Cancel refinements (Styled Button)
-        self.cancel_btn = cObj.StyledButton(text='CANCEL',
+        self.cancel_btn = CW.StyledButton(text='CANCEL',
                                             bg_color=pref.BTN_RED)
         self.cancel_btn.setToolTip('Revert all edits')
 
     # Save refinements (Styled Button)
-        self.save_btn = cObj.StyledButton(QIcon(r'Icons/save.png'), 'SAVE')
+        self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'SAVE')
         self.save_btn.setToolTip('Save refined mineral map')
 
     # Control widgets layout
@@ -7159,7 +6998,7 @@ class PhaseRefiner(DraggableTool):
         self.prev_navtbar_advan.insertAction(10, self.draw_roi_action)
 
     # ROI selector widget 
-        self.roi_sel = cObj.RectSel(self.prev_canvas_advan.ax, self.onRoiDrawn)
+        self.roi_sel = plots.RectSel(self.prev_canvas_advan.ax, self.onRoiDrawn)
 
     # Original phase info (Group Area)
         orig_info_name = QW.QLabel()
@@ -7170,7 +7009,7 @@ class PhaseRefiner(DraggableTool):
         orig_info_form.addRow('Phase: ', orig_info_name)
         orig_info_form.addRow('Pixels: ', orig_info_pixels)
         orig_info_form.addRow('Amount: ', orig_info_mode)
-        orig_info_group = cObj.GroupArea(orig_info_form, 'Original')
+        orig_info_group = CW.GroupArea(orig_info_form, 'Original')
 
     # Current phase info (Group Area) 
         curr_info_name = QW.QLabel()
@@ -7181,7 +7020,7 @@ class PhaseRefiner(DraggableTool):
         curr_info_form.addRow('Phase: ', curr_info_name)
         curr_info_form.addRow('Pixels: ', curr_info_pixels)
         curr_info_form.addRow('Amount: ', curr_info_mode)
-        curr_info_group = cObj.GroupArea(curr_info_form, 'Current')
+        curr_info_group = CW.GroupArea(curr_info_form, 'Current')
 
     # Preview phase info (Group Area)
         prev_info_name = QW.QLabel()
@@ -7211,7 +7050,7 @@ class PhaseRefiner(DraggableTool):
         prev_info_grid.addWidget(prev_info_removed, 1, 2, 1, 1, 
                                  Qt.AlignHCenter | Qt.AlignTop)
 
-        prev_info_group = cObj.GroupArea(prev_info_grid, 'Preview')
+        prev_info_group = CW.GroupArea(prev_info_grid, 'Preview')
 
     # Convenient advanced info labels list 
         self.advan_info = (orig_info_name, orig_info_pixels, orig_info_mode,
@@ -7245,10 +7084,10 @@ class PhaseRefiner(DraggableTool):
         left_vbox.addWidget(self.settings_stack)
         left_vbox.addLayout(ctrl_widgets_grid)
         left_vbox.addStretch(1)
-        left_scroll = cObj.GroupScrollArea(left_vbox, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
 
     # Right panel layout
-        self.mode_tabwid = cObj.StyledTabWidget()
+        self.mode_tabwid = CW.StyledTabWidget()
         self.mode_tabwid.addTab(basic_refiner_grid, QIcon(r'Icons/cube.png'),
                                 'BASIC MODE')
         self.mode_tabwid.addTab(advan_refiner_grid, QIcon(r'Icons/gear.png'), 
@@ -7257,10 +7096,10 @@ class PhaseRefiner(DraggableTool):
             0, 'Quick and simple refinement with mode filter')
         self.mode_tabwid.tabBar().setTabToolTip(
             1, 'Class-wise advanced refinement with multiple binary filters')
-        right_scroll = cObj.GroupScrollArea(self.mode_tabwid, frame=False)
+        right_scroll = CW.GroupScrollArea(self.mode_tabwid, frame=False)
 
     # Main layout
-        main_layout = cObj.SplitterLayout()
+        main_layout = CW.SplitterLayout()
         main_layout.addWidgets((left_scroll, right_scroll))
         self.setLayout(main_layout)
 
@@ -7744,7 +7583,7 @@ class PhaseRefiner(DraggableTool):
         operations.
 
         '''
-        pbar = cObj.PopUpProgBar(self, 3, 'Applying filter', cancel=False, 
+        pbar = CW.PopUpProgBar(self, 3, 'Applying filter', cancel=False, 
                                  forceShow=True)
 
     # Compute basic refinement operations. An encoded refined map is returned.
@@ -7812,7 +7651,7 @@ class PhaseRefiner(DraggableTool):
 
     # Nearest class strategy
         if strategy == 'Nearest class':
-            minmap = ML_tools.replace_with_nearest(minmap, mask)
+            minmap = iatools.replace_with_nearest(minmap, mask)
     # _ND_ strategy
         else:
             minmap[mask] = '_ND_'
@@ -7834,14 +7673,14 @@ class PhaseRefiner(DraggableTool):
     # Construct kernel structure
         kern_shape = self.kern_shape_btns.getChecked().objectName()
         kern_size = self.kern_size_spbox.value()
-        kernel = ML_tools.construct_kernel_filter(kern_shape, kern_size)
+        kernel = iatools.construct_kernel_filter(kern_shape, kern_size)
 
     # Apply max frequency (mode) filter
         mmap_enc = self.minmap.minmap_encoded
         nan_phase = self.nd_combox.currentText()
         nan_id = None if nan_phase == '' else self.minmap.as_id(nan_phase)
         nan_thr = self.nd_thresh_spbox.value()
-        refined = ML_tools.apply_mode_filter(mmap_enc, kernel, nan_id, nan_thr)
+        refined = iatools.apply_mode_filter(mmap_enc, kernel, nan_id, nan_thr)
 
     # Preserve borders if required
         if self.skip_border_cbox.isChecked():
@@ -7870,7 +7709,7 @@ class PhaseRefiner(DraggableTool):
     # Construct kernel structure
         kern_shape = self.kern_shape_btns.getChecked().objectName()
         kern_size = self.kern_size_spbox.value()
-        kernel = ML_tools.construct_kernel_filter(kern_shape, kern_size)
+        kernel = iatools.construct_kernel_filter(kern_shape, kern_size)
         
     # Get ROI mask if required ('Fill Holes' always ignores the ROI)
         algm = self.algm_combox.currentText()
@@ -7881,10 +7720,10 @@ class PhaseRefiner(DraggableTool):
     # Phase mask inversion (if required) only affects morphology operation. The
     # result must then be inverted back. 
         if self.invert_mask_cbox.isChecked():
-            refined = np.invert(ML_tools.apply_binary_morph(np.invert(phasemap),
-                                                            algm, kernel, roi))
+            refined = np.invert(iatools.apply_binary_morph(np.invert(phasemap),
+                                                           algm, kernel, roi))
         else:
-            refined = ML_tools.apply_binary_morph(phasemap, algm, kernel, roi)
+            refined = iatools.apply_binary_morph(phasemap, algm, kernel, roi)
 
     # Preserve borders if required
         if self.skip_border_cbox.isChecked():
@@ -8059,7 +7898,7 @@ class PhaseRefiner(DraggableTool):
             return QW.QMessageBox.information(self, 'X-Min Learn', 
                                               'Map saved with success')
         except Exception as e:
-            return cObj.RichMsgBox(self, QW.QMessageBox.critical, 'X-Min Learn',
+            return CW.RichMsgBox(self, QW.QMessageBox.critical, 'X-Min Learn',
                                    'An error occurred while saving the map',
                                    detailedText=repr(e))
                                                
@@ -8139,12 +7978,12 @@ class PhaseRefiner(DraggableTool):
 #         self.loadDS_btn.clicked.connect(self.load_dataset)
 
 #     # CSV decimal character selector
-#         self.CSVdec = cObj.DecimalPointSelector()
+#         self.CSVdec = CW.DecimalPointSelector()
 #         CSVdec_form = QW.QFormLayout()
 #         CSVdec_form.addRow('CSV decimal point', self.CSVdec)
 
 #     # Loaded dataset path
-#         self.DS_path = cObj.PathLabel('', 'No dataset loaded')
+#         self.DS_path = CW.PathLabel('', 'No dataset loaded')
 
 #     # Loaded dataset preview Area
 #         self.DS_previewArea = QW.QTextEdit()
@@ -8158,7 +7997,7 @@ class PhaseRefiner(DraggableTool):
 #         loadDS_grid.addWidget(self.DS_path, 1, 0, 1, 2)
 #         loadDS_grid.addWidget(self.DS_previewArea, 2, 0, 1, 2)
 #         loadDS_grid.setRowStretch(2, 1)
-#         loadDS_group = cObj.GroupArea(loadDS_grid, 'Ground-truth dataset')
+#         loadDS_group = CW.GroupArea(loadDS_grid, 'Ground-truth dataset')
 
 
 # # ==== RANDOM SEED GENERATOR WIDGETS==== #
@@ -8169,14 +8008,14 @@ class PhaseRefiner(DraggableTool):
 #         self.seedInput.textChanged.connect(self.change_seed)
 
 #     # Randomize seed button
-#         self.randseed_btn = cObj.IconButton('Icons/dice.png')
+#         self.randseed_btn = CW.IconButton('Icons/dice.png')
 #         self.randseed_btn.clicked.connect(self.randomize_seed)
 
 #     # Adjust random seed group layout
 #         seed_hbox = QW.QHBoxLayout()
 #         seed_hbox.addWidget(self.seedInput, 1)
 #         seed_hbox.addWidget(self.randseed_btn, alignment = Qt.AlignRight)
-#         seed_group = cObj.GroupArea(seed_hbox, 'Random seed generator')
+#         seed_group = CW.GroupArea(seed_hbox, 'Random seed generator')
 
 
 # # ==== PREVIOUS ML MODEL LOADING WIDGETS ==== #
@@ -8191,13 +8030,13 @@ class PhaseRefiner(DraggableTool):
 #         self.removeModel_btn.clicked.connect(self.remove_parentModel)
 
 #     # Previous model path
-#         self.parentModel_path = cObj.PathLabel('', 'No model loaded')
+#         self.parentModel_path = CW.PathLabel('', 'No model loaded')
 
 #     # Adjust previous model group
 #         parentModel_form = QW.QFormLayout()
 #         parentModel_form.addRow('Update model', self.loadModel_btn)
 #         parentModel_form.addRow(self.parentModel_path, self.removeModel_btn)
-#         parentModel_group = cObj.GroupArea(parentModel_form, 'Load previous model')
+#         parentModel_group = CW.GroupArea(parentModel_form, 'Load previous model')
 
 
 # # ==== HYPER-PARAMETERS INPUT WIDGETS ==== #
@@ -8236,7 +8075,7 @@ class PhaseRefiner(DraggableTool):
 #         hyperparam_form.addRow('Weight Decay', self.wd_spbox)
 #         hyperparam_form.addRow('Momentum', self.mtm_spbox)
 #         hyperparam_form.addRow('Epochs', self.epochs_spbox)
-#         hyperparam_group = cObj.GroupArea(hyperparam_form, 'Hyperparameters')
+#         hyperparam_group = CW.GroupArea(hyperparam_form, 'Hyperparameters')
 
 
 # # ==== LEARNING PREFERENCES INPUT WIDGETS ==== #
@@ -8284,7 +8123,7 @@ class PhaseRefiner(DraggableTool):
 #         preferences_form.addRow('Optimization function', self.optim_combox)
 #         preferences_form.addRow(self.cuda_cbox)
 #         preferences_form.addRow('Graphics update rate', self.graph_updateRate)
-#         preferences_group = cObj.GroupArea(preferences_form, 'Learning preferences')
+#         preferences_group = CW.GroupArea(preferences_form, 'Learning preferences')
 
 
 # # ==== START - STOP - TEST - SAVE - PROGBAR WIDGETS ==== #
@@ -8349,28 +8188,28 @@ class PhaseRefiner(DraggableTool):
 #         self.splitDS_btn.setEnabled(False)
 
 #     # Train, Validation & Test sets PieChart
-#         self.tvt_pie = cObj.PieCanvas(self, perc=None)
+#         self.tvt_pie = CW.PieCanvas(self, perc=None)
 #         self.tvt_pie.setMinimumSize(150, 150)
 
 #     # Train, Validation & Test sets barchart
-#         self.tvt_bar =  cObj.BarCanvas(self)
-#         self.tvt_bar.fig.patch.set(facecolor=CF.RGB2float([(169, 185, 188)]), linewidth=0)
+#         self.tvt_bar =  CW.BarCanvas(self)
+#         self.tvt_bar.fig.patch.set(facecolor=cf.RGB2float([(169, 185, 188)]), linewidth=0)
 #         self.tvt_bar.setMinimumSize(100, 300)
 
 #     # Train set class visualizer
-#         self.trSet_list = cObj.StyledListWidget(ext_selection=False)
+#         self.trSet_list = CW.StyledListWidget(ext_selection=False)
 #         self.trSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Train'))
 #         self.trSet_currCount = QW.QLabel('')
 #         self.trSet_totCount  = QW.QLabel('Tot = 0')
 
 #     # Validation set class visualizer
-#         self.vdSet_list = cObj.StyledListWidget(ext_selection=False)
+#         self.vdSet_list = CW.StyledListWidget(ext_selection=False)
 #         self.vdSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Validation'))
 #         self.vdSet_currCount = QW.QLabel('')
 #         self.vdSet_totCount  = QW.QLabel('Tot = 0')
 
 #     # Test set class visualizer
-#         self.tsSet_list = cObj.StyledListWidget(ext_selection=False)
+#         self.tsSet_list = CW.StyledListWidget(ext_selection=False)
 #         self.tsSet_list.itemClicked.connect(lambda i: self.count_target(i, 'Test'))
 #         self.tsSet_currCount = QW.QLabel('')
 #         self.tsSet_totCount  = QW.QLabel('Tot = 0')
@@ -8393,19 +8232,19 @@ class PhaseRefiner(DraggableTool):
 #         trSet_vbox.addWidget(self.trSet_list, 1)
 #         trSet_vbox.addWidget(self.trSet_currCount)
 #         trSet_vbox.addWidget(self.trSet_totCount)
-#         trSet_group = cObj.GroupArea(trSet_vbox, 'Train Set')
+#         trSet_group = CW.GroupArea(trSet_vbox, 'Train Set')
 
 #         vdSet_vbox = QW.QVBoxLayout()
 #         vdSet_vbox.addWidget(self.vdSet_list, 1)
 #         vdSet_vbox.addWidget(self.vdSet_currCount)
 #         vdSet_vbox.addWidget(self.vdSet_totCount)
-#         vdSet_group = cObj.GroupArea(vdSet_vbox, 'Validation Set')
+#         vdSet_group = CW.GroupArea(vdSet_vbox, 'Validation Set')
 
 #         tsSet_vbox = QW.QVBoxLayout()
 #         tsSet_vbox.addWidget(self.tsSet_list, 1)
 #         tsSet_vbox.addWidget(self.tsSet_currCount)
 #         tsSet_vbox.addWidget(self.tsSet_totCount)
-#         tsSet_group = cObj.GroupArea(tsSet_vbox, 'Test Set')
+#         tsSet_group = CW.GroupArea(tsSet_vbox, 'Test Set')
 
 #         sets_hbox = QW.QHBoxLayout()
 #         sets_hbox.addWidget(trSet_group)
@@ -8413,14 +8252,14 @@ class PhaseRefiner(DraggableTool):
 #         sets_hbox.addWidget(tsSet_group)
 
 #         # (T-V-T group Layout)
-#         tvt_hsplit = cObj.SplitterGroup((split_grid, sets_hbox))
-#         tvt_group = cObj.GroupArea(tvt_hsplit, 'Split Dataset')
+#         tvt_hsplit = CW.SplitterGroup((split_grid, sets_hbox))
+#         tvt_group = CW.GroupArea(tvt_hsplit, 'Split Dataset')
 
 
 # # ==== BALANCING OPERATIONS WIDGETS ==== #
 
 #     # Balancing help button
-#         self.balanceHelp_btn = cObj.IconButton('Icons/info.png')
+#         self.balanceHelp_btn = CW.IconButton('Icons/info.png')
 #         self.balanceHelp_btn.setMaximumSize(30, 30)
 #         self.balanceHelp_btn.setFlat(True)
 #         self.balanceHelp_btn.setToolTip('Click for more info about dataset balancing algorithms')
@@ -8514,29 +8353,29 @@ class PhaseRefiner(DraggableTool):
 #         balOptions_grid.addWidget(self.balanceHelp_btn, 0, 0, alignment = Qt.AlignLeft)
 #         balOptions_grid.addWidget(self.US_warnIcon, 0, 2, alignment = Qt.AlignRight)
 #         balOptions_grid.addWidget(QW.QLabel('Over-Sampling algorithm'), 1, 0)
-#         balOptions_grid.addWidget(cObj.LineSeparator(), 1, 1, 1, 2)
+#         balOptions_grid.addWidget(CW.LineSeparator(), 1, 1, 1, 2)
 #         balOptions_grid.addWidget(self.OS_combox, 2, 0)
 #         balOptions_grid.addWidget(QW.QLabel('k-neighbours'), 2, 1, alignment = Qt.AlignRight)
 #         balOptions_grid.addWidget(self.kOS_spbox, 2, 2)
 #         balOptions_grid.addWidget(QW.QLabel('m-neighbours'), 3, 1, alignment = Qt.AlignRight)
 #         balOptions_grid.addWidget(self.mOS_spbox, 3, 2)
 #         balOptions_grid.addWidget(QW.QLabel('Under-Sampling algorithm'), 4, 0)
-#         balOptions_grid.addWidget(cObj.LineSeparator(), 4, 1, 1, 2)
+#         balOptions_grid.addWidget(CW.LineSeparator(), 4, 1, 1, 2)
 #         balOptions_grid.addWidget(self.US_combox, 5, 0)
 #         balOptions_grid.addWidget(QW.QLabel('n-neighbours'), 5, 1, alignment = Qt.AlignRight)
 #         balOptions_grid.addWidget(self.nUS_spbox, 5, 2)
-#         balOptions_grid.addWidget(cObj.LineSeparator(), 6, 0, 1, 3)
+#         balOptions_grid.addWidget(CW.LineSeparator(), 6, 0, 1, 3)
 #         balOptions_grid.addWidget(QW.QLabel('Strategy'), 7, 0)
 #         balOptions_grid.addWidget(self.strategy_combox, 7, 1, 1, 2)
 #         balOptions_grid.addWidget(QW.QLabel('Unique value'), 8, 0)
 #         balOptions_grid.addWidget(self.strat_value, 8, 1, 1, 2)
-#         balOptions_grid.addWidget(cObj.LineSeparator(), 9, 0, 1, 3)
+#         balOptions_grid.addWidget(CW.LineSeparator(), 9, 0, 1, 3)
 #         balOptions_grid.addLayout(balActions_hbox, 10, 0, 1, 3)
 #         balOptions_grid.addWidget(self.balance_pBar, 11, 0, 1, 3)
 
 #         # (Balance group main layout)
-#         balance_hsplit = cObj.SplitterGroup((balOptions_grid, self.balance_table), (0, 1))
-#         self.balance_group = cObj.GroupArea(balance_hsplit, 'Balance train set',
+#         balance_hsplit = CW.SplitterGroup((balOptions_grid, self.balance_table), (0, 1))
+#         self.balance_group = CW.GroupArea(balance_hsplit, 'Balance train set',
 #                                             checkable=True)
 #         self.balance_group.setAlignment(Qt.AlignLeft)
 #         self.balance_group.setChecked(False)
@@ -8546,12 +8385,12 @@ class PhaseRefiner(DraggableTool):
 # # ==== LEARNING SESSION PLOTS ==== #
 
 #     # Loss curves canvas
-#         self.lossView = cObj.CurvePlotCanvas(self, title='Loss curves', tight=True,
+#         self.lossView = CW.CurvePlotCanvas(self, title='Loss curves', tight=True,
 #                                              xlab='Epochs', ylab='Loss')
 #         self.lossView.setMinimumSize(500, 400)
 
 #     # Loss curves Navigation Toolbar
-#         self.lossNTbar = cObj.NavTbar(self.lossView, self)
+#         self.lossNTbar = CW.NavTbar(self.lossView, self)
 #         self.lossNTbar.removeToolByIndex([3, 4, 8, 9])
 #         self.lossNTbar.fixHomeAction()
 
@@ -8560,12 +8399,12 @@ class PhaseRefiner(DraggableTool):
 #         self.vdLoss_lbl = QW.QLabel('None')
 
 #     # Accuracy curves canvas
-#         self.accuracyView = cObj.CurvePlotCanvas(self, title='Accuracy curves', tight=True,
+#         self.accuracyView = CW.CurvePlotCanvas(self, title='Accuracy curves', tight=True,
 #                                                  xlab='Epochs', ylab='Accuracy')
 #         self.accuracyView.setMinimumSize(500, 400)
 
 #     # Accuracy curves Navigation Toolbar
-#         self.accuracyNTbar = cObj.NavTbar(self.accuracyView, self)
+#         self.accuracyNTbar = CW.NavTbar(self.accuracyView, self)
 #         self.accuracyNTbar.removeToolByIndex([3, 4, 8, 9])
 #         self.accuracyNTbar.fixHomeAction()
 
@@ -8574,14 +8413,14 @@ class PhaseRefiner(DraggableTool):
 #         self.vdAcc_lbl = QW.QLabel('None')
 
 #     # Train Confusion Matrix canvas
-#         self.CMtrainView = cObj.MatrixCanvas(self,
+#         self.CMtrainView = CW.MatrixCanvas(self,
 #                                              title='Train set Confusion Matrix',
 #                                              xlab='Predicted classes',
 #                                              ylab='True Classes')
 #         self.CMtrainView.setMinimumSize(600, 600)
 
 #     # Train Confusion Matrix Navigation Toolbar
-#         self.CMtrainNTbar = cObj.NavTbar(self.CMtrainView, self)
+#         self.CMtrainNTbar = CW.NavTbar(self.CMtrainView, self)
 #         self.CMtrainNTbar.removeToolByIndex([3, 4, 8, 9, -1])
 
 #     # Show annotation as percentage action [--> Train CM NavTBar]
@@ -8599,14 +8438,14 @@ class PhaseRefiner(DraggableTool):
 #         self.trF1Weight_lbl = QW.QLabel('None')
 
 #     # Validation Confusion Matrix area
-#         self.CMvalidView = cObj.MatrixCanvas(self,
+#         self.CMvalidView = CW.MatrixCanvas(self,
 #                                             title='Validation set Confusion Matrix',
 #                                             xlab='Predicted classes',
 #                                             ylab='True Classes')
 #         self.CMvalidView.setMinimumSize(600, 600)
 
 #     # Validation Confusion Matrix Navigation Toolbar
-#         self.CMvalidNTbar = cObj.NavTbar(self.CMvalidView, self)
+#         self.CMvalidNTbar = CW.NavTbar(self.CMvalidView, self)
 #         self.CMvalidNTbar.removeToolByIndex([3, 4, 8, 9, -1])
 
 #     # Show annotation as percentage action [--> Validation CM NavTBar]
@@ -8660,20 +8499,20 @@ class PhaseRefiner(DraggableTool):
 #             else:
 #                 learnPlots_grid.addWidget(l, row, 0)
 #                 learnPlots_grid.addWidget(r, row, 1)
-#         learnPlots_group = cObj.GroupArea(learnPlots_grid, 'Learning Evaluation')
+#         learnPlots_group = CW.GroupArea(learnPlots_grid, 'Learning Evaluation')
 
 
 # # ==== FINAL TESTING PLOTS ==== #
 
 #     # Test Confusion Matrix
-#         self.CMtestView = cObj.MatrixCanvas(self,
+#         self.CMtestView = CW.MatrixCanvas(self,
 #                                             title='Test set Confusion Matrix',
 #                                             xlab='Predicted classes',
 #                                             ylab='True Classes')
 #         self.CMtestView.setMinimumSize(600, 600)
 
 #     # Test Confusion Matrix Navigation Toolbar
-#         self.CMtestNTbar = cObj.NavTbar(self.CMtestView, self)
+#         self.CMtestNTbar = CW.NavTbar(self.CMtestView, self)
 #         self.CMtestNTbar.removeToolByIndex([3, 4, 8, 9, -1])
 
 #     # Show annotation as percentage action [--> Test CM NavTBar]
@@ -8712,7 +8551,7 @@ class PhaseRefiner(DraggableTool):
 #         test_grid.addWidget(self.CMtestView, 1, 0)
 #         test_grid.addWidget(self.modelPreview, 1, 1, 3, 1)
 #         test_grid.addLayout(tsScores_form, 2, 0)
-#         test_group = cObj.GroupArea(test_grid, 'Model testing')
+#         test_group = CW.GroupArea(test_grid, 'Model testing')
 
 
 # # ==== ADJUST MAIN LAYOUT ==== #
@@ -8725,7 +8564,7 @@ class PhaseRefiner(DraggableTool):
 #         left_vbox.addWidget(hyperparam_group)
 #         left_vbox.addWidget(preferences_group)
 #         left_vbox.addLayout(mainActions_grid)
-#         left_scroll = cObj.GroupScrollArea(left_vbox)
+#         left_scroll = CW.GroupScrollArea(left_vbox)
 #         left_scroll.setStyleSheet('QWidget {""}') # set the default stylesheet
 
 #     # Adjust right area
@@ -8735,10 +8574,10 @@ class PhaseRefiner(DraggableTool):
 #         right_vbox.addWidget(self.balance_group)
 #         right_vbox.addWidget(learnPlots_group)
 #         right_vbox.addWidget(test_group)
-#         right_scroll = cObj.GroupScrollArea(right_vbox)
+#         right_scroll = CW.GroupScrollArea(right_vbox)
 
 #     # Adjust final layout
-#         main_hsplit = cObj.SplitterGroup((left_scroll, right_scroll), (0, 1)) # use SplitterLayout
+#         main_hsplit = CW.SplitterGroup((left_scroll, right_scroll), (0, 1)) # use SplitterLayout
 #         mainLayout = QW.QGridLayout()
 #         mainLayout.addWidget(main_hsplit)
 #         self.setLayout(mainLayout)
@@ -8792,7 +8631,7 @@ class PhaseRefiner(DraggableTool):
 #         # Get decimal point character
 #             dec = self.CSVdec.currentText()
 #         # Load GT dataset
-#             self.dataset = cObj.CsvChunkReader(dec, pBar=True).read(path)
+#             self.dataset = CW.CsvChunkReader(dec, pBar=True).read(path)
 #         # Update GT dataset path
 #             self.DS_path.set_fullpath(path, predict_display=True)
 #         # Update dataset preview
@@ -8836,20 +8675,20 @@ class PhaseRefiner(DraggableTool):
 #             if choice == QW.QMessageBox.No: return
 
 #     # Split features [X] from targets [Y (as labels)]
-#         pbar = cObj.PopUpProgBar(self, 5, 'Splitting dataset', cancel=False)
+#         pbar = CW.PopUpProgBar(self, 5, 'Splitting dataset', cancel=False)
 #         try:
 #             X, Y_lbl = ML_tools.splitXFeat_YTarget(self.dataset.to_numpy(),
 #                                                    xtype='int32', ytype='U8')
 #             pbar.setValue(1)
 #         except Exception as e:
-#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#             CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                             'Unexpected data type', detailedText = repr(e))
 #             pbar.reset()
 #             return
 
 #     # Update Y_dict and encode Y labels through it
 #         self.update_Ydict(Y_lbl)
-#         Y = CF.encode_labels(Y_lbl, self.Y_dict)
+#         Y = cf.encode_labels(Y_lbl, self.Y_dict)
 #         pbar.setValue(2)
 
 #     # Store original Train, Validation & Test sets rateos (before balancing operations)
@@ -8907,7 +8746,7 @@ class PhaseRefiner(DraggableTool):
 
 
 #     def update_setClassCounter(self, set_name, Yset):
-#         Yset = CF.decode_labels(Yset, self.Y_dict)
+#         Yset = cf.decode_labels(Yset, self.Y_dict)
 #         counter = dict()
 #         for k in self.Y_dict.keys():
 #             counter[k] = np.count_nonzero(Yset==k)
@@ -9142,7 +8981,7 @@ class PhaseRefiner(DraggableTool):
 
 #     # Check the result from the balance external thread
 #         if len(thread_out) == 1: # it means that the balancing operation has raised an exception
-#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#             CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                             'Balancing failed.', detailedText=repr(thread_out[0]))
 
 #         else: # it means that the balancing operation was completed succesfully
@@ -9230,7 +9069,7 @@ class PhaseRefiner(DraggableTool):
 #                                                   'PyTorch Data File (*.pth)')
 #         if path:
 #             pref.set_dirPath('in', os.path.dirname(path))
-#             pbar = cObj.PopUpProgBar(self, 4, 'Loading Model')
+#             pbar = CW.PopUpProgBar(self, 4, 'Loading Model')
 #             try:
 #             # Import parent model variables
 #                 modelVars = ML_tools.loadModel(path)
@@ -9270,7 +9109,7 @@ class PhaseRefiner(DraggableTool):
 #                                            'Model loaded with success.')
 #             except Exception as e:
 #                 pbar.reset()
-#                 cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                 CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                                 'The selected model produced an error.',
 #                                 detailedText = repr(e))
 #                 self.remove_parentModel()
@@ -9731,7 +9570,7 @@ class PhaseRefiner(DraggableTool):
 #     # Check the result from the learning external thread:
 #         completed, e = thread_out
 #         if not completed: # it means that the learning operation has raised an exception
-#             cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#             CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                             'Learning failed.', detailedText=repr(e))
 
 #         else:
@@ -9865,13 +9704,13 @@ class PhaseRefiner(DraggableTool):
 #         if path:
 #             pref.set_dirPath('out', os.path.dirname(path))
 #             try:
-#                 log_path = CF.extend_filename(path, '_log', ext='.txt')
+#                 log_path = cf.extend_filename(path, '_log', ext='.txt')
 #                 extendedLog = pref.get_setting('class/extLog', False, bool)
 #                 ML_tools.saveModel(self.model_vars, path, log_path, extendedLog)
 #                 QW.QMessageBox.information(self, 'Model saved',
 #                                            'The model was saved succesfully.')
 #             except Exception as e:
-#                 cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+#                 CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
 #                                 'An error was raised while saving the model.',
 #                                  detailedText=repr(e))
 
@@ -9941,7 +9780,7 @@ class PhaseRefiner(DraggableTool):
 #             self.minmap = self.parent.minmap
 #             self.refined = self.minmap.copy()
 
-#             self.originalModeDict = dict(zip(*CF.get_mode(self.minmap, ordered=True)))
+#             self.originalModeDict = dict(zip(*cf.get_mode(self.minmap, ordered=True)))
 #             self.refinedModeDict = self.originalModeDict.copy()
 
 #             self.mainParent = self.parent.parent
@@ -9951,7 +9790,7 @@ class PhaseRefiner(DraggableTool):
 #         def init_ui(self):
 
 #         # Kernel size selector widget
-#             self.kernelSel = cObj.KernelSelector()
+#             self.kernelSel = CW.KernelSelector()
 
 #         # Preserve image borders checkbox
 #             self.psvBorders_cbox = QW.QCheckBox('Preserve borders')
@@ -10000,37 +9839,37 @@ class PhaseRefiner(DraggableTool):
 #             pref_vbox.addWidget(self.psvBorders_cbox)
 #             pref_vbox.addLayout(nan_form)
 #             pref_vbox.addLayout(btn_hbox)
-#             pref_group = cObj.GroupArea(pref_vbox, 'Preferences')
+#             pref_group = CW.GroupArea(pref_vbox, 'Preferences')
 
 #         # Original map canvas + NavTbar
-#             self.origCanvas = cObj.DiscreteClassCanvas(self, tight=True)
+#             self.origCanvas = CW.DiscreteClassCanvas(self, tight=True)
 #             self.origCanvas.update_canvas('Original', self.minmap,
 #                                           colors = self.mainParent._minmaptab.MinMapView.curr_colors)
 #             self.origCanvas.setMinimumSize(100, 100)
-#             self.origNTbar = cObj.NavTbar(self.origCanvas, self)
+#             self.origNTbar = CW.NavTbar(self.origCanvas, self)
 #             self.origNTbar.fixHomeAction()
 #             self.origNTbar.removeToolByIndex([3, 4, 8, 9])
 
 #         # Original map Mode Bar Chart
-#             self.origMode = cObj.BarCanvas(self, size=(5.0, 3.5))
+#             self.origMode = CW.BarCanvas(self, size=(5.0, 3.5))
 #             self._updateModePlot('Original')
 
 #         # Refined map canvas + NavTbar
-#             self.refCanvas = cObj.DiscreteClassCanvas(self, tight=True)
+#             self.refCanvas = CW.DiscreteClassCanvas(self, tight=True)
 #             self.refCanvas.setMinimumSize(100, 100)
 #             self.refCanvas.update_canvas('Refined', self.minmap,
 #                                           colors = self.origCanvas.curr_colors)
-#             CF.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
-#             self.refNTbar = cObj.NavTbar(self.refCanvas, self)
+#             cf.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
+#             self.refNTbar = CW.NavTbar(self.refCanvas, self)
 #             self.refNTbar.fixHomeAction()
 #             self.refNTbar.removeToolByIndex([3, 4, 8, 9])
 
 #         # Refined map Mode Bar Chart
-#             self.refMode = cObj.BarCanvas(self, size=(5.0, 3.5))
+#             self.refMode = CW.BarCanvas(self, size=(5.0, 3.5))
 #             self._updateModePlot('Refined')
 
 #         # Legend List widget
-#             self.legend = cObj.CanvasLegend(self.origCanvas, amounts=False,
+#             self.legend = CW.CanvasLegend(self.origCanvas, amounts=False,
 #                                             childrenCanvas=[self.refCanvas])
 #             self.legend.itemColorChanged.connect(
 #                 lambda: self._updateModePlot('Original'))
@@ -10052,7 +9891,7 @@ class PhaseRefiner(DraggableTool):
 #             plot_area.setRowStretch(1, 2)
 #             plot_area.setRowStretch(2, 1)
 
-#             main_split = cObj.SplitterGroup((left_area, plot_area), (1, 2)) # use SplitterLayout
+#             main_split = CW.SplitterGroup((left_area, plot_area), (1, 2)) # use SplitterLayout
 
 #             mainLayout = QW.QHBoxLayout()
 #             mainLayout.addWidget(main_split)
@@ -10063,7 +9902,7 @@ class PhaseRefiner(DraggableTool):
 #             self.refCanvas.update_canvas('Refined', lbl_arr)
 #             self.legend._transferColors()
 #             self._updateModePlot('Refined')
-#             # lbl, mode = CF.get_mode(lbl_arr, ordered=True)
+#             # lbl, mode = cf.get_mode(lbl_arr, ordered=True)
 #             # self.refMode.update_canvas('Refined Mineral Mode', mode, lbl)
 
 #         def _updateModePlot(self, plot):
@@ -10079,7 +9918,7 @@ class PhaseRefiner(DraggableTool):
 #             # Use the current colors of original canvas, which includes always all the classes
 #             col_dict = dict(zip(self.phases, self.origCanvas.curr_colors))
 #             # The sort_dict_by_list func excludes from col_dict the keys not in lbl (see documentation)
-#             col_dict = CF.sort_dict_by_list(col_dict, lbl)
+#             col_dict = cf.sort_dict_by_list(col_dict, lbl)
 #             canvas.update_canvas(f'{plot} Mineral Mode', mode, lbl,
 #                                  colors=list(col_dict.values()))
 
@@ -10117,7 +9956,7 @@ class PhaseRefiner(DraggableTool):
 #             return out
 
 #         def applyFilter(self):
-#             pbar = cObj.PopUpProgBar(self, 5, 'Applying filter',
+#             pbar = CW.PopUpProgBar(self, 5, 'Applying filter',
 #                                      cancel=False, forceShow=True)
 #             arr = self.origCanvas.data
 #             transDict = self.origCanvas.dataDict
@@ -10135,10 +9974,10 @@ class PhaseRefiner(DraggableTool):
 #                 freq = self.preserve_borders(arr, freq, border_tck)
 #             pbar.setValue(2)
 
-#             self.refined = CF.decode_labels(freq, transDict)
+#             self.refined = cf.decode_labels(freq, transDict)
 #             pbar.setValue(3)
 
-#             self.refinedModeDict = dict(zip(*CF.get_mode(self.refined, ordered=True)))
+#             self.refinedModeDict = dict(zip(*cf.get_mode(self.refined, ordered=True)))
 #             pbar.setValue(4)
 
 #             self._updateRefinedCanvas(self.refined)
@@ -10195,10 +10034,10 @@ class PhaseRefiner(DraggableTool):
 #         def init_ui(self):
 
 #         # Mineral phases TOC
-#             self.TOC = cObj.RadioBtnLayout(self.phases)
+#             self.TOC = CW.RadioBtnLayout(self.phases)
 #             for btn in self.TOC.get_buttonList():
 #                 btn.clicked.connect(self.update_phaseView)
-#             TOC_group = cObj.GroupScrollArea(self.TOC, 'Mineral Phases')
+#             TOC_group = CW.GroupScrollArea(self.TOC, 'Mineral Phases')
 #             TOC_group.setStyleSheet('border: 0px;')
 
 #         # Reset original phase button
@@ -10210,11 +10049,11 @@ class PhaseRefiner(DraggableTool):
 #             self.resetPhase_btn.clicked.connect(self.resetPhase)
 
 #         # Original phase preview + NavTbar
-#             self.origCanvas = cObj.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
+#             self.origCanvas = CW.HeatMapCanvas(self, binary=True, cbar=False, tight=True)
 #             self.origCanvas.fig.suptitle('Original', size='x-large')
 #             self.origCanvas.setMinimumSize(100, 100)
 
-#             self.origNTbar = cObj.NavTbar(self.origCanvas, self)
+#             self.origNTbar = CW.NavTbar(self.origCanvas, self)
 #             self.origNTbar.fixHomeAction()
 #             self.origNTbar.removeToolByIndex([3, 4, 8, 9, 12])
 
@@ -10226,12 +10065,12 @@ class PhaseRefiner(DraggableTool):
 #             self.refinePhase_btn.clicked.connect(self.refinePhase)
 
 #         # Refined phase preview + NavTbar
-#             self.refCanvas = cObj.DiscreteClassCanvas(self, tight=True)
+#             self.refCanvas = CW.DiscreteClassCanvas(self, tight=True)
 #             self.refCanvas.fig.suptitle('Refined', size='x-large')
 #             self.refCanvas.setMinimumSize(100, 100)
-#             CF.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
+#             cf.shareAxis(self.origCanvas.ax, self.refCanvas.ax, True)
 
-#             self.refNTbar = cObj.NavTbar(self.refCanvas, self)
+#             self.refNTbar = CW.NavTbar(self.refCanvas, self)
 #             self.refNTbar.fixHomeAction()
 #             self.refNTbar.removeToolByIndex([3, 4, 8, 9, 12])
 
@@ -10259,7 +10098,7 @@ class PhaseRefiner(DraggableTool):
 #             self.algmWarn.hide()
 
 #         # Rectangle selector widget
-#             self.rectSel = cObj.RectSel(self.refCanvas.ax, self.select_roi, btns=[1])
+#             self.rectSel = CW.RectSel(self.refCanvas.ax, self.select_roi, btns=[1])
 
 #         # Preview Area group
 #             origTbar_hbox = QW.QHBoxLayout()
@@ -10282,7 +10121,7 @@ class PhaseRefiner(DraggableTool):
 #             preview_hbox = QW.QHBoxLayout()
 #             preview_hbox.addLayout(orig_vbox)
 #             preview_hbox.addLayout(ref_vbox)
-#             preview_group = cObj.GroupArea(preview_hbox, 'Preview')
+#             preview_group = CW.GroupArea(preview_hbox, 'Preview')
 
 #         # Morphological tool algorithms combobox
 #             self.algm_combox = QW.QComboBox()
@@ -10300,7 +10139,7 @@ class PhaseRefiner(DraggableTool):
 #             self.invertROI_cbox.stateChanged.connect(self.update_phaseView)
 
 #         # Kernel size selector widget
-#             self.kernelSel = cObj.KernelSelector()
+#             self.kernelSel = CW.KernelSelector()
 #             self.kernelSel.structureChanged.connect(self.update_phaseView)
 
 #         # Removed pixels behaviour combobox
@@ -10333,7 +10172,7 @@ class PhaseRefiner(DraggableTool):
 #             options_vbox.addWidget(self.kernelSel)
 #             options_vbox.addLayout(delPixAs_form)
 #             options_vbox.addLayout(saveReset_hbox)
-#             options_group = cObj.GroupArea(options_vbox, 'Preferences')
+#             options_group = CW.GroupArea(options_vbox, 'Preferences')
 
 
 #         # Adjust Main Layout
@@ -10341,7 +10180,7 @@ class PhaseRefiner(DraggableTool):
 #             left_box.addWidget(TOC_group)
 #             left_box.addWidget(options_group)
 
-#             mainSplit = cObj.SplitterGroup((left_box, preview_group), # use SplitterLayout
+#             mainSplit = CW.SplitterGroup((left_box, preview_group), # use SplitterLayout
 #                                            (1, 2))
 #             mainLayout = QW.QHBoxLayout()
 #             mainLayout.addWidget(mainSplit)
@@ -10526,12 +10365,12 @@ class DataViewer(QW.QWidget):
         self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # Go To Pixel Widget
-        self.go2Pix = cObj.PixelFinder(self.canvas)
+        self.go2Pix = CW.PixelFinder(self.canvas)
         self.navTbar.addSeparator()
         self.navTbar.addWidget(self.go2Pix)
 
     # Current showed map path
-        self.currPath = cObj.PathLabel()
+        self.currPath = CW.PathLabel()
 
     # Adjust Window Layout
         main_layout = QW.QVBoxLayout()

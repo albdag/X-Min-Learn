@@ -17,8 +17,8 @@ import numpy as np
 from matplotlib.backend_bases import MouseButton
 
 # IMPORT XMIN-LEARN CUSTOM MODULES
-import conv_functions as CF
-import customObjects as cObj
+import convenient_functions as CF
+import custom_widgets as CW
 #import ML_tools
 import dialogs
 import preferences as pref
@@ -288,50 +288,50 @@ class XMapsTab(QW.QWidget):
         
     # T.O.C.
         self.TOC = QW.QListWidget()
-        self.TOC.setHorizontalScrollBar(cObj.CustomScrollBar(Qt.Horizontal))
-        self.TOC.setVerticalScrollBar(cObj.CustomScrollBar(Qt.Vertical))
+        self.TOC.setHorizontalScrollBar(CW.CustomScrollBar(Qt.Horizontal))
+        self.TOC.setVerticalScrollBar(CW.CustomScrollBar(Qt.Vertical))
         self.TOC.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
         self.TOC.keyPressEvent = lambda evt: evt.ignore() # ignore key press events to avoid bugs with TOC.currentRow()
         self.TOC.itemPressed.connect(self.showMap)  # item pressed includes right-click
  
     # T.O.C. Option Buttons
-        self.loadMaps_btn = cObj.IconButton('Icons/generic_add.png')
+        self.loadMaps_btn = CW.IconButton('Icons/generic_add.png')
         self.loadMaps_btn.setToolTip('Load input maps')
         self.loadMaps_btn.clicked.connect(lambda: self.loadMaps())
         
-        self.refresh_btn = cObj.IconButton('Icons/refresh.png')
+        self.refresh_btn = CW.IconButton('Icons/refresh.png')
         self.refresh_btn.setToolTip('Refresh data source')
         self.refresh_btn.clicked.connect(self.refresh_data)
         
-        self.delMaps_btn = cObj.IconButton('Icons/generic_del.png')
+        self.delMaps_btn = CW.IconButton('Icons/generic_del.png')
         self.delMaps_btn.setToolTip('Remove maps')
         self.delMaps_btn.clicked.connect(self.delMaps)
         
-        self.invertMaps_btn = cObj.IconButton('Icons/invert.png') 
+        self.invertMaps_btn = CW.IconButton('Icons/invert.png') 
         self.invertMaps_btn.setToolTip('Invert pixel values')
         self.invertMaps_btn.clicked.connect(self.invertMaps)
         
-        self.scaleCmap_btn = cObj.IconButton('Icons/lockCbar.png')
+        self.scaleCmap_btn = CW.IconButton('Icons/lockCbar.png')
         self.scaleCmap_btn.setToolTip('Apply the same colormap range to all maps')
         self.scaleCmap_btn.setCheckable(True)
         self.scaleCmap_btn.toggled.connect(self.scaleColormap)
         
-        self.RGBA_btn = cObj.IconButton('Icons/RGBA.png')
+        self.RGBA_btn = CW.IconButton('Icons/RGBA.png')
         self.RGBA_btn.setToolTip('Set a composite RGB(A) image')
         self.RGBA_btn.clicked.connect(self.calc_RGBAmap)
         
     # X-Ray Maps Canvas
-        self.XMapsView = cObj.HeatMapCanvas(self, tight=True)
+        self.XMapsView = CW.HeatMapCanvas(self, tight=True)
         self.XMapsView.setMinimumSize(100, 100)
         self.XMapsView.mpl_connect('scroll_event',  
                                    lambda evt: self.scroll_maps(evt.button)) 
         
     # Rectangle selector widget for X-Ray Maps Canvas
-        self.rectSel = cObj.RectSel(self.XMapsView.ax, self.selectROI, btns=[1])
+        self.rectSel = CW.RectSel(self.XMapsView.ax, self.selectROI, btns=[1])
     
         
     # X-Ray Maps Navigation Toolbar
-        self.XMapsNTbar = cObj.NavTbar(self.XMapsView, self)
+        self.XMapsNTbar = CW.NavTbar(self.XMapsView, self)
         self.XMapsNTbar.fixHomeAction()        
         self.XMapsNTbar.removeToolByIndex([3, 4, 8, 9])
         
@@ -359,20 +359,20 @@ class XMapsTab(QW.QWidget):
                                       (self.resetZoomAction, self.lockZoomAction, self.ROIAction))
         
     # Go To Pixel Widget in X-Ray Maps NavTbar
-        self.go2Pix = cObj.PixelFinder(self.XMapsView)
+        self.go2Pix = CW.PixelFinder(self.XMapsView)
         self.XMapsNTbar.addSeparator()
         self.XMapsNTbar.addWidget(self.go2Pix)
     
     # Current showed map path
-        self.curr_XMapPath = cObj.PathLabel()
+        self.curr_XMapPath = CW.PathLabel()
         
     # Histogram Canvas
-        self.histCanvas = cObj.HistogramCanvas(self)
+        self.histCanvas = CW.HistogramCanvas(self)
         self.histCanvas.setMinimumSize(100, 100)
         self.histCanvas.ax.yaxis.set_ticks_position('both')
         
     # Histogram Navigation Toolbar
-        self.histNTbar = cObj.NavTbar(self.histCanvas, self) 
+        self.histNTbar = CW.NavTbar(self.histCanvas, self) 
         self.histNTbar.removeToolByIndex([2, 3, 4, 8, 9, 12])
         
     # Set bin slider widget in Histogram NavTbar
@@ -389,16 +389,16 @@ class XMapsTab(QW.QWidget):
                                     self.bin_slider)
         
     # HeatMap Scaler widget for the Histogram Canvas
-        self.scaler = cObj.HeatmapScaler(self.histCanvas.ax, self.XMapsView)
+        self.scaler = CW.HeatmapScaler(self.histCanvas.ax, self.XMapsView)
     
     # Composite RGB(A) Image Canvas
-        self.RGBACanvas = cObj.HeatMapCanvas(self, size=(5.0, 6.0), cbar=False)
+        self.RGBACanvas = CW.HeatMapCanvas(self, size=(5.0, 6.0), cbar=False)
         self.RGBACanvas.ax.set_title('RGB(A) composite map')
         self.RGBACanvas.setMinimumSize(100, 100)
         CF.shareAxis(self.RGBACanvas.ax, self.XMapsView.ax, True)
         
     # Composite RGB(A) Image NavTbar
-        self.RGBANTbar = cObj.NavTbar(self.RGBACanvas, self) 
+        self.RGBANTbar = CW.NavTbar(self.RGBACanvas, self) 
         self.RGBANTbar.fixHomeAction()
         self.RGBANTbar.removeToolByIndex([3, 4, 8, 9])
         
@@ -406,10 +406,10 @@ class XMapsTab(QW.QWidget):
         (self.R_lbl, 
          self.G_lbl, 
          self.B_lbl, 
-         self.A_lbl) = self.RGBA_lbls = (cObj.PathLabel(),
-                                         cObj.PathLabel(),
-                                         cObj.PathLabel(),
-                                         cObj.PathLabel())
+         self.A_lbl) = self.RGBA_lbls = (CW.PathLabel(),
+                                         CW.PathLabel(),
+                                         CW.PathLabel(),
+                                         CW.PathLabel())
 
     # Adjust Window Layout
         left_grid = QW.QGridLayout()
@@ -421,7 +421,7 @@ class XMapsTab(QW.QWidget):
         left_grid.addWidget(self.scaleCmap_btn, 2, 1)
         left_grid.addWidget(self.RGBA_btn, 2, 2)
         # left_grid.setRowStretch(0, 1)
-        TOC_group = cObj.GroupArea(left_grid, 'Loaded Maps')
+        TOC_group = CW.GroupArea(left_grid, 'Loaded Maps')
 
         Maps_viewBox = QW.QVBoxLayout()
         Maps_viewBox.addWidget(self.XMapsNTbar)
@@ -447,10 +447,10 @@ class XMapsTab(QW.QWidget):
         RGBA_viewBox.addWidget(self.RGBACanvas, 2)
         RGBA_viewBox.addLayout(RGBA_lblGrid)
         
-        subPlot_Vsplit = cObj.SplitterGroup((hist_viewBox, RGBA_viewBox), 
+        subPlot_Vsplit = CW.SplitterGroup((hist_viewBox, RGBA_viewBox), 
                                             orient=Qt.Vertical)
 
-        main_Hsplit = cObj.SplitterGroup((TOC_group, Maps_viewBox, subPlot_Vsplit),
+        main_Hsplit = CW.SplitterGroup((TOC_group, Maps_viewBox, subPlot_Vsplit),
                                          (1, 3, 2))
         
         mainLayout = QW.QHBoxLayout()
@@ -482,7 +482,7 @@ class XMapsTab(QW.QWidget):
                                                        'ASCII maps (*.txt *.gz)')
         if paths:
             pref.set_dirPath('in', dirname(paths[0]))
-            progBar = cObj.PopUpProgBar(self, len(paths), 'Loading Maps Data')
+            progBar = CW.PopUpProgBar(self, len(paths), 'Loading Maps Data')
             for n, p in enumerate(paths, start=1):
                 if not progBar.wasCanceled():
                     try:
@@ -494,7 +494,7 @@ class XMapsTab(QW.QWidget):
                 
                     except Exception as e:
                         progBar.setWindowModality(Qt.NonModal)
-                        cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
+                        CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
                                         f'Unexpected ASCII file:\n{p}.',
                                         detailedText = repr(e))
                         progBar.setWindowModality(Qt.WindowModal)
@@ -514,7 +514,7 @@ class XMapsTab(QW.QWidget):
                 try:
                     _loadedXMapsData[idx] = np.loadtxt(path, dtype='int32')
                 except Exception as e:
-                    cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Bad data source',
+                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Bad data source',
                                     f'Unable to refresh the data source for the following file:\n{path}\n'\
                                     'The file may have been corrupted, deleted, renamed or moved.',
                                     detailedText = repr(e))
@@ -548,7 +548,7 @@ class XMapsTab(QW.QWidget):
         selected = self._getSelectedMapsIdx()
         if len(selected):
             msg_cbox = QW.QCheckBox('Edit source data file')      
-            choice = cObj.RichMsgBox(self, QW.QMessageBox.Question, 'Invert', 
+            choice = CW.RichMsgBox(self, QW.QMessageBox.Question, 'Invert', 
                                      'Invert the selected maps?',
                                      QW.QMessageBox.Yes | QW.QMessageBox.No,
                                      QW.QMessageBox.No, 
@@ -621,7 +621,7 @@ class XMapsTab(QW.QWidget):
                 self.scaler.hide()
                 
             except Exception as e:
-                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
                                 f'Unexpected ASCII file:\n{path}.',
                                 detailedText = repr(e))
                 self.curr_XMapPath.clear_all()
@@ -684,22 +684,22 @@ class MinMapTab(QW.QWidget):
     def init_ui(self):
     # TOC
         self.TOC = QW.QListWidget()
-        self.TOC.setHorizontalScrollBar(cObj.CustomScrollBar(Qt.Horizontal))
-        self.TOC.setVerticalScrollBar(cObj.CustomScrollBar(Qt.Vertical))
+        self.TOC.setHorizontalScrollBar(CW.CustomScrollBar(Qt.Horizontal))
+        self.TOC.setVerticalScrollBar(CW.CustomScrollBar(Qt.Vertical))
         self.TOC.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
         self.TOC.keyPressEvent = lambda evt: evt.ignore() # ignore key press events to avoid bugs with TOC.currentRow()
         self.TOC.itemPressed.connect(self.show_minMap)  # item pressed includes right-click
         
     # TOC Option Buttons
-        self.addMaps_btn = cObj.IconButton('Icons/generic_add.png')
+        self.addMaps_btn = CW.IconButton('Icons/generic_add.png')
         self.addMaps_btn.setToolTip('Load mineral maps.')
         self.addMaps_btn.clicked.connect(lambda: self.loadMaps())
         
-        self.refresh_btn = cObj.IconButton('Icons/refresh.png')
+        self.refresh_btn = CW.IconButton('Icons/refresh.png')
         self.refresh_btn.setToolTip('Refresh data source.')
         self.refresh_btn.clicked.connect(self.refresh_data)
         
-        self.delMaps_btn = cObj.IconButton('Icons/generic_del.png')
+        self.delMaps_btn = CW.IconButton('Icons/generic_del.png')
         self.delMaps_btn.setToolTip('Remove mineral maps.')
         self.delMaps_btn.clicked.connect(self.delMaps)
            
@@ -710,10 +710,10 @@ class MinMapTab(QW.QWidget):
         TOC_grid.addWidget(self.refresh_btn, 1, 1)
         TOC_grid.addWidget(self.delMaps_btn, 1, 2)
         # TOC_grid.setRowStretch(0, 1)
-        TOC_group = cObj.GroupArea(TOC_grid, 'Loaded Maps')
+        TOC_group = CW.GroupArea(TOC_grid, 'Loaded Maps')
         
     # Mineral Map View Area
-        self.MinMapView = cObj.DiscreteClassCanvas(self, tight=True)
+        self.MinMapView = CW.DiscreteClassCanvas(self, tight=True)
         self.MinMapView.setMinimumSize(100, 100)
         self.MinMapView.mpl_connect('scroll_event',  
                                    lambda evt: self.scroll_maps(evt.button))
@@ -721,12 +721,12 @@ class MinMapTab(QW.QWidget):
                      pref.get_setting('plots/shareaxis', True, type=bool))
     
     # Mineral Map Navigation Toolbar
-        self.MinMapNTbar = cObj.NavTbar(self.MinMapView, self)
+        self.MinMapNTbar = CW.NavTbar(self.MinMapView, self)
         self.MinMapNTbar.fixHomeAction()
         self.MinMapNTbar.removeToolByIndex([3, 4, 8, 9])
         
     # Mineral Map path label
-        self.curr_imgPath = cObj.PathLabel()
+        self.curr_imgPath = CW.PathLabel()
         
     # Draw/Edit Action in MinMap NavTbar
         self.drawAction = QW.QAction(QIcon('Icons/edit.png'),
@@ -763,7 +763,7 @@ class MinMapTab(QW.QWidget):
         self.exportAction.triggered.connect(self.exportArray)
         
     # Go To Pixel Widget in MinMap NavTbar
-        self.go2Pix = cObj.PixelFinder(self.MinMapView)
+        self.go2Pix = CW.PixelFinder(self.MinMapView)
         
     # Add custom actions and widgets to MinMap NavTbar
         self.MinMapNTbar.insertActions(self.MinMapNTbar.findChildren(QW.QAction)[10],
@@ -778,26 +778,26 @@ class MinMapTab(QW.QWidget):
         self.MinMapNTbar.addWidget(self.go2Pix)
    
     # Rectangle Selector widget
-        self.rectSel = cObj.RectSel(self.MinMapView.ax, self.editPix, btns=[1, 3])
+        self.rectSel = CW.RectSel(self.MinMapView.ax, self.editPix, btns=[1, 3])
     
     # Mineral Map Legend
-        self.legend = cObj.CanvasLegend(self.MinMapView)
+        self.legend = CW.CanvasLegend(self.MinMapView)
         self.legend.itemColorChanged.connect(lambda: self.update_modePlot(self.currentMap))
         
     # Legend Options buttons
-        self.rename_btn = cObj.IconButton('Icons/rename.png')
+        self.rename_btn = CW.IconButton('Icons/rename.png')
         self.rename_btn.setToolTip('Rename selected')
         self.rename_btn.clicked.connect(self.rename_phase)
         
-        self.randCol_btn = cObj.IconButton('Icons/resetMapCol.png')
+        self.randCol_btn = CW.IconButton('Icons/resetMapCol.png')
         self.randCol_btn.setToolTip('Randomize colors')
         self.randCol_btn.clicked.connect(self.randomize_color)
         
-        self.savePalette_btn = cObj.IconButton('Icons/savePalette.png')
+        self.savePalette_btn = CW.IconButton('Icons/savePalette.png')
         self.savePalette_btn.setToolTip('Save the current palette for this map')
         self.savePalette_btn.clicked.connect(self.save_palette)
         
-        self.highlight_btn = cObj.IconButton('Icons/highlight.png')
+        self.highlight_btn = CW.IconButton('Icons/highlight.png')
         self.highlight_btn.setToolTip('Highlight selected')
         self.highlight_btn.setCheckable(True)
         self.highlight_btn.toggled.connect(self.highlight)
@@ -810,15 +810,15 @@ class MinMapTab(QW.QWidget):
         legend_grid.addWidget(self.savePalette_btn, 1, 2)
         legend_grid.addWidget(self.highlight_btn, 2, 0)
         # legend_grid.setRowStretch(0, 1)
-        legend_group = cObj.GroupArea(legend_grid, 'Legend')
+        legend_group = CW.GroupArea(legend_grid, 'Legend')
         
     # Probability Map View Area
-        self.pMapView = cObj.HeatMapCanvas(self, size=(6.0, 5.0))
+        self.pMapView = CW.HeatMapCanvas(self, size=(6.0, 5.0))
         self.pMapView.setMinimumSize(100, 100)
         CF.shareAxis(self.pMapView.ax, self.MinMapView.ax, True)
         
     # Probability Map Navigation Toolbar
-        self.pMapNTbar = cObj.NavTbar(self.pMapView, self)
+        self.pMapNTbar = CW.NavTbar(self.pMapView, self)
         self.pMapNTbar.fixHomeAction()
         self.pMapNTbar.removeToolByIndex([3, 4, 8, 9])
         
@@ -830,11 +830,11 @@ class MinMapTab(QW.QWidget):
         self.pMapNTbar.addAction(self.loadPMap_Action)
         
     # Mode Bar Chart Area
-        self.modeView = cObj.BarCanvas(self, size=(6.4, 3.6))
+        self.modeView = CW.BarCanvas(self, size=(6.4, 3.6))
         self.modeView.setMinimumSize(100, 100)
         
     # Mode BarChart NavTbar
-        self.modeNTbar = cObj.NavTbar(self.modeView, self)
+        self.modeNTbar = CW.NavTbar(self.modeView, self)
         self.modeNTbar.removeToolByIndex(list(range(2,10)) + [12])
     
     # Labelize Action in Mode BarChart NavTbar
@@ -846,7 +846,7 @@ class MinMapTab(QW.QWidget):
                                     self.labelizeAction)
   
     # Adjust Main Layout
-        left_Vsplit = cObj.SplitterGroup((TOC_group, legend_group),
+        left_Vsplit = CW.SplitterGroup((TOC_group, legend_group),
                                          orient=Qt.Vertical)
         
         mainPlotBox = QW.QVBoxLayout()
@@ -862,10 +862,10 @@ class MinMapTab(QW.QWidget):
         modeBox.addWidget(self.modeNTbar)
         modeBox.addWidget(self.modeView)
         
-        subPlot_VSplit = cObj.SplitterGroup((modeBox, pMapBox), 
+        subPlot_VSplit = CW.SplitterGroup((modeBox, pMapBox), 
                                             orient=Qt.Vertical)
             
-        main_Hsplit = cObj.SplitterGroup((left_Vsplit, mainPlotBox, subPlot_VSplit), 
+        main_Hsplit = CW.SplitterGroup((left_Vsplit, mainPlotBox, subPlot_VSplit), 
                                          (1, 3, 2))
         
         mainLayout = QW.QHBoxLayout()
@@ -900,7 +900,7 @@ class MinMapTab(QW.QWidget):
                                                       'ASCII maps (*.txt *.gz)')
         if paths:
             pref.set_dirPath('in', dirname(paths[0]))
-            progBar = cObj.PopUpProgBar(self, len(paths), 'Loading Maps Data')
+            progBar = CW.PopUpProgBar(self, len(paths), 'Loading Maps Data')
             for n, p in enumerate(paths, start=1):
                 if not progBar.wasCanceled():
                     try:
@@ -914,7 +914,7 @@ class MinMapTab(QW.QWidget):
                             
                     except Exception as e:
                         progBar.setWindowModality(Qt.NonModal)
-                        cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
+                        CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
                                         f'Unexpected ASCII file:\n{p}.',
                                         detailedText = repr(e))
                         progBar.setWindowModality(Qt.WindowModal)
@@ -935,7 +935,7 @@ class MinMapTab(QW.QWidget):
                     _loadedMinMapsData[idx] = np.loadtxt(path, dtype='U8')
                     _loadedMinMapsPalette[idx] = False
                 except Exception as e:
-                    cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Bad data source',
+                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Bad data source',
                                     f'Unable to refresh the data source for the following file:\n{path}\n'\
                                     'The file may have been corrupted, deleted, renamed or moved.',
                                     detailedText = repr(e))
@@ -993,7 +993,7 @@ class MinMapTab(QW.QWidget):
             self.exportAction.setEnabled(True)
             
         except Exception as e:
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
                             f'Unexpected ASCII file:\n{path}.',
                             detailedText = repr(e))
             self.curr_imgPath.clear_all()
@@ -1019,7 +1019,7 @@ class MinMapTab(QW.QWidget):
                 self.pMapView.update_canvas('Probability Map', pMap)
                 self.currentPMap = pMap
             except Exception as e:
-                cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'Error', 
                                 f'Unexpected ASCII file:\n{path}.',
                                 detailedText = repr(e))
                 
@@ -1050,7 +1050,7 @@ class MinMapTab(QW.QWidget):
                 else:
                     old_name = selected.text().split(' - ')[0]
                     msg_cbox = QW.QCheckBox('Edit source data file')      
-                    choice = cObj.RichMsgBox(self, QW.QMessageBox.Question, 'Rename', 
+                    choice = CW.RichMsgBox(self, QW.QMessageBox.Question, 'Rename', 
                                              f'Rename {old_name} phase as {name}?',
                                              QW.QMessageBox.Yes | QW.QMessageBox.No,
                                              QW.QMessageBox.Yes, 
@@ -1177,7 +1177,7 @@ class MinMapTab(QW.QWidget):
          
     def exportArray(self):
         msg_cbox = QW.QCheckBox('Include translation dictionary')      
-        choice = cObj.RichMsgBox(self, QW.QMessageBox.Question, 'Export Map', 
+        choice = CW.RichMsgBox(self, QW.QMessageBox.Question, 'Export Map', 
                                  'Export map as a numeric array',
                                  QW.QMessageBox.Yes | QW.QMessageBox.No,
                                  QW.QMessageBox.Yes, 

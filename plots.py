@@ -14,11 +14,23 @@ from PyQt5.QtGui import QCursor, QIcon
 from PyQt5.QtWidgets import QAction, QSizePolicy, QWidgetAction
 
 import numpy as np
-import matplotlib as mpl
-import mpl_interactions
+
+from matplotlib.axes import Axes
+from matplotlib.backends import backend_qtagg
+from matplotlib.backend_bases import MouseEvent
+from matplotlib.collections import PolyCollection
+from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
+from matplotlib.text import Annotation
+from matplotlib import colormaps as mpl_colormaps
+from matplotlib import colors as mpl_colors
+from matplotlib import patheffects as mpl_patheffects
+from matplotlib import style as mpl_style
+from matplotlib import widgets as mpl_widgets
+from mpl_interactions import panhandler
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
-import customObjects as cObj
+import custom_widgets as CW
 import preferences as pref
 
 # mpl.use('Qt5Agg')
@@ -26,15 +38,15 @@ import preferences as pref
 
 
 
-class PanHandler(mpl_interactions.panhandler):
+class PanHandler(panhandler):
     '''
-    Reimplemantation of the <panhandler> class from mpl_interactions library. 
+    Reimplemantation of the 'panhandler' class from mpl_interactions library. 
     It simply adds a couple of functions to control the type of cursor.
     '''
     _pressCursor = QCursor(Qt.ClosedHandCursor)
     _releaseCursor = QCursor(Qt.ArrowCursor)
 
-    def __init__(self, fig: mpl.figure.Figure, button=2):
+    def __init__(self, fig: Figure, button=2):
         '''
         Constructor.
 
@@ -50,7 +62,7 @@ class PanHandler(mpl_interactions.panhandler):
         super(PanHandler, self).__init__(fig, button)
         self.wheelButton = button
 
-    def press(self, event: mpl.backend_bases.MouseEvent):
+    def press(self, event: MouseEvent):
         '''
         Reimplementation of the press event. It just changes the cursor.
 
@@ -66,7 +78,7 @@ class PanHandler(mpl_interactions.panhandler):
             super(PanHandler, self).press(event)
 
 
-    def release(self, event: mpl.backend_bases.MouseEvent):
+    def release(self, event: MouseEvent):
         '''
         Reimplementation of the release event. It just changes the cursor.
 
@@ -82,7 +94,7 @@ class PanHandler(mpl_interactions.panhandler):
 
 
 
-class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
+class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
     '''
     A base canvas for any type of plot.
     '''
@@ -110,9 +122,9 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
 
         '''
     # Define the figure and the ax of the matplotlib canvas
-        self.fig = mpl.figure.Figure(figsize=size, facecolor=pref.IVORY,
-                                     edgecolor=pref.BLACK_PEARL, linewidth=2,
-                                     layout=layout)
+        self.fig = Figure(figsize=size, facecolor=pref.IVORY, 
+                          edgecolor=pref.BLACK_PEARL, linewidth=2, 
+                          layout=layout)
         self.ax = self.fig.add_subplot(111, facecolor=pref.BLACK_PEARL)
         self.ax.patch.set(edgecolor=pref.SAN_MARINO, linewidth=3)
         
@@ -124,7 +136,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         super(_CanvasBase, self).__init__(self.fig)
 
     # Set the default style
-        mpl.style.use('seaborn-v0_8-dark') # menu/pref to change style
+        mpl_style.use('seaborn-v0_8-dark') # menu/pref to change style
 
     # Set events connections for mouse-wheel zoom and mouse-wheel pan
         if wheel_zoom:
@@ -155,7 +167,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         self.ax.axis('off')
 
 
-    def mouseMoveEvent(self, event: mpl.backend_bases.MouseEvent):
+    def mouseMoveEvent(self, event: MouseEvent):
         '''
         Set focus on the canvas widget when mouse hovering. Necessary to detect
         the key attribute of the mouse wheel zoom event. See wheel_zoom() 
@@ -188,7 +200,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
             A StyledMenu() populated with actions.
 
         '''
-        menu = cObj.StyledMenu()
+        menu = CW.StyledMenu()
 
     # Get Navigation Toolbar true actions (exclude QWidgetActions, like coords)
         ntbar_actions = navtbar.getTrueActions()
@@ -203,32 +215,9 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         menu.addActions(ntbar_actions)
 
         return menu
-
-
-    def rgb_to_float(self, rgb_list: Iterable[tuple]):
-        '''
-        Convert RGB values to matplotlib compatible floating values ranging in
-        [0, 1].
-
-        Parameters
-        ----------
-        rgb_list : iterable of tuples
-            A list of RGB triplets.
-
-        Returns
-        -------
-        list
-            A list of float RGB triplets.
-
-        '''
-        float_rgb = [(r/255, g/255, b/255) for (r, g, b) in rgb_list]
-        if len(float_rgb) == 1:
-            return float_rgb[0]
-        else:
-            return float_rgb
         
 
-    def share_axis(self, ax: mpl.axes.Axes, share=True):
+    def share_axis(self, ax: Axes, share=True):
         '''
         Share an ax from a different canvas with the ax of this canvas, so that 
         zoom and pan operations on one ax are reflected on the other.
@@ -236,7 +225,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
         Parameters
         ----------
         ax : Axes
-            Sharing ax_
+            Sharing ax.
         share : bool, optional
             Toggle on/off sharing. The default is True.
 
@@ -287,7 +276,7 @@ class _CanvasBase(mpl.backends.backend_qtagg.FigureCanvasQTAgg):
 
         '''
 
-        def zoom(event: mpl.backend_bases.MouseEvent):
+        def zoom(event: MouseEvent):
             '''
             Apply zoom to canvas after mouse wheel event.
 
@@ -415,7 +404,7 @@ class ImageCanvas(_CanvasBase):
 
         '''
     # Set colormap
-        self.cmap = mpl.colormaps['binary_r' if self.is_binary else cmap_name]
+        self.cmap = mpl_colormaps['binary_r' if self.is_binary else cmap_name]
     # Set outliers as grayed-out
         self.cmap.set_over('0.2')
         self.cmap.set_under('0.5')
@@ -436,13 +425,13 @@ class ImageCanvas(_CanvasBase):
 
         '''
     # Convert colorlist RGB triplets to float RGB values
-        floatRGBA = self.rgb_to_float(colors)
+        floatRGBA = rgb_to_float(colors)
     # # Filter the colorlist if the map data is masked (required as bug fix)
     #     if self.contains_masked_data():
     #         data, mask = self.get_map(return_mask=True)
     #         floatRGBA = [floatRGBA[u] for u in np.unique((data[~mask]))]
     # Set colormap
-        self.cmap = mpl.colors.ListedColormap(floatRGBA, name=name)
+        self.cmap = mpl_colors.ListedColormap(floatRGBA, name=name)
     # Set outliers as ivory
         self.cmap.set_over(pref.IVORY)
         self.cmap.set_under(pref.IVORY)
@@ -467,7 +456,7 @@ class ImageCanvas(_CanvasBase):
 
         '''
         boundaries = [n - 0.5 for n in range(n_colors + 1)]
-        norm = mpl.colors.BoundaryNorm(boundaries, n_colors)
+        norm = mpl_colors.BoundaryNorm(boundaries, n_colors)
         return norm
 
 
@@ -532,7 +521,7 @@ class ImageCanvas(_CanvasBase):
             Whether the currently displayed data is a discrete map.
 
         '''
-        return isinstance(self.cmap, mpl.colors.ListedColormap)
+        return isinstance(self.cmap, mpl_colors.ListedColormap)
 
 
     def contains_heatmap(self):
@@ -545,7 +534,7 @@ class ImageCanvas(_CanvasBase):
             Whether the currently displayed data is a heatmap.
 
         '''
-        return isinstance(self.cmap, mpl.colors.LinearSegmentedColormap)
+        return isinstance(self.cmap, mpl_colors.LinearSegmentedColormap)
 
 
     def scale_clim(self, toggled: bool, arrays: list[np.ndarray]|None=None):
@@ -832,7 +821,7 @@ class ImageCanvas(_CanvasBase):
         self.set_heatmap_cmap(cmap_name)
 
     # Set linear boundary norm
-        norm = mpl.colors.Normalize()
+        norm = mpl_colors.Normalize()
 
     # Set image
         if self.is_empty():
@@ -978,7 +967,7 @@ class BarCanvas(_CanvasBase):
     # Show the amounts
         elif enabled:
             prec = pref.get_setting('plots/legendDec', 3, type=int)
-            pe = [mpl.patheffects.withStroke(linewidth=2, foreground='k')]
+            pe = [mpl_patheffects.withStroke(linewidth=2, foreground='k')]
             self.label_amounts = self.ax.bar_label(self.plot, fmt=f'%.{prec}f',
                                                     label_type='center',
                                                     padding=16, color='w',
@@ -1074,7 +1063,7 @@ class BarCanvas(_CanvasBase):
 
     # Convert the bar colors to a matplotlib compatible format
         if colors is not None: 
-            colors = self.rgb_to_float(colors)
+            colors = rgb_to_float(colors)
 
     # Adjust the canvas for a multibar plot, if required (multibars is used as 
     # a boolean switch)
@@ -1410,7 +1399,7 @@ class ConfMatCanvas(_CanvasBase):
         xx, yy = np.meshgrid(col_ind, row_ind)
 
     # Annotate each node with the corresponding value
-        pe = [mpl.patheffects.withStroke(linewidth=2, foreground='k')]
+        pe = [mpl_patheffects.withStroke(linewidth=2, foreground='k')]
         for t, x, y in zip(matrix.flatten(), xx.flatten(), yy.flatten()):
             self.ax.annotate(t, (x, y), va='center', ha='center', color='w',
                              path_effects=pe)
@@ -1443,7 +1432,7 @@ class ConfMatCanvas(_CanvasBase):
 
         '''
         for child in self.ax.get_children():
-            if isinstance(child, mpl.text.Annotation):
+            if isinstance(child, Annotation):
                 child.remove()
 
 
@@ -1568,11 +1557,11 @@ class SilhouetteCanvas(_CanvasBase):
 
         '''
     # Format the RGB palette colors as matplotlib compatible floating values
-        pal = dict(zip(palette.keys(), self.rgb_to_float(palette.values())))
+        pal = dict(zip(palette.keys(), rgb_to_float(palette.values())))
 
     # Iterate through clusters (artists) and use their label as identifier
         for artist in self.ax.get_children():
-            if isinstance(artist, mpl.collections.PolyCollection):
+            if isinstance(artist, PolyCollection):
                 id_ = int(artist.get_label())
                 artist.set(fc = pal[id_])
 
@@ -1606,7 +1595,7 @@ class SilhouetteCanvas(_CanvasBase):
         self.ax.set_title(title, pad=self._title_pad)
 
     # Format the RGB palette colors as matplotlib compatible floating values
-        pal = dict(zip(palette.keys(), self.rgb_to_float(palette.values())))
+        pal = dict(zip(palette.keys(), rgb_to_float(palette.values())))
 
     # Adjust the initial vertical (y) padding
         y_btm = self.y_btm_init
@@ -1622,7 +1611,7 @@ class SilhouetteCanvas(_CanvasBase):
             y_btm = y_top + self.y_btm_init
 
     # Draw the average silhouette score as a red vertical dashed line
-        pe = [mpl.patheffects.withStroke(foreground=pref.IVORY)]
+        pe = [mpl_patheffects.withStroke(foreground=pref.IVORY)]
         self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, path_effects=pe)
 
     # Render the plot
@@ -1930,7 +1919,7 @@ class CurveCanvas(_CanvasBase):
 
 
 
-class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
+class NavTbar(backend_qtagg.NavigationToolbar2QT):
     '''
     A class to provide a navigation toolbar linked to a canvas object.
     '''
@@ -2185,15 +2174,375 @@ class NavTbar(mpl.backends.backend_qtagg.NavigationToolbar2QT):
             self.setMinimumHeight(new_h)
 
 
+class RoiPatch(Rectangle):
+    '''
+    Reimplementation of a matplotlib rectangle patch useful to manage and 
+    display ROIs.
+    '''
+    def __init__(self, bbox: list|tuple, color: str, filled: bool):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        bbox : list | tuple
+            ROI bounding box.
+        color : str
+            Color string.
+        filled : bool
+            Whether the ROI patch should be filled.
+
+        '''
+    # Set main attributes
+        x0, y0, w, h = bbox
+        lw = 2
+
+        super(RoiPatch, self).__init__((x0, y0), w, h, linewidth=lw,
+                                       color=color, fill=filled)
 
 
 
+class RoiAnnotation(Annotation):
+    '''
+    Reimplementation of a matplotlib text annotation useful to manage and 
+    display ROIs names.
+    '''
+    def __init__(self, text: str, anchor_patch: RoiPatch, xy=(0, 1)):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        text : str
+            ROI name. If the hyphen symbol ('-') is used, the annotation is 
+            hidden.
+        anchor_patch : RoiPatch
+            ROI to which attach the annotation.
+        xy : tuple, optional
+            Point of anchor with respect to the anchor_patch. For example, 
+            (0, 1) means top left corner. The default is (0, 1).
+
+        '''
+        bbox = dict(boxstyle='round', fc=pref.IVORY, ec=pref.BLACK_PEARL)
+
+    # The hyphen symbol can be used to hide ROI annotation
+        if text == '-': 
+            text = ''
+
+        super(RoiAnnotation, self).__init__(text, xy, xycoords=anchor_patch,
+                                            bbox=bbox, annotation_clip=True)
+        
+
+    def set_text(self, text: str):
+        '''
+        Change the text annotation.
+
+        Parameters
+        ----------
+        text : str
+            _description_
+        '''
+    # The hyphen symbol can be used to hide ROI annotation
+        if text == '-': 
+            text = ''
+        super(RoiAnnotation, self).set_text(text)
 
 
 
+class Crosshair(mpl_widgets.MultiCursor): # !!! Not used yet
+    def __init__(self, canvas, *axes):
+        super(Crosshair, self).__init__(canvas, axes=axes, useblit=True,
+                                        horizOn=True, vertOn=True,
+                                        color='r', lw=1)
 
 
 
+class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
+
+    def __init__(self, canvasAx, onselect, useblit=True):
+        self.props = dict(color='k', linestyle='-', linewidth=2, alpha=0.5)
+        super(PolySel, self).__init__(canvasAx, onselect, useblit=useblit,
+                                      props=self.props, grab_range=10)
+        self.ax = canvasAx
+        self.onselect = onselect
+        self.canvas = self.ax.figure.canvas
+        self.useblit = useblit
+
+        self.set_active(False)
+        self.canvas.mpl_connect('figure_enter_event', lambda evt: self.updateCursor())
+        self.canvas.mpl_connect('scroll_event', lambda evt: self.updateCursor())
+        # # Callback to update rectangle selector with useblit=True when zooming
+        if self.useblit:
+            self.canvas.mpl_connect('motion_notify_event', self.update_)
+            self.canvas.mpl_connect('scroll_event', self.update_)
+
+
+    def updateCursor(self):
+        if self.active:
+            self.canvas.setCursor(QCursor(Qt.PointingHandCursor))
+        # else:
+        #     self.canvas.setCursor(QG.QCursor(QC.Qt.ArrowCursor))
+
+    def update_(self, event):
+        if self.active:
+            self.update()
+
+
+class RectSel(mpl_widgets.RectangleSelector):
+    '''
+    A customized rectangle selector widget, tailored to ROI selection.
+
+    '''
+    def __init__(self, ax, onselect, interactive=True, btns=[1]):
+        '''
+        RectSel class constructor.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            The ax where the selector must be drawn.
+        onselect : function
+            Callback function that is called after the selection is created.
+        useblit : bool, optional
+            Whether to use blitting for faster rendering. The default is True.
+        btns : list or None, optional
+            List of mouse buttons that can trigger the drawing event. Left = 1,
+            Middle = 2 and Right = 3. If None all the buttons are included. The
+            default is [1].
+
+        '''
+    # Customize the appearence of the rectangle selector and of its handles
+        rect_props = dict(fc=pref.BLACK_PEARL, ec=pref.BLOSSOM, alpha=0.6, 
+                          lw=2, fill=True)
+        handle_props = dict(mfc=pref.BLOSSOM, mec=pref.BLACK_PEARL, alpha=1)
+
+    # drag_from_anywhere=True causes a rendering glitch when a former selection
+    # is active, you draw a new one and, without releasing the left button, you
+    # start resizing it.
+        kwargs = {'minspanx': 1,
+                  'minspany': 1,
+                  'useblit': True,
+                  'props': rect_props,
+                  'spancoords': 'data',
+                  'button': btns,
+                  'grab_range': 10,
+                  'handle_props': handle_props,
+                  'interactive': interactive,
+                  'drag_from_anywhere': True}
+
+        super(RectSel, self).__init__(ax, onselect, **kwargs)
+
+    # By default the selector is turned off
+        self.set_active(False)
+
+
+    def fixed_extents(self, shape:tuple, fmt='matrix', mode='full'):
+        '''
+        Get integer extents of the selector after checking if it lies within
+        the provided shape. Different output extents format can be selected.
+
+        Parameters
+        ----------
+        shape : tuple
+            Control shape. It must be provided as (rows, cols).
+        fmt : STR, optional
+            The output format of coords. If 'matrix' the coords format is
+            (row_min, row_max, col_min, col_max). If 'xy' the coords format is
+            (x_min, x_max, y_min, y_max). The default is 'matrix'.
+        mode : str, optional
+            How to treat pixels at the border of the selector region. At the
+            moment the only supported mode is 'full', which means that only
+            the pixels that are entirely covered by the selector region will be
+            included. The default is 'full'.
+
+        Returns
+        -------
+        extents : tuple or None
+            Fixed extents as integer indices. If the selector region falls
+            entirely outside the map area, extents will be None.
+
+        '''
+    # Get the default extents
+        xmin, xmax, ymin, ymax = self.extents
+
+    # Exclude pixels not entirely selected --> <mode> : 'full'
+    # ymax and xmax should be decreased by one (-1) before being rounded
+    # but this is skipped due to range and/or array slice mechanics,
+    # where the second index is always excluded -> [xmin, xmax)
+        if mode == 'full':
+            xmin = round(xmin + 1)
+            xmax = round(xmax)
+            ymin = round(ymin + 1)
+            ymax = round(ymax)
+        else:
+            raise NameError(f'No mode available for {mode}')
+
+    # Exit function if the extents are completely outside the map
+        if xmax < 0 or xmin > shape[1] or ymax < 0 or ymin > shape[0]:
+            return None
+
+    # Fix extents that are partially outside the map borders
+        if xmin < 0: xmin = 0
+        if xmax > shape[1]: xmax = shape[1]
+        if ymin < 0: ymin = 0
+        if ymax > shape[0]: ymax = shape[0]
+
+    # Return the fixed extents formatted according to <fmt>
+        if fmt == 'matrix':
+            extents = (ymin, ymax, xmin, xmax)
+        elif fmt == 'xy':
+            extents = (xmin, xmax, ymin, ymax)
+        else:
+            raise NameError('No format available for {fmt}')
+
+        return extents
+
+
+    def fixed_rect_bbox(self, shape:tuple, mode='full'):
+        '''
+        Get the bounding box of the selector after checking if it lies within
+        the provided shape. The bounding box values are expressed as integers.
+
+        Parameters
+        ----------
+        shape : tuple
+            Control shape. It must be provided as (rows, cols).
+        mode : str, optional
+            How to treat pixels at the border of the selector region. At the
+            moment the only supported mode is 'full', which means that only
+            the pixels that are entirely covered by the selector region will be
+            included. The default is 'full'.
+
+        Returns
+        -------
+        bbox : tuple or None
+            Fixed bounding box with integer values. If the selector region
+            falls entirely outside the map area, the bounding box will be None.
+
+        '''
+    # Get the default bounding box
+        x0, y0, w, h = self._rect_bbox
+
+    # Exit function if the bounding box is completely outside the map
+        if x0+0.5 > shape[1] or x0+w < -0.5 or y0+0.5 > shape[0] or y0+h < -0.5:
+            return None
+
+    # Fix extents that are partially outside the map borders
+        if x0 < -0.5:
+            w += x0 + 0.5
+            x0 = -0.5
+        if x0 + w + 0.5 > shape[1]:
+            w = shape[1] - 0.5 - x0
+        if y0 < -0.5:
+            h += y0 + 0.5
+            y0 = -0.5
+        if y0 + h + 0.5 > shape[0]:
+            h = shape[0] - 0.5 - y0
+
+    # Exclude pixels not entirely selected --> <mode> : 'full'
+        if mode == 'full':
+            _x0 = round(x0 + 1) - 0.5
+            _y0 = round(y0 + 1) - 0.5
+            w = int(w + x0 - _x0)
+            h = int(h + y0 - _y0)
+
+            if w < 1 or h < 1: # It should never happen
+                return None
+        else:
+            raise NameError(f'No mode available for {mode}')
+
+    # Return the fixed bounding box
+        bbox = (_x0, _y0, w, h)
+        return bbox
+
+
+    def update(self):
+        '''
+        Reimplementation of the default update function. It also calls the
+        updateCursor function after the default update operations are done.
+
+        '''
+        super(RectSel, self).update()
+        self.updateCursor()
+
+
+    def updateCursor(self):
+        '''
+        Updates the cursor depending on the state of the selector. When it is
+        active, the pointing hand cursor is set, otherwise the arrow cursor.
+
+        '''
+        if self.active:
+            self.canvas.setCursor(QCursor(Qt.PointingHandCursor))
+        else:
+            self.canvas.setCursor(QCursor(Qt.ArrowCursor))
 
 
 
+class HeatmapScaler(mpl_widgets.SpanSelector):
+    '''
+    A customized span selector widget, tailored to scale heatmaps histograms.
+
+    '''
+    def __init__(self, ax, onselect, interactive=True, btns=[1]):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        ax : Matplotlib Axes
+            The ax where the span selection is performed.
+        onselect : func
+            The function that triggers after a selection event.
+        interactive : bool, optional
+            Wether the selector is interactive. The default is True.
+        btns : list or None, optional
+            List of buttons that can trigger the selection. Can be left mouse 
+            button [1], wheel mouse button [2], right mouse button [3] or None,
+            which means all the buttons. The default is [1].
+
+        '''
+    # Customize the appearence of the span selector and its handles
+        span_props = dict(fc=pref.BLOSSOM, ec=pref.BLOSSOM, alpha=0.6,
+                          fill=True)
+        handle_props = dict(linewidth=2, color=pref.BLOSSOM)
+    
+    # Define the scaler properties
+        kwargs = {'direction': 'horizontal',
+                  'minspan': 0,
+                  'useblit': True,
+                  'props': span_props,
+                  'interactive': interactive,
+                  'button': btns,
+                  'handle_props': handle_props,
+                  'grab_range': 10,
+                  'drag_from_anywhere': True}
+
+        super(HeatmapScaler, self).__init__(ax, onselect, **kwargs)
+
+    # By default the selector is turned off
+        self.set_active(False)
+
+
+
+def rgb_to_float(rgb_list: Iterable[tuple]):
+    '''
+    Convert RGB values to matplotlib compatible floating values ranging in
+    [0, 1].
+
+    Parameters
+    ----------
+    rgb_list : iterable of tuples
+        A list of RGB triplets.
+
+    Returns
+    -------
+    list
+        A list of float RGB triplets.
+
+    '''
+    float_rgb = [(r/255, g/255, b/255) for (r, g, b) in rgb_list]
+    if len(float_rgb) == 1:
+        return float_rgb[0]
+    else:
+        return float_rgb

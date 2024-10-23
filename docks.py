@@ -14,9 +14,10 @@ from PyQt5 import QtWidgets as QW
 import numpy as np
 
 from _base import InputMap, Mask, MineralMap, RoiMap
-import conv_functions as CF
-import customObjects as cObj
-import dialogs as dial
+import convenient_functions as cf
+import custom_widgets as CW
+import image_analysis_tools as iatools
+import dialogs
 import plots
 import preferences as pref
 
@@ -58,13 +59,13 @@ class Pane(QW.QDockWidget):
 
     # Wrap the widget into a container widget (scroll area or group area)
         if scroll:
-            scroll_area = cObj.GroupScrollArea(widget)
+            scroll_area = CW.GroupScrollArea(widget)
             scroll_area.setStyleSheet(None)
             scroll_area.setObjectName('PaneScrollArea') # Name for custom qss
             self.setWidget(scroll_area)
 
         else:
-            group_area = cObj.GroupArea(widget, tight=True)
+            group_area = CW.GroupArea(widget, tight=True)
             group_area.setStyleSheet(None)
             group_area.setObjectName('PaneGroupArea')  # Name for custom qss
             self.setWidget(group_area)
@@ -137,8 +138,8 @@ class DataManager(QW.QTreeWidget):
         self.customContextMenuRequested.connect(self.showContextMenu)
 
     # Set custom scrollbars
-        self.setHorizontalScrollBar(cObj.StyledScrollBar(Qt.Horizontal))
-        self.setVerticalScrollBar(cObj.StyledScrollBar(Qt.Vertical))
+        self.setHorizontalScrollBar(CW.StyledScrollBar(Qt.Horizontal))
+        self.setVerticalScrollBar(CW.StyledScrollBar(Qt.Vertical))
 
     # Set the style-sheet (custom icons for expanded and collapsed branches and
     # right-click menu when editing items name)
@@ -159,7 +160,7 @@ class DataManager(QW.QTreeWidget):
             will be forced to be on first column anyway. The default is 0.
 
         '''
-        if isinstance(item, (cObj.DataGroup, cObj.DataObject)):
+        if isinstance(item, (CW.DataGroup, CW.DataObject)):
             self.editItem(item, 0)
 
 
@@ -174,7 +175,7 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Define a menu (Styled Menu)
-        menu = cObj.StyledMenu()
+        menu = CW.StyledMenu()
 
     # Get the item that is clicked at <point> and the group it belongs to
         item = self.itemAt(point)
@@ -195,7 +196,7 @@ class DataManager(QW.QTreeWidget):
                            self.clearAll)
 
     # CONTEXT MENU ON GROUP
-        elif isinstance(item, cObj.DataGroup):
+        elif isinstance(item, CW.DataGroup):
 
         # Load data submenu
             load_submenu = menu.addMenu(QIcon(r'Icons/import.png'), 'Load...')
@@ -223,7 +224,7 @@ class DataManager(QW.QTreeWidget):
             menu.addAction(QIcon(r'Icons/remove.png'), 'Delete', self.delGroup)
 
     # CONTEXT MENU ON SUBGROUP
-        elif isinstance(item, cObj.DataSubGroup):
+        elif isinstance(item, CW.DataSubGroup):
 
         # Load data
             menu.addAction(QIcon(r'Icons/generic_add.png'), 'Load', 
@@ -254,7 +255,7 @@ class DataManager(QW.QTreeWidget):
             clear_subgroup.triggered.connect(self.clearView)
 
     # CONTEXT MENU ON DATA OBJECTS
-        elif isinstance(item, cObj.DataObject):
+        elif isinstance(item, CW.DataObject):
 
         # Rename item
             menu.addAction(QIcon(r'Icons/rename.png'), 'Rename',
@@ -358,13 +359,13 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Item is group
-        if isinstance(item, cObj.DataGroup):
+        if isinstance(item, CW.DataGroup):
             group = item
     # Item is subgroup
-        elif isinstance(item, cObj.DataSubGroup):
+        elif isinstance(item, CW.DataSubGroup):
             group = item.parent()
     # Item is data object
-        elif isinstance(item, cObj.DataObject):
+        elif isinstance(item, CW.DataObject):
             group = item.parent().parent()
     # Item is invalid (safety)
         else:
@@ -402,7 +403,7 @@ class DataManager(QW.QTreeWidget):
 
         '''
         items = self.selectedItems()
-        data_obj = [i for i in items if isinstance(i, cObj.DataObject)]
+        data_obj = [i for i in items if isinstance(i, CW.DataObject)]
         return data_obj
 
 
@@ -425,7 +426,7 @@ class DataManager(QW.QTreeWidget):
         text = 'New Sample'
         if (n := len(unnamed_groups)): 
             text += f' ({n})'
-        new_group = cObj.DataGroup(text)
+        new_group = CW.DataGroup(text)
         self.addTopLevelItem(new_group)
         if return_group: 
             return new_group
@@ -569,7 +570,7 @@ class DataManager(QW.QTreeWidget):
                 item.setEdited(False)
             except Exception as e:
                 text = 'An error occurred while saving the file'
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', text, 
                                        detailedText=repr(e))
 
@@ -593,7 +594,7 @@ class DataManager(QW.QTreeWidget):
                                                        'ASCII maps (*.txt *.gz)')
         if paths:
             pref.set_dirPath('in', os.path.dirname(paths[0]))
-            progBar = cObj.PopUpProgBar(self, len(paths), 'Loading data')
+            progBar = CW.PopUpProgBar(self, len(paths), 'Loading data')
             for n, p in enumerate(paths, start=1):
                 if progBar.wasCanceled(): break
                 try:
@@ -602,7 +603,7 @@ class DataManager(QW.QTreeWidget):
 
                 except Exception as e:
                     progBar.setWindowModality(Qt.NonModal)
-                    cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                     'X-Min Learn', f'Unexpected file:\n{p}.',
                                     detailedText=repr(e))
                     progBar.setWindowModality(Qt.WindowModal)
@@ -633,19 +634,19 @@ class DataManager(QW.QTreeWidget):
                                                           Legacy mineral maps (*.txt *.gz)''')
         if paths:
             pref.set_dirPath('in', os.path.dirname(paths[0]))
-            progBar = cObj.PopUpProgBar(self, len(paths), 'Loading data')
+            progBar = CW.PopUpProgBar(self, len(paths), 'Loading data')
             for n, p in enumerate(paths, start=1):
                 if progBar.wasCanceled(): break
                 try:
                     mmap = MineralMap.load(p)
                 # Convert legacy mineral maps to new file format (mmp)
                     if os.path.splitext(p)[1] != '.mmp':
-                        mmap.save(CF.extend_filename(p, '', '.mmp'))
+                        mmap.save(cf.extend_filename(p, '', '.mmp'))
                     group.minmaps.addData(mmap)
 
                 except Exception as e:
                     progBar.setWindowModality(Qt.NonModal)
-                    cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                     'X-Min Learn', f'Unexpected file:\n{p}.',
                                     detailedText=repr(e))
                     progBar.setWindowModality(Qt.WindowModal)
@@ -676,7 +677,7 @@ class DataManager(QW.QTreeWidget):
                                                           Text file (*.txt)''')
         if paths:
             pref.set_dirPath('in', os.path.dirname(paths[0]))
-            progBar = cObj.PopUpProgBar(self, len(paths), 'Loading data')
+            progBar = CW.PopUpProgBar(self, len(paths), 'Loading data')
             for n, p in enumerate(paths, start=1):
                 if progBar.wasCanceled(): break
                 try:
@@ -685,7 +686,7 @@ class DataManager(QW.QTreeWidget):
 
                 except Exception as e:
                     progBar.setWindowModality(Qt.NonModal)
-                    cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                     'X-Min Learn', f'Unexpected file:\n{p}.',
                                     detailedText=repr(e))
                     progBar.setWindowModality(Qt.WindowModal)
@@ -705,7 +706,7 @@ class DataManager(QW.QTreeWidget):
         items = [i for i in self.getSelectedDataObjects() if i.holdsInputMap()]
 
     # Invert the input map arrays held in each item
-        progBar = cObj.PopUpProgBar(self, len(items), 'Inverting data')
+        progBar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
             if progBar.wasCanceled(): break
             i.get('data').invert()
@@ -726,7 +727,7 @@ class DataManager(QW.QTreeWidget):
         items = [i for i in self.getSelectedDataObjects() if i.holdsMask()]
 
     # Invert the mask arrays held in each item
-        progBar = cObj.PopUpProgBar(self, len(items), 'Inverting data')
+        progBar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
             if progBar.wasCanceled(): break
             i.get('data').invert()
@@ -804,7 +805,7 @@ class DataManager(QW.QTreeWidget):
                    'the exported mineral map.'
         msg_cbox = QW.QCheckBox('Include translation dictionary')
         msg_cbox.setChecked(True)
-        choice = cObj.RichMsgBox(self, QW.QMessageBox.Question, 'X-Min Learn',
+        choice = CW.RichMsgBox(self, QW.QMessageBox.Question, 'X-Min Learn',
                                  'Export map as a numeric array?',
                                  QW.QMessageBox.Yes | QW.QMessageBox.No,
                                  QW.QMessageBox.Yes, detailedText=det_text,
@@ -824,7 +825,7 @@ class DataManager(QW.QTreeWidget):
 
             # Also save the encoder if user requests it
                 if choice.checkBox().isChecked():
-                    encoder_path = CF.extend_filename(outpath, '_transDict')
+                    encoder_path = cf.extend_filename(outpath, '_transDict')
                     rows, cols = mmap.shape
                     with open(encoder_path, 'w') as ep:
                         for id_, lbl in mmap.encoder.items():
@@ -841,7 +842,7 @@ class DataManager(QW.QTreeWidget):
 
         '''
         items = self.getSelectedDataObjects()
-        progBar = cObj.PopUpProgBar(self, len(items), 'Reloading data')
+        progBar = CW.PopUpProgBar(self, len(items), 'Reloading data')
         for n, i in enumerate(items, start=1):
             if progBar.wasCanceled(): break
             try:
@@ -879,7 +880,7 @@ class DataManager(QW.QTreeWidget):
     #         return
 
     # Update the scene if item is a data group, data subgroup or data object
-        objects = (cObj.DataObject, cObj.DataSubGroup, cObj.DataGroup)
+        objects = (CW.DataObject, CW.DataSubGroup, CW.DataGroup)
         if isinstance(item, objects):
             self.updateSceneRequested.emit(item)
 
@@ -952,7 +953,7 @@ class HistogramViewer(QW.QWidget):
         # self.canvas.setSizePolicy(QW.QSizePolicy.Minimum, QW.QSizePolicy.Minimum)
 
     # HeatMap Scaler widget
-        self.scaler = cObj.HeatmapScaler(self.canvas.ax, self.onSpanSelect)
+        self.scaler = plots.HeatmapScaler(self.canvas.ax, self.onSpanSelect)
 
     # Navigation Toolbar
         self.navTbar = plots.NavTbar(self.canvas, self, coords=False)
@@ -967,7 +968,7 @@ class HistogramViewer(QW.QWidget):
         self.navTbar.insertAction(2, self.logscale_action)
 
     # HeatMap scaler toolbar
-        self.scaler_tbar = cObj.StyledToolbar('Histogram scaler toolbar')
+        self.scaler_tbar = CW.StyledToolbar('Histogram scaler toolbar')
 
     # Toggle scaler action [-> Heatmap scaler toolbar]
         self.scaler_action = self.scaler_tbar.addAction(
@@ -1238,7 +1239,7 @@ class HistogramViewer(QW.QWidget):
     # If the legacy mask exists, intersect it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mask_array = CF.binary_merge([mask_array, legacy_mask], mode='I')
+            mask_array = iatools.binary_merge([mask_array, legacy_mask], 'I')
         mask = Mask(mask_array)
 
     # Save mask file
@@ -1251,7 +1252,7 @@ class HistogramViewer(QW.QWidget):
                 mask.save(outpath)
             except Exception as e:
                 text = 'An error occurred while saving the file'
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', text,
                                        detailedText=repr(e))
 
@@ -1279,7 +1280,7 @@ class HistogramViewer(QW.QWidget):
 
 
 
-class ModeViewer(cObj.StyledTabWidget):
+class ModeViewer(CW.StyledTabWidget):
     '''
     A widget to visualize the modal amounts of the mineral classes occurring in
     the mineral map that is currently displayed in the Data Viewer. It includes
@@ -1287,7 +1288,7 @@ class ModeViewer(cObj.StyledTabWidget):
     
     '''
 
-    updateSceneRequested = pyqtSignal(cObj.DataObject) # current data object
+    updateSceneRequested = pyqtSignal(CW.DataObject) # current data object
 
     def __init__(self, map_canvas, parent=None):
         '''
@@ -1320,7 +1321,7 @@ class ModeViewer(cObj.StyledTabWidget):
         
         '''
     # Interactive legend
-        self.legend = cObj.Legend(context_menu=True)
+        self.legend = CW.Legend(context_menu=True)
 
     # Canvas
         self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
@@ -1590,7 +1591,7 @@ class ModeViewer(cObj.StyledTabWidget):
     # If a legacy mask exists, intersect it with the new mask
         _, legacy_mask = self.map_canvas.get_map(return_mask=True)
         if legacy_mask is not None:
-            mask = CF.binary_merge([mask, legacy_mask], mode='I')
+            mask = iatools.binary_merge([mask, legacy_mask], 'I')
 
     # Create a new Mask object
         mask = Mask(mask)
@@ -1605,7 +1606,7 @@ class ModeViewer(cObj.StyledTabWidget):
                 mask.save(outpath)
             except Exception as e:
                 text = 'An error occurred while saving the file'
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', text,
                                         detailedText=repr(e))
 
@@ -1639,7 +1640,7 @@ class RoiEditor(QW.QWidget):
         self.patches = []
 
     # ROI selector widget 
-        self.rect_sel = cObj.RectSel(self.canvas.ax, self.onRectSelect)
+        self.rect_sel = plots.RectSel(self.canvas.ax, self.onRectSelect)
 
     # Load ROIs visual properties
         self.roi_color = pref.get_setting('class/trAreasCol', (255, 0, 0),
@@ -1661,7 +1662,7 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Toolbar
-        self.toolbar = cObj.StyledToolbar('ROI toolbar')
+        self.toolbar = CW.StyledToolbar('ROI toolbar')
 
     # Load ROI map [-> Toolbar Action]
         self.load_action = self.toolbar.addAction(
@@ -1680,7 +1681,7 @@ class RoiEditor(QW.QWidget):
             QIcon(r'Icons/roi_detection.png'), 'Auto detect ROI')
         
     # Auto detect ROI dialog
-        self.autoroi_dial = dial.AutoRoiDetector()
+        self.autoroi_dial = dialogs.AutoRoiDetector()
 
     # Toggle ROI selection [-> Toolbar Action]
         self.draw_action = self.toolbar.addAction(
@@ -1698,7 +1699,7 @@ class RoiEditor(QW.QWidget):
         self.extr_mask_action.setEnabled(False)
 
     # ROI visual preferences [-> Toolbar Menu-Action]
-        pref_menu = cObj.StyledMenu()
+        pref_menu = CW.StyledMenu()
     # - Set ROI outline color action
         self.roicolor_action = pref_menu.addAction('Color...')
     # - Set ROI outline selection color action 
@@ -1716,23 +1717,23 @@ class RoiEditor(QW.QWidget):
         self.toolbar.insertSeparator(self.autoroi_action)
 
     # Loaded ROI map path (Path Label)
-        self.mappath = cObj.PathLabel(full_display=False)
+        self.mappath = CW.PathLabel(full_display=False)
 
     # Hide ROI map (Checkable Styled Button)
-        self.hideroi_btn = cObj.StyledButton(QIcon(r'Icons/not_visible.png'))
+        self.hideroi_btn = CW.StyledButton(QIcon(r'Icons/not_visible.png'))
         self.hideroi_btn.setCheckable(True)
         self.hideroi_btn.setToolTip('Hide ROI map')
 
     # Remove (unload) ROI map (Styled Button)
-        self.unload_btn = cObj.StyledButton(QIcon(r'Icons/clear.png')) 
+        self.unload_btn = CW.StyledButton(QIcon(r'Icons/clear.png')) 
         self.unload_btn.setToolTip('Clear ROI map')
 
     # Remove ROI button [-> Corner table widget]
-        self.delroi_btn = cObj.StyledButton(QIcon(r'Icons/remove.png'))
+        self.delroi_btn = CW.StyledButton(QIcon(r'Icons/remove.png'))
         self.delroi_btn.setFlat(True)
 
     # Roi table
-        self.table = cObj.StyledTable(0, 2)
+        self.table = CW.StyledTable(0, 2)
         self.table.setSelectionBehavior(QW.QAbstractItemView.SelectRows)
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.table.setHorizontalHeaderLabels(['Class', 'Pixel Count'])
@@ -1755,7 +1756,7 @@ class RoiEditor(QW.QWidget):
         barplot_vbox.addWidget(self.barCanvas)
 
     # ROI visualizer (Styled Tab Widget -> [ROI table | bar plot])
-        roi_visualizer = cObj.StyledTabWidget()
+        roi_visualizer = CW.StyledTabWidget()
         roi_visualizer.addTab(self.table, QIcon(r'Icons/table.png'), None)
         roi_visualizer.addTab(barplot_vbox, QIcon(r'Icons/plot.png'), None)
         roi_visualizer.setTabToolTip(0, 'Table')
@@ -2004,8 +2005,8 @@ class RoiEditor(QW.QWidget):
         '''
         selected = self.selectedTableIndices
         for idx, (_, patch) in enumerate(self.patches):
-            color = self.roi_selcolor if idx in selected else self.roi_color
-            patch.set(color=CF.RGB2float([color]), lw=2+2*(idx in selected))
+            col = self.roi_selcolor if idx in selected else self.roi_color
+            patch.set(color=plots.rgb_to_float([col]), lw=2+2*(idx in selected))
         self._redraw()
 
 
@@ -2053,13 +2054,13 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Display the rectangle in canvas
-        color = CF.RGB2float([self.roi_color])
-        patch = cObj.RoiPatch(bbox, color, self.roi_filled)
+        color = plots.rgb_to_float([self.roi_color])
+        patch = plots.RoiPatch(bbox, color, self.roi_filled)
         patch.set_picker(True)
         self.canvas.ax.add_patch(patch)
 
     # Display the text annotation in canvas
-        text = cObj.RoiAnnotation(name, patch)
+        text = plots.RoiAnnotation(name, patch)
         self.canvas.ax.add_artist(text)
 
     # Set annotation and patch visibility
@@ -2334,7 +2335,7 @@ class RoiEditor(QW.QWidget):
 
     # If the legacy mask exists, intersect it with the new mask
         if legacy_mask is not None:
-            mask.mask = CF.binary_merge([mask.mask, legacy_mask], mode='I')
+            mask.mask = iatools.binary_merge([mask.mask, legacy_mask], 'I')
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
@@ -2345,7 +2346,7 @@ class RoiEditor(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', 'An error occurred '\
                                        'while saving the file', 
                                        detailedText=repr(e))
@@ -2375,7 +2376,7 @@ class RoiEditor(QW.QWidget):
         if not self.canvas.is_empty():
             array, legacy_mask = self.canvas.get_map(return_mask=True)
             if array.shape == shape and legacy_mask is not None:
-                mask.mask = CF.binary_merge([mask.mask, legacy_mask], mode='I')
+                mask.mask = iatools.binary_merge([mask.mask, legacy_mask], 'I')
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
@@ -2386,7 +2387,7 @@ class RoiEditor(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', 'An error occurred '\
                                        'while saving the file',
                                        detailedText=repr(e))
@@ -2458,7 +2459,7 @@ class RoiEditor(QW.QWidget):
                                                  'ROI maps (*.rmp)')
         if path:
             pref.set_dirPath('in', os.path.dirname(path))
-            progbar = cObj.PopUpProgBar(self, 4, 'Loading data', cancel=False)
+            progbar = CW.PopUpProgBar(self, 4, 'Loading data', cancel=False)
             progbar.setValue(0)
 
         # Remove old (current) ROI map
@@ -2472,7 +2473,7 @@ class RoiEditor(QW.QWidget):
                 progbar.increase()
             except Exception as e:
                 progbar.reset()
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', 
                                        f'Unexpected file:\n{path}',
                                        detailedText = repr(e))
@@ -2543,7 +2544,7 @@ class RoiEditor(QW.QWidget):
                 return QW.QMessageBox.information(self, 'X-Min Learn',
                                                   'File saved with success')
             except Exception as e:
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', 'An error occurred '\
                                        'while saving the file',
                                        detailedText=repr(e))
@@ -2587,7 +2588,7 @@ class ProbabilityMapViewer(QW.QWidget):
         self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # View Range toolbar
-        self.rangeTbar = cObj.StyledToolbar('Probability range toolbar')
+        self.rangeTbar = CW.StyledToolbar('Probability range toolbar')
 
     # Toggle range selection [-> View Range Toolbar]
         self.toggle_range_action = self.rangeTbar.addAction(
@@ -2733,7 +2734,7 @@ class ProbabilityMapViewer(QW.QWidget):
     # If the legacy mask exists, intersect it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mask_array = CF.binary_merge([mask_array, legacy_mask], mode='I')
+            mask_array = iatools.binary_merge([mask_array, legacy_mask], 'I')
         mask = Mask(mask_array)
 
     # Save mask file
@@ -2745,7 +2746,7 @@ class ProbabilityMapViewer(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return cObj.RichMsgBox(self, QW.QMessageBox.Critical, 
+                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
                                        'X-Min Learn', 'An error occurred '\
                                        'while saving the file', 
                                        detailedText=repr(e))
@@ -2776,7 +2777,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # R-G-B-A Path Labels
-        self.rgba_lbls = [cObj.PathLabel(full_display=False) for _ in range(4)]
+        self.rgba_lbls = [CW.PathLabel(full_display=False) for _ in range(4)]
         channels_layout = QW.QGridLayout()
 
         for col, lbl in enumerate(self.rgba_lbls):

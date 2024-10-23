@@ -14,17 +14,11 @@ from PyQt5 import QtWidgets as QW
 from PyQt5 import QtGui as QG
 from PyQt5 import QtCore as QC
 
-import matplotlib as mpl
 import numpy as np
-import pandas as pd
-
-# Temporary imports, deprecated. Will be removed
-from matplotlib import patheffects as mpe
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
 
 from _base import InputMap, MineralMap, Mask
-import conv_functions as CF
+import convenient_functions as cf
+import image_analysis_tools as iatools
 import preferences as pref
 
 
@@ -85,7 +79,7 @@ class DataGroup(QW.QTreeWidgetItem):
     # Extract the shape from each object data and obtain the trending shape  
         if len(objects):
             shapes = [o.get('data').shape for o in objects]
-            trend_shape = CF.most_frequent(shapes)
+            trend_shape = cf.most_frequent(shapes)
 
     # Set a warning state to each object whose data shape differs from trend
             for idx, shp in enumerate(shapes):
@@ -138,7 +132,7 @@ class DataGroup(QW.QTreeWidgetItem):
         elif len(masks) == 1:
             comp_mask = None if ignore_single_mask else masks[0]
         else:
-            comp_mask = Mask(CF.binary_merge([m.mask for m in masks], mode))
+            comp_mask = Mask(iatools.binary_merge([m.mask for m in masks], mode))
 
         return comp_mask
 
@@ -323,7 +317,7 @@ class DataObject(QW.QTreeWidgetItem):
             name = f'Unnamed {obj_type}'
 
         else:
-            name = CF.path2filename(filepath)
+            name = cf.path2filename(filepath)
 
         return name
 
@@ -1091,282 +1085,6 @@ class RGBIcon(QG.QIcon):
 
 
 
-class Crosshair(mpl.widgets.MultiCursor): # !!! Not used yet
-    def __init__(self, canvas, *axes):
-        super(Crosshair, self).__init__(canvas, axes=axes, useblit=True,
-                                        horizOn=True, vertOn=True,
-                                        color='r', lw=1)
-
-
-
-class PolySel(mpl.widgets.PolygonSelector): # future improvement to ROIs
-
-    def __init__(self, canvasAx, onselect, useblit=True):
-        self.props = dict(color='k', linestyle='-', linewidth=2, alpha=0.5)
-        super(PolySel, self).__init__(canvasAx, onselect, useblit=useblit,
-                                      props=self.props, grab_range=10)
-        self.ax = canvasAx
-        self.onselect = onselect
-        self.canvas = self.ax.figure.canvas
-        self.useblit = useblit
-
-        self.set_active(False)
-        self.canvas.mpl_connect('figure_enter_event', lambda evt: self.updateCursor())
-        self.canvas.mpl_connect('scroll_event', lambda evt: self.updateCursor())
-        # # Callback to update rectangle selector with useblit=True when zooming
-        if self.useblit:
-            self.canvas.mpl_connect('motion_notify_event', self.update_)
-            self.canvas.mpl_connect('scroll_event', self.update_)
-
-
-    def updateCursor(self):
-        if self.active:
-            self.canvas.setCursor(QG.QCursor(QC.Qt.PointingHandCursor))
-        # else:
-        #     self.canvas.setCursor(QG.QCursor(QC.Qt.ArrowCursor))
-
-    def update_(self, event):
-        if self.active:
-            self.update()
-
-
-class RectSel(mpl.widgets.RectangleSelector):
-    '''
-    A customized rectangle selector widget, tailored to ROI selection.
-
-    '''
-    def __init__(self, ax, onselect, interactive=True, btns=[1]):
-        '''
-        RectSel class constructor.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes
-            The ax where the selector must be drawn.
-        onselect : function
-            Callback function that is called after the selection is created.
-        useblit : bool, optional
-            Whether to use blitting for faster rendering. The default is True.
-        btns : list or None, optional
-            List of mouse buttons that can trigger the drawing event. Left = 1,
-            Middle = 2 and Right = 3. If None all the buttons are included. The
-            default is [1].
-
-        '''
-    # Customize the appearence of the rectangle selector and of its handles
-        rect_props = dict(fc=pref.BLACK_PEARL, ec=pref.BLOSSOM, alpha=0.6, 
-                          lw=2, fill=True)
-        handle_props = dict(mfc=pref.BLOSSOM, mec=pref.BLACK_PEARL, alpha=1)
-
-    # drag_from_anywhere=True causes a rendering glitch when a former selection
-    # is active, you draw a new one and, without releasing the left button, you
-    # start resizing it.
-        kwargs = {'minspanx': 1,
-                  'minspany': 1,
-                  'useblit': True,
-                  'props': rect_props,
-                  'spancoords': 'data',
-                  'button': btns,
-                  'grab_range': 10,
-                  'handle_props': handle_props,
-                  'interactive': interactive,
-                  'drag_from_anywhere': True}
-
-        super(RectSel, self).__init__(ax, onselect, **kwargs)
-
-    # By default the selector is turned off
-        self.set_active(False)
-
-
-    def fixed_extents(self, shape:tuple, fmt='matrix', mode='full'):
-        '''
-        Get integer extents of the selector after checking if it lies within
-        the provided shape. Different output extents format can be selected.
-
-        Parameters
-        ----------
-        shape : tuple
-            Control shape. It must be provided as (rows, cols).
-        fmt : STR, optional
-            The output format of coords. If 'matrix' the coords format is
-            (row_min, row_max, col_min, col_max). If 'xy' the coords format is
-            (x_min, x_max, y_min, y_max). The default is 'matrix'.
-        mode : str, optional
-            How to treat pixels at the border of the selector region. At the
-            moment the only supported mode is 'full', which means that only
-            the pixels that are entirely covered by the selector region will be
-            included. The default is 'full'.
-
-        Returns
-        -------
-        extents : tuple or None
-            Fixed extents as integer indices. If the selector region falls
-            entirely outside the map area, extents will be None.
-
-        '''
-    # Get the default extents
-        xmin, xmax, ymin, ymax = self.extents
-
-    # Exclude pixels not entirely selected --> <mode> : 'full'
-    # ymax and xmax should be decreased by one (-1) before being rounded
-    # but this is skipped due to range and/or array slice mechanics,
-    # where the second index is always excluded -> [xmin, xmax)
-        if mode == 'full':
-            xmin = round(xmin + 1)
-            xmax = round(xmax)
-            ymin = round(ymin + 1)
-            ymax = round(ymax)
-        else:
-            raise NameError(f'No mode available for {mode}')
-
-    # Exit function if the extents are completely outside the map
-        if xmax < 0 or xmin > shape[1] or ymax < 0 or ymin > shape[0]:
-            return None
-
-    # Fix extents that are partially outside the map borders
-        if xmin < 0: xmin = 0
-        if xmax > shape[1]: xmax = shape[1]
-        if ymin < 0: ymin = 0
-        if ymax > shape[0]: ymax = shape[0]
-
-    # Return the fixed extents formatted according to <fmt>
-        if fmt == 'matrix':
-            extents = (ymin, ymax, xmin, xmax)
-        elif fmt == 'xy':
-            extents = (xmin, xmax, ymin, ymax)
-        else:
-            raise NameError('No format available for {fmt}')
-
-        return extents
-
-
-    def fixed_rect_bbox(self, shape:tuple, mode='full'):
-        '''
-        Get the bounding box of the selector after checking if it lies within
-        the provided shape. The bounding box values are expressed as integers.
-
-        Parameters
-        ----------
-        shape : tuple
-            Control shape. It must be provided as (rows, cols).
-        mode : str, optional
-            How to treat pixels at the border of the selector region. At the
-            moment the only supported mode is 'full', which means that only
-            the pixels that are entirely covered by the selector region will be
-            included. The default is 'full'.
-
-        Returns
-        -------
-        bbox : tuple or None
-            Fixed bounding box with integer values. If the selector region
-            falls entirely outside the map area, the bounding box will be None.
-
-        '''
-    # Get the default bounding box
-        x0, y0, w, h = self._rect_bbox
-
-    # Exit function if the bounding box is completely outside the map
-        if x0+0.5 > shape[1] or x0+w < -0.5 or y0+0.5 > shape[0] or y0+h < -0.5:
-            return None
-
-    # Fix extents that are partially outside the map borders
-        if x0 < -0.5:
-            w += x0 + 0.5
-            x0 = -0.5
-        if x0 + w + 0.5 > shape[1]:
-            w = shape[1] - 0.5 - x0
-        if y0 < -0.5:
-            h += y0 + 0.5
-            y0 = -0.5
-        if y0 + h + 0.5 > shape[0]:
-            h = shape[0] - 0.5 - y0
-
-    # Exclude pixels not entirely selected --> <mode> : 'full'
-        if mode == 'full':
-            _x0 = round(x0 + 1) - 0.5
-            _y0 = round(y0 + 1) - 0.5
-            w = int(w + x0 - _x0)
-            h = int(h + y0 - _y0)
-
-            if w < 1 or h < 1: # It should never happen
-                return None
-        else:
-            raise NameError(f'No mode available for {mode}')
-
-    # Return the fixed bounding box
-        bbox = (_x0, _y0, w, h)
-        return bbox
-
-
-    def update(self):
-        '''
-        Reimplementation of the default update function. It also calls the
-        updateCursor function after the default update operations are done.
-
-        '''
-        super(RectSel, self).update()
-        self.updateCursor()
-
-
-    def updateCursor(self):
-        '''
-        Updates the cursor depending on the state of the selector. When it is
-        active, the pointing hand cursor is set, otherwise the arrow cursor.
-
-        '''
-        if self.active:
-            self.canvas.setCursor(QG.QCursor(QC.Qt.PointingHandCursor))
-        else:
-            self.canvas.setCursor(QG.QCursor(QC.Qt.ArrowCursor))
-
-
-
-class HeatmapScaler(mpl.widgets.SpanSelector):
-    '''
-    A customized span selector widget, tailored to scale heatmaps histograms.
-
-    '''
-    def __init__(self, ax, onselect, interactive=True, btns=[1]):
-        '''
-        Constructor.
-
-        Parameters
-        ----------
-        ax : Matplotlib Axes
-            The ax where the span selection is performed.
-        onselect : func
-            The function that triggers after a selection event.
-        interactive : bool, optional
-            Wether the selector is interactive. The default is True.
-        btns : list or None, optional
-            List of buttons that can trigger the selection. Can be left mouse 
-            button [1], wheel mouse button [2], right mouse button [3] or None,
-            which means all the buttons. The default is [1].
-
-        '''
-    # Customize the appearence of the span selector and its handles
-        span_props = dict(fc=pref.BLOSSOM, ec=pref.BLOSSOM, alpha=0.6,
-                          fill=True)
-        handle_props = dict(linewidth=2, color=pref.BLOSSOM)
-    
-    # Define the scaler properties
-        kwargs = {'direction': 'horizontal',
-                  'minspan': 0,
-                  'useblit': True,
-                  'props': span_props,
-                  'interactive': interactive,
-                  'button': btns,
-                  'handle_props': handle_props,
-                  'grab_range': 10,
-                  'drag_from_anywhere': True}
-
-        super(HeatmapScaler, self).__init__(ax, onselect, **kwargs)
-
-    # By default the selector is turned off
-        self.set_active(False)
-
-
-
 class StyledButton(QW.QPushButton):
     '''
     QSS-styled reimplementation of a QPushButton.
@@ -1888,7 +1606,7 @@ class CBoxMapLayout(QW.QGridLayout): # deprecated! Use SampleMapsSelector instea
 
 
         for idx, pth in enumerate(paths):
-            cbox = QW.QCheckBox(CF.path2filename(pth))
+            cbox = QW.QCheckBox(cf.path2filename(pth))
             cbox.setObjectName(str(idx))
             cbox.setChecked(True)
             cbox.pressed.connect(lambda: self.cboxPressed.emit())
@@ -2632,7 +2350,7 @@ class PathLabel(FramedLabel):
         '''
         text = self.fullpath
         if not self.full_display:
-            text = CF.path2filename(text, ext=True)
+            text = cf.path2filename(text, ext=True)
         if text == '':
             text = self.placeholder
 
@@ -2734,30 +2452,17 @@ class PopUpProgBar(QW.QProgressDialog):
 
 
 
-# class PulsePopUpProgBar(QW.QDialog):
-#     def __init__(self, text=''):
-#         super(PulsePopUpProgBar, self).__init__(flags=QC.Qt.WindowTitleHint)
-#         self.setWindowModality(QC.Qt.WindowModal)
-#         self.setWindowTitle('Please wait...')
+class PulsePopUpProgBar(PopUpProgBar):
+    def __init__(self, parent, label='', cancel=False):
+        super(PulsePopUpProgBar, self).__init__(parent, 1, label, cancel, True)
+        self.setAutoReset(False)
 
-#         label = QW.QLabel(text)
-#         label.setMaximumHeight(20)
-#         self.progBar = QW.QProgressBar()
+    def startPulse(self):
+        self.setValue(1)
+        self.setRange(0, 0)
 
-#         layout = QW.QVBoxLayout()
-#         layout.addWidget(label, alignment=QC.Qt.AlignHCenter)
-#         layout.addWidget(self.progBar)
-#         self.setLayout(layout)
-#         self.show()
-
-#     def start(self):
-#         QW.QApplication.processEvents()
-#         self.progBar.setRange(0, 0)
-
-#     def stop(self):
-#         self.progBar.setRange(0, 1)
-#         self.progBar.setValue(1)
-#         self.close()
+    def stopPulse(self):
+        self.reset()
 
 
 
@@ -2766,97 +2471,101 @@ class DecimalPointSelector(StyledComboBox):
     Convenient reimplementation of a styled combo box that allows the selection
     of the decimal point selector based on the local system settings.
     '''
+
     def __init__(self):
         '''
         Constructor.
+
         '''
         super(DecimalPointSelector, self).__init__()
-        local_decimalPoint = QC.QLocale().decimalPoint()
+        local_decimal_point = QC.QLocale().decimalPoint()
         self.addItems(['.', ','])
-        self.setCurrentText(local_decimalPoint)
+        self.setCurrentText(local_decimal_point)
 
 
 
 class SeparatorSymbolSelector(StyledComboBox):
     '''
     Convenient reimplementation of a styled combo box that allows the selection
-    of the separator symbol selector based on the local system settings.
+    of the separator symbol based on the local system settings.
     '''
+
     def __init__(self):
         '''
         Constructor.
+
         '''
         super(SeparatorSymbolSelector, self).__init__()
-        local_CSVseparator = ',' if QC.QLocale().decimalPoint() == '.' else ';'
+        local_separator = ',' if QC.QLocale().decimalPoint() == '.' else ';'
         self.addItems([',', ';'])
-        self.setCurrentText(local_CSVseparator)
+        self.setCurrentText(local_separator)
 
 
 
-class CsvChunkReader():
-    '''
-    Ready to use class for reading large CSV files in chunks for better
-    performance.
-    '''
-    def __init__(self, dec: str, sep: str|None=None, chunksize=2**20//8, 
-                 pBar=False):
-        '''
-        Constructor.
+# class CsvChunkReader(): # deprecated. Moved to dataset_tools
+#     '''
+#     Ready to use class for reading large CSV files in chunks for better
+#     performance.
+#     '''
+#     def __init__(self, dec: str, sep: str|None=None, chunksize=2**20//8, 
+#                  pBar=False):
+#         '''
+#         Constructor.
 
-        Parameters
-        ----------
-        dec : str
-            Decimal point symbol.
-        sep : str | None, optional
-            Separator symbol. If None it is inferred. The default is None.
-        chunksize : int, optional
-            Dimension of the reading batch. The default is 2**20//8.
-        pBar : bool, optional
-            Whether a popup progress bar should be displayed during the reading
-            operation. The default is False.
+#         Parameters
+#         ----------
+#         dec : str
+#             Decimal point symbol.
+#         sep : str | None, optional
+#             Separator symbol. If None it is inferred. The default is None.
+#         chunksize : int, optional
+#             Dimension of the reading batch. The default is 2**20//8.
+#         pBar : bool, optional
+#             Whether a popup progress bar should be displayed during the reading
+#             operation. The default is False.
 
-        '''
-    # Set main attributes
-        self.dec = dec
-        self.sep = sep
-        self.chunksize = chunksize
-        self.pBar = pBar
+#         '''
+#     # Set main attributes
+#         self.dec = dec
+#         self.sep = sep
+#         self.chunksize = chunksize
+#         self.pBar = pBar
 
 
-    def read(self, filepath: str):
-        '''
-        Read the CSV file and return a pandas dataframe.
+#     def read(self, filepath: str):
+#         '''
+#         Read the CSV file and return a pandas dataframe.
 
-        Parameters
-        ----------
-        filepath : str 
-            The CSV filepath.
+#         Parameters
+#         ----------
+#         filepath : str 
+#             The CSV filepath.
 
-        Returns
-        -------
-        dataframe : Dataframe
-            Pandas Dataframe.
-        '''
-    # Set the popup progress bar if required
-        if self.pBar:
-            with open(filepath) as temp:
-                nChunks = sum(1 for _ in temp) // self.chunksize
-            progBar = PopUpProgBar(None, nChunks + 1, 'Loading Dataset', 
-                                   cancel=False)
+#         Returns
+#         -------
+#         dataframe : Dataframe
+#             Pandas Dataframe.
+#         '''
+#     # Set the popup progress bar if required
+#         if self.pBar:
+#             with open(filepath) as temp:
+#                 nChunks = sum(1 for _ in temp) // self.chunksize
+#             progBar = PopUpProgBar(None, nChunks + 1, 'Loading Dataset', 
+#                                    cancel=False)
 
-    # Read the CSV
-        chunkList = []
-        with pd.read_csv(filepath, decimal=self.dec, sep=self.sep, 
-                         engine='python', chunksize=self.chunksize) as reader:
-            for n, chunk in enumerate(reader):
-                chunkList.append(chunk)
-                if self.pBar: progBar.setValue(n)
+#     # Read the CSV
+#         chunkList = []
+#         with pd.read_csv(filepath, decimal=self.dec, sep=self.sep, 
+#                          engine='python', chunksize=self.chunksize) as reader:
+#             for n, chunk in enumerate(reader):
+#                 chunkList.append(chunk)
+#                 if self.pBar: progBar.setValue(n)
 
-    # Compile and return the pandas Dataframe
-        dataframe = pd.concat(chunkList)
-        if self.pBar: 
-            progBar.setValue(nChunks + 1)
-        return dataframe
+#     # Compile and return the pandas Dataframe
+#         dataframe = pd.concat(chunkList)
+#         if self.pBar: 
+#             progBar.setValue(nChunks + 1)
+#         return dataframe
 
 
 # class KernelSelector(QW.QWidget): # deprecated. Now included within the Phase Refiner tool
@@ -3156,7 +2865,7 @@ class DocumentBrowser(QW.QWidget):
 
     # Set main attributes
         self.read_only = read_only
-        self.font = QG.QFont()
+        self._font = QG.QFont()
         self.placeholder_text = ''
 
     # Set GUI and connect signals to slots
@@ -3305,10 +3014,10 @@ class DocumentBrowser(QW.QWidget):
 
         '''
     # The new font size must in any case be in range [0pt, 80pt]
-        newSize = self.font.pointSize() + value
+        newSize = self._font.pointSize() + value
         if 0 < newSize < 80:
-            self.font.setPointSize(newSize)
-            self.browser.document().setDefaultFont(self.font)
+            self._font.setPointSize(newSize)
+            self.browser.document().setDefaultFont(self._font)
 
 
     def _findTextUp(self):
@@ -3330,80 +3039,6 @@ class DocumentBrowser(QW.QWidget):
         self.browser.find(self.search_box.text())
 
 
-class RoiPatch(mpl.patches.Rectangle):
-    '''
-    Reimplementation of a matplotlib rectangle patch useful to manage and 
-    display ROIs.
-    '''
-    def __init__(self, bbox: list|tuple, color: str, filled: bool):
-        '''
-        Constructor.
-
-        Parameters
-        ----------
-        bbox : list | tuple
-            ROI bounding box.
-        color : str
-            Color string.
-        filled : bool
-            Whether the ROI patch should be filled.
-
-        '''
-    # Set main attributes
-        x0, y0, w, h = bbox
-        lw = 2
-
-        super(RoiPatch, self).__init__((x0, y0), w, h, linewidth=lw,
-                                       color=color, fill=filled)
-
-
-
-class RoiAnnotation(mpl.text.Annotation):
-    '''
-    Reimplementation of a matplotlib text annotation useful to manage and 
-    display ROIs names.
-    '''
-    def __init__(self, text: str, anchor_patch: RoiPatch, xy=(0, 1)):
-        '''
-        Constructor.
-
-        Parameters
-        ----------
-        text : str
-            ROI name. If the hyphen symbol ('-') is used, the annotation is 
-            hidden.
-        anchor_patch : RoiPatch
-            ROI to which attach the annotation.
-        xy : tuple, optional
-            Point of anchor with respect to the anchor_patch. For example, 
-            (0, 1) means top left corner. The default is (0, 1).
-
-        '''
-        bbox = dict(boxstyle='round', fc=pref.IVORY, ec=pref.BLACK_PEARL)
-
-    # The hyphen symbol can be used to hide ROI annotation
-        if text == '-': 
-            text = ''
-
-        super(RoiAnnotation, self).__init__(text, xy, xycoords=anchor_patch,
-                                            bbox=bbox, annotation_clip=True)
-        
-
-    def set_text(self, text: str):
-        '''
-        Change the text annotation.
-
-        Parameters
-        ----------
-        text : str
-            _description_
-        '''
-    # The hyphen symbol can be used to hide ROI annotation
-        if text == '-': 
-            text = ''
-        super(RoiAnnotation, self).set_text(text)
-
-        
 
 class SampleMapsSelector(QW.QWidget):
     '''

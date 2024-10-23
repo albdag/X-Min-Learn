@@ -10,8 +10,8 @@ from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
-import conv_functions as CF
-import customObjects as cObj
+import custom_widgets as CW
+import dialogs
 import docks
 import preferences as pref
 import tools
@@ -333,7 +333,7 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Sub-sample Dataset 
         self.subsample_ds_action.triggered.connect(
-            lambda: self.launch_dialog('SubSampleDataset'))
+            lambda: dialogs.SubSampleDataset(self).show())
 
     # Launch Merge Datasets 
         self.merge_ds_action.triggered.connect(
@@ -463,11 +463,11 @@ class MainWindow(QW.QMainWindow):
 
     def update_scene(self, item):
     # Re-call this function to refresh the displayed map if item is (sub)group
-        if isinstance(item, (cObj.DataGroup, cObj.DataSubGroup)):
+        if isinstance(item, (CW.DataGroup, CW.DataSubGroup)):
             self.update_scene(self.dataViewer._displayedObject)
 
     # Actions to be performed when item is a data object
-        elif isinstance(item, cObj.DataObject):
+        elif isinstance(item, CW.DataObject):
 
         # Extract item data, name and parent (sample). Also get mask if present
             i_data, i_name = item.get('data', 'name')
@@ -568,7 +568,7 @@ class MainWindow(QW.QMainWindow):
     # Get the current item in the data manager. If it is valid (= a DataObject
     # holding an Input Map), send its data to the RGBA Composite Maps Viewer
         item = self.dataManager.currentItem()
-        if isinstance(item, cObj.DataObject) and item.holdsInputMap():
+        if isinstance(item, CW.DataObject) and item.holdsInputMap():
             self.rgbaViewer.set_channel(channel, item.get('data'))
 
         # Force show the RGBA pane to provide feedback
@@ -687,7 +687,7 @@ class MainTabWidget(QW.QTabWidget):
 
         '''
         icon, title = widget.windowIcon(), widget.windowTitle()
-        widget = cObj.GroupScrollArea(widget, frame=False)
+        widget = CW.GroupScrollArea(widget, frame=False)
         super(MainTabWidget, self).addTab(widget, icon, title)
         self.setCurrentWidget(widget)
 
