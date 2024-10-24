@@ -4,6 +4,7 @@ Created on Tue May  14 15:03:45 2024
 
 @author: albdag
 """
+import os
 
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QIcon
@@ -12,8 +13,10 @@ import PyQt5.QtWidgets as QW
 import numpy as np
 
 from _base import RoiMap, InputMapStack
-import customObjects as cObj
+import custom_widgets as CW
+import dataset_tools as dtools
 import plots
+import preferences as pref
 import threads
 
 
@@ -58,6 +61,7 @@ class AutoRoiDetector(QW.QDialog):
 
         self._init_ui()
         self._connect_slots()
+        self.adjustSize()
         
 
     def _init_ui(self):
@@ -66,24 +70,24 @@ class AutoRoiDetector(QW.QDialog):
 
         '''
     # Input maps selector
-        self.maps_selector = cObj.SampleMapsSelector('inmaps')
+        self.maps_selector = CW.SampleMapsSelector('inmaps')
 
     # Number of ROIs selector (SpinBox)
-        self.nroi_spbox = cObj.StyledSpinBox(min_value=1, max_value=100)
+        self.nroi_spbox = CW.StyledSpinBox(min_value=1, max_value=100)
         self.nroi_spbox.setValue(15)
 
     # ROI size selector (SpinBox)
-        self.size_spbox = cObj.StyledSpinBox(min_value=3, max_value=99, step=2)
+        self.size_spbox = CW.StyledSpinBox(min_value=3, max_value=99, step=2)
         self.size_spbox.setValue(9)
         self.size_spbox.setToolTip('Define a NxN ROI. N must be an odd number')
 
     # ROI distance selector
-        self.distance_spbox = cObj.StyledSpinBox()
+        self.distance_spbox = CW.StyledSpinBox()
         self.distance_spbox.setValue(10)
         self.distance_spbox.setToolTip('Minimum distance between ROI')
 
     # NPV function types (QButtonLayout)
-        self.npv_btns = cObj.RadioBtnLayout(('Pure', 'Simple', 'Smooth'))
+        self.npv_btns = CW.RadioBtnLayout(('Pure', 'Simple', 'Smooth'))
         tooltips = ('Use sum function to penalize all noisy pixels',
                     'Use median function to ignore outliers',
                     'Use mean function to smoothen noise')
@@ -97,18 +101,18 @@ class AutoRoiDetector(QW.QDialog):
         self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # Search ROIs button
-        self.search_btn = cObj.StyledButton(QIcon(r'Icons/roi_detection.png'),
+        self.search_btn = CW.StyledButton(QIcon(r'Icons/roi_detection.png'),
                                             'Search ROI')
         self.search_btn.setEnabled(False)
 
     # Descriptive Progress bar 
-        self.progbar = cObj.DescriptiveProgressBar()
+        self.progbar = CW.DescriptiveProgressBar()
 
     # OK button
-        self.ok_btn = cObj.StyledButton(text='Ok')
+        self.ok_btn = CW.StyledButton(text='Ok')
 
     # Cancel button
-        self.cancel_btn = cObj.StyledButton(text='Cancel')
+        self.cancel_btn = CW.StyledButton(text='Cancel')
 
     # Set layout
         params_form = QW.QFormLayout()
@@ -116,16 +120,13 @@ class AutoRoiDetector(QW.QDialog):
         params_form.addRow('ROI size', self.size_spbox)
         params_form.addRow('ROI distance', self.distance_spbox)
 
-        radbtn_group = cObj.GroupArea(self.npv_btns, 'NPV type', 
-                                      align=Qt.AlignLeft)
-
         left_vbox = QW.QVBoxLayout()
         left_vbox.setSpacing(15)
         left_vbox.addWidget(self.maps_selector)
         left_vbox.addLayout(params_form)
-        left_vbox.addWidget(radbtn_group)
+        left_vbox.addWidget(CW.GroupArea(self.npv_btns, 'NPV type'))
         left_vbox.addWidget(self.search_btn)
-        left_scroll = cObj.GroupScrollArea(left_vbox)
+        left_scroll = CW.GroupScrollArea(left_vbox)
 
         right_grid = QW.QGridLayout()
         right_grid.addWidget(self.navtbar, 0, 0, 1, -1)
@@ -299,7 +300,7 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             e, = thread_result
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                             'NPV calculation failed', detailedText=repr(e))
             self._end_threaded_session()
 
@@ -348,7 +349,7 @@ class AutoRoiDetector(QW.QDialog):
         if success:
         # Display existent ROIs in black
             for _, bbox in self._current_roimap.roilist:
-                patch = cObj.RoiPatch(bbox, 'black', filled=False)
+                patch = plots.RoiPatch(bbox, 'black', filled=False)
                 patch.set_label('Existent ROI')
                 self.canvas.ax.add_patch(patch)
                 self._patches.append(patch)
@@ -356,7 +357,7 @@ class AutoRoiDetector(QW.QDialog):
         # Display new auto detected ROIs in red
             auto_roimap, = thread_result
             for _, bbox in auto_roimap.roilist:
-                patch = cObj.RoiPatch(bbox, 'red', filled=False)
+                patch = plots.RoiPatch(bbox, 'red', filled=False)
                 patch.set_label('Auto detected ROI')
                 self.canvas.ax.add_patch(patch)
                 self._patches.append(patch)
@@ -373,8 +374,8 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             e, = thread_result
-            cObj.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'ROI detection failed', detailedText=repr(e))
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                          'ROI detection failed', detailedText=repr(e))
             
     # End the threaded session anyway
         self._end_threaded_session()    
@@ -454,3 +455,498 @@ class AutoRoiDetector(QW.QDialog):
             self.activateWindow()
 
 
+
+class MergeDatasets(QW.QDialog):
+    '''
+    A dialog to create and save to disk a merged copy of two or more existent
+    ground truth datasets.
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : qObject or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super(MergeDatasets, self).__init__(parent)
+
+    # Set dialog widget attributes
+        self.setWindowTitle('Merge Datasets')
+        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+    # Set main attribute
+        self.merged_dataset = None
+
+        self._init_ui()
+        self._connect_slots()
+        self.adjustSize()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Decimal character selector for imported datasets
+        self.in_csv_decimal = CW.DecimalPointSelector()
+
+    # Import datasets (Styled Button)
+        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 'Import')
+
+    # Remove datasets (Styled Button)
+        self.remove_btn = CW.StyledButton(QIcon(r'Icons/remove.png'), 'Remove')
+
+    # Input datasets paths list (Styled List Widget)
+        self.in_path_list = CW.StyledListWidget()
+        
+    # Decimal point character selector for merged dataset
+        self.out_csv_decimal = CW.DecimalPointSelector()
+
+    # Separator character selector for merged dataset
+        self.out_csv_separator = CW.SeparatorSymbolSelector()
+
+    # Save merged dataset (Styled Button)
+        self.save_btn = CW.StyledButton(QIcon('Icons/save.png'), 'Save')
+        self.save_btn.setEnabled(False)
+
+    # Input datasets preview area (Document Browser)
+        self.input_info = CW.DocumentBrowser(read_only=True)
+
+    # Number of dataset preview rows (StyledSpinbox)
+        self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
+
+    # Merge datasets (Styled Button)
+        self.merge_btn = CW.StyledButton(text='Merge', bg_color=pref.BTN_GREEN)
+
+    # Merged dataset preview area (Document Browser)
+        self.merged_info = CW.DocumentBrowser(read_only=True)
+
+    # Adjust Layout
+        input_form = QW.QFormLayout()
+        input_form.addRow('CSV decimal point', self.in_csv_decimal)
+        input_form.addRow(self.import_btn)
+        input_form.addRow(self.in_path_list)
+        input_form.addRow(self.remove_btn)
+        input_group = CW.GroupArea(input_form, 'Import datasets')
+
+        output_form = QW.QFormLayout()
+        output_form.addRow('CSV decimal point', self.out_csv_decimal)
+        output_form.addRow('CSV separator', self.out_csv_separator)
+        output_form.addRow(self.save_btn)
+        output_group = CW.GroupArea(output_form, 'Export dataset')
+
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.addWidget(input_group)
+        left_vbox.addWidget(output_group)
+        left_vbox.addStretch(1)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
+
+        right_grid = QW.QGridLayout()
+        right_grid.setRowMinimumHeight(3, 20)
+        right_grid.addWidget(self.input_info, 0, 0, 1, -1)
+        right_grid.addWidget(QW.QLabel('Previewed rows'), 1, 0)
+        right_grid.addWidget(self.nrows_spbox, 1, 1)
+        right_grid.addWidget(self.merge_btn, 2, 0, 1, -1)
+        right_grid.addWidget(self.merged_info, 4, 0, 1, -1)
+        right_scroll = CW.GroupScrollArea(right_grid, frame=False)
+
+        main_layout = CW.SplitterLayout()
+        main_layout.addWidgets((left_scroll, right_scroll), (0, 1))
+        self.setLayout(main_layout)
+
+    
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        self.import_btn.clicked.connect(self.importDatasets)
+        self.in_path_list.itemClicked.connect(self.showInputDatasetPreview)
+        self.remove_btn.clicked.connect(self.removeDatasets)
+        self.merge_btn.clicked.connect(self.mergeDatasets)
+        self.save_btn.clicked.connect(self.save)
+
+
+    def importDatasets(self):
+        '''
+        Import ground truth datasets from files. In order to be more memory
+        friendly, this function just saves the datasets paths without actually
+        loading the entire dataframe.
+         
+        '''
+    # Do nothing if paths are invalid or the file dialog is canceled
+        ftype =  'Comma Separated Value (*.csv)'
+        paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Import Datasets',
+                                                   pref.get_dirPath('in'),
+                                                   ftype)
+        if not paths:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(paths[0]))
+     
+    # Add datasets paths to list but skip those that had already been added
+        for p in paths[:]:
+            if len(self.in_path_list.findItems(p, Qt.MatchExactly)): 
+                paths.remove(p) 
+            else:
+                self.in_path_list.addItem(p)
+
+
+    def removeDatasets(self):
+        '''
+        Remove selected datasets.
+
+        '''
+        if len(self.in_path_list.selectedItems()):
+            self.in_path_list.removeSelected()
+            self.input_info.clear()
+
+
+    def showInputDatasetPreview(self, item: QW.QListWidgetItem):
+        '''
+        Quickly read the input dataset held by 'item' and show a preview of its 
+        first rows. This is useful to check all the dataset's columns names.
+
+        Parameters
+        ----------
+        item : QW.QListWidgetItem
+            List item from 'self.in_path_list' holding the dataset path.
+
+        '''
+        if item is None:
+            return
+        
+    # Clear info area
+        self.input_info.clear()
+
+    # Get dataset preview
+        dec = self.in_csv_decimal.currentText()
+        nrows = self.nrows_spbox.value()
+        preview = dtools.dataframe_preview(item.text(), dec, n_rows=nrows)
+    
+    # Show preview in the info area
+        text = f'DATAFRAME PREVIEW\n(First {nrows} rows)\n\n{repr(preview)}'
+        self.input_info.setText(text)
+
+
+    def showOutputDatasetPreview(self):
+        '''
+        Show a preview of the output merged dataset.
+
+        '''
+        dataframe = self.merged_dataset.dataframe
+        text = f'MERGED DATAFRAME PREVIEW\n\n{repr(dataframe)}'
+        self.merged_info.setText(text)
+        
+
+    def mergeDatasets(self):
+        '''
+        Merge the loaded datasets. This function sends an error message if any 
+        of the datasets has different unique columns.
+
+        '''
+    # Check for at least two imported datasets
+        count = self.in_path_list.count()
+        if count < 2:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'Import at least two datasets.')
+        
+    # Merge datasets one at the time to build the final merged dataset. The 
+    # first path in the list is the starting dataset ('paths.pop(0)')
+        pbar = CW.PopUpProgBar(self, count, 'Merging datasets', forceShow=True)
+        dec = self.in_csv_decimal.currentText()
+        paths = [item.text() for item in self.in_path_list.getItems()]
+        merged = dtools.GroundTruthDataset.load(paths.pop(0), dec, chunks=True)
+        pbar.setValue(1)
+        for n, p in enumerate(paths, start=2):
+            if pbar.wasCanceled(): 
+                return
+            try:
+                merged.merge(dtools.GroundTruthDataset.load(p, dec, chunks=True))
+                pbar.setValue(n)
+            except ValueError:
+                pbar.reset()
+                return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                               'Datasets columns do not fit.')
+        
+    # Update attribute and save button state. Show dataset preview.
+        self.merged_dataset = merged
+        self.save_btn.setEnabled(True)
+        self.showOutputDatasetPreview()
+
+        
+    def save(self):
+        '''
+        Save merged datasets to file.
+
+        '''
+    # Exit function if outpath is invalid or file dialog is canceled
+        ftype = 'Comma Separated Values (*.csv)'
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Dataset',
+                                                    pref.get_dirPath('out'),
+                                                    ftype)
+
+        if not outpath:
+            return
+        
+        pref.set_dirPath('out', os.path.dirname(outpath))
+
+    # Save dataset
+        sep = self.out_csv_separator.currentText()
+        dec = self.out_csv_decimal.currentText()
+        try:
+            self.merged_dataset.save(outpath, sep, dec)
+            QW.QMessageBox.information(self, 'X-Min Learn',
+                                       'Merged dataset succesfully saved.')
+        except Exception as e:
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                          'Cannot save merged dataset.', detailedText=repr(e))
+
+
+
+class SubSampleDataset(QW.QDialog):
+    '''
+    A dialog to create and save to disk a sub-sampled copy of an existent 
+    ground truth dataset, by selecting which mineral classes to include.
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : qObject or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super(SubSampleDataset, self).__init__(parent)
+
+    # Set dialog widget attributes
+        self.setWindowTitle('Sub-sample Dataset')
+        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+    # Define main attribute
+        self._dataset = None
+
+        self._init_ui()
+        self._connect_slots()
+        self.adjustSize()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Import Dataset (Styled Button)
+        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 
+                                            'Import dataset')
+
+    # Imported dataset path
+        self.in_dataset_path = CW.PathLabel(full_display=False, 
+                                              placeholder='No dataset loaded')
+
+    # Decimal point character selector for imported dataset
+        self.in_csv_decimal = CW.DecimalPointSelector()
+
+    # Decimal point character selector for sub-sampled dataset
+        self.out_csv_decimal = CW.DecimalPointSelector()
+
+    # Separator character selector for sub-sampled dataset
+        self.out_csv_separator = CW.SeparatorSymbolSelector()
+
+    # Input dataset preview area (Document Browser)
+        self.dataset_info = CW.DocumentBrowser(read_only=True)
+
+    # Class selector (Twin List Widgets)
+        self.original_classes = CW.StyledListWidget()
+        self.subsampled_classes = CW.StyledListWidget()
+        for wid in (self.original_classes, self.subsampled_classes):
+            wid.setAcceptDrops(True)
+            wid.setDragEnabled(True)
+            wid.setDefaultDropAction(Qt.MoveAction)
+
+    # Class counter (Label)
+        self.counter_lbl = QW.QLabel()
+
+    # Save (Styled Button)
+        self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
+        self.save_btn.setEnabled(False)
+
+    # Adjust layout
+        input_form = QW.QFormLayout()
+        input_form.addRow('CSV decimal point', self.in_csv_decimal)
+        input_form.addRow(self.import_btn)
+        input_form.addRow(self.in_dataset_path)
+        input_group = CW.GroupArea(input_form, 'Import dataset')
+
+        output_form = QW.QFormLayout()
+        output_form.addRow('CSV decimal point', self.out_csv_decimal)
+        output_form.addRow('CSV separator', self.out_csv_separator)
+        output_form.addRow(self.save_btn)
+        output_group = CW.GroupArea(output_form, 'Export dataset')
+
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.addWidget(input_group)
+        left_vbox.addWidget(output_group)
+        left_vbox.addStretch(1)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
+        
+        right_grid = QW.QGridLayout()
+        right_grid.setRowMinimumHeight(1, 20)
+        hint = 'Drag & drop to include classes'
+        right_grid.addWidget(self.dataset_info, 0, 0, 1, -1)
+        right_grid.addWidget(QW.QLabel(hint), 2, 0, 1, -1, Qt.AlignCenter)
+        right_grid.addWidget(QW.QLabel('ORIGINAL CLASSES'), 3, 0, Qt.AlignCenter)
+        right_grid.addWidget(QW.QLabel('SUB-SAMPLED CLASSES'), 3, 1, Qt.AlignCenter)
+        right_grid.addWidget(self.original_classes, 4, 0)
+        right_grid.addWidget(self.subsampled_classes, 4, 1)
+        right_grid.addWidget(self.counter_lbl, 5, 0, 1, -1)
+        right_scroll = CW.GroupScrollArea(right_grid, frame=False)
+
+        main_layout = CW.SplitterLayout()
+        main_layout.addWidgets((left_scroll, right_scroll), (0, 1))
+        self.setLayout(main_layout)
+
+    
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        self.import_btn.clicked.connect(self.importDataset)
+        self.original_classes.itemClicked.connect(self.countClass)
+        self.subsampled_classes.itemClicked.connect(self.countClass)
+        self.save_btn.clicked.connect(self.save)
+
+
+    def resetDialog(self):
+        '''
+        Reset some GUI widgets to their initial state.
+
+        '''
+        self.original_classes.clear()
+        self.subsampled_classes.clear()
+        self.counter_lbl.clear()
+        self.dataset_info.clear()
+        self.save_btn.setEnabled(False)
+
+
+    def importDataset(self):
+        '''
+        Import an existent ground truth dataset.
+
+        '''
+    # Do nothing if path is invalid or file dialog is canceled
+        ftype = 'Comma Separated Value (*.csv)'
+        path, _ = QW.QFileDialog.getOpenFileName(self, 'Import dataset', 
+                                                 pref.get_dirPath('in'), ftype)
+        if not path:
+            return
+        
+    # Load dataset
+        pref.set_dirPath('in', os.path.dirname(path))
+        pbar = CW.PulsePopUpProgBar(self, 'Importing dataset')
+        pbar.startPulse()
+        dec = self.in_csv_decimal.currentText()
+        self._dataset = dtools.GroundTruthDataset.load(path, dec, chunks=True)
+
+    # Update GUI
+        self.in_dataset_path.setPath(path)
+        self.resetDialog()
+        self.updateDatasetInfo()
+        pbar.setValue(3)
+
+    # Split dataset features from targets and update widgets
+        try:
+            self._dataset.split_features_targets(split_idx=-1)
+            self.original_classes.addItems(self._dataset.targets_names())
+            self.save_btn.setEnabled(True)
+            pbar.stopPulse()
+        except Exception as e:
+            self._dataset = None
+            self.in_dataset_path.clearPath()
+            pbar.stopPulse()
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                          'Invalid dataset', detailedText=repr(e))
+          
+
+    def updateDatasetInfo(self):
+        '''
+        Populate the dataset info widget with a preview of the imported ground
+        truth dataset.
+
+        '''
+        text = f'DATAFRAME PREVIEW\n\n{repr(self._dataset.dataframe)}'
+        self.dataset_info.setText(text)
+
+
+    def countClass(self, item: QW.QListWidgetItem):
+        '''
+        Show the amount of instances of the selected class in the dataset.
+
+        Parameters
+        ----------
+        item : QW.QListWidgetItem
+            Selected class item.
+
+        '''
+        if self._dataset is None: # safety
+            return
+        class_name = item.text()
+        count = np.count_nonzero(self._dataset.targets == class_name)
+        self.counter_lbl.setText(f'{class_name} = {count}')
+
+
+    def save(self):
+        '''
+        Save sub-sampled version of the loaded ground truth dataset.
+
+        '''
+    # Deny sub-sampling if no classes are selected
+        count = self.subsampled_classes.count()
+        if count == 0:
+            return QW.QMessageBox.Critical(self, 'X-Min Learn',
+                                           'Include at least one class.')
+        
+    # Exit function if outpath is invalid or file dialog is canceled
+        ftype = 'Comma Separated Values (*.csv)'
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save dataset',
+                                                    pref.get_dirPath('out'), 
+                                                    ftype)
+        if not outpath:
+            return
+        
+        pref.set_dirPath('out', os.path.dirname(outpath))
+    
+    # Get selected class labels
+        pbar = CW.PopUpProgBar(self, 3, 'Sub-sampling dataset', cancel=False)
+        labels = [self.subsampled_classes.item(i).text() for i in range(count)]
+        pbar.setValue(1)
+
+    # Sub sample dataset
+        subsampled = self._dataset.sub_sample(labels, idx=-1)
+        pbar.setValue(2)
+
+    # Save dataset
+        separator_char = self.out_csv_separator.currentText()
+        decimal_char = self.out_csv_decimal.currentText()
+        try:
+            subsampled.save(outpath, separator_char, decimal_char)
+            pbar.setValue(3)
+            return QW.QMessageBox.information(self, 'X-Min Learn', 
+                                              'Dataset saved with success.')
+        except Exception as e:
+            pbar.reset()
+            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                                   'Cannot save dataset', detailedText=repr(e))
+        

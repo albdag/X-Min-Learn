@@ -88,7 +88,9 @@ class GroundTruthDataset():
             dataframe = CsvChunkReader(dec, sep).read(filepath)
             
         else:
-            dataframe = pd.read_csv(filepath, sep=sep, decimals=dec)
+            engine = 'python' if sep is None else 'c'
+            dataframe = pd.read_csv(filepath, sep=sep, decimals=dec, 
+                                    engine=engine)
 
         return cls(dataframe, filepath)
 
@@ -114,6 +116,39 @@ class GroundTruthDataset():
         '''
         df = self.dataframe[self.dataframe.iloc[:, idx].isin(targets)]
         return GroundTruthDataset(df)
+    
+
+    def merge(self, other):
+        '''
+        Merge this dataset with another one. The two datasets must share the
+        same column names. Warning: once merged, this dataset attributes will
+        be reset.
+
+        Parameters
+        ----------
+        other : GroundTruthDataset
+            The dataset to be merged with this one.
+
+        Raises
+        ------
+        TypeError
+            'Other' must be a GroundTruthDataset.
+        ValueError
+            The two datasets must share the same column names.
+
+        '''
+    # Check for object type
+        if not isinstance(other, GroundTruthDataset):
+            raise TypeError(f'Cannot merge with object of type {type(other)}')
+    
+    # Check for same column names
+        if sorted(self.dataframe.columns) != sorted(other.dataframe.columns):
+            raise ValueError(f'Cannot merge datasets with different columns')
+    
+    # Merge dataframes and update dataset
+        df = pd.concat([self.dataframe, other.dataframe], ignore_index=True)
+        self.dataframe = df
+        self.reset()
 
     
     def reset(self):
@@ -843,3 +878,32 @@ class CsvChunkReader():
 
     # Compile and return the pandas Dataframe
         return pd.concat(chunk_list)
+    
+
+
+def dataframe_preview(filepath: str, dec: str, sep: str|None=None, n_rows=10):
+    '''
+    Return a preview of the first 'n_rows' of the dataset stored at the given
+    'filepath'.  
+
+    Parameters
+    ----------
+    filepath : str
+        Dataset filepath. Must have the .csv extension. 
+    dec : str
+        CSV decimal point character.
+    sep : str | None, optional
+        CSV separator character. If None, it is inferred. The default is None.
+    n_rows : int, optional
+        Number of rows to be read for the preview. The default is 10.
+
+    Returns
+    -------
+    preview : Pandas Dataframe
+        First 'n_rows' of the dataset.
+
+    '''
+    engine = 'python' if sep is None else 'c'
+    preview = pd.read_csv(filepath, decimal=dec, sep=sep, nrows=n_rows, 
+                          engine=engine) 
+    return preview

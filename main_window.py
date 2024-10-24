@@ -337,7 +337,7 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Merge Datasets 
         self.merge_ds_action.triggered.connect(
-            lambda: self.launch_dialog('MergeDatasets'))
+            lambda: dialogs.MergeDatasets(self).show())
 
     # Launch Dataset Builder 
         self.ds_builder_action.triggered.connect(
