@@ -591,9 +591,9 @@ class MergeDatasets(QW.QDialog):
         pref.set_dirPath('in', os.path.dirname(paths[0]))
      
     # Add datasets paths to list but skip those that had already been added
-        for p in paths[:]:
+        for p in paths:
             if len(self.in_path_list.findItems(p, Qt.MatchExactly)): 
-                paths.remove(p) 
+                continue
             else:
                 self.in_path_list.addItem(p)
 
