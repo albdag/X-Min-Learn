@@ -1724,7 +1724,7 @@ class MineralClassifier(DraggableTool):
         # Parse the classification result appropriately
             if self._current_classifier.type == 'Unsupervised':
                 pred, prob, sil_avg, sil_clust, chi, dbi = result
-                pred = pred.astype('U8')
+                pred = pred.astype(MineralMap._DTYPE_STR)
             else:   
                 pred, prob = result
                 sil_avg, sil_clust, chi, dbi = None, None, None, None
@@ -1739,7 +1739,7 @@ class MineralClassifier(DraggableTool):
         # Reshape mineral map and probability map when mask is present
             else:
                 rows, cols = (mask.mask == 0).nonzero()
-                mmap = np.empty(shape, dtype='U8')
+                mmap = np.empty(shape, dtype=MineralMap._DTYPE_STR)
                 mmap[:, :] = '_MSK_'
                 mmap[rows, cols] = pred
                 pmap = np.ones(shape)
@@ -5424,7 +5424,8 @@ class ModelLearner(DraggableTool):
     # Split features [X] from targets [Y] expressed as labels
         pbar = CW.PopUpProgBar(self, 4, 'Splitting dataset', cancel=False)
         try:
-            self.dataset.split_features_targets(xtype='int32')
+            x_dtype, y_dtype = InputMap._DTYPE, MineralMap._DTYPE_STR
+            self.dataset.split_features_targets(xtype=x_dtype, ytype=y_dtype)
             pbar.setValue(1)
 
     # Update encoder. Inherit from parent model encoder if present.    

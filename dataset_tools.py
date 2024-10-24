@@ -303,7 +303,7 @@ class GroundTruthDataset():
         self.orig_subsets_ratios = (train_ratio, valid_ratio, test_ratio)
 
     # Encode targets' labels as IDs    
-        targ_ids = np.empty(self.targets.shape, dtype='int16')
+        targ_ids = np.empty(self.targets.shape, dtype='uint16')
         for lbl, id in self.encoder.items():
             targ_ids[self.targets==lbl] = id
 

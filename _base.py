@@ -14,6 +14,7 @@ class InputMap():
     Base class for generating, editing, loading and saving an input 2d map. The
     object consists of an input map array (e.g., X-Ray map).
     '''
+    _DTYPE = 'int32'
 
     def __init__(self, map_array: np.ndarray, filepath: str|None=None):
         '''
@@ -60,7 +61,7 @@ class InputMap():
 
     # Proper file extensions (.gz or .txt) instantiate a new Input Map object
         if filext in ('.gz', '.txt'):
-            inmap = np.loadtxt(filepath, dtype='int32')
+            inmap = np.loadtxt(filepath, dtype=cls._DTYPE)
             return cls(inmap, filepath)
 
     # Any other file extension is discarded.
@@ -251,7 +252,7 @@ class MineralMap():
     # From these we can retrieve only the mineral map data. Useful to load
     # old (legacy) mineral maps and data from different software.
         elif filext in ('.gz', '.txt'):
-            minmap = np.loadtxt(filepath, dtype='U8')
+            minmap = np.loadtxt(filepath, dtype=cls._DTYPE_STR)
 
         # If a legacy-style probability map is present in the same folder, it
         # is loaded as well.
@@ -1045,7 +1046,7 @@ class RoiMap():
             A new instance of ROI map.
 
         '''
-        map_array = np.empty(shape, dtype='U8')
+        map_array = np.empty(shape, dtype=cls._DTYPE_STR)
         return cls(map_array, [])
     
 
