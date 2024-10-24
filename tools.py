@@ -7898,7 +7898,7 @@ class PhaseRefiner(DraggableTool):
             return QW.QMessageBox.information(self, 'X-Min Learn', 
                                               'Map saved with success')
         except Exception as e:
-            return CW.RichMsgBox(self, QW.QMessageBox.critical, 'X-Min Learn',
+            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                    'An error occurred while saving the map',
                                    detailedText=repr(e))
                                                
