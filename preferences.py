@@ -373,8 +373,9 @@ SS_grouparea_title = (SS_grouparea_notitle +
 SS_groupScrollArea_frame = (
     '''QScrollArea {
             border: 1px solid %s;
+            border-radius: 2px;
             padding: 1px;}'''
-    %(BLACK_PEARL))
+    %(SAN_MARINO))
 
 
 SS_groupScrollArea_noframe = (SS_groupScrollArea_frame +
