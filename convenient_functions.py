@@ -126,30 +126,30 @@ def sort_dict_by_list(dictionary: dict, ordered_list: list, mode='keys'):
 #     return (unique, perc)
 
 
-def map2ASCII(map_path): # Probably should be moved directly inside Map converter tool/dialog or maybe leave here the conversion part, but not the loading from file part!
-# # If the image has a .tiff format we use the libtiff module
-#     if splitext(map_path)[1].upper() in ('.TIFF', '.TIF'):
-#         libtiff.libtiff_ctypes.suppress_warnings()
-#         img = libtiff.TIFFfile(map_path, use_memmap=False)
-#     # Adjust array shape by removing dimensions that are == 1 (squeeze)
-#     # and swapping dimensions(transpose) to get 1st -> row, 2nd -> col, 3rd -> channels
-#         arr = np.transpose(img.get_tiff_array(), (1,2,0)).squeeze()
-#         return arr
+# def map2ASCII(map_path): # deprecated. Moved to image_analysis_function as 'image2array'
+# # # If the image has a .tiff format we use the libtiff module
+# #     if splitext(map_path)[1].upper() in ('.TIFF', '.TIF'):
+# #         libtiff.libtiff_ctypes.suppress_warnings()
+# #         img = libtiff.TIFFfile(map_path, use_memmap=False)
+# #     # Adjust array shape by removing dimensions that are == 1 (squeeze)
+# #     # and swapping dimensions(transpose) to get 1st -> row, 2nd -> col, 3rd -> channels
+# #         arr = np.transpose(img.get_tiff_array(), (1,2,0)).squeeze()
+# #         return arr
 
-# If the image has a .tiff format we use the TIFFFILE module
-# Adjust array shape by removing dimensions that are == 1 (squeeze)
-    if os.path.splitext(map_path)[1].upper() in ('.TIFF', '.TIF'):
-        arr = tifffile.imread(map_path).squeeze()
-        return arr
-# otherwise we use PIL
-    else:
-        img = PIL.Image.open(map_path)
-        mode = img.mode
-        if mode == 'CMYK':
-            img = img.convert('RGB')
-        dtype = 'uint8' if mode in ('1', 'L', 'P') else 'uint32'
-        arr = np.array(img, dtype=dtype)
-        return arr
+# # If the image has a .tiff format we use the TIFFFILE module
+# # Adjust array shape by removing dimensions that are == 1 (squeeze)
+#     if os.path.splitext(map_path)[1].upper() in ('.TIFF', '.TIF'):
+#         arr = tifffile.imread(map_path).squeeze()
+#         return arr
+# # otherwise we use PIL
+#     else:
+#         img = PIL.Image.open(map_path)
+#         mode = img.mode
+#         if mode == 'CMYK':
+#             img = img.convert('RGB')
+#         dtype = 'uint8' if mode in ('1', 'L', 'P') else 'uint32'
+#         arr = np.array(img, dtype=dtype)
+#         return arr
 
 
 

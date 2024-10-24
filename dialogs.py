@@ -6,15 +6,17 @@ Created on Tue May  14 15:03:45 2024
 """
 import os
 
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import pyqtSignal, QSize, Qt
+from PyQt5.QtGui import QIcon, QPixmap
 import PyQt5.QtWidgets as QW
 
 import numpy as np
 
-from _base import RoiMap, InputMapStack
+from _base import InputMap, InputMapStack, RoiMap
+import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools
+import image_analysis_tools as iatools
 import plots
 import preferences as pref
 import threads
@@ -458,8 +460,8 @@ class AutoRoiDetector(QW.QDialog):
 
 class MergeDatasets(QW.QDialog):
     '''
-    A dialog to create and save to disk a merged copy of two or more existent
-    ground truth datasets.
+    A dialog to create and save a merged copy of two or more existent ground 
+    truth datasets.
     '''
 
     def __init__(self, parent=None):
@@ -712,8 +714,8 @@ class MergeDatasets(QW.QDialog):
 
 class SubSampleDataset(QW.QDialog):
     '''
-    A dialog to create and save to disk a sub-sampled copy of an existent 
-    ground truth dataset, by selecting which mineral classes to include.
+    A dialog to create and save a sub-sampled copy of an existent ground truth 
+    dataset, by selecting which mineral classes to include.
     '''
 
     def __init__(self, parent=None):
@@ -950,3 +952,195 @@ class SubSampleDataset(QW.QDialog):
             return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
                                    'Cannot save dataset', detailedText=repr(e))
         
+
+
+class ImageToInputMap(QW.QDialog):
+    '''
+    A dialog to convert images to InputMaps and save them. Multi-channel images
+    can be optionally split into 1-channel images and converted as well.
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : qObject or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super(ImageToInputMap, self).__init__(parent)
+
+    # Set dialog widget attributes
+        self.setWindowTitle('Image To Input Map')
+        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+    # Set main attribute
+        self.preview_size = QSize(64, 64)
+
+        self._init_ui()
+        self._connect_slots()
+        self.adjustSize()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Import images (Styled Button)
+        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 'Import')
+        
+    # Remove images (Styled Button)
+        self.remove_btn = CW.StyledButton(QIcon(r'Icons/remove.png'), 'Remove')
+        
+    # Images list (Styled ListWidget)
+        self.img_list = CW.StyledListWidget()
+        self.img_list.setIconSize(self.preview_size)
+
+    # Split multichannel images (CheckBox)
+        self.split_cbox = QW.QCheckBox('Split multi-channel images')
+        self.split_cbox.setChecked(True)
+
+    # Output map extension (Styled ComboBox)
+        self.map_ext_combox = CW.StyledComboBox()
+        self.map_ext_combox.addItems(['.gz', '.txt'])
+
+    # Convert (Styled Button)
+        self.convert_btn = CW.StyledButton(text='Convert',
+                                           bg_color=pref.BTN_GREEN)
+        
+    # Progress bar (DescriptiveProgressBar)
+        self.progbar = CW.DescriptiveProgressBar()
+
+    # Adjust layout
+        left_form = QW.QFormLayout()
+        left_form.setVerticalSpacing(15)
+        left_form.addRow(self.split_cbox)
+        left_form.addRow('Output map format', self.map_ext_combox)
+        left_form.addRow(self.convert_btn)
+        left_scroll = CW.GroupScrollArea(left_form, 'Options', frame=False)
+
+        right_grid = QW.QGridLayout()
+        right_grid.addWidget(self.import_btn, 0, 0)
+        right_grid.addWidget(self.remove_btn, 0, 1)
+        right_grid.addWidget(self.img_list, 1, 0, 1, -1)
+        right_scroll = CW.GroupScrollArea(right_grid, frame=True)
+
+        splitter = CW.SplitterGroup([left_scroll, right_scroll], (0, 1))
+        main_layout = QW.QVBoxLayout()
+        main_layout.addWidget(splitter, 1)
+        main_layout.addWidget(self.progbar, 0)
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        self.import_btn.clicked.connect(self.importImages)
+        self.remove_btn.clicked.connect(self.img_list.removeSelected)
+        self.convert_btn.clicked.connect(self.convertImages)
+
+
+    def importImages(self):
+        '''
+        Import images and show their paths as well as a small preview.
+
+        '''
+    # Do nothing if paths are invalid or the file dialogs is canceled
+        ftypes = '''TIF (*.tif; *.tiff)
+                    BMP (*.bmp)
+                    PNG (*.png)
+                    JPEG (*.jpg; *.jpeg)'''
+        paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Import images',
+                                                   pref.get_dirPath('in'),
+                                                   ftypes)
+
+        if not paths:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(paths[0]))
+
+    # Add images paths and previews (as icon) to list but skip those that had 
+    # already been added
+        self.progbar.setRange(0, len(paths))
+        for p in paths:
+            self.progbar.step(f'Importing {os.path.split(p)[1]}')
+            if len(self.img_list.findItems(p, Qt.MatchExactly)): 
+                continue
+            else:
+                try:
+                    # TIFF file previews may spam warnings on the console (BUG)
+                    transforms = (Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pixmap = QPixmap(p).scaled(self.preview_size, *transforms)
+                    self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
+                except Exception as e:
+                    self.progbar.reset()
+                    return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
+                                         'X-Min Learn', 'Cannot import images',
+                                         detailedText=repr(e))
+        self.progbar.reset()
+
+
+    def convertImages(self):
+        '''
+        Convert images to InputMaps and save them.
+
+        '''
+    # Deny conversion if no image is loaded
+        img_count = self.img_list.count()
+        if not img_count:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'No image loaded.')
+
+    # Do nothing if directory is invalid or the direcotry dialog is canceled
+        outdir = QW.QFileDialog.getExistingDirectory(self, 'Output directory',
+                                                     pref.get_dirPath('out'))
+        if not outdir:
+            return
+        
+        pref.set_dirPath('out', outdir)
+        
+        errors_log = []
+        ext = str(self.map_ext_combox.currentText())
+        self.progbar.setRange(0, img_count)
+
+        for n, i in enumerate(self.img_list.getItems()):
+            try:
+                path = i.text()
+                fname = cf.path2filename(path) + ext
+                self.progbar.step(f'Converting {fname}')
+            
+            # Convert image to array
+                array = iatools.image2array(path, InputMap._DTYPE)
+
+            # Save InputMap. Split multi-channel arrays, if requested
+                if array.ndim == 3 and self.split_cbox.isChecked():
+                    channels = np.split(array, array.shape[-1], axis=2)
+                    for n, c in enumerate(channels, start=1):
+                        fname_channel = cf.extend_filename(fname, f'_ch{n}')
+                        out = os.path.join(outdir, fname_channel)
+                        InputMap(np.squeeze(c)).save(out)
+                else:
+                    out = os.path.join(outdir, fname)
+                    InputMap(array).save(out)
+
+            except Exception as e:
+                errors_log.append((path, e))
+        
+        self.progbar.reset()
+
+    # Send message box with success confirm or error warnings
+        if len(errors_log):
+            fpaths, err = zip(*errors_log) 
+            return CW.RichMsgBox(self, QW.QMessageBox.Warning, 'X-Min Learn',
+                                 f'Some conversion failed:\n\n{fpaths}',
+                                 detailedText='\n'.join(repr(e) for e in err))
+        else:
+            return QW.QMessageBox.information(self, 'X-Min Learn',
+                                              'Images converted with success.')

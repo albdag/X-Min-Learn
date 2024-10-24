@@ -161,9 +161,9 @@ class MainWindow(QW.QMainWindow):
             QG.QIcon(r'Icons/wrench.png'), '&Preferences')
         self.pref_action.setShortcut('Ctrl+P')
 
-    # Launch Convert Grayscale to ASCII Action
-        self.conv2ascii_action = QW.QAction('Grayscale to Input Map')
-        self.conv2ascii_action.setStatusTip('Convert image to Input Map')
+    # Launch Convert Image to Input Map Action
+        self.conv2inmap_action = QW.QAction('Image to Input Map')
+        self.conv2inmap_action.setStatusTip('Convert image to Input Map')
 
     # Launch Convert RGB to Mineral Maps Action
         self.conv2mmap_action = QW.QAction('RGB to Mineral Map')
@@ -264,7 +264,7 @@ class MainWindow(QW.QMainWindow):
         utility_menu = menu_bar.addMenu('&Utility')
         convert_submenu = utility_menu.addMenu('&Convert')
         convert_submenu.addActions(
-            (self.conv2ascii_action, self.conv2mmap_action))
+            (self.conv2inmap_action, self.conv2mmap_action))
         utility_menu.addAction(self.dummy_map_action)
 
     # View Menu
@@ -318,9 +318,9 @@ class MainWindow(QW.QMainWindow):
         self.pref_action.triggered.connect(
             lambda: self.launch_dialog('Preferences'))
 
-    # Launch Convert Grayscale images to ASCII 
-        self.conv2ascii_action.triggered.connect(
-            lambda: self.launch_dialog('Grayscale2Ascii'))
+    # Launch Convert Images to Input Maps 
+        self.conv2inmap_action.triggered.connect(
+            lambda: dialogs.ImageToInputMap(self).show())
 
     # Launch Convert RGB yo Mineral Maps 
         self.conv2mmap_action.triggered.connect(
