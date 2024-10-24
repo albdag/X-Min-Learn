@@ -1237,6 +1237,7 @@ class StyledListWidget(QW.QListWidget):
     '''
     QSS-styled reimplementation of a QListWidget.
     '''
+
     def __init__(self, ext_selection=True, parent=None):
         '''
         Constructor.
@@ -1245,8 +1246,9 @@ class StyledListWidget(QW.QListWidget):
         ----------
         ext_selection : bool, optional
             If extended selection mode should be enabled. The default is True.
-        parent : QObject | None, optional
+        parent : QObject or None, optional
             The GUI parent of this object. The default is None.
+
         '''
         super(StyledListWidget, self).__init__(parent)
     # Set custom scroll bars
@@ -1255,6 +1257,7 @@ class StyledListWidget(QW.QListWidget):
     # Set extended selection mode if requested
         if ext_selection:
             self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
+
 
     def getItems(self):
         '''
@@ -1268,6 +1271,30 @@ class StyledListWidget(QW.QListWidget):
         '''
         items = [self.item(row) for row in range(self.count())]
         return items
+    
+
+    def selectedRows(self):
+        '''
+        Return all selected rows.
+
+        Returns
+        -------
+        selected_rows : list[int]
+            List of selected items expressed as rows.
+
+        '''
+        selected_items = self.selectedItems()
+        selected_rows = [self.row(item) for item in selected_items]
+        return selected_rows
+    
+
+    def removeSelected(self):
+        '''
+        Remove all selected items from list.
+
+        '''
+        for idx in sorted(self.selectedRows(), reverse=True):
+            self.takeItem(idx)
 
 
 
