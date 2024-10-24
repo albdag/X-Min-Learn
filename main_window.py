@@ -174,13 +174,12 @@ class MainWindow(QW.QMainWindow):
         self.dummy_map_action.setStatusTip('Build placeholder noisy maps')
 
     # Launch Sub-sample Dataset Action
-        self.subsample_ds_action = QW.QAction('&Sub-sample dataset')
-        self.subsample_ds_action.setStatusTip('Extract sub-datasets from an '\
-                                              'existent dataset')
+        self.subsample_ds_action = QW.QAction('&Sub-sample Dataset')
+        self.subsample_ds_action.setStatusTip('Extract sub-sets from dataset')
 
     # Launch Merge Datasets Action
-        self.merge_ds_action = QW.QAction('&Merge datasets')
-        self.merge_ds_action.setStatusTip('Merge multiple datasets')
+        self.merge_ds_action = QW.QAction('&Merge Datasets')
+        self.merge_ds_action.setStatusTip('Merge multiple datasets into one')
 
     # Launch Dataset Builder Action
         self.ds_builder_action = QW.QAction(
