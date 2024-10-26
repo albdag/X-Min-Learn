@@ -285,6 +285,44 @@ def rgba2rgb(rgba: np.ndarray):
     return np.asarray(rgb, dtype=rgba.dtype)
 
 
+def greyscale2rgb(greyscale: np.ndarray):
+    '''
+    Convert 1 channel "greyscale" array to 3 channels "RGB" array.
+
+    Parameters
+    ----------
+    greyscale : np.ndarray
+        Input greyscale array.
+
+    Returns
+    -------
+    rgb : np.ndarray
+        Output RGB array.
+
+    '''
+    rgb = np.stack((greyscale, ) * 3, axis=-1)
+    return rgb
+
+
+def binary2greyscale(binary: np.ndarray):
+    '''
+    Convert binary array to greyscale array.
+
+    Parameters
+    ----------
+    binary : np.ndarray
+        Input binary array.
+
+    Returns
+    -------
+    greyscale : np.ndarray
+        Output greyscale array.
+        
+    '''
+    greyscale = binary.astype('uint8') * 255
+    return greyscale
+
+
 def image2array(path: str, dtype='int64'):
     '''
     Convert image data to array.
@@ -314,5 +352,4 @@ def image2array(path: str, dtype='int64'):
             img = img.convert('RGB')
         array = np.array(img, dtype=dtype)
     
-    print(array.dtype)
     return array
