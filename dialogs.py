@@ -529,6 +529,9 @@ class MergeDatasets(QW.QDialog):
     # Merged dataset preview area (Document Browser)
         self.merged_info = CW.DocumentBrowser(read_only=True)
 
+    # Progress bar (ProgressBar)
+        self.progbar = QW.QProgressBar()
+
     # Adjust Layout
         input_form = QW.QFormLayout()
         input_form.addRow('CSV decimal point', self.in_csv_decimal)
@@ -558,8 +561,10 @@ class MergeDatasets(QW.QDialog):
         right_grid.addWidget(self.merged_info, 4, 0, 1, -1)
         right_scroll = CW.GroupScrollArea(right_grid, frame=False)
 
-        main_layout = CW.SplitterLayout()
-        main_layout.addWidgets((left_scroll, right_scroll), (0, 1))
+        splitter = CW.SplitterGroup((left_scroll, right_scroll), (0, 1))
+        main_layout = QW.QVBoxLayout()
+        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.progbar)
         self.setLayout(main_layout)
 
     
@@ -654,29 +659,32 @@ class MergeDatasets(QW.QDialog):
 
         '''
     # Check for at least two imported datasets
-        count = self.in_path_list.count()
-        if count < 2:
+        if self.in_path_list.count() < 2:
             return QW.QMessageBox.critical(self, 'X-Min Learn', 
                                            'Import at least two datasets.')
         
+    # Check that all paths still exist
+        paths = [item.text() for item in self.in_path_list.getItems()]
+        if not all([os.path.exists(p) for p in paths]):
+            msg = 'Some datasets have been deleted, moved or renamed.'
+            return QW.QMessageBox.critical(self, 'X-Min Learn', msg)
+        
     # Merge datasets one at the time to build the final merged dataset. The 
     # first path in the list is the starting dataset ('paths.pop(0)')
-        pbar = CW.PopUpProgBar(self, count, 'Merging datasets', forceShow=True)
         dec = self.in_csv_decimal.currentText()
-        paths = [item.text() for item in self.in_path_list.getItems()]
+        self.progbar.setRange(0, len(paths))
+        self.progbar.setValue(1)
         merged = dtools.GroundTruthDataset.load(paths.pop(0), dec, chunks=True)
-        pbar.setValue(1)
         for n, p in enumerate(paths, start=2):
-            if pbar.wasCanceled(): 
-                return
             try:
+                self.progbar.setValue(n)
                 merged.merge(dtools.GroundTruthDataset.load(p, dec, chunks=True))
-                pbar.setValue(n)
             except ValueError:
-                pbar.reset()
+                self.progbar.reset()
                 return QW.QMessageBox.critical(self, 'X-Min Learn',
                                                'Datasets columns do not fit.')
-        
+        self.progbar.reset()
+
     # Update attribute and save button state. Show dataset preview.
         self.merged_dataset = merged
         self.save_btn.setEnabled(True)
