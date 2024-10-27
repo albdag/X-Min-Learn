@@ -1,36 +1,16 @@
 """This file is just a temporary space where new features can be tested"""
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
-import sklearn.cluster
-import sklearn.metrics
-from sklearn.preprocessing import PolynomialFeatures
-from scipy import ndimage
-import os, sys, time, math
-from _base import *
-
-def num_output_features_no_bias(n, d):
-    return sum(math.comb(n + i - 1, i) for i in range(1, d + 1))
-
-def map2Polynomial(arr, degree, return_n_features=False):
-    kern = PolynomialFeatures(degree, include_bias=False)
-    out = kern.fit_transform(arr)
-# workaround to know how many in_feat there will be after polynomial mapping
-    if return_n_features:
-        out = (out, kern.n_output_features_)
-    return out
-
-deg = 1
-arr = np.arange(20).reshape(1, -1)
-arr_poly, n = map2Polynomial(arr, deg, True)
-print(arr)
-print(arr_poly)
-print(n)
-print(num_output_features_no_bias(arr.shape[1], deg))
+def f():
+    for x in reversed(range(10)):
+        try:
+            print(1/x)
+        except ZeroDivisionError:
+            return 'err'
+        finally:
+            print('.')
 
 
-
+print(f())
 
 
 ### ------------------ A U T O   R O I   D E T E C T O R ------------------ ###

@@ -165,9 +165,9 @@ class MainWindow(QW.QMainWindow):
         self.conv2inmap_action = QW.QAction('Image to Input Map')
         self.conv2inmap_action.setStatusTip('Convert image to Input Map')
 
-    # Launch Convert RGB to Mineral Maps Action
-        self.conv2mmap_action = QW.QAction('RGB to Mineral Map')
-        self.conv2mmap_action.setStatusTip('Convert image to Mineral Map')
+    # Launch Convert Image to Mineral Maps Action
+        self.conv2minmap_action = QW.QAction('Image to Mineral Map')
+        self.conv2minmap_action.setStatusTip('Convert image to Mineral Map')
 
     # Launch Build Dummy Maps Action
         self.dummy_map_action = QW.QAction('Generate &Dummy Maps')
@@ -264,7 +264,7 @@ class MainWindow(QW.QMainWindow):
         utility_menu = menu_bar.addMenu('&Utility')
         convert_submenu = utility_menu.addMenu('&Convert')
         convert_submenu.addActions(
-            (self.conv2inmap_action, self.conv2mmap_action))
+            (self.conv2inmap_action, self.conv2minmap_action))
         utility_menu.addAction(self.dummy_map_action)
 
     # View Menu
@@ -322,9 +322,9 @@ class MainWindow(QW.QMainWindow):
         self.conv2inmap_action.triggered.connect(
             lambda: dialogs.ImageToInputMap(self).show())
 
-    # Launch Convert RGB yo Mineral Maps 
-        self.conv2mmap_action.triggered.connect(
-            lambda: self.launch_dialog('Rgb2Minmap'))
+    # Launch Convert Image to Mineral Maps 
+        self.conv2minmap_action.triggered.connect(
+            lambda: dialogs.ImageToMineralMap(self).show())
 
     # Launch Build Dummy Maps 
         self.dummy_map_action.triggered.connect(

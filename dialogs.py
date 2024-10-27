@@ -12,7 +12,7 @@ import PyQt5.QtWidgets as QW
 
 import numpy as np
 
-from _base import InputMap, InputMapStack, RoiMap
+from _base import InputMap, InputMapStack, MineralMap, RoiMap
 import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools
@@ -1198,3 +1198,313 @@ class ImageToInputMap(QW.QDialog):
         else:
             return QW.QMessageBox.information(self, 'X-Min Learn',
                                               'Images converted with success.')
+        
+
+
+class ImageToMineralMap(QW.QDialog):
+    '''
+    A dialog to convert images to MineralMaps and save them.
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : qObject or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super(ImageToMineralMap, self).__init__(parent)
+
+    # Set dialog widget attributes
+        self.setWindowTitle('Image To Mineral Map')
+        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+    # Set main attribute
+        self.image_array = None
+        self.minmap = None
+
+        self._init_ui()
+        self._connect_slots()
+        self.adjustSize()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Import image (Styled Button)
+        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 'Import')
+
+    # Image path (Path Label)
+        self.path_lbl = CW.PathLabel(full_display=False)
+
+    # Pixel color delta (Styled SpinBox)
+        self.delta_spbox = CW.StyledSpinBox(1, 255)
+        self.delta_spbox.setToolTip('Minimum color variance to split classes')
+
+    # Convert (Styled Button)
+        self.convert_btn = CW.StyledButton(text='Convert', 
+                                           bg_color=pref.BTN_GREEN)
+
+    # Legend (Legend)
+        self.legend = CW.Legend()
+
+    # Save (Styled Button)
+        self.save_btn = CW.StyledButton(QIcon(r'Icons\save.png'), 'Save')
+        self.save_btn.setEnabled(False)
+
+    # Canvas (ImageCanvas)
+        self.canvas = plots.ImageCanvas(size=(5, 3.75))
+        self.canvas.setMinimumSize(300, 300)
+
+    # Navigation Toolbar (NavTbar)
+        self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
+
+    # Progress bar (ProgressBar)
+        self.progbar = QW.QProgressBar()
+
+    # Adjust layout
+        options_vbox = QW.QFormLayout()
+        options_vbox.setVerticalSpacing(15)
+        options_vbox.addRow('Color delta', self.delta_spbox)
+        options_vbox.addRow(self.convert_btn)
+        options_vbox.addRow(self.legend)
+        options_vbox.addRow(self.save_btn)
+        options_group = CW.GroupArea(options_vbox, 'Options')
+        
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.addWidget(self.import_btn)
+        left_vbox.addWidget(self.path_lbl)
+        left_vbox.addWidget(options_group)
+        left_scoll = CW.GroupScrollArea(left_vbox, frame=False)
+
+        right_vbox = QW.QVBoxLayout()
+        right_vbox.addWidget(self.navtbar)
+        right_vbox.addWidget(self.canvas)
+        right_scroll = CW.GroupScrollArea(right_vbox, frame=False)
+
+        splitter = CW.SplitterGroup((left_scoll, right_scroll), (0, 1))
+        main_layout = QW.QVBoxLayout()
+        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.progbar)
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        self.import_btn.clicked.connect(self.importImage)
+        self.convert_btn.clicked.connect(self.convertImage)
+        self.save_btn.clicked.connect(self.saveMineralMap)
+    # Legend signals
+        self.legend.colorChangeRequested.connect(self.changeColor)
+        self.legend.itemRenameRequested.connect(self.renameClass)
+        self.legend.itemHighlightRequested.connect(self.highlightClass)
+
+
+    def importImage(self):
+        '''
+        Import image from file and store it as a NumPy array.
+
+        '''
+    # Do nothing if image path is invalid or file dialog is canceled 
+        ftypes = '''TIF (*.tif; *.tiff)
+                    BMP (*.bmp)
+                    PNG (*.png)
+                    JPEG (*.jpg; *.jpeg)'''
+        path, _ = QW.QFileDialog.getOpenFileName(self, 'Import image',
+                                                 pref.get_dirPath('in'), 
+                                                 ftypes)
+        if not path:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(path))
+
+    # Store the image array
+        try:
+            self.image_array = iatools.image2array(path, dtype='int32')
+            self.path_lbl.setPath(path)
+        except Exception as e:
+            CW.RichMsgBox(self, QW.QMessageBox.critical, 'X-Min Learn',
+                          'Failed to import this image', detailedText=repr(e))
+
+
+    def convertImage(self):
+        '''
+        Convert imported image into a mineral map.
+
+        '''
+    # Deny conversion if no image is loaded
+        array = self.image_array.copy()
+        if array is None:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'No image loaaded.')
+        
+    # Get image array shape
+        if array.ndim == 3:
+            row, col, chan = array.shape
+        else:
+            row, col = array.shape
+            chan = 1
+
+    # Convert greyscale (and binary) arrays to RGB
+        if chan == 1:
+            if ((array==0) | (array==1)).all():
+                array = iatools.binary2greyscale(array)
+            array = iatools.greyscale2rgb(array)
+
+    # Convert RGBA array to RGB
+        elif chan == 4:
+            array = iatools.rgba2rgb(array)
+
+    # Deny conversion if loaded image has 2 or more than 4 channels (possible?)
+        elif chan == 2 or chan > 4:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'This image cannot be converted.')
+        
+    # Get unique RGB values. Use color delta to reduce color variance.
+        delta = self.delta_spbox.value()
+        array = (array//delta) * delta
+        array = array.reshape(-1, 3)
+        unique = np.unique(array, axis=0)
+
+    # Deny conversion for more than (2**16)/2 = 32768 classes (can be more)
+        n_classes = len(unique)
+        if n_classes > 32768:
+            return QW.QMessageBox.critical(self, 'X-Min Learn',
+                                           'Too many classes found.')
+
+    # Build a flattened minmap
+        self.progbar.setRange(0, n_classes)
+        minmap = np.empty((row * col), dtype=MineralMap._DTYPE_STR)
+        palette = dict()
+        for n, rgb in enumerate(unique):
+            self.progbar.setValue(n + 1)
+            mask = (array == rgb).all(axis=1)
+            minmap[mask] = f'{n:05d}' # Ensure correct order of classes in legend
+            palette[n] = tuple(rgb)
+
+    # Construct mineral map object
+        self.minmap = MineralMap(minmap.reshape(row, col), palette_dict=palette)
+
+    # Plot the map and update legend
+        title = self.path_lbl.text()
+        mmap_enc, encoder, colors = self.minmap.get_plot_data()
+        self.canvas.draw_discretemap(mmap_enc, encoder, colors, title)
+        self.legend.update(self.minmap)
+
+    # Enable the save button
+        self.save_btn.setEnabled(True)
+
+    # Reset progress bar
+        self.progbar.reset()
+
+
+    def saveMineralMap(self):
+        '''
+        Save mineral map to file.
+        '''
+    # Do nothing if output path is invalid or file dialog is canceled
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
+                                                    pref.get_dirPath('out'),
+                                                    'Mineral map (*.mmp)')
+        if not outpath:
+            return
+        
+        pref.set_dirPath('out', os.path.dirname(outpath))
+    
+    # Save mineral map
+        self.minmap.save(outpath)
+        QW.QMessageBox.information(self, 'X-Min Learn', 
+                                   'Map saved with success.')
+        
+
+    def changeColor(self, legend_item: QW.QTreeWidgetItem, color: tuple[int]):
+        '''
+        Alter the displayed color of a mineral class. This function propagates 
+        the changes to mineral map, canvas and legend. The arguments of this 
+        function are specifically compatible with the colorChangeRequested 
+        signal emitted by the legend (see Legend object for more details). 
+
+        Parameters
+        ----------
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested the color change.
+        color : tuple[int]
+            RGB triplet.
+
+        '''
+        if self.minmap is None: # safety
+            return
+        
+    # Change color in the mineral map
+        class_name = legend_item.text(1)
+        self.minmap.set_phase_color(class_name, color)
+    
+    # Update canvas and legend
+        self.canvas.alter_cmap(self.minmap.palette.values())
+        self.legend.changeItemColor(legend_item, color)
+
+
+    def renameClass(self, legend_item: QW.QTreeWidgetItem, new_name: str):
+        '''
+        Rename a mineral class. This function propagates the changes to mineral
+        map, canvas and legend. The arguments of this function are specifically
+        compatible with the itemRenameRequested signal emitted by the legend 
+        (see Legend object for more details).
+
+        Parameters
+        ----------
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested to be renamed
+        new_name : str
+            New class name.
+
+        '''
+        if self.minmap is None: # safety
+            return
+        
+    # Rename class in the mineral map
+        old_name = legend_item.text(1)
+        self.minmap.rename_phase(old_name, new_name)
+    
+    # Update canvas and legend
+        mmap_enc, encoder, colors = self.minmap.get_plot_data()
+        self.canvas.draw_discretemap(mmap_enc, encoder, colors)
+        self.legend.renameClass(legend_item, new_name)
+
+
+    def highlightClass(self, toggled: bool, legend_item: QW.QTreeWidgetItem):
+        '''
+        Highlight on/off the selected mineral class in the map canvas. The 
+        arguments of this function are specifically compatible with the 
+        itemHighlightRequested signal emitted by the legend (see Legend object 
+        for more details).
+
+        Parameters
+        ----------
+        toggled : bool
+            Highlight on/off
+        legend_item : QW.QTreeWidgetItem
+            The legend item that requested to be highlighted.
+
+        '''
+        if self.minmap is None: # safety
+            return
+
+        if toggled:
+            phase_id = self.minmap.as_id(legend_item.text(1))
+            vmin, vmax = phase_id - 0.5, phase_id + 0.5
+        else:
+            vmin, vmax = None, None
+
+        self.canvas.update_clim(vmin, vmax)
+        self.canvas.draw_idle() 
