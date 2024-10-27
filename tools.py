@@ -423,120 +423,7 @@ class Preferences(QW.QWidget):
 
 
 
-class DummyMapsBuilder(QW.QWidget):
-    def __init__(self, parent=None):
-        self.parent = parent
-        super(DummyMapsBuilder, self).__init__()
-        self.setWindowTitle('Dummy Maps Builder')
-        self.setWindowIcon(QIcon('Icons/gear.png'))
-        self.resize(600, 750)
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
 
-        self.dummy_map = None
-
-        self.init_ui()
-
-
-    def init_ui(self):
-
-    # Information about this tool label
-        self.toolInfo_lbl = QW.QLabel('This tool allows to build artificial noisy maps '\
-                                      'featuring a near-zero value on all of their pixels. '\
-                                      'The values are randomized through a Gamma distribution '\
-                                      'function. Such maps can be used as a placeholder for '\
-                                      'missing mandatory maps when applying a pre-trained model.')
-        self.toolInfo_lbl.setWordWrap(True)
-        self.toolInfo_lbl.setSizePolicy(QW.QSizePolicy.Expanding,
-                                        QW.QSizePolicy.Fixed)
-
-    # Map width spinbox
-        self.mapWidth_spbox = QW.QSpinBox()
-        self.mapWidth_spbox.setRange(1, 10e8)
-        self.mapWidth_spbox.setValue(100)
-
-    # Map height spinbox
-        self.mapHeight_spbox = QW.QSpinBox()
-        self.mapHeight_spbox.setRange(1, 10e8)
-        self.mapHeight_spbox.setValue(100)
-
-    # Shape of gamma distribution spinbox
-        self.shape_spbox = QW.QDoubleSpinBox()
-        self.shape_spbox.setRange(0.1, 100.)
-        self.shape_spbox.setDecimals(2)
-        self.shape_spbox.setSingleStep(0.1)
-        self.shape_spbox.setValue(1.5)
-        self.shape_spbox.setToolTip('The shape of the gamma distribution function.')
-
-    # Scale of gamma distribution spinbox
-        self.scale_spbox = QW.QDoubleSpinBox()
-        self.scale_spbox.setRange(0.1, 100.)
-        self.scale_spbox.setDecimals(2)
-        self.scale_spbox.setSingleStep(0.1)
-        self.scale_spbox.setValue(1.)
-        self.scale_spbox.setToolTip('The scale of the gamma distribution function.')
-
-    # Generate button
-        self.generate_btn = QW.QPushButton('Generate')
-        self.generate_btn.clicked.connect(self.generate_dummyMap)
-
-    # Save button
-        self.save_btn = QW.QPushButton(QIcon('Icons/save.png'), 'Save')
-        self.save_btn.setEnabled(False)
-        self.save_btn.clicked.connect(self.save_dummyMap)
-
-    # Preview histogram canvas + Navigation Toolbar
-        self.histChart = CW.HistogramCanvas(self, size=(5.6, 7.5))
-        self.histChart.setMinimumSize(100, 100)
-        self.histChart_NTbar = CW.NavTbar(self.histChart, self)
-        self.histChart_NTbar.removeToolByIndex([3, 4, 8, 9])
-
-    # Adjust main layout
-        plot_vbox = QW.QVBoxLayout()
-        plot_vbox.addWidget(self.histChart_NTbar)
-        plot_vbox.addWidget(self.histChart)
-
-        gridLayout = QW.QGridLayout()
-        gridLayout.addWidget(QW.QLabel('Map Width'), 0, 0)
-        gridLayout.addWidget(self.mapWidth_spbox, 0, 1)
-        gridLayout.addWidget(QW.QLabel('Map Height'), 1, 0)
-        gridLayout.addWidget(self.mapHeight_spbox, 1, 1)
-        gridLayout.addWidget(QW.QLabel('Function shape'), 2, 0)
-        gridLayout.addWidget(self.shape_spbox, 2, 1)
-        gridLayout.addWidget(QW.QLabel('Function scale'), 3, 0)
-        gridLayout.addWidget(self.scale_spbox, 3, 1)
-        gridLayout.addWidget(self.generate_btn, 4, 0)
-        gridLayout.addWidget(self.save_btn, 4, 1)
-        gridLayout.addLayout(plot_vbox, 0, 2, 5, 1)
-        gridLayout.setColumnStretch(2, 1)
-
-        mainLayout = QW.QVBoxLayout()
-        mainLayout.addWidget(self.toolInfo_lbl)
-        mainLayout.addWidget(CW.GroupArea(gridLayout))
-        self.setLayout(mainLayout)
-
-
-    def generate_dummyMap(self):
-    # Gather the parameters
-        w = self.mapWidth_spbox.value()
-        h = self.mapHeight_spbox.value()
-        shp = self.shape_spbox.value()
-        scl = self.scale_spbox.value()
-    # Generate the map
-        self.dummy_map = np.random.gamma(shp, scl, size=(h, w)).round()
-    # Refresh the histogram
-        self.histChart.update_canvas('', self.dummy_map)
-    # Enable save button
-        self.save_btn.setEnabled(True)
-
-    def save_dummyMap(self):
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
-                                                    pref.get_dirPath('out'),
-                                                    '''Compressed ASCII file (*.gz)
-                                                       ASCII file (*.txt)''')
-        if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
-            np.savetxt(outpath, self.dummy_map, fmt='%d')
 
 
 
@@ -5009,7 +4896,8 @@ class ModelLearner(DraggableTool):
 
     def loadGroundTruthDataset(self):
         '''
-        Load ground truth dataset from file.
+        Load ground truth dataset from file. This function launches the dataset
+        chunk reader thread.
 
         '''
     # Prevent loading dataset when a thread is active
@@ -5059,6 +4947,18 @@ class ModelLearner(DraggableTool):
 
 
     def _parseDatasetReaderResult(self, result: tuple, success: bool):
+        '''
+        Parse the result of the dataset chunk reader thread and compile ground
+        truth dataset if it is succesful.
+
+        Parameters
+        ----------
+        result : tuple
+            Result of the dataset chunk reader thread.
+        success : bool
+            Whether the thread ended succesfully.
+            
+        '''
         if success:
             try:
             # Compile ground truth dataset
