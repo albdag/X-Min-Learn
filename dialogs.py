@@ -1067,8 +1067,8 @@ class ImageToInputMap(QW.QDialog):
         self.convert_btn = CW.StyledButton(text='Convert',
                                            bg_color=pref.BTN_GREEN)
         
-    # Progress bar (DescriptiveProgressBar)
-        self.progbar = CW.DescriptiveProgressBar()
+    # Progress bar (ProgressBar)
+        self.progbar = QW.QProgressBar()
 
     # Adjust layout
         left_form = QW.QFormLayout()
@@ -1086,8 +1086,8 @@ class ImageToInputMap(QW.QDialog):
 
         splitter = CW.SplitterGroup([left_scroll, right_scroll], (0, 1))
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(splitter, 1)
-        main_layout.addWidget(self.progbar, 0)
+        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.progbar)
         self.setLayout(main_layout)
 
 
@@ -1123,8 +1123,8 @@ class ImageToInputMap(QW.QDialog):
     # Add images paths and previews (as icon) to list but skip those that had 
     # already been added
         self.progbar.setRange(0, len(paths))
-        for p in paths:
-            self.progbar.step(f'Importing {os.path.split(p)[1]}')
+        for n, p in enumerate(paths, start=1):
+            self.progbar.setValue(n)
             if len(self.img_list.findItems(p, Qt.MatchExactly)): 
                 continue
             else:
@@ -1164,11 +1164,11 @@ class ImageToInputMap(QW.QDialog):
         ext = str(self.map_ext_combox.currentText())
         self.progbar.setRange(0, img_count)
 
-        for n, i in enumerate(self.img_list.getItems()):
+        for n, i in enumerate(self.img_list.getItems(), start=1):
             try:
                 path = i.text()
                 fname = cf.path2filename(path) + ext
-                self.progbar.step(f'Converting {fname}')
+                self.progbar.setValue(n)
             
             # Convert image to array
                 array = iatools.image2array(path, InputMap._DTYPE)
@@ -1176,8 +1176,8 @@ class ImageToInputMap(QW.QDialog):
             # Save InputMap. Split multi-channel arrays, if requested
                 if array.ndim == 3 and self.split_cbox.isChecked():
                     channels = np.split(array, array.shape[-1], axis=2)
-                    for n, c in enumerate(channels, start=1):
-                        fname_channel = cf.extend_filename(fname, f'_ch{n}')
+                    for idx, c in enumerate(channels, start=1):
+                        fname_channel = cf.extend_filename(fname, f'_ch{idx}')
                         out = os.path.join(outdir, fname_channel)
                         InputMap(np.squeeze(c)).save(out)
                 else:
