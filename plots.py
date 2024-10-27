@@ -2039,6 +2039,36 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         return navtbar
     
 
+    @classmethod
+    def histCanvasDefault(cls, canvas: HistogramCanvas, 
+                          parent: QObject|None=None, orient=Qt.Horizontal):
+        '''
+        Quick convenient method to instantiate a Navigation Toolbar attached to
+        a HistogramCanvas with default actions and the custom log scale action.
+
+        Parameters
+        ----------
+        canvas : HistogramCanvas
+            The histogram canvas object linked to the navigation toolbar. 
+        parent : QObject or None, optional
+            Parent widget of the toolbar in the GUI. The default is None.
+        orient : Qt.Orientation, optional
+            The orientation of the navigation toolbar. The default is
+            Qt.Horizontal.
+
+        Returns
+        -------
+        NavTbar
+            A new instance of Navigation Toolbar.
+
+        '''
+        navtbar = cls(canvas, parent, orient, coords=False)
+        navtbar.removeToolByIndex([3, 4, 8, 9])
+        navtbar.fixHomeAction()
+        navtbar.insertLogscaleAction(2)
+        return navtbar
+    
+
     def insertLabelizeAction(self, before_idx: int):
         '''
         Convenient function to include the labelize action to a Navigation 
@@ -2059,6 +2089,28 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         self.lbl_action.toggled.connect(self.canvas.show_amounts)
         self.insertAction(before_idx, self.lbl_action)
 
+
+    def insertLogscaleAction(self, before_idx: int):
+        '''
+        Convenient function to include the log scale action to a Navigation 
+        Toolbar which is linked to a HistogramCanvas.
+
+        Parameters
+        ----------
+        before_idx : int
+            Before action index.
+
+        '''
+    # Do nothing if the linked canvas object is not a Histogram canvas
+        if not isinstance(self.canvas, HistogramCanvas):
+            return
+        
+        self.log_action = QAction(QIcon(r'Icons/logscale.png'), 'Log scale')
+        self.log_action.setCheckable(True)
+        self.log_action.setChecked(self.canvas.log)
+        self.log_action.toggled.connect(self.canvas.toggle_logscale)
+        self.insertAction(before_idx, self.log_action)
+        
 
     def fixHomeAction(self):
         '''

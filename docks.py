@@ -956,16 +956,7 @@ class HistogramViewer(QW.QWidget):
         self.scaler = plots.HeatmapScaler(self.canvas.ax, self.onSpanSelect)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar(self.canvas, self, coords=False)
-        self.navTbar.fixHomeAction()
-        self.navTbar.removeToolByIndex([3, 4, 8, 9])
-
-    # Toggle log scale [-> NavTbar Action]
-        self.logscale_action = QW.QAction(QIcon(r'Icons/logscale.png'),
-                                          'Log scale')
-        self.logscale_action.setCheckable(True)
-        self.logscale_action.setChecked(True)
-        self.navTbar.insertAction(2, self.logscale_action)
+        self.navtbar = plots.NavTbar.histCanvasDefault(self.canvas, self)
 
     # HeatMap scaler toolbar
         self.scaler_tbar = CW.StyledToolbar('Histogram scaler toolbar')
@@ -1019,7 +1010,7 @@ class HistogramViewer(QW.QWidget):
 
     # Adjust Layout
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(self.navTbar)
+        main_layout.addWidget(self.navtbar)
         main_layout.addWidget(self.scaler_tbar)
         main_layout.addLayout(bins_form)
         main_layout.addWidget(self.canvas, stretch=2)
@@ -1033,9 +1024,6 @@ class HistogramViewer(QW.QWidget):
         '''
     # Context menu on histogram canvas
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)
-
-    # Toggle logarithmic scale
-        self.logscale_action.toggled.connect(self.canvas.toggle_logscale)
 
     # Toggle scaler 
         self.scaler_action.toggled.connect(self.onScalerToggled)
@@ -1066,7 +1054,7 @@ class HistogramViewer(QW.QWidget):
 
         '''
     # Get context menu from NavTbar actions
-        menu = self.canvas.get_navigation_context_menu(self.navTbar)
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
