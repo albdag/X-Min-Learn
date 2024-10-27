@@ -927,6 +927,7 @@ class DynamicStepsThread(QThread):
     interrupted.
     '''
     iterCompleted = pyqtSignal(int)
+    taskInterrupted = pyqtSignal()
     taskFinished = pyqtSignal(tuple, bool)
 
     def __init__(self):
@@ -959,6 +960,23 @@ class DynamicStepsThread(QThread):
 
         '''
         self.params = (args)
+
+
+    def isInterruptionRequested(self):
+        '''
+        Add a custom signal to the default isInterruptionRequested function.
+
+        Returns
+        -------
+        interrupt : bool
+            If the thread interruption has been requested.
+
+        '''
+        interrupt = super(DynamicStepsThread, self).isInterruptionRequested()
+        if interrupt:
+            self.taskInterrupted.emit()
+            self.reset()
+        return interrupt
 
 
     def run(self):
