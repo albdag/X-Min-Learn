@@ -4324,6 +4324,10 @@ class ModelLearner(DraggableTool):
     # CSV decimal character selector
         self.csv_dec_selector = CW.DecimalPointSelector()
 
+    # Dataset CSV chunk reader
+        dec = self.csv_dec_selector.currentText()
+        self.dataset_reader = dtools.CsvChunkReader(dec)
+
     # Loaded dataset path (Path Label)
         self.dataset_path_lbl = CW.PathLabel(full_display=False,
                                                placeholder='No dataset loaded')
@@ -4984,7 +4988,9 @@ class ModelLearner(DraggableTool):
     # Manage seed changes
         self.seed_generator.seedChanged.connect(self.onSeedChanged)
 
-    # Load ground truth dataset
+    # Ground truth dataset signals
+        self.csv_dec_selector.currentTextChanged.connect(
+            self.dataset_reader.set_decimal)
         self.load_dataset_btn.clicked.connect(self.loadGroundTruthDataset)
 
     # Load / unload existent model
@@ -5201,20 +5207,50 @@ class ModelLearner(DraggableTool):
             else:
                 self._reset()
 
-    # Load ground truth dataset
-        pbar = CW.PulsePopUpProgBar(self, 'Loading dataset')
-        pbar.startPulse()
-        dec = self.csv_dec_selector.currentText()
-        self.dataset = dtools.GroundTruthDataset.load(path, dec, chunks=True)
-        self.dataset_path_lbl.setPath(path)
-    # Update dataset preview
-        text = f'DATASET PREVIEW\n\n{repr(self.dataset.dataframe)}'
-        self.dataset_preview.setText(text)
-    # Enable "Split dataset" and "Load previous model" buttons
-        self.load_pmodel_btn.setEnabled(True)
-        self.split_dataset_btn.setEnabled(True)
-        pbar.stopPulse()
+    # Set up a temporary popup progress bar
+        n_chunks = self.dataset_reader.chunks_number(path)
+        pbar = CW.PopUpProgBar(self, n_chunks, 'Loading dataset', cancel=False)
+        
+    # Connect dataset reader thread signals with popup progress bar
+        self.dataset_reader.thread.iterCompleted.connect(pbar.setValue)
+        self.dataset_reader.thread.taskFinished.connect(pbar.reset)
+        self.dataset_reader.thread.taskFinished.connect(
+            self._parseDatasetReaderResult)
     
+    # Update current dataset path 
+        self.dataset_path_lbl.setPath(path)
+
+    # Launch CSV chunk reader thread
+        self.dataset_reader.read_threaded(path)
+    
+    # Program removal of temporary progress bar to avoid visual glitches
+        pbar.deleteLater()
+
+
+    def _parseDatasetReaderResult(self, result: tuple, success: bool):
+        if success:
+            try:
+            # Compile ground truth dataset
+                dataframe = self.dataset_reader.combine_chunks(result)
+                path = self.dataset_path_lbl.fullpath
+                self.dataset = dtools.GroundTruthDataset(dataframe, path)
+            # Update dataset preview
+                text = f'DATASET PREVIEW\n\n{repr(dataframe)}'
+                self.dataset_preview.setText(text)
+            # Enable "Split dataset" and "Load previous model" buttons
+                self.load_pmodel_btn.setEnabled(True)
+                self.split_dataset_btn.setEnabled(True)
+            except Exception as e:
+                self.dataset_path_lbl.clearPath()
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                              'Dataset loading failed.', detailedText=repr(e))
+
+        else:
+            self.dataset_path_lbl.clearPath()
+            err = result[0]
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                          'Dataset loading failed.', detailedText=repr(err))
+
 
     def _fixSubsetsRatios(self, new_value: int):
         '''

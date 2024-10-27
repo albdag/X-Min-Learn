@@ -736,7 +736,8 @@ class SubSampleDataset(QW.QDialog):
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
-    # Define main attribute
+    # Define main attributes
+        self.reader = None
         self._dataset = None
 
         self._init_ui()
@@ -759,6 +760,9 @@ class SubSampleDataset(QW.QDialog):
 
     # Decimal point character selector for imported dataset
         self.in_csv_decimal = CW.DecimalPointSelector()
+
+    # Input dataset CSV chunk reader (CsvChunkReader)
+        self.reader = dtools.CsvChunkReader(self.in_csv_decimal.currentText())
 
     # Decimal point character selector for sub-sampled dataset
         self.out_csv_decimal = CW.DecimalPointSelector()
@@ -783,6 +787,9 @@ class SubSampleDataset(QW.QDialog):
     # Save (Styled Button)
         self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
         self.save_btn.setEnabled(False)
+
+    # Progress bar (ProgressBar)
+        self.progbar = QW.QProgressBar()
 
     # Adjust layout
         input_form = QW.QFormLayout()
@@ -815,8 +822,10 @@ class SubSampleDataset(QW.QDialog):
         right_grid.addWidget(self.counter_lbl, 5, 0, 1, -1)
         right_scroll = CW.GroupScrollArea(right_grid, frame=False)
 
-        main_layout = CW.SplitterLayout()
-        main_layout.addWidgets((left_scroll, right_scroll), (0, 1))
+        splitter = CW.SplitterGroup((left_scroll, right_scroll), (0, 1))
+        main_layout = QW.QVBoxLayout()
+        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.progbar)
         self.setLayout(main_layout)
 
     
@@ -825,9 +834,17 @@ class SubSampleDataset(QW.QDialog):
         Signals-slots connector.
 
         '''
-        self.import_btn.clicked.connect(self.importDataset)
+    # Chunk reader related signals
+        self.in_csv_decimal.currentTextChanged.connect(self.reader.set_decimal)
+        self.reader.thread.iterCompleted.connect(self.progbar.setValue)
+        self.reader.thread.taskFinished.connect(self._parseReaderResult)
+
+    # Count class amount when clicked
         self.original_classes.itemClicked.connect(self.countClass)
         self.subsampled_classes.itemClicked.connect(self.countClass)
+
+    # Import and save buttons
+        self.import_btn.clicked.connect(self.importDataset)
         self.save_btn.clicked.connect(self.save)
 
 
@@ -845,7 +862,8 @@ class SubSampleDataset(QW.QDialog):
 
     def importDataset(self):
         '''
-        Import an existent ground truth dataset.
+        Import an existent ground truth dataset. This function launches the CSV
+        chunk reader thread.
 
         '''
     # Do nothing if path is invalid or file dialog is canceled
@@ -855,32 +873,60 @@ class SubSampleDataset(QW.QDialog):
         if not path:
             return
         
-    # Load dataset
         pref.set_dirPath('in', os.path.dirname(path))
-        pbar = CW.PulsePopUpProgBar(self, 'Importing dataset')
-        pbar.startPulse()
-        dec = self.in_csv_decimal.currentText()
-        self._dataset = dtools.GroundTruthDataset.load(path, dec, chunks=True)
 
-    # Update GUI
+    # Set current path
         self.in_dataset_path.setPath(path)
-        self.resetDialog()
-        self.updateDatasetInfo()
-        pbar.setValue(3)
 
-    # Split dataset features from targets and update widgets
-        try:
-            self._dataset.split_features_targets(split_idx=-1)
-            self.original_classes.addItems(self._dataset.targets_names())
-            self.save_btn.setEnabled(True)
-            pbar.stopPulse()
-        except Exception as e:
-            self._dataset = None
+    # Load dataset chunks (threaded)
+        self.progbar.setRange(0, self.reader.chunks_number(path))
+        self.reader.read_threaded(path)
+
+
+    def _parseReaderResult(self, result: tuple, success: bool):
+        '''
+        Parse the result of the chunk reader thread.
+
+        Parameters
+        ----------
+        result : tuple
+            Result of chunk reader thread.
+        success : bool
+            Whether the chunk reader task finished succesfully or not.
+
+        '''
+    # Reset progress bar
+        self.progbar.reset()
+
+        if success:
+            self.progbar.setRange(0, 3)
+        # Compile dataset
+            dataframe = self.reader.combine_chunks(result)
+            self._dataset = dtools.GroundTruthDataset(dataframe)
+            self.progbar.setValue(1)
+        # Update GUI
+            self.resetDialog()
+            self.updateDatasetInfo()
+            self.progbar.setValue(2)
+        # Split dataset features from targets and update widgets
+            try:
+                self._dataset.split_features_targets(split_idx=-1)
+                self.original_classes.addItems(self._dataset.targets_names())
+                self.save_btn.setEnabled(True)
+            except Exception as e:
+                self._dataset = None
+                self.in_dataset_path.clearPath()
+                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                                'Invalid dataset', detailedText=repr(e))
+            finally:
+                self.progbar.reset()
+        
+        else:
             self.in_dataset_path.clearPath()
-            pbar.stopPulse()
+            err = result[0]
             CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'Invalid dataset', detailedText=repr(e))
-          
+                          'Dataset loading failed.', detailedText=repr(err))
+            
 
     def updateDatasetInfo(self):
         '''
@@ -931,26 +977,26 @@ class SubSampleDataset(QW.QDialog):
         pref.set_dirPath('out', os.path.dirname(outpath))
     
     # Get selected class labels
-        pbar = CW.PopUpProgBar(self, 3, 'Sub-sampling dataset', cancel=False)
+        self.progbar.setRange(0, 3)
         labels = [self.subsampled_classes.item(i).text() for i in range(count)]
-        pbar.setValue(1)
+        self.progbar.setValue(1)
 
     # Sub sample dataset
         subsampled = self._dataset.sub_sample(labels, idx=-1)
-        pbar.setValue(2)
+        self.progbar.setValue(2)
 
     # Save dataset
         separator_char = self.out_csv_separator.currentText()
         decimal_char = self.out_csv_decimal.currentText()
         try:
             subsampled.save(outpath, separator_char, decimal_char)
-            pbar.setValue(3)
-            return QW.QMessageBox.information(self, 'X-Min Learn', 
-                                              'Dataset saved with success.')
+            QW.QMessageBox.information(self, 'X-Min Learn', 
+                                       'Dataset saved with success.')
         except Exception as e:
-            pbar.reset()
-            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                   'Cannot save dataset', detailedText=repr(e))
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                          'Cannot save dataset', detailedText=repr(e))
+        finally:
+            self.progbar.reset()
         
 
 

@@ -1063,3 +1063,46 @@ class LearningThread(DynamicStepsThread):
         finally:
         # Reset parameters for safety measures
             self.reset()
+
+
+
+class CsvChunkReadingThread(DynamicStepsThread):
+    '''
+    Dynamic steps thread specialized for CSV chunk reading. 
+    '''
+
+    def __init__(self):
+        '''
+        Constructor.
+
+        '''
+        super(CsvChunkReadingThread, self).__init__()
+
+
+    def run(self):
+        '''
+        Main function of the thread. Defines how the worker should perform its
+        task. 
+
+        '''
+        super(CsvChunkReadingThread, self).run()
+        chunk_list = []
+        
+        try:
+        # Read CSV and retunr chunks
+            with self.task() as reader:
+                for i, chunk in enumerate(reader, start=1):
+                    if self.isInterruptionRequested(): 
+                        return
+                    chunk_list.append(chunk)
+                    self.iterCompleted.emit(i)
+
+            self.taskFinished.emit(tuple(chunk_list), True)
+        
+        except Exception as exc:
+        # Exit with error
+            self.taskFinished.emit((exc, ), False)
+
+        finally:
+        # Reset parameters for safety measures
+            self.reset()

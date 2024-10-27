@@ -9,6 +9,8 @@ import imblearn.under_sampling as US
 import pandas as pd
 import numpy as np
 
+import threads
+
 
 
 
@@ -85,7 +87,7 @@ class GroundTruthDataset():
             raise TypeError('File must have .csv extension.')
         
         if chunks:
-            dataframe = CsvChunkReader(dec, sep).read(filepath)
+            dataframe = CsvChunkReader(dec, sep).read_combine(filepath)
             
         else:
             engine = 'python' if sep is None else 'c'
@@ -852,33 +854,178 @@ class CsvChunkReader():
         self.dec = dec
         self.sep = sep
         self.chunksize = chunksize
+        self.thread = threads.CsvChunkReadingThread()
+
+
+    def set_decimal(self, dec: str):
+        '''
+        Set CSV decimal point character.
+
+        Parameters
+        ----------
+        dec : str
+            Decimal point character.
+
+        '''
+        self.dec = dec
+
+
+    def set_separator(self, sep: str|None):
+        '''
+        Set CSV separator character.
+
+        Parameters
+        ----------
+        sep : str | None
+            Separator character. If None, it is inferred.
+
+        '''
+        self.sep = sep
+
+
+    def set_chunksize(self, chunksize: int):
+        '''
+        Set maximum CSV chunks size.
+
+        Parameters
+        ----------
+        chunksize : int
+            Chunk size.
+
+        '''
+        self.chunksize = chunksize
+
+
+    def chunks_number(self, filepath: str):
+        '''
+        Get number of chunks in the given CSV file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to CSV file. Must have the .csv file extension.
+
+        Returns
+        -------
+        n_chunks : int
+            Number of chunks.
+
+        Raises
+        ------
+        TypeError
+            The filepath must have the .csv extension.
+
+        '''
+        if not filepath.lower().endswith('.csv'):
+            raise TypeError('The filepath must have the .csv extension.')
+        with open(filepath) as temp:
+            n_chunks = sum(1 for _ in temp) // self.chunksize
+        return n_chunks
 
 
     def read(self, filepath: str):
         '''
-        Read CSV file and build a Pandas Dataframe.
+        Read CSV file chunk by chunk and return them.
 
         Parameters
         ----------
-        filepath : str 
-            The CSV filepath. Must have the .csv extension.
+        filepath : str
+            Path to CSV file. Must have the .csv file extension.
 
         Returns
         -------
-        Pandas Dataframe
-            Reconstructed dataframe.
+        chunk_list : list
+            List of read chunks.
+
+        Raises
+        ------
+        TypeError
+            The filepath must have the .csv extension.
 
         '''
-    # Read CSV
+
+        if not filepath.lower().endswith('.csv'):
+            raise TypeError('The filepath must have the .csv extension.')
+
         chunk_list = []
         with pd.read_csv(filepath, decimal=self.dec, sep=self.sep, 
                          engine='python', chunksize=self.chunksize) as reader:
             for chunk in reader:
                 chunk_list.append(chunk)
 
-    # Compile and return the pandas Dataframe
-        return pd.concat(chunk_list)
+        return chunk_list
     
+
+    def read_threaded(self, filepath: str):
+        '''
+        Run a threaded CSV chunk reading session. 
+
+        Parameters
+        ----------
+        filepath : str
+            Path to CSV file. Must have the .csv file extension.
+
+        Raises
+        ------
+        TypeError
+            The filepath must have the .csv extension.
+
+        '''
+        if not filepath.lower().endswith('.csv'):
+            raise TypeError('The filepath must have the .csv extension.')
+
+        read = lambda: pd.read_csv(filepath, decimal=self.dec, sep=self.sep, 
+                                   engine='python', chunksize=self.chunksize)
+        self.thread.set_task(read)
+        self.thread.run()
+
+
+    def combine_chunks(self, chunks: list|tuple):
+        '''
+        Combine given chunks to reconstruct the full CSV dataframe.
+
+        Parameters
+        ----------
+        chunks : list | tuple
+            List of CSV file chunks.
+
+        Returns
+        -------
+        Pandas DataFrame
+            The reconstructed CSV dataframe.
+
+        '''
+        return pd.concat(chunks)
+    
+
+    def read_combine(self, filepath: str):
+        '''
+        Conveninent function to read and return a full CSV dataframe chunk by
+        chunk.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to CSV file. Must have the .csv file extension.
+
+        Returns
+        -------
+        Pandas DataFrame
+            The CSV dataframe.
+
+        Raises
+        ------
+        TypeError
+            The filepath must have the .csv extension.
+
+        '''
+        if not filepath.lower().endswith('.csv'):
+            raise TypeError('The filepath must have the .csv extension.')
+        
+        chunks = self.read(filepath)
+        dataframe = self.combine_chunks(chunks)
+        return dataframe
+
 
 
 def dataframe_preview(filepath: str, dec: str, sep: str|None=None, n_rows=10):
