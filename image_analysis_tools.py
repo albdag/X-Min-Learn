@@ -353,3 +353,29 @@ def image2array(path: str, dtype='int64'):
         array = np.array(img, dtype=dtype)
     
     return array
+
+
+def noisy_array(shape: float, scale: float, array_shape: tuple[int], 
+                dtype='int32'):
+    '''
+    Generate random noisy integer array with a Gamma distribution function.
+
+    Parameters
+    ----------
+    shape : float
+        The shape of the Gamma distribution.
+    scale : float
+        The scale of the Gamma distribution.
+    array_shape : tuple[int]
+        The shape of the output array.
+    dtype : np.dtype or str, optional
+        Output array dtype. The default is 'int32'.
+
+    Returns
+    -------
+    noisy : np.ndarray
+        Noisy integer array.
+
+    '''
+    noisy = np.random.gamma(shape, scale, size=array_shape).round()
+    return noisy.astype(dtype)

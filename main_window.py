@@ -169,9 +169,9 @@ class MainWindow(QW.QMainWindow):
         self.conv2minmap_action = QW.QAction('Image to Mineral Map')
         self.conv2minmap_action.setStatusTip('Convert image to Mineral Map')
 
-    # Launch Build Dummy Maps Action
-        self.dummy_map_action = QW.QAction('Generate &Dummy Maps')
-        self.dummy_map_action.setStatusTip('Build placeholder noisy maps')
+    # Launch Generate Dummy Maps Action
+        self.dummymap_action = QW.QAction('Generate &Dummy Maps')
+        self.dummymap_action.setStatusTip('Build placeholder noisy maps')
 
     # Launch Sub-sample Dataset Action
         self.subsample_ds_action = QW.QAction('&Sub-sample Dataset')
@@ -265,7 +265,7 @@ class MainWindow(QW.QMainWindow):
         convert_submenu = utility_menu.addMenu('&Convert')
         convert_submenu.addActions(
             (self.conv2inmap_action, self.conv2minmap_action))
-        utility_menu.addAction(self.dummy_map_action)
+        utility_menu.addAction(self.dummymap_action)
 
     # View Menu
         view_menu = menu_bar.addMenu('&View')
@@ -326,9 +326,9 @@ class MainWindow(QW.QMainWindow):
         self.conv2minmap_action.triggered.connect(
             lambda: dialogs.ImageToMineralMap(self).show())
 
-    # Launch Build Dummy Maps 
-        self.dummy_map_action.triggered.connect(
-            lambda: self.launch_dialog('DummyMaps'))
+    # Launch Generate Dummy Maps 
+        self.dummymap_action.triggered.connect(
+            lambda: dialogs.DummyMapsBuilder(self).show())
 
     # Launch Sub-sample Dataset 
         self.subsample_ds_action.triggered.connect(

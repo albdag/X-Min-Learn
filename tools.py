@@ -413,20 +413,6 @@ class Preferences(QW.QWidget):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class MineralClassifier(DraggableTool):
     '''
     One of the main tools of X-Min Learn, that allows the classification of
@@ -4957,7 +4943,7 @@ class ModelLearner(DraggableTool):
             Result of the dataset chunk reader thread.
         success : bool
             Whether the thread ended succesfully.
-            
+
         '''
         if success:
             try:

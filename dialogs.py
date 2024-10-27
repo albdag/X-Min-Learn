@@ -1508,3 +1508,165 @@ class ImageToMineralMap(QW.QDialog):
 
         self.canvas.update_clim(vmin, vmax)
         self.canvas.draw_idle() 
+
+
+
+class DummyMapsBuilder(QW.QDialog):
+    '''
+    A dialog to generate dummy input maps, useful as a placeholder for missing
+    maps when using model-based classifiers.
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : qObject or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super(DummyMapsBuilder, self).__init__(parent)
+
+    # Set dialog widget attributes
+        self.setWindowTitle('Dummy Maps Builder')
+        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+    # Set main attribute
+        self.dummy_map = None
+
+        self._init_ui()
+        self._connect_slots()
+        self.adjustSize()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Tool info (FramedLabel)
+        info = 'Build artificial noisy maps with near-zero values, randomized '\
+               'through a Gamma distribution function. These maps can be used '\
+               'as a placeholder for missing maps in a pre-trained model.'
+        self.info_lbl = CW.FramedLabel(info)
+        self.info_lbl.setWordWrap(True)
+
+    # Map width (Styled SpinBox)
+        self.width_spbox = CW.StyledSpinBox(1, 10**5)
+        self.width_spbox.setValue(100)
+
+    # Map height (Styled SpinBox)
+        self.height_spbox = CW.StyledSpinBox(1, 10**5)
+        self.height_spbox.setValue(100)
+
+    # Shape of gamma distribution function (Styled DoubleSpinBox)
+        self.shape_spbox = CW.StyledDoubleSpinBox(0.1, 100., 0.1)
+        self.shape_spbox.setValue(1.5)
+        self.shape_spbox.setToolTip('Shape of Gamma distribution function')
+
+    # Scale of gamma distribution function (Styled DoubleSpinBox)
+        self.scale_spbox = CW.StyledDoubleSpinBox(0.1, 100., 0.1)
+        self.scale_spbox.setValue(1.)
+        self.scale_spbox.setToolTip('Scale of Gamma distribution function')
+
+    # Generate random map (Styled Button)
+        self.generate_btn = CW.StyledButton(text='Randomize', 
+                                            bg_color=pref.BTN_GREEN)
+
+    # Save map (Styled Button)
+        self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
+
+    # Preview histogram (HistogramCanvas) 
+        self.canvas = plots.HistogramCanvas(wheel_pan=False, wheel_zoom=False)
+        self.canvas.setMinimumSize(300, 300)
+    
+    # Navigation Toolbar for preview histogram
+        self.navtbar = plots.NavTbar.histCanvasDefault(self.canvas, self)
+
+    # Adjust layout
+        options_form = QW.QFormLayout()
+        options_form.addRow('Map width', self.width_spbox)
+        options_form.addRow('Map height', self.height_spbox)
+        options_form.addRow('Function shape', self.shape_spbox)
+        options_form.addRow('Function scale', self.scale_spbox)
+        options_group = CW.GroupArea(options_form, 'Options')
+
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.setSpacing(15)
+        left_vbox.addWidget(options_group)
+        left_vbox.addWidget(self.generate_btn)
+        left_vbox.addWidget(self.save_btn)
+        left_scroll = CW.GroupScrollArea(left_vbox, tight=True, frame=False)
+
+        right_vbox = QW.QVBoxLayout()
+        right_vbox.addWidget(self.navtbar)
+        right_vbox.addWidget(self.canvas)
+        right_scroll = CW.GroupScrollArea(right_vbox, tight=True, frame=False)
+ 
+        splitter = CW.SplitterGroup((left_scroll, right_scroll), (0, 1))
+        main_layout = QW.QVBoxLayout()
+        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.info_lbl)
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        self.generate_btn.clicked.connect(self.generateMap)
+        self.save_btn.clicked.connect(self.saveMap)
+
+
+    def generateMap(self):
+        '''
+        Generate and render dummy map.
+
+        '''
+    # Gather the parameters
+        w = self.width_spbox.value()
+        h = self.height_spbox.value()
+        shp = self.shape_spbox.value()
+        scl = self.scale_spbox.value()
+
+    # Generate dummy map
+        self.dummy_map = iatools.noisy_array(shp, scl, (h, w), InputMap._DTYPE)
+
+    # Refresh the histogram
+        self.canvas.update_canvas(self.dummy_map, title='Dummy map histogram')
+
+
+    def saveMap(self):
+        '''
+        Save dummy map to file.
+
+        '''
+    # Deny saving if no map is generated
+        if self.dummy_map is None:
+            return QW.QMessageBox.critical(self, 'X-Min Learn', 
+                                           'No map generated.')
+        
+    # Do nothing if output path is invalid or file dialog is canceled
+        ftypes = '''Compressed ASCII file (*.gz)
+                    ASCII file (*.txt)'''
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
+                                                    pref.get_dirPath('out'),
+                                                    ftypes)
+        if not outpath:
+            return
+        
+        pref.set_dirPath('out', os.path.dirname(outpath))
+    
+    # Save map  
+        try:
+            InputMap(self.dummy_map).save(outpath)
+            QW.QMessageBox.information(self, 'X-Min Learn', 
+                                       'Map saved succesfully.')
+        except Exception as e:
+            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
+                          'Failed to save map.', detailedText=repr(e))
