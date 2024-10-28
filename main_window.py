@@ -382,14 +382,15 @@ class MainWindow(QW.QMainWindow):
     def about(self):
         '''
         Show the about X-Min Learn dialog.
-        
+
         '''
         html = f'''
         <p><span style="font-size: 12pt; font-weight: bold;">About X-Min Learn</span></p>
-        <p>Currently used version: {QW.qApp.applicationVersion()}<br>
-        Author: Dr. Alberto D'Agostino (Ph.D.) - University of Catania<br>
-        Contacts: <a href='mailto:dagostino.alberto@hotmail.it'>dagostino.alberto@hotmail.it</a> | <a href='mailto:alberto.dagostino@unict.it'>alberto.dagostino@unict.it</a><br></p>
-        </p>X-Min Learn is an open-source project (<a href='https://www.gnu.org/licenses/gpl-3.0.html'>GPLv3</a>).
+        <p>Currently used version: <span style="font-weight: bold;">{QW.qApp.applicationVersion()}</span><\p>
+        <p>Author: Dr. Alberto D'Agostino (Ph.D.) - University of Catania<br>
+        Contacts: <a href='mailto:dagostino.alberto@hotmail.it'>dagostino.alberto@hotmail.it</a> | <a href='mailto:alberto.dagostino@unict.it'>alberto.dagostino@unict.it</a></p>
+        <p><br>X-Min Learn is an open-source project (<a href='https://www.gnu.org/licenses/gpl-3.0.html'>GPLv3</a>).
+        Most of the app icons are provided for free by <a href='https://icons8.it/'>Icons8</a>.
         For more info check the <a href='https://github.com/albdag/X-Min-Learn'>project page</a>.</p>
         '''
         QW.QMessageBox.about(self, 'About X-Min Learn', html)
