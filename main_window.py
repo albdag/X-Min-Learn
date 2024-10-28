@@ -386,7 +386,7 @@ class MainWindow(QW.QMainWindow):
         '''
         html = f'''
         <p><span style="font-size: 12pt; font-weight: bold;">About X-Min Learn</span></p>
-        <p>Currently used version: <span style="font-weight: bold;">{QW.qApp.applicationVersion()}</span><\p>
+        <p>Currently used version: <span style="font-weight: bold;">{QW.qApp.applicationVersion()}</span></p>
         <p>Author: Dr. Alberto D'Agostino (Ph.D.) - University of Catania<br>
         Contacts: <a href='mailto:dagostino.alberto@hotmail.it'>dagostino.alberto@hotmail.it</a> | <a href='mailto:alberto.dagostino@unict.it'>alberto.dagostino@unict.it</a></p>
         <p><br>X-Min Learn is an open-source project (<a href='https://www.gnu.org/licenses/gpl-3.0.html'>GPLv3</a>).
