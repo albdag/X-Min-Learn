@@ -24,7 +24,7 @@ class MainWindow(QW.QMainWindow):
 
     # Set main window properties
         self.resize(1600, 900)
-        self.setWindowTitle('X-Min Learn - Alpha version')
+        # self.setWindowTitle('New project') TODO
         self.setWindowIcon(QG.QIcon(r'Icons/XML_logo.png'))
         self.setDockOptions(self.AnimatedDocks | self.AllowTabbedDocks)
         self.statusBar()
@@ -205,6 +205,16 @@ class MainWindow(QW.QMainWindow):
         self.refiner_action.setShortcut('Ctrl+Alt+R')
         self.refiner_action.setStatusTip('Refine mineral maps')
 
+    # About X-Min Learn Action
+        self.about_action = QW.QAction('About X-Min Learn')
+        self.about_action.setStatusTip('About X-Min Learn app')
+
+    # About Qt Action
+        self.aboutqt_action = QW.QAction('About Qt')
+        self.aboutqt_action.setStatusTip('About Qt toolkit')
+
+
+
 
     def _init_toolbars(self):
         '''Initialize main toolbars.'''
@@ -275,6 +285,14 @@ class MainWindow(QW.QMainWindow):
         view_menu.addActions((self.panes_toolbar.toggleViewAction(),
                               self.tools_toolbar.toggleViewAction()))
         
+    # Info menu
+        info_menu = menu_bar.addMenu('&?')
+        info_menu.addActions((self.about_action, self.aboutqt_action))
+        # Separator
+        # Help (user-guide?)
+        # Separator
+        # Check updates (link to github page?)
+        
 
     def _connect_slots(self):
         '''Signal-slot connector.'''
@@ -337,6 +355,12 @@ class MainWindow(QW.QMainWindow):
     # Launch Merge Datasets 
         self.merge_ds_action.triggered.connect(
             lambda: dialogs.MergeDatasets(self).show())
+        
+    # Launch about X-Min Learn dialog
+        self.about_action.triggered.connect(self.about)
+        
+    # Launch about Qt dialog
+        self.aboutqt_action.triggered.connect(QW.qApp.aboutQt)
 
     # Launch Dataset Builder 
         self.ds_builder_action.triggered.connect(
@@ -353,6 +377,22 @@ class MainWindow(QW.QMainWindow):
     # Launch Phase Refiner 
         self.refiner_action.triggered.connect(
             lambda: self.launch_tool('PhaseRefiner'))
+
+
+    def about(self):
+        '''
+        Show the about X-Min Learn dialog.
+        
+        '''
+        html = f'''
+        <p><span style="font-size: 12pt; font-weight: bold;">About X-Min Learn</span></p>
+        <p>Currently used version: {QW.qApp.applicationVersion()}<br>
+        Author: Dr. Alberto D'Agostino (Ph.D.) - University of Catania<br>
+        Contacts: <a href='mailto:dagostino.alberto@hotmail.it'>dagostino.alberto@hotmail.it</a> | <a href='mailto:alberto.dagostino@unict.it'>alberto.dagostino@unict.it</a><br></p>
+        </p>X-Min Learn is an open-source project (<a href='https://www.gnu.org/licenses/gpl-3.0.html'>GPLv3</a>).
+        For more info check the <a href='https://github.com/albdag/X-Min-Learn'>project page</a>.</p>
+        '''
+        QW.QMessageBox.about(self, 'About X-Min Learn', html)
 
 
     def addPane(self, dockWidgetArea, pane, visible=True):

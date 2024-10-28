@@ -17,7 +17,7 @@ import preferences as pref
 # WINDOWS SHELL OPTION FOR DISTRIBUTION
 try:
     from ctypes import windll  # Only exists on Windows.
-    myappid = 'X-MinLearn.alpha.1.0'
+    myappid = 'X-MinLearn.beta.1.0.0'
     windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except ImportError:
     pass
@@ -33,6 +33,9 @@ if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
 if __name__ == "__main__":
 
     app = QApplication(sys.argv)
+    app.setApplicationName('X-Min Learn')
+    app.setApplicationDisplayName('X-Min Learn')
+    app.setApplicationVersion('beta.1.0.0')
 
     loader_bg = QPixmap('Icons/XML_logo.png').scaledToWidth(400)
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
