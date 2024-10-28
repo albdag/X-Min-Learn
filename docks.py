@@ -639,8 +639,8 @@ class DataManager(QW.QTreeWidget):
                 if progBar.wasCanceled(): break
                 try:
                     mmap = MineralMap.load(p)
-                # Convert legacy mineral maps to new file format (mmp)
-                    if os.path.splitext(p)[1] != '.mmp':
+                    # Convert legacy mineral maps to new file format (mmp)
+                    if mmap.is_obsolete():
                         mmap.save(cf.extend_filename(p, '', '.mmp'))
                     group.minmaps.addData(mmap)
 
