@@ -626,7 +626,7 @@ class Legend(QW.QTreeWidget):
         rgb_color = literal_eval(item.whatsThis(0)) # tuple parsing from string
         hex_color = '#{:02x}{:02x}{:02x}'.format(*rgb_color)
     # Copy the string to the clipboard
-        clipboard = QW.QApplication.clipboard()
+        clipboard = QW.qApp.clipboard()
         clipboard.setText(hex_color)
 
 
