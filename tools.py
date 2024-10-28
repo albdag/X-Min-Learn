@@ -1540,8 +1540,8 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Load ROI map (Styled Button)
-            self.load_btn = CW.StyledButton(QIcon('Icons/load.png'),
-                                              'Load ROI map')
+            self.load_btn = CW.StyledButton(QIcon(r'Icons/import.png'),
+                                            'Load ROI map')
             self.load_btn.setToolTip('Load training ROI data')
 
         # Remove (unload) ROI map (Styled Button)
