@@ -298,7 +298,7 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             e, = thread_result
-            CW.MsgBox(self, 'Crit', 'NPV calculation failed.', repr(e))
+            CW.MsgBox(self, 'Crit', 'NPV calculation failed.', str(e))
             self._end_threaded_session()
 
     
@@ -371,7 +371,7 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             e, = thread_result
-            CW.MsgBox(self, 'Crit', 'ROI detection failed.', repr(e))
+            CW.MsgBox(self, 'Crit', 'ROI detection failed.', str(e))
             
     # End the threaded session anyway
         self._end_threaded_session()    
@@ -704,7 +704,7 @@ class MergeDatasets(QW.QDialog):
             self.merged_dataset.save(outpath, sep, dec)
             CW.MsgBox(self, 'Info', 'Succesfully saved merged dataset.')
         except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save merged dataset.', repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save merged dataset.', str(e))
 
 
 
@@ -912,15 +912,14 @@ class SubSampleDataset(QW.QDialog):
             except Exception as e:
                 self._dataset = None
                 self.in_dataset_path.clearPath()
-                CW.MsgBox(self, 'Crit', 'Invalid dataset.', repr(e))
+                CW.MsgBox(self, 'Crit', 'Invalid dataset.', str(e))
 
             finally:
                 self.progbar.reset()
         
         else:
             self.in_dataset_path.clearPath()
-            err = result[0]
-            CW.MsgBox(self, 'Crit', 'Dataset loading failed.', repr(e))
+            CW.MsgBox(self, 'Crit', 'Dataset loading failed.', str(result[0]))
             
 
     def updateDatasetInfo(self):
@@ -987,7 +986,7 @@ class SubSampleDataset(QW.QDialog):
             CW.MsgBox(self, 'Info', 'Dataset successfully saved.')
 
         except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save dataset.', repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save dataset.', str(e))
 
         finally:
             self.progbar.reset()
@@ -1121,7 +1120,7 @@ class ImageToInputMap(QW.QDialog):
                     self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
                 except Exception as e:
                     self.progbar.reset()
-                    return CW.MsgBox(self, 'C', 'File import failed.', repr(e))
+                    return CW.MsgBox(self, 'C', 'File import failed.', str(e))
 
         self.progbar.reset()
 
@@ -1177,7 +1176,7 @@ class ImageToInputMap(QW.QDialog):
         if len(errors_log):
             fpaths, err = zip(*errors_log)
             return CW.MsgBox(self, 'Warn', f'Failed conversions:\n\n{fpaths}',
-                             '\n'.join(repr(e) for e in err)) 
+                             '\n'.join(str(e) for e in err)) 
 
         else:
             return CW.MsgBox(self, 'Info', 'Images successfully converted.')
@@ -1316,7 +1315,7 @@ class ImageToMineralMap(QW.QDialog):
             self.image_array = iatools.image2array(path, dtype='int32')
             self.path_lbl.setPath(path)
         except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to import image.', repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to import image.', str(e))
 
 
     def convertImage(self):
@@ -1644,4 +1643,4 @@ class DummyMapsBuilder(QW.QDialog):
             InputMap(self.dummy_map).save(outpath)
             CW.MsgBox(self, 'Info', 'Map saved succesfully.')
         except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save map.', repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))

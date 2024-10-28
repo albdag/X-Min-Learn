@@ -883,7 +883,7 @@ class MineralClassifier(DraggableTool):
             mask = Mask.load(path)     
         except Exception as e:
             mask = None 
-            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', repr(e))
+            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', str(e))
 
         finally:
             if mask:
@@ -1055,7 +1055,7 @@ class MineralClassifier(DraggableTool):
             try:
                 minmap.save(path)
             except Exception as e:
-                CW.MsgBox(self, 'Crit', 'Failed to save map.', repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
 
 
     def removeMineralMap(self): 
@@ -1309,7 +1309,7 @@ class MineralClassifier(DraggableTool):
             self.showMineralMap(item)
 
         else:
-            CW.MsgBox(self, 'Crit', 'Classification failed.', repr(result[0]))
+            CW.MsgBox(self, 'Crit', 'Classification failed.', str(result[0]))
 
         self._endClassification(success)
 
@@ -1448,7 +1448,7 @@ class MineralClassifier(DraggableTool):
             try:
                 self.model = mltools.EagerModel.load(path)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Incompatible model.', repr(e))
+                return CW.MsgBox(self, 'Crit', 'Incompatible model.', str(e))
 
             self.model_path.setPath(path)
             logpath = self.model.generate_log_path(path)
@@ -1646,8 +1646,7 @@ class MineralClassifier(DraggableTool):
                 pbar.increase()
             except Exception as e:
                 pbar.reset()
-                return CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', 
-                                 repr(e))
+                return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}.', str(e))
 
         # Remove previous ROI map from canvas
             self.unloadRoiMap()
@@ -3408,7 +3407,7 @@ class DatasetBuilder(DraggableTool):
 
                 except Exception as e:
                     pbar.setWindowModality(Qt.NonModal)
-                    CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                    CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
                     pbar.setWindowModality(Qt.WindowModal)
 
                 finally:
@@ -4928,12 +4927,11 @@ class ModelLearner(DraggableTool):
                 self.split_dataset_btn.setEnabled(True)
             except Exception as e:
                 self.dataset_path_lbl.clearPath()
-                CW.MsgBox(self, 'Crit', 'Loading dataset failed.', repr(e))
+                CW.MsgBox(self, 'Crit', 'Loading dataset failed.', str(e))
 
         else:
             self.dataset_path_lbl.clearPath()
-            err = result[0]
-            CW.MsgBox(self, 'Crit', 'Loading dataset failed.', repr(e))
+            CW.MsgBox(self, 'Crit', 'Loading dataset failed.', str(result[0]))
 
 
     def _fixSubsetsRatios(self, new_value: int):
@@ -5021,7 +5019,7 @@ class ModelLearner(DraggableTool):
 
         except Exception as e:
             pbar.reset()
-            return CW.MsgBox(self, 'Crit', 'Unexpected data type', repr(e))
+            return CW.MsgBox(self, 'Crit', 'Unexpected data type', str(e))
 
     # Update GUI elements
         for subset in ('Train', 'Validation', 'Test'):
@@ -5285,7 +5283,7 @@ class ModelLearner(DraggableTool):
         
         else:
         # Forward error if balancing operations failed
-            CW.MsgBox(self, 'Crit', 'Balancing failed.', repr(result[0]))
+            CW.MsgBox(self, 'Crit', 'Balancing failed.', str(result[0]))
             
     # End balancing session in any case
         self._endBalancingSession(success)

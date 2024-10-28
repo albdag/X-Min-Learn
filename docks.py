@@ -560,7 +560,7 @@ class DataManager(QW.QTreeWidget):
             # Set the item edited status to False
                 item.setEdited(False)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save file.', repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save file.', str(e))
 
 
     def loadInputMaps(self, group: CW.DataGroup, paths: list|None=None):
@@ -596,7 +596,7 @@ class DataManager(QW.QTreeWidget):
 
             except Exception as e:
                 pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
                 pbar.setWindowModality(Qt.WindowModal)
 
             finally:
@@ -642,7 +642,7 @@ class DataManager(QW.QTreeWidget):
 
             except Exception as e:
                 pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
                 pbar.setWindowModality(Qt.WindowModal)
 
             finally:
@@ -685,7 +685,7 @@ class DataManager(QW.QTreeWidget):
 
             except Exception as e:
                 pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
                 pbar.setWindowModality(Qt.WindowModal)
 
             finally:
@@ -1234,7 +1234,7 @@ class HistogramViewer(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
 # !!! EXPERIMENTAL
@@ -1585,7 +1585,7 @@ class ModeViewer(CW.StyledTabWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
 
@@ -2323,7 +2323,7 @@ class RoiEditor(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def extractMaskFromRois(self):
@@ -2361,7 +2361,7 @@ class RoiEditor(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def removeRoi(self):
@@ -2444,7 +2444,7 @@ class RoiEditor(QW.QWidget):
             progbar.increase()
         except Exception as e:
             progbar.reset()
-            return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', repr(e))
+            return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', str(e))
 
     # Populate the canvas and the ROIs table with the loaded ROIs
         for name, bbox in self.current_roimap.roilist:
@@ -2507,7 +2507,7 @@ class RoiEditor(QW.QWidget):
                 self.current_roimap.save(outpath)
                 self.mappath.setPath(outpath)
             except Exception as e:
-                CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
 
 
 
@@ -2707,7 +2707,7 @@ class ProbabilityMapViewer(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
             
 
 
