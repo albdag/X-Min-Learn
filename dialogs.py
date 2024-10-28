@@ -236,8 +236,7 @@ class AutoRoiDetector(QW.QDialog):
         '''
     # Exit function if a thread is currentlty active
         if self._active_thread is not None:
-            info = 'A detection process is currently active.'
-            return QW.QMessageBox.information(self, 'X-Min Learn', info)
+            return CW.MsgBox(self, 'Crit', 'A detection process is active.')
 
     # Disable OK button
         self.ok_btn.setEnabled(False)
@@ -249,24 +248,21 @@ class AutoRoiDetector(QW.QDialog):
     # Get input map data
         checked_maps = self.maps_selector.getChecked()
         if not len(checked_maps):
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Select at '\
-                                           'least one map')
+            return CW.MsgBox(self, 'Crit', 'Select at least one map.')
         inmaps, names = zip(*[i.get('data', 'name') for i in checked_maps])
         input_stack = InputMapStack(inmaps)
 
     # Check that input maps share the same shape
         if not input_stack.maps_fit():
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'The selected '\
-                                           'maps have different shapes')
+            return CW.MsgBox(self, 'C', 'Selected maps have different shapes.')
         
     # Get current ROI map and check its shape
         self.requestRoiMap.emit()
         if self._current_roimap is None:
             self._current_roimap = RoiMap.from_shape(input_stack.maps_shape)
         elif self._current_roimap.shape != input_stack.maps_shape:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'The currently '\
-                                           'loaded ROI map and the selected '\
-                                           'input maps have different shapes')
+            t = 'Loaded ROI map and selected input maps have different shapes.'
+            return CW.MsgBox(self, 'Crit', t)
 
     # Launch the NPV thread
         self.progbar.setMaximum(len(inmaps))
@@ -302,8 +298,7 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             e, = thread_result
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'NPV calculation failed', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'NPV calculation failed.', repr(e))
             self._end_threaded_session()
 
     
@@ -376,8 +371,7 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             e, = thread_result
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'ROI detection failed', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'ROI detection failed.', repr(e))
             
     # End the threaded session anyway
         self._end_threaded_session()    
@@ -393,11 +387,8 @@ class AutoRoiDetector(QW.QDialog):
             Whether the stop event is confirmed by user or not.
 
         '''
-        quest = 'Do you want to interrupt the automatic ROI detection?'
-        choice = QW.QMessageBox.question(self, 'X-Min Learn', quest,
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.Yes)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'Quest', 'Interrupt automatic ROI detection?')
+        if choice.yes():
             self._active_thread.requestInterruption()
             self._end_threaded_session()
             return True
@@ -660,14 +651,13 @@ class MergeDatasets(QW.QDialog):
         '''
     # Check for at least two imported datasets
         if self.in_path_list.count() < 2:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'Import at least two datasets.')
+            return CW.MsgBox(self, 'Crit', 'Import at least two datasets.')
         
     # Check that all paths still exist
         paths = [item.text() for item in self.in_path_list.getItems()]
         if not all([os.path.exists(p) for p in paths]):
-            msg = 'Some datasets have been deleted, moved or renamed.'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', msg)
+            err_msg = 'Some datasets have been deleted, moved or renamed.'
+            return CW.MsgBox(self, 'Crit', err_msg)
         
     # Merge datasets one at the time to build the final merged dataset. The 
     # first path in the list is the starting dataset ('paths.pop(0)')
@@ -681,8 +671,8 @@ class MergeDatasets(QW.QDialog):
                 merged.merge(dtools.GroundTruthDataset.load(p, dec, chunks=True))
             except ValueError:
                 self.progbar.reset()
-                return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                               'Datasets columns do not fit.')
+                return CW.MsgBox(self, 'Crit', 'Datasets columns do not fit.')
+
         self.progbar.reset()
 
     # Update attribute and save button state. Show dataset preview.
@@ -712,11 +702,9 @@ class MergeDatasets(QW.QDialog):
         dec = self.out_csv_decimal.currentText()
         try:
             self.merged_dataset.save(outpath, sep, dec)
-            QW.QMessageBox.information(self, 'X-Min Learn',
-                                       'Merged dataset succesfully saved.')
+            CW.MsgBox(self, 'Info', 'Succesfully saved merged dataset.')
         except Exception as e:
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'Cannot save merged dataset.', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save merged dataset.', repr(e))
 
 
 
@@ -924,16 +912,15 @@ class SubSampleDataset(QW.QDialog):
             except Exception as e:
                 self._dataset = None
                 self.in_dataset_path.clearPath()
-                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                'Invalid dataset', detailedText=repr(e))
+                CW.MsgBox(self, 'Crit', 'Invalid dataset.', repr(e))
+
             finally:
                 self.progbar.reset()
         
         else:
             self.in_dataset_path.clearPath()
             err = result[0]
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'Dataset loading failed.', detailedText=repr(err))
+            CW.MsgBox(self, 'Crit', 'Dataset loading failed.', repr(e))
             
 
     def updateDatasetInfo(self):
@@ -971,8 +958,7 @@ class SubSampleDataset(QW.QDialog):
     # Deny sub-sampling if no classes are selected
         count = self.subsampled_classes.count()
         if count == 0:
-            return QW.QMessageBox.Critical(self, 'X-Min Learn',
-                                           'Include at least one class.')
+            return CW.MsgBox(self, 'Crit', 'Include at least one class.')
         
     # Exit function if outpath is invalid or file dialog is canceled
         ftype = 'Comma Separated Values (*.csv)'
@@ -998,11 +984,11 @@ class SubSampleDataset(QW.QDialog):
         decimal_char = self.out_csv_decimal.currentText()
         try:
             subsampled.save(outpath, separator_char, decimal_char)
-            QW.QMessageBox.information(self, 'X-Min Learn', 
-                                       'Dataset saved with success.')
+            CW.MsgBox(self, 'Info', 'Dataset successfully saved.')
+
         except Exception as e:
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'Cannot save dataset', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save dataset.', repr(e))
+
         finally:
             self.progbar.reset()
         
@@ -1135,9 +1121,8 @@ class ImageToInputMap(QW.QDialog):
                     self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
                 except Exception as e:
                     self.progbar.reset()
-                    return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                         'X-Min Learn', 'Cannot import images',
-                                         detailedText=repr(e))
+                    return CW.MsgBox(self, 'C', 'File import failed.', repr(e))
+
         self.progbar.reset()
 
 
@@ -1149,8 +1134,7 @@ class ImageToInputMap(QW.QDialog):
     # Deny conversion if no image is loaded
         img_count = self.img_list.count()
         if not img_count:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'No image loaded.')
+            return CW.MsgBox(self, 'Crit', 'No image loaded.')
 
     # Do nothing if directory is invalid or the direcotry dialog is canceled
         outdir = QW.QFileDialog.getExistingDirectory(self, 'Output directory',
@@ -1191,13 +1175,12 @@ class ImageToInputMap(QW.QDialog):
 
     # Send message box with success confirm or error warnings
         if len(errors_log):
-            fpaths, err = zip(*errors_log) 
-            return CW.RichMsgBox(self, QW.QMessageBox.Warning, 'X-Min Learn',
-                                 f'Some conversion failed:\n\n{fpaths}',
-                                 detailedText='\n'.join(repr(e) for e in err))
+            fpaths, err = zip(*errors_log)
+            return CW.MsgBox(self, 'Warn', f'Failed conversions:\n\n{fpaths}',
+                             '\n'.join(repr(e) for e in err)) 
+
         else:
-            return QW.QMessageBox.information(self, 'X-Min Learn',
-                                              'Images converted with success.')
+            return CW.MsgBox(self, 'Info', 'Images successfully converted.')
         
 
 
@@ -1333,8 +1316,7 @@ class ImageToMineralMap(QW.QDialog):
             self.image_array = iatools.image2array(path, dtype='int32')
             self.path_lbl.setPath(path)
         except Exception as e:
-            CW.RichMsgBox(self, QW.QMessageBox.critical, 'X-Min Learn',
-                          'Failed to import this image', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to import image.', repr(e))
 
 
     def convertImage(self):
@@ -1345,8 +1327,7 @@ class ImageToMineralMap(QW.QDialog):
     # Deny conversion if no image is loaded
         array = self.image_array.copy()
         if array is None:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'No image loaaded.')
+            return CW.MsgBox(self, 'Crit', 'No image loaaded.')
         
     # Get image array shape
         if array.ndim == 3:
@@ -1367,8 +1348,7 @@ class ImageToMineralMap(QW.QDialog):
 
     # Deny conversion if loaded image has 2 or more than 4 channels (possible?)
         elif chan == 2 or chan > 4:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'This image cannot be converted.')
+            return CW.MsgBox(self, 'Crit', 'This image cannot be converted.')
         
     # Get unique RGB values. Use color delta to reduce color variance.
         delta = self.delta_spbox.value()
@@ -1379,8 +1359,7 @@ class ImageToMineralMap(QW.QDialog):
     # Deny conversion for more than (2**16)/2 = 32768 classes (can be more)
         n_classes = len(unique)
         if n_classes > 32768:
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'Too many classes found.')
+            return CW.MsgBox(self, 'Crit', 'Too many classes found.')
 
     # Build a flattened minmap
         self.progbar.setRange(0, n_classes)
@@ -1423,8 +1402,7 @@ class ImageToMineralMap(QW.QDialog):
     
     # Save mineral map
         self.minmap.save(outpath)
-        QW.QMessageBox.information(self, 'X-Min Learn', 
-                                   'Map saved with success.')
+        CW.MsgBox(self, 'Info', 'Map successfully saved.')
         
 
     def changeColor(self, legend_item: QW.QTreeWidgetItem, color: tuple[int]):
@@ -1648,8 +1626,7 @@ class DummyMapsBuilder(QW.QDialog):
         '''
     # Deny saving if no map is generated
         if self.dummy_map is None:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'No map generated.')
+            CW.MsgBox(self, 'Crit', 'No map generated.')
         
     # Do nothing if output path is invalid or file dialog is canceled
         ftypes = '''Compressed ASCII file (*.gz)
@@ -1665,8 +1642,6 @@ class DummyMapsBuilder(QW.QDialog):
     # Save map  
         try:
             InputMap(self.dummy_map).save(outpath)
-            QW.QMessageBox.information(self, 'X-Min Learn', 
-                                       'Map saved succesfully.')
+            CW.MsgBox(self, 'Info', 'Map saved succesfully.')
         except Exception as e:
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'Failed to save map.', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', repr(e))

@@ -698,8 +698,7 @@ class Legend(QW.QTreeWidget):
     # Deny renaming protected '_ND'_ class
         old_name = item.text(1)
         if old_name == '_ND_':
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'This class cannot be renamed')
+            return MsgBox(self, 'Crit', 'This class cannot be renamed.')
     
     # Do nothing if the dialog is canceled or the class is not renamed
         name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
@@ -710,19 +709,17 @@ class Legend(QW.QTreeWidget):
         
     # Deny renaming to protected '_ND_' class
         elif name == '_ND_':
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           '"_ND_" is a protected class name') 
+            return MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
         
     # Deny renaming if the name already exists
         elif self.hasClass(name):
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'{name} is already taken')
+            return MsgBox(self, 'Crit', f'{name} is already taken.')
 
     # Deny renaming if the new name is not an ASCII <= 8 characters string
         elif 0 < len(name) <= 8 and name.isascii():
             self.itemRenameRequested.emit(item, name)
         else:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Invalid name')
+            return MsgBox(self, 'Crit',  'Invalid name.')
 
 
     def renameClass(self, item: QW.QTreeWidgetItem, name: str):
@@ -753,8 +750,7 @@ class Legend(QW.QTreeWidget):
         
     # Deny renaming protected '_ND'_ class
         if '_ND_' in classes:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           '"_ND_" class cannot be merged')
+            return MsgBox(self, 'Crit', '"_ND_" class cannot be merged.')
         
     # Do nothing if the dialog is canceled
         text = f'Merge {classes} in a new class (max. 8 ASCII characters):'
@@ -764,19 +760,17 @@ class Legend(QW.QTreeWidget):
         
     # Deny renaming to protected '_ND_' class
         elif name == '_ND_':
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           '"_ND_" is a protected class name') 
+            return MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
     
     # Deny renaming if the name already exists (excluding selected classes)
         elif name not in classes and self.hasClass(name):
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           f'{name} is already taken')
+            return MsgBox(self, 'Crit', f'{name} is already taken.')
 
     # Deny renaming if the new name is not an ASCII <= 8 characters string
         elif 0 < len(name) <= 8 and name.isascii():
             self.itemsMergeRequested.emit(classes, name)
         else:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Invalid name')
+            return MsgBox(self, 'Crit', 'Invalid name.')
 
 
     def requestItemHighlight(self, toggled: bool, item: QW.QTreeWidgetItem):
@@ -2732,7 +2726,7 @@ class SeparatorSymbolSelector(StyledComboBox):
 #     #     print('FUNCTION Finished')
 
 
-class RichMsgBox(QW.QMessageBox):
+class RichMsgBox(QW.QMessageBox): # deprecated and will be removed. Use MsgBox instead. 
     def __init__(self, parent, icon=QW.QMessageBox.NoIcon, title='', text='',
                  btns=QW.QMessageBox.Ok, default_btn=QW.QMessageBox.NoButton,
                  detailedText='', cbox=None):
@@ -2749,6 +2743,141 @@ class RichMsgBox(QW.QMessageBox):
         self.exec()
 
 
+    
+class MsgBox(QW.QMessageBox):
+    '''
+    Convenient class to quickly construct a message box dialog with default 
+    icon and buttons depending on selected 'type_'. All property can also be
+    fully customized through parameters. It also includes methods to easily get
+    user interaction with 'Yes' and 'No' buttons and optional checkbox.
+    '''
+
+    def __init__(self, parent, type_: str, text: str='', dtext: str='',
+                 title: str|None=None, icon: QW.QMessageBox.Icon|None=None, 
+                 btns: QW.QMessageBox.StandardButtons|None=None, 
+                 def_btn: QW.QMessageBox.StandardButton|None=None,
+                 cbox: QW.QCheckBox|None=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : QObject
+            The GUI parent of the message box.
+        type_ : str
+            Message box type. It controls the default icon and buttons if not
+            specified. It must be one of 'Info' (or 'I'), 'Quest (or 'Q'),
+            'Warn' (or 'W'), 'QuestWarn' (or 'QW') or 'Crit' (or 'C').
+        text : str, optional
+            Message box text. The default is ''.
+        dtext : str, optional
+            Message box detailed text. If set, a 'Show Details' button will
+            also be added. The default is ''.
+        title : str or None, optional
+            Message box title. If None, it will be the 'parent' window title or
+            'X-Min Learn' if it is invalid. The default is None.
+        icon : QMessageBox.Icon or None, optional
+            Message box icon. If None, it is set according to 'type_'. The
+            default is None.
+        btns : QMessageBox.StandardButtons or None, optional
+            Message box buttons. If None, they are set according to 'type_'. 
+            The default is None.
+        def_btn : QMessageBox.StandardButton or None, optional
+            Default selected button. If None, it is set according to 'type_'.
+            The default is None.
+        cbox : QCheckBox or None, optional
+            If set, adds a checkbox to the message box. The default is None.
+
+        Raises
+        ------
+        ValueError
+            Raised if an invalid 'type_' value is set.
+
+        '''
+    # Set default icon, buttons and default button according to message type
+        if type_ in ('Info', 'I'):
+            icon = QW.QMessageBox.Information if icon is None else icon
+            btns = QW.QMessageBox.Ok if btns is None else btns
+        elif type_ in ('Quest', 'Q'):
+            icon = QW.QMessageBox.Question if icon is None else icon
+            btns = QW.QMessageBox.Yes | QW.QMessageBox.No if btns is None else btns
+            def_btn = QW.QMessageBox.No if def_btn is None else def_btn
+        elif type_ in ('Warn', 'W'):
+            icon = QW.QMessageBox.Warning if icon is None else icon
+            btns = QW.QMessageBox.Ok if btns is None else btns
+        elif type_ in ('QuestWarn', 'QW'):
+            icon = QW.QMessageBox.Warning if icon is None else icon
+            btns = QW.QMessageBox.Yes | QW.QMessageBox.No if btns is None else btns
+            def_btn = QW.QMessageBox.No if def_btn is None else def_btn
+        elif type_ in ('Crit', 'C'):
+            icon = QW.QMessageBox.Critical if icon is None else icon
+            btns = QW.QMessageBox.Ok if btns is None else btns
+        else:
+            raise ValueError('f{type_} is an invalid message box type.')
+        
+    # Auto-set title if not specified
+        if title is None:
+            try:
+                title = parent.windowTitle()
+                if title == '': 
+                    title = 'X-Min Learn'
+            except AttributeError:
+                title = 'X-Min Learn'
+
+    # Set dialog attributes
+        super(MsgBox, self).__init__(icon, title, text, btns, parent)
+        self.setDefaultButton(def_btn)
+        self.setDetailedText(dtext)
+        self.setCheckBox(cbox)
+
+    # Show dialog
+        self.exec()
+
+
+    def yes(self):
+        '''
+        Check if user clicked on 'Yes' button.
+
+        Returns
+        -------
+        bool
+            Whether user clicked on 'Yes'.
+
+        '''
+        return self.clickedButton().text() == '&Yes'
+    
+
+    def no(self):
+        '''
+        Check if user clicked on 'No' button.
+
+        Returns
+        -------
+        bool
+            Whether user clicked on 'No'.
+            
+        '''
+        return self.clickedButton().text() == '&No'
+    
+
+    def cboxChecked(self):
+        '''
+        Check the state of the checkbox. If no checkbox was set, this function
+        returns False.
+
+        Returns
+        -------
+        bool
+            Whether the checkbox was checked.
+
+        '''
+        cbox = self.checkBox()
+        if cbox is None:
+            return False
+        else:
+            return cbox.isChecked() 
+        
+                
 
 class LineSeparator(QW.QFrame):
     '''

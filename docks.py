@@ -440,11 +440,8 @@ class DataManager(QW.QTreeWidget):
         '''
 
         selected = self.getSelectedGroupsIndexes()
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Remove selected sample(s)?',
-                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                          QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'Quest', 'Remove selected sample(s)?')
+        if choice.yes():
             for idx in sorted(selected, reverse=True):
                 self.takeTopLevelItem(idx)
 
@@ -469,11 +466,8 @@ class DataManager(QW.QTreeWidget):
 
         '''
         items = self.getSelectedDataObjects()
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Remove selected data?',
-                                          QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                          QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'Quest', 'Remove selected data?')
+        if choice.yes():
             for i in reversed(items):
                 subgroup = i.parent()
                 subgroup.delChild(i)
@@ -512,7 +506,7 @@ class DataManager(QW.QTreeWidget):
         else: return
 
 
-    def saveData(self, item, overwrite=True):
+    def saveData(self, item: CW.DataObject, overwrite=True):
         '''
         Save the item data to file.
 
@@ -535,12 +529,9 @@ class DataManager(QW.QTreeWidget):
         if overwrite:
             path = item_data.filepath
             if path is not None and os.path.exists(path):
-                choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                 'Overwrite this file?',
-                                                 QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                 QW.QMessageBox.No)
-                if choice == QW.QMessageBox.No: return
-
+                choice = CW.MsgBox(self, 'Quest', 'Overwrite this file?')
+                if choice.no(): 
+                    return
             else:
                 path = None
 
@@ -569,13 +560,10 @@ class DataManager(QW.QTreeWidget):
             # Set the item edited status to False
                 item.setEdited(False)
             except Exception as e:
-                text = 'An error occurred while saving the file'
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', text, 
-                                       detailedText=repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save file.', repr(e))
 
 
-    def loadInputMaps(self, group, paths=None):
+    def loadInputMaps(self, group: CW.DataGroup, paths: list|None=None):
         '''
         Specialized loading function to load input maps to a group (i.e., an
         instance of DataGroup).
@@ -584,37 +572,40 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list, optional
-            A list of filepaths to data. The default is None.
+        paths : list or None, optional
+            A list of filepaths to data. If None, user will be prompt to load
+            them from disk. The default is None.
 
         '''
+    # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
                                                        pref.get_dirPath('in'),
                                                        'ASCII maps (*.txt *.gz)')
-        if paths:
-            pref.set_dirPath('in', os.path.dirname(paths[0]))
-            progBar = CW.PopUpProgBar(self, len(paths), 'Loading data')
-            for n, p in enumerate(paths, start=1):
-                if progBar.wasCanceled(): break
-                try:
-                    xmap = InputMap.load(p)
-                    group.inmaps.addData(xmap)
+        if not paths:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(paths[0]))
+        pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
+        for n, p in enumerate(paths, start=1):
+            if pbar.wasCanceled(): 
+                break
+            try:
+                xmap = InputMap.load(p)
+                group.inmaps.addData(xmap)
 
-                except Exception as e:
-                    progBar.setWindowModality(Qt.NonModal)
-                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                    'X-Min Learn', f'Unexpected file:\n{p}.',
-                                    detailedText=repr(e))
-                    progBar.setWindowModality(Qt.WindowModal)
+            except Exception as e:
+                pbar.setWindowModality(Qt.NonModal)
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                pbar.setWindowModality(Qt.WindowModal)
 
-                finally:
-                    progBar.setValue(n)
+            finally:
+                pbar.setValue(n)
 
-            self.expandRecursively(self.indexFromItem(group))
+        self.expandRecursively(self.indexFromItem(group))
 
 
-    def loadMineralMaps(self, group, paths=None):
+    def loadMineralMaps(self, group: CW.DataGroup, paths: list|None=None):
         '''
         Specialized loading function to load mineral maps to a group (i.e., an
         instance of DataGroup).
@@ -623,41 +614,44 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list, optional
-            A list of filepaths to data. The default is None.
+        paths : list or None, optional
+            A list of filepaths to data. If None, user will be prompt to load
+            them from disk. The default is None.
 
         '''
+    # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load mineral maps',
                                                        pref.get_dirPath('in'),
                                                        '''Mineral maps (*.mmp)
                                                           Legacy mineral maps (*.txt *.gz)''')
-        if paths:
-            pref.set_dirPath('in', os.path.dirname(paths[0]))
-            progBar = CW.PopUpProgBar(self, len(paths), 'Loading data')
-            for n, p in enumerate(paths, start=1):
-                if progBar.wasCanceled(): break
-                try:
-                    mmap = MineralMap.load(p)
-                    # Convert legacy mineral maps to new file format (mmp)
-                    if mmap.is_obsolete():
-                        mmap.save(cf.extend_filename(p, '', '.mmp'))
-                    group.minmaps.addData(mmap)
+        if not paths:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(paths[0]))
+        pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
+        for n, p in enumerate(paths, start=1):
+            if pbar.wasCanceled(): 
+                break
+            try:
+                mmap = MineralMap.load(p)
+                # Convert legacy mineral maps to new file format (mmp)
+                if mmap.is_obsolete():
+                    mmap.save(cf.extend_filename(p, '', '.mmp'))
+                group.minmaps.addData(mmap)
 
-                except Exception as e:
-                    progBar.setWindowModality(Qt.NonModal)
-                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                    'X-Min Learn', f'Unexpected file:\n{p}.',
-                                    detailedText=repr(e))
-                    progBar.setWindowModality(Qt.WindowModal)
+            except Exception as e:
+                pbar.setWindowModality(Qt.NonModal)
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                pbar.setWindowModality(Qt.WindowModal)
 
-                finally:
-                    progBar.setValue(n)
+            finally:
+                pbar.setValue(n)
 
-            self.expandRecursively(self.indexFromItem(group))
+        self.expandRecursively(self.indexFromItem(group))
 
 
-    def loadMasks(self, group, paths=None):
+    def loadMasks(self, group: CW.DataGroup, paths: list|None=None):
         '''
         Specialized loading function to load masks to a group (i.e., an
         instance of DataGroup).
@@ -666,35 +660,38 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list, optional
-            A list of filepaths to data. The default is None.
+        paths : list or None, optional
+            A list of filepaths to data. If None, user will be prompt to load
+            them from disk. The default is None.
 
         '''
+    # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load masks',
                                                        pref.get_dirPath('in'),
                                                        '''Masks (*.msk)
                                                           Text file (*.txt)''')
-        if paths:
-            pref.set_dirPath('in', os.path.dirname(paths[0]))
-            progBar = CW.PopUpProgBar(self, len(paths), 'Loading data')
-            for n, p in enumerate(paths, start=1):
-                if progBar.wasCanceled(): break
-                try:
-                    mask = Mask.load(p)
-                    group.masks.addData(mask)
+        if not paths:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(paths[0]))
+        pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
+        for n, p in enumerate(paths, start=1):
+            if pbar.wasCanceled(): 
+                break
+            try:
+                mask = Mask.load(p)
+                group.masks.addData(mask)
 
-                except Exception as e:
-                    progBar.setWindowModality(Qt.NonModal)
-                    CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                    'X-Min Learn', f'Unexpected file:\n{p}.',
-                                    detailedText=repr(e))
-                    progBar.setWindowModality(Qt.WindowModal)
+            except Exception as e:
+                pbar.setWindowModality(Qt.NonModal)
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                pbar.setWindowModality(Qt.WindowModal)
 
-                finally:
-                    progBar.setValue(n)
+            finally:
+                pbar.setValue(n)
 
-            self.expandRecursively(self.indexFromItem(group))
+        self.expandRecursively(self.indexFromItem(group))
 
 
     def invertInputMap(self):
@@ -783,7 +780,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def exportMineralMap(self, item):
+    def exportMineralMap(self, item: CW.DataObject):
         '''
         Export the encoded mineral map (i.e,. with mineral classes expressed
         as numerical IDs) to ASCII format. If users requests it, the encoder
@@ -797,43 +794,42 @@ class DataManager(QW.QTreeWidget):
         '''
 
     # Safety: exit function if item does not held mineral map data
-        if not item.holdsMineralMap(): return
+        if not item.holdsMineralMap(): 
+            return
 
-    # Construct a question message box
+    # Do nothing if user choice is NO
+        text =  'Export map as a numeric array?'
         det_text = 'The translation dictionary is a text file that holds a '\
                    'reference to the mineral classes linked with the IDs of '\
                    'the exported mineral map.'
         msg_cbox = QW.QCheckBox('Include translation dictionary')
         msg_cbox.setChecked(True)
-        choice = CW.RichMsgBox(self, QW.QMessageBox.Question, 'X-Min Learn',
-                                 'Export map as a numeric array?',
-                                 QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                 QW.QMessageBox.Yes, detailedText=det_text,
-                                 cbox=msg_cbox)
-                                 
-    # Get the outpath
-        if choice.clickedButton().text() == '&Yes':
-            outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Export Map',
-                                                        pref.get_dirPath('out'),
-                                                        '''ASCII file (*.txt)''')
-            if outpath:
-                pref.set_dirPath('out', os.path.dirname(outpath))
+        choice = CW.MsgBox(self, 'Quest', text, det_text, cbox=msg_cbox)
+        if choice.no():
+            return
+        
+    # Do nothing if the outpath is invalid or the file dialog is canceled
+        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Export Map',
+                                                    pref.get_dirPath('out'),
+                                                    '''ASCII file (*.txt)''')
+        if not outpath:
+            return
+        
+        pref.set_dirPath('out', os.path.dirname(outpath))
 
-            # Save the mineral map to disk
-                mmap = item.get('data')
-                np.savetxt(outpath, mmap.minmap_encoded, fmt='%d')
+    # Save the mineral map to disk
+        mmap = item.get('data')
+        np.savetxt(outpath, mmap.minmap_encoded, fmt='%d')
 
-            # Also save the encoder if user requests it
-                if choice.checkBox().isChecked():
-                    encoder_path = cf.extend_filename(outpath, '_transDict')
-                    rows, cols = mmap.shape
-                    with open(encoder_path, 'w') as ep:
-                        for id_, lbl in mmap.encoder.items():
-                            ep.write(f'{id_} :\t{lbl}\n')
-                    # Include number of rows and columns
-                        ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
-
-
+    # Also save the encoder if user requests it
+        if choice.cboxChecked():
+            encoder_path = cf.extend_filename(outpath, '_transDict')
+            rows, cols = mmap.shape
+            with open(encoder_path, 'w') as ep:
+                for id_, lbl in mmap.encoder.items():
+                    ep.write(f'{id_} :\t{lbl}\n')
+            # Include number of rows and columns
+                ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
 
 
     def refreshDataSource(self):
@@ -842,9 +838,10 @@ class DataManager(QW.QTreeWidget):
 
         '''
         items = self.getSelectedDataObjects()
-        progBar = CW.PopUpProgBar(self, len(items), 'Reloading data')
+        pbar = CW.PopUpProgBar(self, len(items), 'Reloading data')
         for n, i in enumerate(items, start=1):
-            if progBar.wasCanceled(): break
+            if pbar.wasCanceled(): 
+                break
             try:
                 item_data, item_name = i.get('data', 'name')
                 path = item_data.filepath
@@ -853,13 +850,12 @@ class DataManager(QW.QTreeWidget):
             # Change the edited state of item
                 i.setEdited(False)
             except FileNotFoundError:
-                progBar.setWindowModality(Qt.NonModal)
-                QW.QMessageBox.critical(self, 'X-Min Learn', 'The filepath to '\
-                                        f'{item_name} was deleted, removed or '\
-                                        'renamed.')
-                progBar.setWindowModality(Qt.WindowModal)
+                pbar.setWindowModality(Qt.NonModal)
+                err = f'Filepath to {item_name} was deleted, moved or renamed.'
+                CW.MsgBox(self, 'Crit', err)
+                pbar.setWindowModality(Qt.WindowModal)
             finally:
-                progBar.setValue(n)
+                pbar.setValue(n)
 
         self.refreshView()
 
@@ -898,9 +894,8 @@ class DataManager(QW.QTreeWidget):
 
 
     def clearAll(self):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn', 
-                                         'Remove all samples?')
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'Quest', 'Remove all samples?')
+        if choice.yes():
             self.clear()
             self.clearView()
 
@@ -1239,10 +1234,7 @@ class HistogramViewer(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                text = 'An error occurred while saving the file'
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', text,
-                                       detailedText=repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
 
 
 # !!! EXPERIMENTAL
@@ -1562,7 +1554,7 @@ class ModeViewer(CW.StyledTabWidget):
         self.map_canvas.draw()
 
 
-    def onMaskExtracted(self, classes):
+    def onMaskExtracted(self, classes: list):
         '''
         Extract a mask from a selection of mineral classes and save it to file.
 
@@ -1593,10 +1585,8 @@ class ModeViewer(CW.StyledTabWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                text = 'An error occurred while saving the file'
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', text,
-                                        detailedText=repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+
 
 
 class RoiEditor(QW.QWidget):
@@ -2224,16 +2214,15 @@ class RoiEditor(QW.QWidget):
             warn_text = 'Warning: different map shapes detected. Drawing '\
                         'ROIs on top of different sized maps leads to '\
                         'unpredictable behaviours. Proceed anyway?'
-            btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', warn_text,
-                                            btns, QW.QMessageBox.No)
+            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
+
         # Exit function if user does not want to procede
-            if choice == QW.QMessageBox.No: return
+            if choice.no():
+                return
 
     # Prevent drawing overlapping ROIs
         if self.current_roimap.bbox_overlaps(bbox):
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                           'ROIs cannot overlap')
+            return CW.MsgBox(self, 'Crit', 'ROIs cannot overlap.')
 
     # Show the dialog to type the ROI name
         text = 'Type name (max 8 ASCII characters)'
@@ -2334,10 +2323,7 @@ class RoiEditor(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', 'An error occurred '\
-                                       'while saving the file', 
-                                       detailedText=repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
 
 
     def extractMaskFromRois(self):
@@ -2375,10 +2361,8 @@ class RoiEditor(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', 'An error occurred '\
-                                       'while saving the file',
-                                       detailedText=repr(e))
+                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
+
 
     def removeRoi(self):
         '''
@@ -2391,11 +2375,8 @@ class RoiEditor(QW.QWidget):
         if not len(selected): return
 
     # Ask for confirmation
-        btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Remove selected ROI?',
-                                         btns, QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'Quest', 'Remove selected ROI?')
+        if choice.yes():
 
             for row in sorted(selected, reverse=True):
             # Remove from roimap
@@ -2433,50 +2414,49 @@ class RoiEditor(QW.QWidget):
         '''
     # Show a warning if a ROI map was already loaded
         if self.current_roimap is not None:
-            warn_text = 'Loading a new ROI map will discard any unsaved changes '\
-                        'made to the current ROI map. Proceed anyway?'
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', warn_text,
-                                            QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                            QW.QMessageBox.No)
-        # Exit function if user does not want to procede
-            if choice == QW.QMessageBox.No: return
+            warn_text = 'Loading a new ROI map will discard any unsaved '\
+                        'changes made to the current ROI map. Proceed anyway?'
+            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
 
-    # Get new ROI map filepath
+        # Exit function if user does not want to procede
+            if choice.no():
+                return
+
+    # Do nothing if filepath is invalid or the file dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
                                                  pref.get_dirPath('in'),
                                                  'ROI maps (*.rmp)')
-        if path:
-            pref.set_dirPath('in', os.path.dirname(path))
-            progbar = CW.PopUpProgBar(self, 4, 'Loading data', cancel=False)
-            progbar.setValue(0)
+        if not path:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(path))
+        progbar = CW.PopUpProgBar(self, 4, 'Loading data', cancel=False)
+        progbar.setValue(0)
 
-        # Remove old (current) ROI map
-            self.removeCurrentRoiMap()
+    # Remove old (current) ROI map
+        self.removeCurrentRoiMap()
+        progbar.increase()
+
+    # Load new ROI map
+        try:
+            self.current_roimap = RoiMap.load(path)
+            self.mappath.setPath(path)
             progbar.increase()
+        except Exception as e:
+            progbar.reset()
+            return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', repr(e))
 
-        # Load new ROI map
-            try:
-                self.current_roimap = RoiMap.load(path)
-                self.mappath.setPath(path)
-                progbar.increase()
-            except Exception as e:
-                progbar.reset()
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', 
-                                       f'Unexpected file:\n{path}',
-                                       detailedText = repr(e))
+    # Populate the canvas and the ROIs table with the loaded ROIs
+        for name, bbox in self.current_roimap.roilist:
+            area = self.current_roimap.bbox_area(bbox)
+            self.addRoiToTable(name, area)
+            self.addPatchToCanvas(name, bbox)
+        progbar.increase()
 
-        # Populate the canvas and the ROIs table with the loaded ROIs
-            for name, bbox in self.current_roimap.roilist:
-                area = self.current_roimap.bbox_area(bbox)
-                self.addRoiToTable(name, area)
-                self.addPatchToCanvas(name, bbox)
-            progbar.increase()
-
-        # Refresh view
-            self.updateBarPlot()
-            self._redraw()
-            progbar.increase()
+    # Refresh view
+        self.updateBarPlot()
+        self._redraw()
+        progbar.increase()
 
 
     def unloadRoiMap(self):
@@ -2487,13 +2467,9 @@ class RoiEditor(QW.QWidget):
 
         '''
         if self.current_roimap is not None:
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn',
-                                            'Remove current ROI map? Unsaved '\
-                                            'changes will be discarded.',
-                                             QW.QMessageBox.Yes |
-                                             QW.QMessageBox.No,
-                                             QW.QMessageBox.No)
-            if choice == QW.QMessageBox.Yes:
+            warn_text = 'Remove current ROI map? Unsaved changes will be lost.'
+            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
+            if choice.yes():
                 self.removeCurrentRoiMap()
                 self.updateBarPlot()
                 self._redraw()
@@ -2513,7 +2489,8 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Exit function if the current ROI map does not exist
-        if self.current_roimap is None: return
+        if self.current_roimap is None: 
+            return
 
     # Save the ROI map to a new file if it was requested (saveAs = True) and/or
     # if it was never saved before (= it has not a valid filepath). Otherwise,
@@ -2529,13 +2506,9 @@ class RoiEditor(QW.QWidget):
             try:
                 self.current_roimap.save(outpath)
                 self.mappath.setPath(outpath)
-                return QW.QMessageBox.information(self, 'X-Min Learn',
-                                                  'File saved with success')
             except Exception as e:
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', 'An error occurred '\
-                                       'while saving the file',
-                                       detailedText=repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', repr(e))
+
 
 
 class ProbabilityMapViewer(QW.QWidget):
@@ -2734,11 +2707,9 @@ class ProbabilityMapViewer(QW.QWidget):
             try:
                 mask.save(outpath)
             except Exception as e:
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', 'An error occurred '\
-                                       'while saving the file', 
-                                       detailedText=repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save mask.', repr(e))
             
+
 
 class RgbaCompositeMapViewer(QW.QWidget):
     '''
@@ -2850,8 +2821,8 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Exit function if the Input Map shape does not fit the RGBA map shape
         if inmap.shape != rgba_map.shape[:2]:
-            err_txt = 'This map does not fit within the current RGBA map'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', err_txt)
+            err_txt = 'This map does not fit within the current RGBA map.'
+            return CW.MsgBox(self, 'Crit', err_txt)
 
     # Update the channel with the new data and update the plot
         idx = self.channels.index(channel)

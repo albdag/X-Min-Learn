@@ -618,11 +618,8 @@ class MainWindow(QW.QMainWindow):
     #         self.phaseRefinerDialog.show()
 
     def closeEvent(self, event):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Do you really want to exit the app?',
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'Quest', 'Exit application?')
+        if choice.yes():
             event.accept()
         else:
             event.ignore()

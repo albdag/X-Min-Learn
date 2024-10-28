@@ -122,16 +122,15 @@ class DraggableTool(QW.QWidget):
             Whether or not the close event is accepted.
 
         '''
-        text = f'Close {self.windowTitle()}? Any unsaved data will be lost'
-        choice = QW.QMessageBox.question(self, 'X-Min Learn', text,
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
+        text = f'Close {self.windowTitle()}? Any unsaved data will be lost.'
+        choice = CW.MsgBox(self, 'Quest', text)
+
     # accept() or ignore() are returned as boolean output, so that the event is
     # propagated to the parent widget. The parent can be None when closed as a
     # floating window or the MainTabWidget when closed from the tab. In the
     # latter case the MainTabWidget catches the event output and use that info
     # to "choose" to close or not close the corresponding tab.
-        if choice == QW.QMessageBox.Yes:
+        if choice.yes():
             return event.accept()
         else:
             return event.ignore()
@@ -384,12 +383,10 @@ class Preferences(QW.QWidget):
 
 
     def defaultPref(self):
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Do you want to reset all preferences to default? '\
-                                         'Note: the changes will only take effect after restarting the app.',
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        text = 'Reset all preferences to default? Note: changes take effect '\
+               'after restarting the app.'
+        choice = CW.MsgBox(self, 'Quest', text)
+        if choice.yes():
             pref.clear_settings()
             self.close()
 
@@ -871,31 +868,32 @@ class MineralClassifier(DraggableTool):
         Load an input mask from file.
 
         '''
+    # Do nothing if path is invalid or file dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load mask',
                                                  pref.get_dirPath('in'),
                                                  '''Mask (*.msk)
                                                  Text file (*.txt)''')
 
-        if path:
-            pref.set_dirPath('in', os.path.dirname(path[0]))
-            
-            try:
-                mask = Mask.load(path)     
-            except Exception as e:
-                mask = None 
-                CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                'X-Min Learn', f'Unexpected file:\n{path}.',
-                                detailedText=repr(e))
-            finally:
-                if mask:
-                    self.mask_pathlbl.setPath(path)
-                    self.setMask(mask)
-                else:
-                    self.removeMask()
+        if not path:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(path[0]))
+        
+        try:
+            mask = Mask.load(path)     
+        except Exception as e:
+            mask = None 
+            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', repr(e))
+
+        finally:
+            if mask:
+                self.mask_pathlbl.setPath(path)
+                self.setMask(mask)
+            else:
+                self.removeMask()
 
 
-
-    def getMaskFromClass(self, class_name:str):
+    def getMaskFromClass(self, class_name: str):
         '''
         Extract a mask from the choosen mineral class of the choosen mineral 
         map.
@@ -917,8 +915,7 @@ class MineralClassifier(DraggableTool):
             self.minmap_combox.clear()
             self.class_combox.clear()
             self.removeMask()
-            QW.QMessageBox.critical(self, 'X-Min Learn', 'This mineral map '\
-                                    'is no more available')
+            CW.MsgBox(self, 'Crit', 'This mineral map is no more available.')
 
 
     def setMask(self, mask: Mask):
@@ -1058,10 +1055,7 @@ class MineralClassifier(DraggableTool):
             try:
                 minmap.save(path)
             except Exception as e:
-                text = 'An error occurred while saving the file'
-                return CW.RichMsgBox(self, QW.QMessageBox.Critical, 
-                                       'X-Min Learn', text, 
-                                       detailedText=repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save map.', repr(e))
 
 
     def removeMineralMap(self): 
@@ -1072,11 +1066,8 @@ class MineralClassifier(DraggableTool):
         '''
         item = self.minmaps_list.currentItem()
         item_idx = self.minmaps_list.indexOfTopLevelItem(item)
-        choice = QW.QMessageBox.warning(self, 'X-Min Learn', 
-                                        'Remove selected map?',
-                                        QW.QMessageBox.Yes | QW.QMessageBox.No, 
-                                        QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'QuestWarn', 'Remove selected map?')
+        if choice.yes():
             self.minmaps_list.takeTopLevelItem(item_idx)
             new_displayed_item = self.minmaps_list.topLevelItem(item_idx - 1)
             self.minmaps_list.setCurrentItem(new_displayed_item)
@@ -1233,8 +1224,7 @@ class MineralClassifier(DraggableTool):
         '''
     # Do not allow multiple classification processes at once
         if self._isBusyClassifying:
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Cannot run '\
-                                           'multiple classifications at once.')
+            return CW.MsgBox(self, 'C', 'Cannot run multiple classifications.')
         
     # Get checked input maps data and their dispayed names
         checked_inmaps = self.inmaps_selector.getChecked()
@@ -1245,13 +1235,11 @@ class MineralClassifier(DraggableTool):
     
     # Check for maps perfect overlapping
         if not input_stack.maps_fit():
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'Input maps '\
-                                           'have different shape/size')
+            return CW.MsgBox(self, 'Crit', 'Input maps do not overlap.')
         
     # Check that mask (if present) has correct shape
         if not input_stack.mask_fit():
-            return QW.QMessageBox.critical(self, 'X-Min Learn', 'The selected '\
-                                           'mask has an invalid shape')
+            return CW.MsgBox(self, 'C', 'The selected mask has invalid shape.')
 
     # Get the classifier and launch the classification thread
         active_tab = self.classifier_tabwid.currentWidget()
@@ -1321,9 +1309,7 @@ class MineralClassifier(DraggableTool):
             self.showMineralMap(item)
 
         else:
-            e = result[0]
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Classification failed.', detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Classification failed.', repr(result[0]))
 
         self._endClassification(success)
 
@@ -1358,8 +1344,8 @@ class MineralClassifier(DraggableTool):
             self.progbar.setMaximum(1)
 
         if success:
-            QW.QMessageBox.information(self, 'X-Min Lern', 
-                                       'Classification completed with success')
+            CW.MsgBox(self, 'Info', 'Classification completed successfully.')
+                                    
 
     def closeEvent(self, event):
         '''
@@ -1374,10 +1360,8 @@ class MineralClassifier(DraggableTool):
         '''
         if self._isBusyClassifying:
             text = 'A classification process is still active. Close anyway?'
-            btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                                            btns, QW.QMessageBox.No)
-            if choice == QW.QMessageBox.Yes:
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.yes():
                 self.stopClassification()
                 event.accept()
             else:
@@ -1452,33 +1436,33 @@ class MineralClassifier(DraggableTool):
             Load a pre-trained model from file.
 
             '''
+        # Do nothing if path is invalid or file dialog is canceled.
             path, _ = QW.QFileDialog.getOpenFileName(self, 'Import model',
                                                      pref.get_dirPath('in'),
                                                      'PyTorch model (*.pth)')
-            if path:
-                pref.set_dirPath('in', os.path.dirname(path))
-                try:
-                    self.model = mltools.EagerModel.load(path)
-                except Exception as e:
-                    return CW.RichMsgBox(self, QW.QMessageBox.Critical,
-                                           'X-Min Learn', 'Incompatible model',
-                                           detailedText = repr(e))
-                self.model_path.setPath(path)
-                logpath = self.model.generate_log_path(path)
+            if not path:
+                return
+            
+            pref.set_dirPath('in', os.path.dirname(path))
 
-                # If model log was deleted or moved, ask for rebuilding it
-                if not os.path.exists(logpath):
-                    quest_text = 'Unable to find model log file. Rebuild it?'
-                    btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-                    choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                                     quest_text, btns,
-                                                     QW.QMessageBox.Yes)
-                    if choice == QW.QMessageBox.Yes:
-                        ext_log = pref.get_setting('class/extLog', False, bool)
-                        self.model.save_log(logpath, extended=ext_log)
+            try:
+                self.model = mltools.EagerModel.load(path)
+            except Exception as e:
+                return CW.MsgBox(self, 'Crit', 'Incompatible model.', repr(e))
 
-                # Load log file. No error will be raised if it does not exist
-                self.model_info.setDoc(logpath)
+            self.model_path.setPath(path)
+            logpath = self.model.generate_log_path(path)
+
+            # If model log was deleted or moved, ask for rebuilding it
+            if not os.path.exists(logpath):
+                quest_text = 'Unable to find model log file. Rebuild it?'
+                choice = CW.MsgBox(self, 'Quest', quest_text)
+                if choice.yes():
+                    ext_log = pref.get_setting('class/extLog', False, bool)
+                    self.model.save_log(logpath, extended=ext_log)
+
+            # Load log file. No error will be raised if it does not exist
+            self.model_info.setDoc(logpath)
 
 
         def getClassifier(self, input_stack: InputMapStack, maps_names: list):
@@ -1502,8 +1486,7 @@ class MineralClassifier(DraggableTool):
 
             '''
             if self.model == None:
-                QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                        'A pre-trained model is required')
+                CW.MsgBox(self, 'Crit', 'A pre-trained model is required.')
                 return None
 
         # Check if all required input maps are present and order them to fit
@@ -1512,8 +1495,7 @@ class MineralClassifier(DraggableTool):
             ordered_indices = []
             for feat in self.model.features:
                 if not cf.guessMap(feat, maps_names, caseSens=True):
-                    QW.QMessageBox.critical(self, 'X-Min Learn',
-                                            f'Unable to identify {feat} map.')
+                    CW.MsgBox(self, 'Crit', f'Unable to identify {feat} map.')
                     return None
                 else:
                     ordered_indices.append(maps_names.index(feat))
@@ -1646,34 +1628,36 @@ class MineralClassifier(DraggableTool):
             Mineral Classifier's maps canvas.
 
             '''
-        # Get path to new ROI map
+        # Do nothing if path is invalid or file dialog is canceled
             path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
                                                      pref.get_dirPath('in'),
                                                      'ROI maps (*.rmp)')
-            if path:
-                pref.set_dirPath('in', os.path.dirname(path))
-                pbar = CW.PopUpProgBar(self, 3, 'Loading data', cancel=False)
-                pbar.setValue(0)
+            if not path:
+                return 
+            
+            pref.set_dirPath('in', os.path.dirname(path))
 
-            # Try loading the ROI map. Exit function if something goes wrong
-                try:
-                    new_roimap = RoiMap.load(path)
-                    pbar.increase()
-                except Exception as e:
-                    pbar.reset()
-                    return CW.RichMsgBox(self, QW.QMessageBox.Critical,
-                                        'X-Min Learn', f'Unexpected file:\n{path}',
-                                        detailedText = repr(e))
+            pbar = CW.PopUpProgBar(self, 3, 'Loading data', cancel=False)
+            pbar.setValue(0)
 
-            # Remove previous ROI map from canvas
-                self.unloadRoiMap()
+        # Try loading the ROI map. Exit function if something goes wrong
+            try:
+                new_roimap = RoiMap.load(path)
                 pbar.increase()
+            except Exception as e:
+                pbar.reset()
+                return CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', 
+                                 repr(e))
 
-            # Add the new ROI map and populate the canvas with its ROIs
-                self._roimap = new_roimap
-                self.addRoiMapRequested.emit(new_roimap)
-                self.roimap_path.setPath(path)
-                pbar.increase()
+        # Remove previous ROI map from canvas
+            self.unloadRoiMap()
+            pbar.increase()
+
+        # Add the new ROI map and populate the canvas with its ROIs
+            self._roimap = new_roimap
+            self.addRoiMapRequested.emit(new_roimap)
+            self.roimap_path.setPath(path)
+            pbar.increase()
 
 
         def unloadRoiMap(self):
@@ -1728,18 +1712,15 @@ class MineralClassifier(DraggableTool):
             algm = self.algm_combox.currentText()
 
             if roimap is None:
-                QW.QMessageBox.critical(self, 'X-Min Learn', 
-                                        'A ROI map is required')
+                CW.MsgBox(self, 'Crit', 'A ROI map is required.')
                 return None
 
         # Check if ROI map extension differs from input maps extensions
             if input_stack.maps_shape != roimap.shape:
-                warn_text = 'ROI map extension is different from sample '\
-                            'extension. Proceed anyway?'
-                btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-                choice = QW.QMessageBox.warning(self, 'X-Min Learn', warn_text,
-                                                btns, QW.QMessageBox.No)
-                if choice == QW.QMessageBox.No:
+                text = 'ROI map and sample extensions are different. Proceed '\
+                       'anyway?'
+                choice = CW.MsgBox(self, 'QuestWarn', text)
+                if choice.no():
                     return None
 
             if algm == 'K-Nearest Neighbors':
@@ -3018,13 +2999,9 @@ class DatasetBuilder(DraggableTool):
         Confirm the selected input features and populate the Dataset Designer.
 
         '''
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Do you want to refresh the Dataset '\
-                                         'Designer? All previously loaded '\
-                                         'maps will be removed.',
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        quest_text = 'Refresh Dataset Designer? Loaded maps will be removed.'
+        choice = CW.MsgBox(self, 'Quest', quest_text)
+        if choice.yes():
             cols = sorted(self._features)
             self.xfeat_designer.refresh(cols)
             self.ylab_designer.refresh()
@@ -3058,26 +3035,23 @@ class DatasetBuilder(DraggableTool):
 
         '''
         checked_samples = []
-        tot_rows = self.xfeat_designer.rowCount()
-        progBar = CW.PopUpProgBar(self, tot_rows, 'Compiling Dataset',
-                                    cancel=False)
+        nrows = self.xfeat_designer.rowCount()
+        pbar = CW.PopUpProgBar(self, nrows, 'Compiling dataset', cancel=False)
 
     # Check 0 --> no samples (0 rows)
-        if tot_rows == 0:
-            progBar.reset()
-            return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                           'The Dataset Designer is empty.')
+        if nrows == 0:
+            pbar.reset()
+            return CW.MsgBox(self, 'Crit', 'The Dataset Designer is empty.')
 
-        for row in range(tot_rows):
+        for row in range(nrows):
             xfeat = self.xfeat_designer.getRowData(row)
             ylab = self.ylab_designer.getRowData(row)
             sample = xfeat + ylab
 
         # Check 1 --> missing maps
             if min(map(len, sample)) == 0:
-                progBar.reset()
-                return QW.QMessageBox.critical(self, 'X-Min Learn',
-                                               f'Missing maps in row {row+1}')
+                pbar.reset()
+                return CW.MsgBox(self, 'Crit', f'Missing maps in row {row+1}.')
 
         # Check 2 --> wrong maps shape within same sample
             warnings = 0
@@ -3092,13 +3066,11 @@ class DatasetBuilder(DraggableTool):
                     self.xfeat_designer.cellWidget(row, col).setWarning(u)
 
             if warnings > 0:
-                progBar.reset()
-                return QW.QMessageBox.warning(self, 'X-Min Learn',
-                                              f'A total of {warnings} maps '\
-                                              'do not fit the shape of the '\
-                                              f'sample in row {row+1}. '\
-                                              '\nTip: They are highlighted '\
-                                              'with a yellow line.')
+                pbar.reset()
+                warn_text = f'{warnings} maps do not fit the shape of the '\
+                            f'sample in row {row+1}.\nTip: They are indicated '\
+                             'with a yellow line.'
+                return CW.MsgBox(self, 'Warn', warn_text)
 
         # All checks completed --> add the sample to 'checked_samples'
             checked_samples.append(sample)
@@ -3114,12 +3086,11 @@ class DatasetBuilder(DraggableTool):
             self.dataset = concat([self.dataset, DataFrame(sample_dict)],
                                    ignore_index=True)
             # self.dataset = self.dataset.append(DataFrame(sample_dict), ignore_index=True)
-            progBar.setValue(n)
+            pbar.setValue(n)
 
         self._update_unique_classes()
         self.saveCSV_btn.setEnabled(True)
-        return QW.QMessageBox.information(self, 'X-Min Learn',
-                                          'Dataset compiled with success.')
+        CW.MsgBox(self, 'Info', 'Dataset compiled successfully.')
 
 
     def _update_unique_classes(self):
@@ -3145,7 +3116,7 @@ class DatasetBuilder(DraggableTool):
         self.previewArea.setText(text)
 
 
-    def isClassNameAvailable(self, name):
+    def isClassNameAvailable(self, name: str):
         '''
         Check if a class name is available or if it is already present in the
         dataset. If not available, user can still choose to overwrite it.
@@ -3158,17 +3129,14 @@ class DatasetBuilder(DraggableTool):
         Returns
         -------
         available : bool
-            Wether or not the class name is available.
+            Whether or not the class name is available.
 
         '''
         available = name not in self.dataset.Class.values
         if not available:
-            choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                             f'{name} already exists in the '\
-                                            'dataset. Overwrite it?',
-                                            QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                            QW.QMessageBox.No)
-            available = choice == QW.QMessageBox.Yes
+            quest_text = f'{name} already exists in the dataset. Overwrite it?'
+            choice = CW.MsgBox(self, 'Quest', quest_text)
+            available = choice.yes()
         return available
 
 
@@ -3185,22 +3153,23 @@ class DatasetBuilder(DraggableTool):
     # Just exit function if no classes are selected
         if len(selected) == 0:
             return
+        
     # Only one class can be renamed at a time (send warning)
         elif len(selected) > 1:
-            return QW.QMessageBox.warning(self, 'X-Min Learn',
-                                          'Rename one class at a time')
-    # Length of <selected> is one, so <item> is the first element in the list
+            return CW.MsgBox(self, 'Warn', 'Rename one class at a time.')
+        
+    # Length of 'selected' is one, so 'item' is the first element in the list
         else:
             item = selected[0]
             new_name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
                                                   f'Rename {item.text()}:',
                                                   flags=Qt.MSWindowsFixedSizeDialogHint)
             if ok and self.isClassNameAvailable(new_name):
-                progBar = CW.PopUpProgBar(self, 1, cancel=False)
-                progBar.setValue(0)
+                pbar = CW.PopUpProgBar(self, 1, cancel=False)
+                pbar.setValue(0)
                 self.dataset.replace(item.text(), new_name, inplace=True)
                 self._update_unique_classes()
-                progBar.setValue(1)
+                pbar.setValue(1)
 
 
     def delete_class(self):
@@ -3208,20 +3177,20 @@ class DatasetBuilder(DraggableTool):
         Remove data with the selected classes from the dataset.
 
         '''
+    # Do nothing if no data is selected
         selected = self.refineList.selectedItems()
-        if len(selected) > 0:
-            choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                             'Remove the selected classes?',
-                                             QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                             QW.QMessageBox.No)
-            if choice == QW.QMessageBox.Yes:
-                targets = [item.text() for item in selected]
-                progBar = CW.PopUpProgBar(self, 1, cancel=False)
-                progBar.setValue(0)
-                self.dataset = self.dataset[~self.dataset.Class.isin(targets)]
-                self.dataset.reset_index(drop=True, inplace=True)
-                self._update_unique_classes()
-                progBar.setValue(1)
+        if not len(selected):
+            return
+
+        choice = CW.MsgBox(self, 'Quest', 'Remove selected classes?')
+        if choice.yes():
+            targets = [item.text() for item in selected]
+            pbar = CW.PopUpProgBar(self, 1, cancel=False)
+            pbar.setValue(0)
+            self.dataset = self.dataset[~self.dataset.Class.isin(targets)]
+            self.dataset.reset_index(drop=True, inplace=True)
+            self._update_unique_classes()
+            pbar.setValue(1)
 
 
     def merge_class(self):
@@ -3233,10 +3202,11 @@ class DatasetBuilder(DraggableTool):
     # Just exit function if no classes are selected
         if len(selected) == 0:
             return
+        
     # At least two classes must be selected (send warning)
         elif len(selected) == 1:
-            return QW.QMessageBox.warning(self, 'X-Min Learn',
-                                   'Select at least two classes to merge')
+            return CW.MsgBox(self, 'Warn', 'Select at least two classes.')
+        
         else:
             targets = [item.text() for item in selected]
             name, ok = QW.QInputDialog.getText(self, 'Merge classes',
@@ -3244,11 +3214,11 @@ class DatasetBuilder(DraggableTool):
                                                   'rename them as:',
                                                   flags=Qt.MSWindowsFixedSizeDialogHint)
             if ok and self.isClassNameAvailable(name):
-                progBar = CW.PopUpProgBar(self, 1, cancel=False)
-                progBar.setValue(0)
+                pbar = CW.PopUpProgBar(self, 1, cancel=False)
+                pbar.setValue(0)
                 self.dataset.replace(targets, [name]*len(targets), inplace=True)
                 self._update_unique_classes()
-                progBar.setValue(1)
+                pbar.setValue(1)
 
 
     def save_dataset(self):
@@ -3256,40 +3226,42 @@ class DatasetBuilder(DraggableTool):
         Save the ground truth dataset as one or multiple CSV file(s).
 
         '''
+    # Do nothing if outpath is invalid or file dialog is canceled
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save new dataset',
                                                     pref.get_dirPath('out'),
                                                     'CSV file (*.csv)')
-        if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
-            dec = self.decimal_combox.currentText()
-            sep = self.separator_combox.currentText()
+        if not outpath:
+            return
+        
+        pref.set_dirPath('out', os.path.dirname(outpath))
 
-        # Set the number of output csv files (subsets) if requested
-            nfiles = 1
-            if self.splitFile_cbox.isChecked():
-                batch_size = 2**20 # Excel maximum number of rows
-                nfiles += len(self.dataset) // batch_size
+        dec = self.decimal_combox.currentText()
+        sep = self.separator_combox.currentText()
 
-        # Disable the save button during saving operations, then re-enable it
-            self.sender().setEnabled(False)
-            subsets = np.array_split(self.dataset, nfiles)
-            progBar = CW.PopUpProgBar(self, len(subsets), 'Saving Dataset')
+    # Set the number of output csv files (subsets) if requested
+        nfiles = 1
+        if self.splitFile_cbox.isChecked():
+            batch_size = 2**20 # Excel maximum number of rows
+            nfiles += len(self.dataset) // batch_size
 
-            for idx, ss in enumerate(subsets, start=1):
-                if progBar.wasCanceled(): 
-                    break
-                elif (nfiles - 1): # if there is more than one file to save
-                    path = cf.extend_filename(outpath, str(idx)) 
-                else:
-                    path = outpath
+    # Disable the save button during saving operations, then re-enable it
+        self.sender().setEnabled(False)
+        subsets = np.array_split(self.dataset, nfiles)
+        pbar = CW.PopUpProgBar(self, len(subsets), 'Saving dataset',
+                               cancel=False)
 
-                ss.to_csv(path, sep=sep, index=False, decimal=dec)
-                progBar.setValue(idx)
+        for idx, ss in enumerate(subsets, start=1):
+            if (nfiles - 1): # if there is more than one file to save
+                path = cf.extend_filename(outpath, str(idx)) 
+            else:
+                path = outpath
 
-            self.sender().setEnabled(True)
+            ss.to_csv(path, sep=sep, index=False, decimal=dec)
+            pbar.setValue(idx)
 
-            return QW.QMessageBox.information(self, 'X-Min Learn',
-                                              'Dataset saved succesfully.')
+        self.sender().setEnabled(True)
+
+        CW.MsgBox(self, 'Info', 'Dataset saved succesfully.')
 
 
     class XDatasetDesigner(CW.StyledTable):
@@ -3412,33 +3384,35 @@ class DatasetBuilder(DraggableTool):
             and ordering multiple input maps based on their filename.
 
             '''
+        # Do nothing if path is invalid or file dialog is canceled
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
                                                         pref.get_dirPath('in'),
                                                         'ASCII maps (*.txt *.gz)')
-            if paths:
-                pref.set_dirPath('in', os.path.dirname(paths[0]))
-                progBar = CW.PopUpProgBar(self, len(paths), 'Loading Maps')
-                for n, p in enumerate(paths, start=1):
-                    if progBar.wasCanceled(): break
-                    try:
-                        name = cf.path2filename(p)
-                        matching_col = cf.guessMap(name, self.col_lbls) # !!! find a more elegant solution
-                    # If a filename matches with a column, then add it
-                        if matching_col:
-                            row = int(self.sender().objectName())
-                            col = self.col_lbls.index(matching_col)
-                            self.cellWidget(row, col).addMap(p)
+            if not paths:
+                return
+            
+            pref.set_dirPath('in', os.path.dirname(paths[0]))
 
-                    except Exception as e:
-                        progBar.setWindowModality(Qt.NonModal)
-                        CW.RichMsgBox(self, QW.QMessageBox.Critical,
-                                        'X-Min Learn',
-                                        f'Unexpected ASCII file:\n{p}.',
-                                        detailedText = repr(e))
-                        progBar.setWindowModality(Qt.WindowModal)
+            pbar = CW.PopUpProgBar(self, len(paths), 'Loading Maps')
+            for n, p in enumerate(paths, start=1):
+                if pbar.wasCanceled(): 
+                    break
+                try:
+                    name = cf.path2filename(p)
+                    matching_col = cf.guessMap(name, self.col_lbls) # !!! find a more elegant solution
+                # If a filename matches with a column, then add it
+                    if matching_col:
+                        row = int(self.sender().objectName())
+                        col = self.col_lbls.index(matching_col)
+                        self.cellWidget(row, col).addMap(p)
 
-                    finally:
-                        progBar.setValue(n)
+                except Exception as e:
+                    pbar.setWindowModality(Qt.NonModal)
+                    CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', repr(e))
+                    pbar.setWindowModality(Qt.WindowModal)
+
+                finally:
+                    pbar.setValue(n)
 
 
         def getRowData(self, row):
@@ -3654,9 +3628,8 @@ class DatasetBuilder(DraggableTool):
                     self.setToolTip(path)
 
                 except ValueError:
-                    return QW.QMessageBox.critical(self.parent.parent,
-                                                    'X-Min Learn',
-                                                    f'Unexpected file:\n{path}.')
+                    CW.MsgBox(self.parent.parent, 'Crit', 
+                              f'Unexpected file:\n{path}.')
 
 
         def delMap(self):
@@ -4863,15 +4836,13 @@ class ModelLearner(DraggableTool):
             self.seed_generator.seed_input.setText(str(old_seed))
             self.seed_generator.blockSignals(False)
             text = f'Cannot change seed while a {thr_name} Session is active'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+            return CW.MsgBox(self, 'Crit', text)
     
     # Ask confirmation if a dataset was already processed
         if self.dataset and self.dataset.are_subsets_split():
             text = 'Current progress will be lost if seed is changed. Confirm?'
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                     QW.QMessageBox.Yes | QW.QMessageBox.No,
-                     QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No:
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.no():
                 self.seed_generator.blockSignals(True)
                 self.seed_generator.seed_input.setText(str(old_seed))
                 self.seed_generator.blockSignals(False)
@@ -4890,7 +4861,7 @@ class ModelLearner(DraggableTool):
         thr_active, thr_name = self._threadRunning()
         if thr_active:
             text = f'Cannot load dataset while a {thr_name} Session is active'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+            return CW.MsgBox(self, 'Crit', text)
     
     # Do nothing if path is invalid or the dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load dataset',
@@ -4903,11 +4874,9 @@ class ModelLearner(DraggableTool):
     
     # Ask confirmation if a dataset was already processed
         if self.dataset:
-            text = 'Current progress will be lost. Load a new dataset?'
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                                            QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                            QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No:
+            text = 'Load a new dataset? Current progress will be lost.'
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.no():
                 return
             else:
                 self._reset()
@@ -4959,14 +4928,12 @@ class ModelLearner(DraggableTool):
                 self.split_dataset_btn.setEnabled(True)
             except Exception as e:
                 self.dataset_path_lbl.clearPath()
-                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                              'Dataset loading failed.', detailedText=repr(e))
+                CW.MsgBox(self, 'Crit', 'Loading dataset failed.', repr(e))
 
         else:
             self.dataset_path_lbl.clearPath()
             err = result[0]
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                          'Dataset loading failed.', detailedText=repr(err))
+            CW.MsgBox(self, 'Crit', 'Loading dataset failed.', repr(e))
 
 
     def _fixSubsetsRatios(self, new_value: int):
@@ -5013,16 +4980,14 @@ class ModelLearner(DraggableTool):
     # Prevent splitting dataset when a thread is active
         thr_active, thr_name = self._threadRunning()
         if thr_active:
-            text = f'Cannot split dataset while a {thr_name} Session is active'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+            text = f'Cannot split dataset while a {thr_name} Session is active.'
+            return CW.MsgBox(self, 'Crit', text)
 
     # Ask for overwriting previous balancing results
         if self.balancing_info:
             text = 'Any existent balancing result will be discarded. Continue?'
-            choice = QW.QMessageBox.question(self, 'X-Min Learn', text,
-                                             QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                             QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No: 
+            choice = CW.MsgBox(self, 'Quest', text)
+            if choice.no(): 
                 return
             
     # Reset balancing info
@@ -5056,8 +5021,7 @@ class ModelLearner(DraggableTool):
 
         except Exception as e:
             pbar.reset()
-            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                   'Unexpected data type', detailedText=repr(e))
+            return CW.MsgBox(self, 'Crit', 'Unexpected data type', repr(e))
 
     # Update GUI elements
         for subset in ('Train', 'Validation', 'Test'):
@@ -5171,10 +5135,8 @@ class ModelLearner(DraggableTool):
         
     # Ask for user confirm
         text = 'Any existent balancing result will be discarded. Continue?'
-        choice = QW.QMessageBox.question(self, 'X-Min Learn', text,
-                                         QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.No: 
+        choice = CW.MsgBox(self, 'Quest', text)
+        if choice.no(): 
             return
         
     # Discard balancing results
@@ -5219,7 +5181,7 @@ class ModelLearner(DraggableTool):
         if thr_active:
             text = f'Cannot start a new Balancing Session while a {thr_name} '\
                     'Session is active'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+            return CW.MsgBox(self, 'Crit', text)
         
     # Get cell (widgets) data from balancing table 
         classes = [c.text() for c in self.getBalancingTableCellsByColumn(0)]
@@ -5251,16 +5213,14 @@ class ModelLearner(DraggableTool):
             i.append('Low after-balancing value(s) detected (<20 %). '\
                      'Aggressive under-sampling can cause information loss!')
 
-        icon = QW.QMessageBox.Warning if i else QW.QMessageBox.NoIcon
+        icon = QW.QMessageBox.Warning if i else QW.QMessageBox.Question
         note = '\n\n'.join(i) if i else 'No additional info.'
         text = f'You have {len(i)} warning(s). Click "Show Details" for more '\
-                'info. Launch Balancing Session?'
-        msg = CW.RichMsgBox(self, icon, 'X-Min Learn', text,
-                              QW.QMessageBox.Yes | QW.QMessageBox.No, 
-                              QW.QMessageBox.No, detailedText=note)
+                'info.\n\nLaunch Balancing Session?'
+        choice = CW.MsgBox(self, 'Quest', text, note, icon=icon)
         
     # Run the balancing session
-        if msg.clickedButton().text() == '&Yes':
+        if choice.yes():
             self.canc_balancing_btn.setEnabled(False)
             self.balancing_pbar.reset()
             self.balancing_pbar.setUndetermined()
@@ -5325,8 +5285,7 @@ class ModelLearner(DraggableTool):
         
         else:
         # Forward error if balancing operations failed
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                            'Balancing failed', detailedText=repr(result[0]))
+            CW.MsgBox(self, 'Crit', 'Balancing failed.', repr(result[0]))
             
     # End balancing session in any case
         self._endBalancingSession(success)
@@ -5350,8 +5309,7 @@ class ModelLearner(DraggableTool):
             self.balancing_pbar.setMaximum(4)
         
         if success:
-            text = 'Balancing session concluded succesfully'
-            QW.QMessageBox.information(self, 'X-Min Learn', text)
+            CW.MsgBox(self, 'Info', 'Balancing session concluded succesfully.')
 
 
     def _initBalancingTable(self):
@@ -5510,68 +5468,66 @@ class ModelLearner(DraggableTool):
         thr_active, thr_name = self._threadRunning()
         if thr_active:
             text = f'Cannot load model while a {thr_name} Session is active'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+            return CW.MsgBox(self, 'Crit', text)
 
-    # Load parent model
+    # Do nothing if path is invalid or file dialog is canceled
         path, _  = QW.QFileDialog.getOpenFileName(self, 'Load parent model',
                                                   pref.get_dirPath('in'),
                                                   'PyTorch Data File (*.pth)')
-        if path:
-            pref.set_dirPath('in', os.path.dirname(path))
+        if not path:
+            return
+        
+        pref.set_dirPath('in', os.path.dirname(path))
 
-        # Ask confirmation if a dataset was already processed
-            if self.dataset.are_subsets_split():
-                text = 'Current progress will be lost if model is loaded. Confirm?'
-                choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                                                QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                                QW.QMessageBox.No)
-                if choice == QW.QMessageBox.No:
-                    return
-                else:
-                    self._reset()
-           
-            pbar = CW.PopUpProgBar(self, 3, 'Loading Model')
+    # Ask confirmation if a dataset was already processed
+        if self.dataset.are_subsets_split():
+            text = 'Current progress will be lost if model is loaded. Confirm?'
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.no():
+                return
+            else:
+                self._reset()
+        
+        pbar = CW.PopUpProgBar(self, 3, 'Loading Model')
+        
+        try:
+        # Import parent model
+            pmodel = mltools.EagerModel.load(path)
+            pbar.setValue(1)
+
+        # Check if parent model shares the same features of loaded dataset
+            if pmodel.features != self.dataset.features_names():
+                raise ValueError('The model and the loaded dataset do not '\
+                                 'share the same features.')
             
-            try:
-            # Import parent model
-                pmodel = mltools.EagerModel.load(path)
-                pbar.setValue(1)
+        # Check if parent model shares the same targets of loaded dataset
+            if pmodel.targets != self.dataset.targets_names():
+                raise ValueError('The model and the loaded dataset do not '\
+                                 'share the same target classes.')
+            pbar.setValue(2)
 
-            # Check if parent model shares the same features of loaded dataset
-                if pmodel.features != self.dataset.features_names():
-                    raise ValueError('The model and the loaded dataset do '\
-                                     'not share the same features.')
-                
-            # Check if parent model shares the same targets of loaded dataset
-                if pmodel.targets != self.dataset.targets_names():
-                    raise ValueError('The model and the loaded dataset do '\
-                                     'not share the same target classes.')
-                pbar.setValue(2)
-
-            # Update GUI
-                lr, wd, mtm, _ = pmodel.hyperparameters
-                poly_degree = pmodel.poly_degree
-                self.pmodel_path.setPath(path)
-                self.seed_generator.seed_input.setText(str(pmodel.seed))
-                self.lr_spbox.setValue(lr)
-                self.wd_spbox.setValue(wd)
-                self.mtm_spbox.setValue(mtm)
-                self.feat_mapping_cbox.setChecked(poly_degree > 1)
-                self.feat_mapping_cbox.setEnabled(False)
-                self.poly_deg_spbox.setValue(poly_degree) # if 1, is ignored
-                self.poly_deg_spbox.setEnabled(False)
-                self.algm_combox.setCurrentText(pmodel.algorithm)
-                self.algm_combox.setEnabled(False)
-                self.optim_combox.setCurrentText(pmodel.optimizer)
-                pbar.setValue(3)
-                QW.QMessageBox.information(self, 'X-Min Learn', 'Model loaded.')
-            
-            except Exception as e:
-                pbar.reset()
-                self.removeParentModel()
-                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                'The selected model produced an error.',
-                                detailedText=repr(e))
+        # Update GUI
+            lr, wd, mtm, _ = pmodel.hyperparameters
+            poly_degree = pmodel.poly_degree
+            self.pmodel_path.setPath(path)
+            self.seed_generator.seed_input.setText(str(pmodel.seed))
+            self.lr_spbox.setValue(lr)
+            self.wd_spbox.setValue(wd)
+            self.mtm_spbox.setValue(mtm)
+            self.feat_mapping_cbox.setChecked(poly_degree > 1)
+            self.feat_mapping_cbox.setEnabled(False)
+            self.poly_deg_spbox.setValue(poly_degree) # if 1, is ignored
+            self.poly_deg_spbox.setEnabled(False)
+            self.algm_combox.setCurrentText(pmodel.algorithm)
+            self.algm_combox.setEnabled(False)
+            self.optim_combox.setCurrentText(pmodel.optimizer)
+            pbar.setValue(3)
+            CW.MsgBox(self, 'Info', 'Model loaded successfully.')
+        
+        except Exception as e:
+            pbar.reset()
+            self.removeParentModel()
+            CW.MsgBox(self, 'Crit', 'Failed to load model.', str(e))
 
 
     def removeParentModel(self):
@@ -5642,7 +5598,7 @@ class ModelLearner(DraggableTool):
         if thr_active:
             text = f'Cannot start a new Learning Session while a {thr_name} '\
                     'Session is active'
-            return QW.QMessageBox.critical(self, 'X-Min Learn', text)
+            return CW.MsgBox(self, 'Crit', text)
         
     # Check that subsets contain at least one instance of each target class
         tr_cls = {k for k, v in self.dataset.train_counter.items() if v}
@@ -5651,8 +5607,7 @@ class ModelLearner(DraggableTool):
 
         if xor := ((tr_cls ^ vd_cls) | (tr_cls ^ ts_cls) | (vd_cls ^ ts_cls)): 
             err = 'Some classes have 0 instances in one or more subsets.'
-            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                   err, detailedText=', '.join(xor))
+            return CW.MsgBox(self, 'Crit', err, ', '.join(xor))
 
     # Update GUI
         self.learning_pbar.setRange(0, 4)
@@ -5871,15 +5826,11 @@ class ModelLearner(DraggableTool):
             self.test_model_btn.setEnabled(True)
             self.learning_pbar.reset()
             self.learning_pbar.setTextVisible(True)
-            text = 'Learning Session completed.'
-            QW.QMessageBox.information(self, 'X-Min Learn', text)
+            CW.MsgBox(self, 'Info', 'Learning Session completed successfully.')
 
     # Forward error if learning session failed
         else:
-            e = result[0]
-            text = 'Learning Session failed.'
-            CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn', text,
-                            detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Learning Session failed.', str(result[0]))
 
     # Update Start-Stop-Learn buttons on exit in any case
         self.start_learn_btn.setEnabled(True)
@@ -6026,10 +5977,8 @@ class ModelLearner(DraggableTool):
     # Ask for user confirmation
         text = 'After testing, models should not be further trained on the '\
                'same train set. Proceed?' 
-        choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                                        QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                        QW.QMessageBox.No)
-        if choice == QW.QMessageBox.Yes:
+        choice = CW.MsgBox(self, 'QuestWarn', text)
+        if choice.yes():
             self.learning_pbar.setRange(0, 4)
 
         # Predict targets on test set
@@ -6068,8 +6017,7 @@ class ModelLearner(DraggableTool):
             
         # Reset progress bar and end testing session with success
             self.learning_pbar.reset()
-            text = 'Your model has been tested succesfully.'
-            QW.QMessageBox.information(self, 'X-Min Learn', text)
+            CW.MsgBox(self, 'Info', 'Model tested succesfully.')
 
 
     def saveModel(self):
@@ -6086,11 +6034,9 @@ class ModelLearner(DraggableTool):
                 log_path = self.model.generate_log_path(path)
                 extended_log = pref.get_setting('class/extLog', False, bool)
                 self.model.save(path, log_path, extended_log)
-                QW.QMessageBox.information(self, 'X-Min Learn', 'Model saved.')
+                CW.MsgBox(self, 'Info', 'Model saved successfully.')
             except Exception as e:
-                CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                'An error occurred while saving the model.',
-                                 detailedText=repr(e))
+                CW.MsgBox(self, 'Crit', 'Failed to save model.', str(e))
                 
 
     def closeEvent(self, event: QG.QCloseEvent):
@@ -6107,10 +6053,8 @@ class ModelLearner(DraggableTool):
         thr_active, thr_name = self._threadRunning()
         if thr_active:
             text = f'A {thr_name} Session is still active. Close anyway?'
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text,
-                                            QW.QMessageBox.Yes | QW.QMessageBox.No,
-                                            QW.QMessageBox.No)
-            if choice == QW.QMessageBox.Yes:
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.yes():
                 self.stopBalancingSession()
                 self.stopLearningSession()
                 event.accept()
@@ -6578,10 +6522,8 @@ class PhaseRefiner(DraggableTool):
     # Ask for user confirm
         elif self.minmap is not None:
             text = 'Change map? Unsaved edits on current map will be lost.'
-            btns = QW.QMessageBox.Yes | QW.QMessageBox.No 
-            choice = QW.QMessageBox.warning(self, 'X-Min Learn', text, btns,
-                                            QW.QMessageBox.No)
-            if choice == QW.QMessageBox.No:
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.no():
                 return
     
     # Change current mineral map with the one selected
@@ -7280,11 +7222,8 @@ class PhaseRefiner(DraggableTool):
             return
     
     # Ask for user confirm
-        btns = QW.QMessageBox.Yes | QW.QMessageBox.No
-        choice = QW.QMessageBox.question(self, 'X-Min Learn',
-                                         'Discard all refinements?', btns,
-                                         QW.QMessageBox.No)
-        if choice == QW.QMessageBox.No:
+        choice = CW.MsgBox(self, 'Quest', 'Discard all refinements?')
+        if choice.no():
             return
     
     # Reset map and render refiner widgets
@@ -7311,12 +7250,9 @@ class PhaseRefiner(DraggableTool):
         pref.set_dirPath('out', os.path.dirname(outpath))
         try:
             self.minmap.save(outpath)
-            return QW.QMessageBox.information(self, 'X-Min Learn', 
-                                              'Map saved with success')
+            CW.MsgBox(self, 'Info', 'Map saved successfully.')
         except Exception as e:
-            return CW.RichMsgBox(self, QW.QMessageBox.Critical, 'X-Min Learn',
-                                   'An error occurred while saving the map',
-                                   detailedText=repr(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
                                                
 
 
