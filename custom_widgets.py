@@ -20,7 +20,7 @@ from _base import InputMap, MineralMap, Mask
 import convenient_functions as cf
 import image_analysis_tools as iatools
 import preferences as pref
-
+import style
 
 
 class DataGroup(QW.QTreeWidgetItem):
@@ -516,7 +516,7 @@ class Legend(QW.QTreeWidget):
         self.setContextMenuPolicy(QC.Qt.CustomContextMenu)
 
     # Set stylesheet (right-click menu when editing items name)
-        self.setStyleSheet(pref.SS_menu)
+        self.setStyleSheet(style.SS_MENU)
 
     # Connect signals with slots
         self._connect_slots()
@@ -1040,7 +1040,7 @@ class RGBIcon(QG.QIcon):
     '''
     Convenient class to generate a colored icon useful in legends.
     '''
-    def __init__(self, rgb:tuple, size=(64, 64), edgecolor=pref.IVORY, lw=1):
+    def __init__(self, rgb:tuple, size=(64, 64), edgecolor=style.IVORY, lw=1):
         '''
         Constructor.
 
@@ -1113,7 +1113,7 @@ class StyledButton(QW.QPushButton):
             self.setText(text)
 
     # Overwrite default background color if requested
-        ss = pref.SS_button
+        ss = style.SS_BUTTON
         if bg_color:
             ss+= 'QPushButton {background-color: %s; font: bold;}' %(bg_color)
         self.setStyleSheet(ss)
@@ -1147,7 +1147,7 @@ class StyledComboBox(QW.QComboBox):
             self.currentTextChanged.connect(self.setToolTip)
 
     # Set stylesheet (SS_menu in case of editable combo box)
-        self.setStyleSheet(pref.SS_combox + pref.SS_menu)
+        self.setStyleSheet(style.SS_COMBOX + style.SS_MENU)
 
 
     def wheelEvent(self, event: QG.QWheelEvent):
@@ -1203,7 +1203,7 @@ class StyledDoubleSpinBox(QW.QDoubleSpinBox):
         self.setDecimals(decimals)
 
     # Set stylesheet (context menu)
-        self.setStyleSheet(pref.SS_menu)
+        self.setStyleSheet(style.SS_MENU)
 
 
     def wheelEvent(self, event: QG.QWheelEvent):
@@ -1307,7 +1307,7 @@ class StyledMenu(QW.QMenu):
 
         '''
         super(StyledMenu, self).__init__(parent)
-        self.setStyleSheet(pref.SS_menu)
+        self.setStyleSheet(style.SS_MENU)
 
 
 
@@ -1332,7 +1332,7 @@ class StyledRadioButton(QW.QRadioButton):
         super(StyledRadioButton, self).__init__(text, parent)
         if icon is not None:
             self.setIcon(icon)
-        self.setStyleSheet(pref.SS_radioButton)
+        self.setStyleSheet(style.SS_RADIOBUTTON)
 
 
 
@@ -1354,9 +1354,9 @@ class StyledScrollBar(QW.QScrollBar):
 
     # Set the stylesheet
         if orientation == QC.Qt.Horizontal:
-            self.setStyleSheet(pref.SS_horizScrollBar)
+            self.setStyleSheet(style.SS_SCROLLBARH)
         else:
-            self.setStyleSheet(pref.SS_vertScrollBar)
+            self.setStyleSheet(style.SS_SCROLLBARV)
 
 
 
@@ -1387,7 +1387,7 @@ class StyledSpinBox(QW.QSpinBox):
         self.setSingleStep(step)
 
     # Set stylesheet (context menu)
-        self.setStyleSheet(pref.SS_menu)
+        self.setStyleSheet(style.SS_MENU)
 
 
     def wheelEvent(self, event: QG.QWheelEvent):
@@ -1449,7 +1449,7 @@ class StyledTable(QW.QTableWidget):
             self.corner_btn.clicked.connect(self.onCornerButtonClicked)
 
     # Set stylesheet (context menu)
-        self.setStyleSheet(pref.SS_menu)
+        self.setStyleSheet(style.SS_MENU)
 
     
     def onCornerButtonClicked(self):
@@ -1489,7 +1489,7 @@ class StyledTabWidget(QW.QTabWidget):
             self.setTabBar(self.UnscrollableTabBar())
 
     # Set stylesheet
-        self.setStyleSheet(pref.SS_tabWidget)
+        self.setStyleSheet(style.SS_TABWIDGET)
 
     def addTab(self, qobject: QC.QObject, icon: QG.QIcon|None=None, 
                title: str|None=None):
@@ -1566,7 +1566,7 @@ class StyledToolbar(QW.QToolBar):
         self.setIconSize(QC.QSize(size, size))
 
     # Set stylesheet
-        self.setStyleSheet(pref.SS_toolbar)
+        self.setStyleSheet(style.SS_TOOLBAR)
 
 
 
@@ -1831,10 +1831,10 @@ class GroupArea(QW.QGroupBox):
                          QC.Qt.AlignHCenter: 'top center'}
             title_align_ss = ('QGroupBox::title {subcontrol-position: %s;}' 
                               %(align_css[align]))
-            self.setStyleSheet(pref.SS_grouparea_title + title_align_ss)
+            self.setStyleSheet(style.SS_GROUPAREA_TITLE + title_align_ss)
         else:
             super(GroupArea, self).__init__(parent)
-            ss = pref.SS_grouparea_notitle
+            ss = style.SS_GROUPAREA_NOTITLE
             if not frame:
                 ss = ss + 'QGroupBox {border-width: 0px;}' 
             self.setStyleSheet(ss)
@@ -1905,7 +1905,7 @@ class CollapsibleArea(QW.QWidget):
         '''
     # Arrow button (QToolButton)
         self.arrow = QW.QToolButton()
-        self.arrow.setStyleSheet(pref.SS_toolbutton)
+        self.arrow.setStyleSheet(style.SS_TOOLBUTTON)
         self.arrow.setArrowType(QC.Qt.DownArrow)
         
     # Section title (QLabel)
@@ -2024,9 +2024,9 @@ class GroupScrollArea(QW.QScrollArea):
 
     # Set the stylesheet
         if frame:
-            self.setStyleSheet(pref.SS_groupScrollArea_frame)
+            self.setStyleSheet(style.SS_GROUPSCROLLAREA_FRAME)
         else:
-            self.setStyleSheet(pref.SS_groupScrollArea_noframe)
+            self.setStyleSheet(style.SS_GROUPSCROLLAREA_NOFRAME)
 
     # Set the scrollbars
         self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
@@ -2082,7 +2082,7 @@ class SplitterLayout(QW.QBoxLayout):
     # infinite loop where the app tries to insert the splitter inside itself.
         super(SplitterLayout, self).__init__(direction, parent)
         self.splitter = QW.QSplitter(orient)
-        self.splitter.setStyleSheet(pref.SS_splitter)
+        self.splitter.setStyleSheet(style.SS_SPLITTER)
         super(SplitterLayout, self).addWidget(self.splitter)
 
 
@@ -2243,7 +2243,7 @@ class SplitterGroup(QW.QSplitter):
     # Use super class to create the oriented splitter and set its stylesheet
         self.orient = orient
         super(SplitterGroup, self).__init__(self.orient)
-        self.setStyleSheet(pref.SS_splitter)
+        self.setStyleSheet(style.SS_SPLITTER)
 
     # Add each object to the splitter. If the object is a layout, wrap it first
     # in a QWidget
@@ -2310,7 +2310,7 @@ class FramedLabel(QW.QLabel):
         self.setTextInteractionFlags(QC.Qt.TextSelectableByMouse)
 
     # Set stylesheet
-        self.setStyleSheet(pref.SS_menu + 'QLabel {border: 1px solid black;}')
+        self.setStyleSheet(style.SS_MENU + 'QLabel {border: 1px solid black;}')
 
 
 
@@ -2352,7 +2352,7 @@ class PathLabel(FramedLabel):
         self.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignVCenter)
 
     # Set stylesheet
-        self.setStyleSheet(pref.SS_pathLabel + pref.SS_menu)
+        self.setStyleSheet(style.SS_PATHLABEL + style.SS_MENU)
 
     # Draw the file path
         self.display()
@@ -2941,7 +2941,7 @@ class PixelFinder(QW.QFrame):
         validator = QG.QIntValidator(0, 10**8)
 
         self.X_input = QW.QLineEdit()
-        self.X_input.setStyleSheet(pref.SS_menu)
+        self.X_input.setStyleSheet(style.SS_MENU)
         self.X_input.setAlignment(QC.Qt.AlignHCenter)
         self.X_input.setPlaceholderText('X (C)')
         self.X_input.setValidator(validator)
@@ -2949,7 +2949,7 @@ class PixelFinder(QW.QFrame):
         self.X_input.setMaximumWidth(50)
 
         self.Y_input = QW.QLineEdit()
-        self.Y_input.setStyleSheet(pref.SS_menu)
+        self.Y_input.setStyleSheet(style.SS_MENU)
         self.Y_input.setAlignment(QC.Qt.AlignHCenter)
         self.Y_input.setPlaceholderText('Y (R)')
         self.Y_input.setValidator(validator)
@@ -3037,7 +3037,7 @@ class DocumentBrowser(QW.QWidget):
     # Text browser space
         self.browser = QW.QTextEdit(self.placeholder_text)
         self.browser.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical)) 
-        self.browser.setStyleSheet(pref.SS_menu)
+        self.browser.setStyleSheet(style.SS_MENU)
         self.browser.setReadOnly(self.read_only)
 
     # Browser toolbar
@@ -3051,7 +3051,7 @@ class DocumentBrowser(QW.QWidget):
 
     # Search box
         self.search_box = QW.QLineEdit()
-        self.search_box.setStyleSheet(pref.SS_menu)
+        self.search_box.setStyleSheet(style.SS_MENU)
         self.search_box.setPlaceholderText('Search')
         self.search_box.setClearButtonEnabled(True)
         self.search_box.setMaximumWidth(100)
@@ -3253,7 +3253,7 @@ class SampleMapsSelector(QW.QWidget):
     # Maps list (Tree widget)
         self.maps_list = QW.QTreeWidget()
         self.maps_list.setHeaderHidden(True)
-        self.maps_list.setStyleSheet(pref.SS_menu)
+        self.maps_list.setStyleSheet(style.SS_MENU)
 
     # Set layout
         main_layout = QW.QVBoxLayout()

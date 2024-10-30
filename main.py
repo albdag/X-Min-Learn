@@ -12,6 +12,7 @@ from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
 import preferences as pref
+from style import IVORY
 
 
 # WINDOWS SHELL OPTION FOR DISTRIBUTION
@@ -41,7 +42,7 @@ if __name__ == "__main__":
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     loader = QSplashScreen(loader_bg, flags=flags)
     loader.show()
-    loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(pref.IVORY))
+    loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(IVORY))
 
     app.setStyle('fusion')
     pref.setAppPalette(app)

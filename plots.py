@@ -32,6 +32,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 import custom_widgets as CW
 import preferences as pref
+import style
 
 # mpl.use('Qt5Agg')
 
@@ -122,11 +123,11 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
         '''
     # Define the figure and the ax of the matplotlib canvas
-        self.fig = Figure(figsize=size, facecolor=pref.IVORY, 
-                          edgecolor=pref.BLACK_PEARL, linewidth=2, 
+        self.fig = Figure(figsize=size, facecolor=style.IVORY, 
+                          edgecolor=style.BLACK_PEARL, linewidth=2, 
                           layout=layout)
-        self.ax = self.fig.add_subplot(111, facecolor=pref.BLACK_PEARL)
-        self.ax.patch.set(edgecolor=pref.SAN_MARINO, linewidth=3)
+        self.ax = self.fig.add_subplot(111, facecolor=style.BLACK_PEARL)
+        self.ax.patch.set(edgecolor=style.SAN_MARINO, linewidth=3)
         
     # Initialize blank ax if required
         if init_blank:
@@ -409,7 +410,7 @@ class ImageCanvas(_CanvasBase):
         self.cmap.set_over('0.2')
         self.cmap.set_under('0.5')
     # Set masked data as ivory
-        self.cmap.set_bad(pref.IVORY)
+        self.cmap.set_bad(style.IVORY)
 
 
     def set_discretemap_cmap(self, colors: Iterable[tuple], name='CustomCmap'):
@@ -433,10 +434,10 @@ class ImageCanvas(_CanvasBase):
     # Set colormap
         self.cmap = mpl_colors.ListedColormap(floatRGBA, name=name)
     # Set outliers as ivory
-        self.cmap.set_over(pref.IVORY)
-        self.cmap.set_under(pref.IVORY)
+        self.cmap.set_over(style.IVORY)
+        self.cmap.set_under(style.IVORY)
     # Set masked data as ivory
-        self.cmap.set_bad(pref.IVORY)
+        self.cmap.set_bad(style.IVORY)
 
     
     def set_boundary_norm(self, n_colors: int):
@@ -1079,7 +1080,7 @@ class BarCanvas(_CanvasBase):
         for i in range(n_iter):
             lbl = labels if labels is None else labels[i]
             args = (ticks + shift_step[i], data[i], self.bar_width)
-            kwargs = {'color': colors, 'ec': pref.IVORY, 'lw': 0.5, 
+            kwargs = {'color': colors, 'ec': style.IVORY, 'lw': 0.5, 
                       'label': lbl}
 
             if self.orient == 'v':
@@ -1244,7 +1245,7 @@ class HistogramCanvas(_CanvasBase):
             self.roi_hist_data = roi_data.flatten()
             self.roi_hist = self.ax.hist(self.roi_hist_data, bins=self.nbins,
                                          density=self.density, log=self.log, 
-                                         fc=pref.HIST_MASK)
+                                         fc=style.HIST_MASK)
     # Adjust the x and y lims
         self.update_xylim()
 
@@ -1605,13 +1606,13 @@ class SilhouetteCanvas(_CanvasBase):
             y_top = y_btm + len(values)
 
             self.ax.fill_betweenx(np.arange(y_btm, y_top), 0, values, lw=0.3,
-                                  fc=pal[clust_id], ec=pref.IVORY, 
+                                  fc=pal[clust_id], ec=style.IVORY, 
                                   label=str(clust_id))
             
             y_btm = y_top + self.y_btm_init
 
     # Draw the average silhouette score as a red vertical dashed line
-        pe = [mpl_patheffects.withStroke(foreground=pref.IVORY)]
+        pe = [mpl_patheffects.withStroke(foreground=style.IVORY)]
         self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, path_effects=pe)
 
     # Render the plot
@@ -1890,7 +1891,7 @@ class CurveCanvas(_CanvasBase):
         self.ax.autoscale_view()
 
     # Render the legend in the most suitable position
-        self.ax.legend(loc='best', frameon=True, facecolor=pref.IVORY, 
+        self.ax.legend(loc='best', frameon=True, facecolor=style.IVORY, 
                        framealpha=1)
     
     # Render the plot
@@ -1977,7 +1978,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
                                         QSizePolicy.Minimum)
 
     # Set the toolbar style-sheet
-        self.setStyleSheet(pref.SS_toolbar)
+        self.setStyleSheet(style.SS_TOOLBAR)
 
     
     @classmethod
@@ -2275,7 +2276,7 @@ class RoiAnnotation(Annotation):
             (0, 1) means top left corner. The default is (0, 1).
 
         '''
-        bbox = dict(boxstyle='round', fc=pref.IVORY, ec=pref.BLACK_PEARL)
+        bbox = dict(boxstyle='round', fc=style.IVORY, ec=style.BLACK_PEARL)
 
     # The hyphen symbol can be used to hide ROI annotation
         if text == '-': 
@@ -2364,9 +2365,9 @@ class RectSel(mpl_widgets.RectangleSelector):
 
         '''
     # Customize the appearence of the rectangle selector and of its handles
-        rect_props = dict(fc=pref.BLACK_PEARL, ec=pref.BLOSSOM, alpha=0.6, 
+        rect_props = dict(fc=style.BLACK_PEARL, ec=style.BLOSSOM, alpha=0.6, 
                           lw=2, fill=True)
-        handle_props = dict(mfc=pref.BLOSSOM, mec=pref.BLACK_PEARL, alpha=1)
+        handle_props = dict(mfc=style.BLOSSOM, mec=style.BLACK_PEARL, alpha=1)
 
     # drag_from_anywhere=True causes a rendering glitch when a former selection
     # is active, you draw a new one and, without releasing the left button, you
@@ -2555,9 +2556,9 @@ class HeatmapScaler(mpl_widgets.SpanSelector):
 
         '''
     # Customize the appearence of the span selector and its handles
-        span_props = dict(fc=pref.BLOSSOM, ec=pref.BLOSSOM, alpha=0.6,
+        span_props = dict(fc=style.BLOSSOM, ec=style.BLOSSOM, alpha=0.6,
                           fill=True)
-        handle_props = dict(linewidth=2, color=pref.BLOSSOM)
+        handle_props = dict(linewidth=2, color=style.BLOSSOM)
     
     # Define the scaler properties
         kwargs = {'direction': 'horizontal',

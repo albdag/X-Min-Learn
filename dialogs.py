@@ -19,6 +19,7 @@ import dataset_tools as dtools
 import image_analysis_tools as iatools
 import plots
 import preferences as pref
+from style import BTN_GREEN
 import threads
 
 
@@ -515,7 +516,7 @@ class MergeDatasets(QW.QDialog):
         self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
 
     # Merge datasets (Styled Button)
-        self.merge_btn = CW.StyledButton(text='Merge', bg_color=pref.BTN_GREEN)
+        self.merge_btn = CW.StyledButton(text='Merge', bg_color=BTN_GREEN)
 
     # Merged dataset preview area (Document Browser)
         self.merged_info = CW.DocumentBrowser(read_only=True)
@@ -1049,8 +1050,7 @@ class ImageToInputMap(QW.QDialog):
         self.map_ext_combox.addItems(['.gz', '.txt'])
 
     # Convert (Styled Button)
-        self.convert_btn = CW.StyledButton(text='Convert',
-                                           bg_color=pref.BTN_GREEN)
+        self.convert_btn = CW.StyledButton(text='Convert', bg_color=BTN_GREEN)
         
     # Progress bar (ProgressBar)
         self.progbar = QW.QProgressBar()
@@ -1231,8 +1231,7 @@ class ImageToMineralMap(QW.QDialog):
         self.delta_spbox.setToolTip('Minimum color variance to split classes')
 
     # Convert (Styled Button)
-        self.convert_btn = CW.StyledButton(text='Convert', 
-                                           bg_color=pref.BTN_GREEN)
+        self.convert_btn = CW.StyledButton(text='Convert', bg_color=BTN_GREEN)
 
     # Legend (Legend)
         self.legend = CW.Legend()
@@ -1551,8 +1550,7 @@ class DummyMapsBuilder(QW.QDialog):
         self.scale_spbox.setToolTip('Scale of Gamma distribution function')
 
     # Generate random map (Styled Button)
-        self.generate_btn = CW.StyledButton(text='Randomize', 
-                                            bg_color=pref.BTN_GREEN)
+        self.rand_btn = CW.StyledButton(text='Randomize', bg_color=BTN_GREEN)
 
     # Save map (Styled Button)
         self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
@@ -1575,7 +1573,7 @@ class DummyMapsBuilder(QW.QDialog):
         left_vbox = QW.QVBoxLayout()
         left_vbox.setSpacing(15)
         left_vbox.addWidget(options_group)
-        left_vbox.addWidget(self.generate_btn)
+        left_vbox.addWidget(self.rand_btn)
         left_vbox.addWidget(self.save_btn)
         left_scroll = CW.GroupScrollArea(left_vbox, tight=True, frame=False)
 
@@ -1596,7 +1594,7 @@ class DummyMapsBuilder(QW.QDialog):
         Signals-slots connector.
 
         '''
-        self.generate_btn.clicked.connect(self.generateMap)
+        self.rand_btn.clicked.connect(self.generateMap)
         self.save_btn.clicked.connect(self.saveMap)
 
 

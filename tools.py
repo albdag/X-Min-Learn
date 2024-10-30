@@ -26,6 +26,7 @@ import image_analysis_tools as iatools
 import machine_learning_tools as mltools
 import plots
 import preferences as pref
+import style
 import threads
 
 
@@ -465,7 +466,7 @@ class MineralClassifier(DraggableTool):
 
     # Load mask from file choice (RadioButton) [Default choice]
         self.mask_radbtn_1 = QW.QRadioButton('Load from file')
-        self.mask_radbtn_1.setStyleSheet(pref.SS_radioButton)
+        self.mask_radbtn_1.setStyleSheet(style.SS_RADIOBUTTON)
         self.mask_radbtn_1.setChecked(True)
     
     # Load mask from file (Styled Button)
@@ -474,7 +475,7 @@ class MineralClassifier(DraggableTool):
         
     # Get mask from class choice (RadioButton)
         self.mask_radbtn_2 = QW.QRadioButton('Get from class')
-        self.mask_radbtn_2.setStyleSheet(pref.SS_radioButton)
+        self.mask_radbtn_2.setStyleSheet(style.SS_RADIOBUTTON)
 
     # Minmap selector to get mask from (Auto Update Combobox)
         self.minmap_combox = CW.AutoUpdateComboBox()
@@ -488,7 +489,7 @@ class MineralClassifier(DraggableTool):
         self.minmaps_list = QW.QTreeWidget()
         self.minmaps_list.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
         self.minmaps_list.setHeaderHidden(True)
-        self.minmaps_list.setStyleSheet(pref.SS_menu)
+        self.minmaps_list.setStyleSheet(style.SS_MENU)
         self.minmaps_list.setMinimumHeight(150)
 
     # Save mineral map (Styled Button)
@@ -551,11 +552,11 @@ class MineralClassifier(DraggableTool):
 
     # Classify button (Styled Button)
         self.classify_btn = CW.StyledButton(text='CLASSIFY',
-                                              bg_color=pref.BTN_GREEN)
+                                              bg_color=style.BTN_GREEN)
         self.classify_btn.setEnabled(False)
 
     # Interrupt classification process button (StyledButton)
-        self.stop_btn = CW.StyledButton(text='STOP', bg_color=pref.BTN_RED)
+        self.stop_btn = CW.StyledButton(text='STOP', bg_color=style.BTN_RED)
 
 #  -------------------------------------------------------------------------  #
 #                                VIEWER PANEL 
@@ -2826,7 +2827,7 @@ class DatasetBuilder(DraggableTool):
 
     # Custom feature entry (Line Edit)
         self.customEntry_lbl = QW.QLineEdit()
-        self.customEntry_lbl.setStyleSheet(pref.SS_menu)
+        self.customEntry_lbl.setStyleSheet(style.SS_MENU)
         self.customEntry_lbl.setPlaceholderText('Custom feature name')
         self.customEntry_lbl.returnPressed.connect(self.add_inputFeature)
 
@@ -4122,7 +4123,7 @@ class ModelLearner(DraggableTool):
         self.plots_update_rate = QW.QLineEdit()
         self.plots_update_rate.setValidator(QG.QIntValidator(1, 10**8))
         self.plots_update_rate.setText('10')
-        self.plots_update_rate.setStyleSheet(pref.SS_menu)
+        self.plots_update_rate.setStyleSheet(style.SS_MENU)
 
     # Number of workers (Styled Spinbox)
         max_workers = mltools.num_cores() // 2 # safety
@@ -4154,13 +4155,13 @@ class ModelLearner(DraggableTool):
 
     # Start learning button (Styled Button)
         self.start_learn_btn = CW.StyledButton(text='LEARN', 
-                                                 bg_color=pref.BTN_GREEN)
+                                                 bg_color=style.BTN_GREEN)
         self.start_learn_btn.setToolTip('Start learning session')
         self.start_learn_btn.setEnabled(False)
 
     # Stop learning button (Styled Button)
         self.stop_learn_btn = CW.StyledButton(text='STOP', 
-                                                 bg_color=pref.BTN_RED)
+                                                 bg_color=style.BTN_RED)
         self.stop_learn_btn.setToolTip('Stop learning session')
         self.stop_learn_btn.setEnabled(False)
 
@@ -4198,15 +4199,15 @@ class ModelLearner(DraggableTool):
 
     # Split ground truth dataset button (Styled Button)
         self.split_dataset_btn = CW.StyledButton(text='SPLIT', 
-                                                   bg_color=pref.BTN_GREEN)
+                                                   bg_color=style.BTN_GREEN)
         self.split_dataset_btn.setToolTip('Split ground truth dataset into '\
                                           'train, validation and test sets')
         self.split_dataset_btn.setEnabled(False)
 
     # Train, Validation and Test sets PieChart (PieCanvas)
         self.subsets_pie = plots.PieCanvas(wheel_pan=False, wheel_zoom=False)
-        self.subsets_pie.fig.patch.set(facecolor=pref.CASPER_LIGHT, 
-                                       edgecolor=pref.BLACK_PEARL, lw=2)
+        self.subsets_pie.fig.patch.set(facecolor=style.CASPER_LIGHT, 
+                                       edgecolor=style.BLACK_PEARL, lw=2)
         self.subsets_pie.setMinimumSize(200, 200)
 
     # Train, Validation & Test sets barchart (BarCanvas)
@@ -4334,14 +4335,14 @@ class ModelLearner(DraggableTool):
         self.strategy_value = QW.QLineEdit()
         regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8}|1000000000)$") # 1 - 10^9
         self.strategy_value.setValidator(QG.QRegularExpressionValidator(regex))
-        self.strategy_value.setStyleSheet(pref.SS_menu)
+        self.strategy_value.setStyleSheet(style.SS_MENU)
 
     # Strategy percentage (Line edit)
         self.strategy_percent = QW.QLineEdit()
         regex = QC.QRegularExpression(r"^(?:[1-9]|\d{2,3}|1000)$") # 1 - 1000
         self.strategy_percent.setValidator(QG.QRegularExpressionValidator(regex))
         self.strategy_percent.setText('100')
-        self.strategy_percent.setStyleSheet(pref.SS_menu)
+        self.strategy_percent.setStyleSheet(style.SS_MENU)
 
     # Use parallel computation (Checkbox)
         self.balancing_multicore_cbox = QW.QCheckBox('Parallel computation')
@@ -4360,12 +4361,12 @@ class ModelLearner(DraggableTool):
 
     # Start balancing button (Styled Button)
         self.start_balancing_btn = CW.StyledButton(text='Start', 
-                                                     bg_color=pref.BTN_GREEN)
+                                                     bg_color=style.BTN_GREEN)
         self.start_balancing_btn.setToolTip('Start balancing session')
 
     # Stop balancing button (Styled Button)
         self.stop_balancing_btn = CW.StyledButton(text='Stop',
-                                                    bg_color=pref.BTN_RED)
+                                                    bg_color=style.BTN_RED)
         self.stop_balancing_btn.setToolTip('Stop balancing session')
 
     # Cancel balancing button (Styled Button)
@@ -6249,12 +6250,12 @@ class PhaseRefiner(DraggableTool):
 
     # Apply refinement (Styled Button)
         self.apply_btn = CW.StyledButton(text='APPLY', 
-                                           bg_color=pref.BTN_GREEN)
+                                           bg_color=style.BTN_GREEN)
         self.apply_btn.setToolTip('Apply filter')
 
     # Cancel refinements (Styled Button)
         self.cancel_btn = CW.StyledButton(text='CANCEL',
-                                            bg_color=pref.BTN_RED)
+                                            bg_color=style.BTN_RED)
         self.cancel_btn.setToolTip('Revert all edits')
 
     # Save refinements (Styled Button)

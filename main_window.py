@@ -13,7 +13,7 @@ from PyQt5 import QtWidgets as QW
 import custom_widgets as CW
 import dialogs
 import docks
-import preferences as pref
+import style
 import tools
 
 class MainWindow(QW.QMainWindow):
@@ -28,7 +28,7 @@ class MainWindow(QW.QMainWindow):
         self.setWindowIcon(QG.QIcon(r'Icons/XML_logo.png'))
         self.setDockOptions(self.AnimatedDocks | self.AllowTabbedDocks)
         self.statusBar()
-        self.setStyleSheet(pref.SS_mainWindow)
+        self.setStyleSheet(style.SS_MAINWINDOW)
 
     # Initialize GUI
         self._init_ui()
@@ -221,7 +221,7 @@ class MainWindow(QW.QMainWindow):
     # Tools toolbar
         self.tools_toolbar = QW.QToolBar('Tools toolbar')
         self.tools_toolbar.setFloatable(False)
-        self.tools_toolbar.setStyleSheet(pref.SS_mainToolbar)
+        self.tools_toolbar.setStyleSheet(style.SS_MAINTOOLBAR)
         # import data actions (button menu), followed by a separator
         self.tools_toolbar.addActions(
             (self.ds_builder_action, self.model_learner_action,
@@ -232,7 +232,7 @@ class MainWindow(QW.QMainWindow):
     # Panes toolbar
         self.panes_toolbar = QW.QToolBar('Panes toolbar')
         self.panes_toolbar.setFloatable(False)
-        self.panes_toolbar.setStyleSheet(pref.SS_mainToolbar)
+        self.panes_toolbar.setStyleSheet(style.SS_MAINTOOLBAR)
         self.panes_toolbar.addActions(self.panes_tva)
 
     # Set default toolbars position in the window
@@ -244,7 +244,7 @@ class MainWindow(QW.QMainWindow):
         '''Initialize main menu.'''
     # Set custom stylesheet to menu bar
         menu_bar = self.menuBar()
-        menu_bar.setStyleSheet(pref.SS_menuBar + pref.SS_menu)
+        menu_bar.setStyleSheet(style.SS_MENUBAR + style.SS_MENU)
 
     # File Menu
         file_menu = menu_bar.addMenu('&File')
@@ -425,7 +425,7 @@ class MainWindow(QW.QMainWindow):
 
     def createPopupMenu(self):
         popupmenu = super(MainWindow, self).createPopupMenu()
-        popupmenu.setStyleSheet(pref.SS_menu)
+        popupmenu.setStyleSheet(style.SS_MENU)
         return popupmenu
     
 
@@ -689,7 +689,7 @@ class MainTabWidget(QW.QTabWidget):
         super(MainTabWidget, self).__init__(parent)
 
     # Set stylesheet
-        self.setStyleSheet(pref.SS_mainTabWidget)
+        self.setStyleSheet(style.SS_MAINTABWIDGET)
 
     # Set properties
         self.setAcceptDrops(True)

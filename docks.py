@@ -20,6 +20,7 @@ import image_analysis_tools as iatools
 import dialogs
 import plots
 import preferences as pref
+import style
 
 
 
@@ -71,7 +72,7 @@ class Pane(QW.QDockWidget):
             self.setWidget(group_area)
 
     # Set the style-sheet 
-        self.setStyleSheet(pref.SS_pane)
+        self.setStyleSheet(style.SS_PANE)
 
 
     def trueWidget(self):
@@ -143,7 +144,7 @@ class DataManager(QW.QTreeWidget):
 
     # Set the style-sheet (custom icons for expanded and collapsed branches and
     # right-click menu when editing items name)
-        self.setStyleSheet(pref.SS_dataManager)
+        self.setStyleSheet(style.SS_DATAMANAGER)
 
 
     def onEdit(self, item, column=0):
@@ -1864,7 +1865,7 @@ class RoiEditor(QW.QWidget):
             return
 
         menu = QW.QMenu()
-        menu.setStyleSheet(pref.SS_menu)
+        menu.setStyleSheet(style.SS_MENU)
 
     # Extract mask from selected ROIs
         menu.addAction(QIcon(r'Icons/add_mask.png'), 'ROI mask',
