@@ -13,6 +13,7 @@ from PyQt5 import QtWidgets as QW
 import custom_widgets as CW
 import dialogs
 import docks
+import preferences as pref
 import style
 import tools
 
