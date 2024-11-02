@@ -2398,8 +2398,7 @@ class PathLabel(FramedLabel):
             Text to be elided.
 
         '''
-        font = pref.get_setting('main/font', QG.QFont())
-        metrics = QG.QFontMetrics(font)
+        metrics = self.fontMetrics()
         elided = metrics.elidedText(text, QC.Qt.ElideRight, self.width()-2)
         self.setText(elided)
 

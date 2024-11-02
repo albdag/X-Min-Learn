@@ -9721,7 +9721,7 @@ class DataViewer(QW.QWidget):
         self.navTbar.addWidget(self.go2Pix)
 
     # Current showed map path
-        self.currPath = CW.PathLabel()
+        self.currPath = CW.PathLabel(elide=True)
 
     # Adjust Window Layout
         main_layout = QW.QVBoxLayout()
