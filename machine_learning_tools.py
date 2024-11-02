@@ -698,7 +698,7 @@ class EagerModel():
     # Save the converted model and its log file if a path is provided
         if path is not None:
             log_path = self.generate_log_path(path)
-            extended = pref.get_setting('class/extLog', False, bool)
+            extended = pref.get_setting('data/extended_model_log')
             self.save(path, log_path=log_path, extended_log=extended)
 
 

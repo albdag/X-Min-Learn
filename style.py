@@ -39,7 +39,7 @@ HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
 #  -------------------------------------------------------------------------  #
 
 def getFont(family: str): # !!!
-    pointsize = pref.get_setting('main/fontsize', 10, type=int)
+    pointsize = pref.get_setting('GUI/fontsize')
     
     if family == 'default':
         font = QFont()

@@ -967,7 +967,7 @@ class BarCanvas(_CanvasBase):
 
     # Show the amounts
         elif enabled:
-            prec = pref.get_setting('plots/legendDec', 3, type=int)
+            prec = pref.get_setting('data/decimal_precision')
             pe = [mpl_patheffects.withStroke(linewidth=2, foreground='k')]
             self.label_amounts = self.ax.bar_label(self.plot, fmt=f'%.{prec}f',
                                                     label_type='center',
@@ -1964,10 +1964,6 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         for a in self.actions():
             if icon := icons_dict.get(a.text()):
                 a.setIcon(icon)
-
-    # Set icons size
-        size = pref.get_setting('plots/NTBsize', 28, type=int)
-        self.setIconSize(QSize(size, size))
 
     # Set the orientation of the toolbar (vertical/horizontal)
         self.setOrientation(self.orient)

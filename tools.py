@@ -871,14 +871,14 @@ class MineralClassifier(DraggableTool):
         '''
     # Do nothing if path is invalid or file dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load mask',
-                                                 pref.get_dirPath('in'),
+                                                 pref.get_dir('in'),
                                                  '''Mask (*.msk)
                                                  Text file (*.txt)''')
 
         if not path:
             return
         
-        pref.set_dirPath('in', os.path.dirname(path[0]))
+        pref.set_dir('in', os.path.dirname(path[0]))
         
         try:
             mask = Mask.load(path)     
@@ -960,8 +960,8 @@ class MineralClassifier(DraggableTool):
             The ROI map to be rendered.
 
         '''
-        color = pref.get_setting('class/trAreasCol', (255,0,0), tuple)
-        filled = pref.get_setting('class/trAreasFill', False, bool)
+        color = pref.get_setting('plots/roi_color')
+        filled = pref.get_setting('plots/roi_filled')
 
         for name, bbox in roimap.roilist:
             patch = plots.RoiPatch(bbox, plots.rgb_to_float([color]), filled)
@@ -1048,10 +1048,10 @@ class MineralClassifier(DraggableTool):
         '''
         item = self.minmaps_list.currentItem()
         path, _ = QW.QFileDialog.getSaveFileName(self, 'Save mineral map',
-                                                pref.get_dirPath('out'),
+                                                pref.get_dir('out'),
                                                 'Mineral map (*.mmp)')
         if path:
-            pref.set_dirPath('out', os.path.dirname(path))
+            pref.set_dir('out', os.path.dirname(path))
             minmap = self._thresholdMineralMap(item.get('data'))
             try:
                 minmap.save(path)
@@ -1439,12 +1439,12 @@ class MineralClassifier(DraggableTool):
             '''
         # Do nothing if path is invalid or file dialog is canceled.
             path, _ = QW.QFileDialog.getOpenFileName(self, 'Import model',
-                                                     pref.get_dirPath('in'),
+                                                     pref.get_dir('in'),
                                                      'PyTorch model (*.pth)')
             if not path:
                 return
             
-            pref.set_dirPath('in', os.path.dirname(path))
+            pref.set_dir('in', os.path.dirname(path))
 
             try:
                 self.model = mltools.EagerModel.load(path)
@@ -1459,7 +1459,7 @@ class MineralClassifier(DraggableTool):
                 quest_text = 'Unable to find model log file. Rebuild it?'
                 choice = CW.MsgBox(self, 'Quest', quest_text)
                 if choice.yes():
-                    ext_log = pref.get_setting('class/extLog', False, bool)
+                    ext_log = pref.get_setting('data/extended_model_log')
                     self.model.save_log(logpath, extended=ext_log)
 
             # Load log file. No error will be raised if it does not exist
@@ -1631,12 +1631,12 @@ class MineralClassifier(DraggableTool):
             '''
         # Do nothing if path is invalid or file dialog is canceled
             path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
-                                                     pref.get_dirPath('in'),
+                                                     pref.get_dir('in'),
                                                      'ROI maps (*.rmp)')
             if not path:
                 return 
             
-            pref.set_dirPath('in', os.path.dirname(path))
+            pref.set_dir('in', os.path.dirname(path))
 
             pbar = CW.PopUpProgBar(self, 3, 'Loading data', cancel=False)
             pbar.setValue(0)
@@ -3228,12 +3228,12 @@ class DatasetBuilder(DraggableTool):
         '''
     # Do nothing if outpath is invalid or file dialog is canceled
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save new dataset',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     'CSV file (*.csv)')
         if not outpath:
             return
         
-        pref.set_dirPath('out', os.path.dirname(outpath))
+        pref.set_dir('out', os.path.dirname(outpath))
 
         dec = self.decimal_combox.currentText()
         sep = self.separator_combox.currentText()
@@ -3386,12 +3386,12 @@ class DatasetBuilder(DraggableTool):
             '''
         # Do nothing if path is invalid or file dialog is canceled
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
-                                                        pref.get_dirPath('in'),
-                                                        'ASCII maps (*.txt *.gz)')
+                                                       pref.get_dir('in'),
+                                                       'ASCII maps (*.txt *.gz)')
             if not paths:
                 return
             
-            pref.set_dirPath('in', os.path.dirname(paths[0]))
+            pref.set_dir('in', os.path.dirname(paths[0]))
 
             pbar = CW.PopUpProgBar(self, len(paths), 'Loading Maps')
             for n, p in enumerate(paths, start=1):
@@ -3611,11 +3611,11 @@ class DatasetBuilder(DraggableTool):
                     filext_filter = '''Mineral maps (*.mmp)
                                        Legacy mineral maps (*.txt *.gz)'''
                 path, _ = QW.QFileDialog.getOpenFileName(self, f'Load {self.mapName} Map',
-                                                         pref.get_dirPath('in'),
+                                                         pref.get_dir('in'),
                                                          filext_filter)
         # If path is valid, load the data
             if path:
-                pref.set_dirPath('in', os.path.dirname(path))
+                pref.set_dir('in', os.path.dirname(path))
                 try:
                     if self.mapType == 'input':
                         self.data = InputMap.load(path).map
@@ -3758,11 +3758,11 @@ class PixelEditor(QW.QWidget):
 
         editedMap = self.tempResult
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save edited map',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Compressed ASCII file (*.gz)
                                                        ASCII file (*.txt)''')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             np.savetxt(outpath, editedMap, fmt='%s')
             QW.QMessageBox.information(self, 'X-Min Learn',
                                        'Edited map saved with success.')
@@ -4865,12 +4865,12 @@ class ModelLearner(DraggableTool):
     
     # Do nothing if path is invalid or the dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load dataset',
-                                                 pref.get_dirPath('in'),
+                                                 pref.get_dir('in'),
                                                  'Comma Separated Values (*.csv)')
         if not path:
             return
         
-        pref.set_dirPath('in', os.path.dirname(path))
+        pref.set_dir('in', os.path.dirname(path))
     
     # Ask confirmation if a dataset was already processed
         if self.dataset:
@@ -5471,12 +5471,12 @@ class ModelLearner(DraggableTool):
 
     # Do nothing if path is invalid or file dialog is canceled
         path, _  = QW.QFileDialog.getOpenFileName(self, 'Load parent model',
-                                                  pref.get_dirPath('in'),
+                                                  pref.get_dir('in'),
                                                   'PyTorch Data File (*.pth)')
         if not path:
             return
         
-        pref.set_dirPath('in', os.path.dirname(path))
+        pref.set_dir('in', os.path.dirname(path))
 
     # Ask confirmation if a dataset was already processed
         if self.dataset.are_subsets_split():
@@ -6025,13 +6025,13 @@ class ModelLearner(DraggableTool):
 
         '''
         path, _  = QW.QFileDialog.getSaveFileName(self, 'Save model',
-                                                  pref.get_dirPath('out'),
+                                                  pref.get_dir('out'),
                                                   'PyTorch Data File (*.pth)')
         if path:
-            pref.set_dirPath('out', os.path.dirname(path))
+            pref.set_dir('out', os.path.dirname(path))
             try:
                 log_path = self.model.generate_log_path(path)
-                extended_log = pref.get_setting('class/extLog', False, bool)
+                extended_log = pref.get_setting('data/extended_model_log')
                 self.model.save(path, log_path, extended_log)
                 CW.MsgBox(self, 'Info', 'Model saved successfully.')
             except Exception as e:
@@ -7240,13 +7240,13 @@ class PhaseRefiner(DraggableTool):
         '''
     # Ask for output path
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Mineral map (*.mmp)''')
         if not outpath:
             return
         
     # Send success or error message
-        pref.set_dirPath('out', os.path.dirname(outpath))
+        pref.set_dir('out', os.path.dirname(outpath))
         try:
             self.minmap.save(outpath)
             CW.MsgBox(self, 'Info', 'Map saved successfully.')

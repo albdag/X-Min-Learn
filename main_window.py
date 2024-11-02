@@ -26,7 +26,8 @@ class MainWindow(QW.QMainWindow):
         self.resize(1600, 900)
         # self.setWindowTitle('New project') TODO
         self.setWindowIcon(QG.QIcon(r'Icons/XML_logo.png'))
-        self.setDockOptions(self.AnimatedDocks | self.AllowTabbedDocks)
+        self.setDockOptions(self.AllowTabbedDocks)
+        self.setAnimated(pref.get_setting('GUI/smooth_animation'))
         self.statusBar()
         self.setStyleSheet(style.SS_MAINWINDOW)
 

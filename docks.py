@@ -550,12 +550,12 @@ class DataManager(QW.QTreeWidget):
                 return # safety
 
             path, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
-                                                     pref.get_dirPath('out'),
+                                                     pref.get_dir('out'),
                                                      filext)
 
     # Finally, if there is a valid path, save the data
         if path:
-            pref.set_dirPath('out', os.path.dirname(path))
+            pref.set_dir('out', os.path.dirname(path))
             try:
                 item_data.save(path)
             # Set the item edited status to False
@@ -581,12 +581,12 @@ class DataManager(QW.QTreeWidget):
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
-                                                       pref.get_dirPath('in'),
+                                                       pref.get_dir('in'),
                                                        'ASCII maps (*.txt *.gz)')
         if not paths:
             return
         
-        pref.set_dirPath('in', os.path.dirname(paths[0]))
+        pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         for n, p in enumerate(paths, start=1):
             if pbar.wasCanceled(): 
@@ -623,13 +623,13 @@ class DataManager(QW.QTreeWidget):
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load mineral maps',
-                                                       pref.get_dirPath('in'),
+                                                       pref.get_dir('in'),
                                                        '''Mineral maps (*.mmp)
                                                           Legacy mineral maps (*.txt *.gz)''')
         if not paths:
             return
         
-        pref.set_dirPath('in', os.path.dirname(paths[0]))
+        pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         for n, p in enumerate(paths, start=1):
             if pbar.wasCanceled(): 
@@ -669,13 +669,13 @@ class DataManager(QW.QTreeWidget):
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load masks',
-                                                       pref.get_dirPath('in'),
+                                                       pref.get_dir('in'),
                                                        '''Masks (*.msk)
                                                           Text file (*.txt)''')
         if not paths:
             return
         
-        pref.set_dirPath('in', os.path.dirname(paths[0]))
+        pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         for n, p in enumerate(paths, start=1):
             if pbar.wasCanceled(): 
@@ -811,12 +811,12 @@ class DataManager(QW.QTreeWidget):
         
     # Do nothing if the outpath is invalid or the file dialog is canceled
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Export Map',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''ASCII file (*.txt)''')
         if not outpath:
             return
         
-        pref.set_dirPath('out', os.path.dirname(outpath))
+        pref.set_dir('out', os.path.dirname(outpath))
 
     # Save the mineral map to disk
         mmap = item.get('data')
@@ -1228,10 +1228,10 @@ class HistogramViewer(QW.QWidget):
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Mask file (*.msk)''')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             try:
                 mask.save(outpath)
             except Exception as e:
@@ -1579,10 +1579,10 @@ class ModeViewer(CW.StyledTabWidget):
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Mask file (*.msk)''')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             try:
                 mask.save(outpath)
             except Exception as e:
@@ -1622,11 +1622,9 @@ class RoiEditor(QW.QWidget):
         self.rect_sel = plots.RectSel(self.canvas.ax, self.onRectSelect)
 
     # Load ROIs visual properties
-        self.roi_color = pref.get_setting('class/trAreasCol', (255, 0, 0),
-                                           tuple)
-        self.roi_selcolor = pref.get_setting('class/trAreasSel', (0, 0, 255),
-                                              tuple)
-        self.roi_filled = pref.get_setting('class/trAreasFill', False, bool)
+        self.roi_color = pref.get_setting('plots/roi_color')
+        self.roi_selcolor = pref.get_setting('plots/roi_selcolor')
+        self.roi_filled = pref.get_setting('plots/roi_filled')
 
     # Initialize GUI
         self._init_ui()
@@ -2117,7 +2115,7 @@ class RoiEditor(QW.QWidget):
         '''
         rgb = self.getColorFromDialog(self.roi_color)
         if rgb:
-            pref.edit_setting('class/trAreasCol', rgb)
+            pref.edit_setting('plots/roi_color', rgb)
             self.roi_color = rgb
             self.updatePatchSelection()
 
@@ -2133,7 +2131,7 @@ class RoiEditor(QW.QWidget):
         '''
         rgb = self.getColorFromDialog(self.roi_selcolor)
         if rgb:
-            pref.edit_setting('class/trAreasSel', rgb)
+            pref.edit_setting('plots/roi_selcolor', rgb)
             self.roi_selcolor = rgb
             self.updatePatchSelection()
 
@@ -2154,7 +2152,7 @@ class RoiEditor(QW.QWidget):
 
         '''
         self.roi_filled = filled
-        pref.edit_setting('class/trAreasFill', filled)
+        pref.edit_setting('plots/roi_filled', filled)
         for _, patch in self.patches:
             patch.set_fill(filled)
         self._redraw()
@@ -2317,10 +2315,10 @@ class RoiEditor(QW.QWidget):
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Mask file (*.msk)''')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             try:
                 mask.save(outpath)
             except Exception as e:
@@ -2355,10 +2353,10 @@ class RoiEditor(QW.QWidget):
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Mask file (*.msk)''')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             try:
                 mask.save(outpath)
             except Exception as e:
@@ -2425,12 +2423,12 @@ class RoiEditor(QW.QWidget):
 
     # Do nothing if filepath is invalid or the file dialog is canceled
         path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
-                                                 pref.get_dirPath('in'),
+                                                 pref.get_dir('in'),
                                                  'ROI maps (*.rmp)')
         if not path:
             return
         
-        pref.set_dirPath('in', os.path.dirname(path))
+        pref.set_dir('in', os.path.dirname(path))
         progbar = CW.PopUpProgBar(self, 4, 'Loading data', cancel=False)
         progbar.setValue(0)
 
@@ -2500,10 +2498,10 @@ class RoiEditor(QW.QWidget):
             outpath = path
         else:
             outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save ROI map',
-                                                        pref.get_dirPath('out'),
+                                                        pref.get_dir('out'),
                                                         'ROI map file (*.rmp)')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             try:
                 self.current_roimap.save(outpath)
                 self.mappath.setPath(outpath)
@@ -2701,10 +2699,10 @@ class ProbabilityMapViewer(QW.QWidget):
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dirPath('out'),
+                                                    pref.get_dir('out'),
                                                     '''Mask file (*.msk)''')
         if outpath:
-            pref.set_dirPath('out', os.path.dirname(outpath))
+            pref.set_dir('out', os.path.dirname(outpath))
             try:
                 mask.save(outpath)
             except Exception as e:

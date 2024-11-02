@@ -497,7 +497,7 @@ class Legend(QW.QTreeWidget):
         self._highlighted_item = None
         self.amounts = amounts
         self.has_context_menu = context_menu
-        self.precision = pref.get_setting('plots/legendDec', 3, type=int)
+        self.precision = pref.get_setting('data/decimal_precision')
         
     # Customize the legend appearence and properties (headers & selection mode)
         self.setColumnCount(2 + self.amounts)
@@ -1560,10 +1560,6 @@ class StyledToolbar(QW.QToolBar):
             
         '''
         super(StyledToolbar, self).__init__(title, parent)
-    
-    # Set icon size
-        size = pref.get_setting('plots/NTBsize', 28, type=int)
-        self.setIconSize(QC.QSize(size, size))
 
     # Set stylesheet
         self.setStyleSheet(style.SS_TOOLBAR)
@@ -2082,6 +2078,7 @@ class SplitterLayout(QW.QBoxLayout):
     # infinite loop where the app tries to insert the splitter inside itself.
         super(SplitterLayout, self).__init__(direction, parent)
         self.splitter = QW.QSplitter(orient)
+        self.splitter.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
         self.splitter.setStyleSheet(style.SS_SPLITTER)
         super(SplitterLayout, self).addWidget(self.splitter)
 
@@ -2243,6 +2240,7 @@ class SplitterGroup(QW.QSplitter):
     # Use super class to create the oriented splitter and set its stylesheet
         self.orient = orient
         super(SplitterGroup, self).__init__(self.orient)
+        self.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
         self.setStyleSheet(style.SS_SPLITTER)
 
     # Add each object to the splitter. If the object is a layout, wrap it first

@@ -11,42 +11,114 @@ from PyQt5.QtCore import QSettings
 # SETTINGS
 settings = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
 
+settings_dict = {
+    'GUI/fontsize': (10, int),
+    'GUI/smooth_animation': (False, bool),
+    'plots/roi_color': ((25, 35, 45), tuple),
+    'plots/roi_selcolor': ((85, 255, 255), tuple),
+    'plots/roi_filled': (False, bool),
+    'data/extended_model_log': (False, bool),
+    'data/decimal_precision': (3, int),
+    'system/in_path': ('.\\', str),
+    'system/out_path': ('.\\', str),
+    }
 
-def get_setting(name, default=None, type=None):
-    if type is None:
-        return settings.value(name, default)
-    else:
-        return settings.value(name, default, type)
+
+def get_setting(name: str):
+    '''
+    Get current value of setting with name 'name'.
+
+    Parameters
+    ----------
+    name : str
+        A valid setting name.
+
+    Returns
+    -------
+    Any
+        Current value associated with the required setting.
+
+    Raises
+    ------
+    ValueError
+        Raised if 'name' is not a valid setting.
+
+    '''
+    if not name in settings_dict:
+        raise ValueError(f'{name} is not a valid setting.')
+    
+    default, type_ = settings_dict[name]
+    return settings.value(name, default, type_)
 
 
-def edit_setting(name, value):
+def edit_setting(name: str, value: object):
+    '''
+    Change the current value of setting with name 'name'.
+
+    Parameters
+    ----------
+    name : str
+        A valid setting name. If setting does not exist, it will be created.
+    value : Any
+        Value to be assigned to setting.
+
+    '''
     settings.setValue(name, value)
 
 
 def clear_settings():
+    '''
+    Clear all settings.
+
+    '''
     settings.clear()
 
-# def setAppFont(fontsize, font=QFont()): # !!!
-#     app = QApplication.instance()
-#     # size = f'{font.pointSize()}pt'
-#     size = f'{fontsize}pt'
-#     name = font.family()
-#     app.setStyleSheet('''QWidget{font: %s %s;}''' %(size, name))
-#     # font.setPointSize(int(fontsize))
-#     # app.setFont(font)
+
+def get_dir(direction: str):
+    '''
+    Get last accessed input or output directory.  
+
+    Parameters
+    ----------
+    direction : str
+        Must be 'in' for input directory or 'out' for output directory.
+
+    Returns
+    -------
+    str
+        Last input/output directory.
+
+    Raises
+    ------
+    ValueError
+        Raised if 'direction' is not 'in' or 'out'.
+
+    '''
+    if direction not in ('in', 'out'):
+        raise ValueError(f'{direction} must be "in" or "out".')
+    return get_setting(f'system/{direction}_path')
 
 
+def set_dir(direction: str, dirpath: str):
+    '''
+    Set 'dirpath' as the last accessed input or output directory.
 
+    Parameters
+    ----------
+    direction : str
+        Must be 'in' for input directory or 'out' for output directory.
+    dirpath : str
+        Path to directory.
 
-def get_dirPath(direction):
-    assert direction in ('in', 'out')
-    path = get_setting(f'system/{direction}dirPath', '.\\')
-    return path
+    Raises
+    ------
+    ValueError
+        Raised if 'direction' is not 'in' or 'out'.
 
-
-def set_dirPath(direction, path):
-    assert direction in ('in', 'out')
-    edit_setting(f'system/{direction}dirPath', path)
+    '''
+    if direction not in ('in', 'out'):
+        raise ValueError(f'{direction} must be "in" or "out".')
+    edit_setting(f'system/{direction}_path', dirpath)
 
 
 # # X-Min Learn GUI colors
