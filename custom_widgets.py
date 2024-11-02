@@ -674,7 +674,7 @@ class Legend(QW.QTreeWidget):
 
         '''
     # Set the new color to the legend item
-        item.setIcon(0, RGBIcon(color))
+        item.setIcon(0, ColorIcon(color))
     # Also set the new whatsThis string
         item.setWhatsThis(0, iatools.rgb2hex(color))
 
@@ -827,7 +827,7 @@ class Legend(QW.QTreeWidget):
 
         '''
         item = QW.QTreeWidgetItem(self)
-        item.setIcon(0, RGBIcon(color))                 # icon [column 0]
+        item.setIcon(0, ColorIcon(color))               # icon [column 0]
         item.setWhatsThis(0, iatools.rgb2hex(color))    # HEX string ['virtual' column 0]
         item.setText(1, name)                           # class name [column 1]
         if self.amounts:                                # amounts (optional) [column 2]
@@ -1031,35 +1031,47 @@ class Legend(QW.QTreeWidget):
 
 
 
-class RGBIcon(QG.QIcon):
+class ColorIcon(QG.QIcon):
     '''
     Convenient class to generate a colored icon useful in legends.
     '''
-    def __init__(self, rgb:tuple, size=(64, 64), edgecolor=style.IVORY, lw=1):
+
+    def __init__(self, color: tuple[int]|str, edgecolor=style.IVORY, lw=1,
+                 size=(64, 64)):
         '''
         Constructor.
 
         Parameters
         ----------
-        rgb : tuple
-            RGB triplet.
-        size : tuple, optional
-            Icon size. The default is (64, 64).
+        color : tuple[int] or str
+            RGB triplet or HEX color string.
         edgecolor : str, optional
             Color of the icon border, expressed as a HEX string. The default is
             #F9F9F4 (IVORY).
         lw : int, optional
             Border line width. The default is 1.
+        size : tuple, optional
+            Icon size. The default is (64, 64).
+
+        Raises
+        ------
+        TypeError
+            Raised if color is not a valid type.
 
         '''
     # Set main attributes
-        self.rgb = rgb
+        self.color = color
         self.height, self.width = size
 
     # Create a pixmap
         pixmap = QG.QPixmap(self.height, self.width)
-        pixmap.fill(QG.QColor(*self.rgb))
-
+        if isinstance(self.color, tuple):
+            pixmap.fill(QG.QColor(*self.color))
+        elif isinstance(self.color, str):
+            pixmap.fill(QG.QColor(self.color))
+        else:
+            raise TypeError(f'Color must be tuple or str, not {type(color)}')
+            
     # Add border
         painter = QG.QPainter(pixmap)
         pen = QG.QPen(QG.QColor(edgecolor))
@@ -1070,7 +1082,7 @@ class RGBIcon(QG.QIcon):
         painter.end()
 
     # Create the icon using the pixmap
-        super(RGBIcon, self).__init__(pixmap)
+        super(ColorIcon, self).__init__(pixmap)
 
 
 
