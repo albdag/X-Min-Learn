@@ -14,8 +14,8 @@ settings = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
 settings_dict = {
     'GUI/fontsize': (10, int),
     'GUI/smooth_animation': (False, bool),
-    'plots/roi_color': ((25, 35, 45), tuple),
-    'plots/roi_selcolor': ((85, 255, 255), tuple),
+    'plots/roi_color': ('#19232d', str),
+    'plots/roi_selcolor': ('#55ffff', str),
     'plots/roi_filled': (False, bool),
     'data/extended_model_log': (False, bool),
     'data/decimal_precision': (3, int),

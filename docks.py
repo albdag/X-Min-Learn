@@ -1622,9 +1622,11 @@ class RoiEditor(QW.QWidget):
         self.rect_sel = plots.RectSel(self.canvas.ax, self.onRectSelect)
 
     # Load ROIs visual properties
-        self.roi_color = pref.get_setting('plots/roi_color')
-        self.roi_selcolor = pref.get_setting('plots/roi_selcolor')
+        hex_roi_color = pref.get_setting('plots/roi_color')
+        hex_roi_selcolor = pref.get_setting('plots/roi_selcolor')
         self.roi_filled = pref.get_setting('plots/roi_filled')
+        self.roi_color = iatools.hex2rgb(hex_roi_color)
+        self.roi_selcolor = iatools.hex2rgb(hex_roi_selcolor)
 
     # Initialize GUI
         self._init_ui()
@@ -2115,7 +2117,7 @@ class RoiEditor(QW.QWidget):
         '''
         rgb = self.getColorFromDialog(self.roi_color)
         if rgb:
-            pref.edit_setting('plots/roi_color', rgb)
+            pref.edit_setting('plots/roi_color', iatools.rgb2hex(rgb))
             self.roi_color = rgb
             self.updatePatchSelection()
 
@@ -2131,7 +2133,7 @@ class RoiEditor(QW.QWidget):
         '''
         rgb = self.getColorFromDialog(self.roi_selcolor)
         if rgb:
-            pref.edit_setting('plots/roi_selcolor', rgb)
+            pref.edit_setting('plots/roi_selcolor', iatools.rgb2hex(rgb))
             self.roi_selcolor = rgb
             self.updatePatchSelection()
 

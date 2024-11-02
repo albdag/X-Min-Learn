@@ -960,7 +960,7 @@ class MineralClassifier(DraggableTool):
             The ROI map to be rendered.
 
         '''
-        color = pref.get_setting('plots/roi_color')
+        color = iatools.hex2rgb(pref.get_setting('plots/roi_color'))
         filled = pref.get_setting('plots/roi_filled')
 
         for name, bbox in roimap.roilist:

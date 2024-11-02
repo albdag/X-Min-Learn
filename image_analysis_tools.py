@@ -214,6 +214,45 @@ def binary_merge(arrays: list[np.ndarray], mode: str):
     return merged
 
 
+def hex2rgb(hex: str):
+    '''
+    Convert color HEX string to RGB tuple.
+
+    Parameters
+    ----------
+    hex : str
+        Color string.
+
+    Returns
+    -------
+    rgb : tuple[int]
+        RGB color triplet.
+
+    '''
+    hex = hex.lstrip('#')
+    rgb = tuple(int(hex[i:i+2], 16) for i in (0, 2, 4))
+    return rgb
+
+
+def rgb2hex(rgb: tuple[int]):
+    '''
+    Convert RGB tuple to color HEX string.
+
+    Parameters
+    ----------
+    rgb : tuple[int]
+        RGB color triplet.
+
+    Returns
+    -------
+    hex : str
+        Color HEX string.
+        
+    '''
+    hex = '#{:02x}{:02x}{:02x}'.format(*rgb)
+    return hex
+
+
 def rgb_complementary(rgb: tuple[int]): # Currently not used
     '''
     Return complemetary RGB color.

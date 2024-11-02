@@ -5,7 +5,6 @@ Created on Wed Apr 28 12:27:17 2021
 @author: albdag
 """
 
-from ast import literal_eval
 import os
 from typing import Iterable, Callable
 from weakref import proxy
@@ -622,12 +621,8 @@ class Legend(QW.QTreeWidget):
             The selected phase item.
 
         '''
-    # Get the hex string of phase color
-        rgb_color = literal_eval(item.whatsThis(0)) # tuple parsing from string
-        hex_color = '#{:02x}{:02x}{:02x}'.format(*rgb_color)
-    # Copy the string to the clipboard
         clipboard = QW.qApp.clipboard()
-        clipboard.setText(hex_color)
+        clipboard.setText(item.whatsThis(0))
 
 
     def requestColorChange(self, item: QW.QTreeWidgetItem):
@@ -642,9 +637,9 @@ class Legend(QW.QTreeWidget):
             The item that requests the color change.
 
         '''
-    # Get the old color and the new color (as rgb tuple)
-        old_col = literal_eval(item.whatsThis(0)) # tuple parsing from str
-        new_col = QW.QColorDialog.getColor(initial=QG.QColor(*old_col))
+    # Get the old color (as HEX string) and the new color (as RGB tuple)
+        old_col = item.whatsThis(0)
+        new_col = QW.QColorDialog.getColor(initial=QG.QColor(old_col))
     # Emit the signal
         if new_col.isValid():
             rgb = tuple(new_col.getRgb()[:-1])
@@ -681,7 +676,7 @@ class Legend(QW.QTreeWidget):
     # Set the new color to the legend item
         item.setIcon(0, RGBIcon(color))
     # Also set the new whatsThis string
-        item.setWhatsThis(0, str(color))
+        item.setWhatsThis(0, iatools.rgb2hex(color))
 
 
     def requestClassRename(self, item: QW.QTreeWidgetItem):
@@ -832,10 +827,10 @@ class Legend(QW.QTreeWidget):
 
         '''
         item = QW.QTreeWidgetItem(self)
-        item.setIcon(0, RGBIcon(color))    # icon [column 0]
-        item.setWhatsThis(0, str(color))   # RGB string ['virtual' column 0]
-        item.setText(1, name)              # class name [column 1]
-        if self.amounts:                   # amounts (optional) [column 2]
+        item.setIcon(0, RGBIcon(color))                 # icon [column 0]
+        item.setWhatsThis(0, iatools.rgb2hex(color))    # HEX string ['virtual' column 0]
+        item.setText(1, name)                           # class name [column 1]
+        if self.amounts:                                # amounts (optional) [column 2]
             amount = round(amount, self.precision)
             item.setText(2, f'{amount}%')
 
