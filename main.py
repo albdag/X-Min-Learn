@@ -11,8 +11,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
-import preferences as pref
-from style import IVORY
+import style
 
 
 # WINDOWS SHELL OPTION FOR DISTRIBUTION
@@ -42,16 +41,11 @@ if __name__ == "__main__":
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     loader = QSplashScreen(loader_bg, flags=flags)
     loader.show()
-    loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(IVORY))
+    loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(style.IVORY))
 
     app.setStyle('fusion')
-    pref.setAppPalette(app)
-
-    # pref.setAppFont(pref.get_setting('main/fontsize', 11))
-    # font = app.font()
-    # font.setPointSize(pref.get_setting('main/fontsize', 11))
-    # app.setFont(font)
-    pref.setAppFont(app)
+    app.setPalette(style.getPalette('default'))
+    app.setFont(style.getFont('Arial'))
 
     from main_window import MainWindow
     main_win = MainWindow()

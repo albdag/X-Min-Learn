@@ -5,11 +5,8 @@ Created on Tue Dec 14 14:09:21 2021
 @author: albdag
 """
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QSettings, Qt
-from PyQt5.QtGui import QColor, QFont, QPalette
+from PyQt5.QtCore import QSettings
 
-from style import BLACK_PEARL, BLOSSOM, CASPER, IVORY
 
 # SETTINGS
 settings = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
@@ -38,62 +35,7 @@ def clear_settings():
 #     # font.setPointSize(int(fontsize))
 #     # app.setFont(font)
 
-def setAppFont(app): # !!!
-    font = app.font()
-    font.setPointSize(get_setting('main/fontsize', 10, type=int))
-    app.setFont(font)
 
-
-def setAppPalette(app, kind='default'):
-    
-    if kind == 'default':
-        palette = app.palette()
-
-    # Window (A general background color)
-        palette.setColor(QPalette.Active, QPalette.Window, QColor(CASPER)) 
-        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(CASPER)) 
-
-    # WindowText (A general foreground color)
-        palette.setColor(QPalette.WindowText, Qt.black)
-
-    # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
-        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
-
-    # AlternateBase (Alternate background in views with alternating row colors)
-        # palette.setColor(QPalette.AlternateBase, Qt.red)
-
-    # ToolTips background & text
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
-
-    # PlaceholderText (Placeholder color for various text input widgets)
-        palette.setColor(QPalette.PlaceholderText, Qt.lightGray)
-
-    # Text (The foreground color used with Base)
-        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Text, Qt.lightGray)
-
-    # Button (The general button background color)
-        palette.setColor(QPalette.Active, QPalette.Button, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Button, Qt.lightGray)
-
-    # ButtonText (A foreground color used with the Button color)
-        palette.setColor(QPalette.Active, QPalette.ButtonText, Qt.black)
-        palette.setColor(QPalette.Inactive, QPalette.ButtonText, Qt.black)
-        palette.setColor(QPalette.Disabled, QPalette.ButtonText, Qt.darkGray)
-
-    # Highlight and highlighted text
-        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
-        palette.setColor(QPalette.HighlightedText, Qt.black)
-
-        # palette.setColor(QPalette.BrightText, Qt.red)
-        # palette.setColor(QPalette.Link, Qt.red)
-
-        app.setPalette(palette)
 
 
 def get_dirPath(direction):
