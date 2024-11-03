@@ -17,6 +17,7 @@ settings_dict = {
     'plots/roi_color': ('#19232d', str),
     'plots/roi_selcolor': ('#55ffff', str),
     'plots/roi_filled': (False, bool),
+    'plots/mask_merging_rule': ('intersection', str),
     'data/extended_model_log': (False, bool),
     'data/decimal_precision': (3, int),
     'system/in_path': ('.\\', str),

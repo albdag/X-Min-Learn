@@ -7,7 +7,7 @@ Created on Tue May  14 15:03:45 2024
 import os
 
 from PyQt5.QtCore import pyqtSignal, QSize, Qt
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPixmap
 import PyQt5.QtWidgets as QW
 
 import numpy as np
@@ -1638,3 +1638,296 @@ class DummyMapsBuilder(QW.QDialog):
             CW.MsgBox(self, 'Info', 'Map saved succesfully.')
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
+
+
+
+class Preferences(QW.QDialog):
+    '''
+    A dialog to access application preferences.
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : qObject or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super(Preferences, self).__init__(parent)
+
+    # Set dialog widget attributes
+        self.setWindowTitle('Preferences')
+        self.setWindowIcon(QIcon(r'Icons/wrench.png'))
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+        self.readSettings()
+        self._init_ui()
+        self._connect_slots()
+        self.adjustSize()
+        
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+#  -------------------------------------------------------------------------  #
+#                           INTERFACE SETTINGS
+#  -------------------------------------------------------------------------  #
+    # Application font-size (Styled Spinbox)
+        self.fontsize_spbox = CW.StyledSpinBox(8, 16)
+        self.fontsize_spbox.setValue(self._fontsize)
+
+    # Smooth GUI (CheckBox)
+        self.smooth_cbox = QW.QCheckBox()
+        self.smooth_cbox.setToolTip('Smooth feedback when resizing widgets')
+        self.smooth_cbox.setChecked(self._smooth_gui)
+
+    # Interface tab (GroupScrollArea)
+        gui_form = QW.QFormLayout()
+        gui_form.setVerticalSpacing(15)
+        gui_form.addRow('Font size', self.fontsize_spbox)
+        gui_form.addRow('Smooth resize', self.smooth_cbox)
+        gui_scroll = CW.GroupScrollArea(gui_form, tight=True, frame=False)
+
+#  -------------------------------------------------------------------------  #
+#                              PLOTS SETTINGS
+#  -------------------------------------------------------------------------  #
+    # ROI color (Styled Button)
+        self.roi_col_btn = CW.StyledButton(CW.ColorIcon(self._roi_col))
+        
+    # ROI selection color (Styled Button)
+        self.roi_selcol_btn = CW.StyledButton(CW.ColorIcon(self._roi_selcol))
+
+    # ROI filled (CheckBox)
+        self.roi_filled_cbox = QW.QCheckBox('Filled')
+        self.roi_filled_cbox.setChecked(self._roi_filled)
+
+    # Mask merging rule (RadioButtons Layout)
+        btns = ('Intersection', 'Union')
+        selected_btn = btns.index(self._mask_merge_type.capitalize())
+        tip1 = 'Preserve pixels only if visible in all masks'
+        tip2 = 'Preserve pixels visible at least in one mask'
+        self.mask_merge_btns = CW.RadioBtnLayout(btns, default=selected_btn,
+                                                 orient='horizontal')
+        self.mask_merge_btns.button(0).setToolTip(tip1)
+        self.mask_merge_btns.button(1).setToolTip(tip2)
+
+    # ROI group (GroupArea)
+        roi_form = QW.QFormLayout()
+        roi_form.setVerticalSpacing(15)
+        roi_form.addRow('Color', self.roi_col_btn)
+        roi_form.addRow('Selection color', self.roi_selcol_btn)
+        roi_form.addRow(self.roi_filled_cbox)
+        roi_group = CW.GroupArea(roi_form, 'ROI')
+
+    # Mask group (GroupArea)
+        mask_form = QW.QFormLayout()
+        mask_form.setVerticalSpacing(15)
+        mask_form.addRow('Default merging', self.mask_merge_btns)
+        mask_group = CW.GroupArea(mask_form, 'Mask')
+
+    # Plots tab (GroupScrollArea)
+        plots_vbox = QW.QVBoxLayout()
+        plots_vbox.setSpacing(10)
+        plots_vbox.addWidget(roi_group)
+        plots_vbox.addWidget(mask_group)
+        plots_scroll = CW.GroupScrollArea(plots_vbox, tight=True, frame=False)
+
+#  -------------------------------------------------------------------------  #
+#                              DATA SETTINGS
+#  -------------------------------------------------------------------------  #
+    # Decimal precision (Styled SpinBox)
+        self.decimal_spbox = CW.StyledSpinBox(0, 6)
+        self.decimal_spbox.setToolTip('Number of displayed decimal places')
+        self.decimal_spbox.setValue(self._decimal_prec)
+
+    # Extended log (CheckBox)
+        self.extlog_cbox = QW.QCheckBox('Extended model log')
+        self.extlog_cbox.setToolTip('Save advanced info in custom model logs')
+        self.extlog_cbox.setChecked(self._extended_log)
+
+    # Data tab (GroupScrollArea)
+        data_form = QW.QFormLayout()
+        data_form.setSpacing(15)
+        data_form.addRow('Decimals', self.decimal_spbox)
+        data_form.addRow(self.extlog_cbox)
+        data_scroll = CW.GroupScrollArea(data_form, tight=True, frame=False)
+
+#  -------------------------------------------------------------------------  #
+#                              DIALOG BUTTONS
+#  -------------------------------------------------------------------------  #
+    # Ok (Styled Button)
+        self.ok_btn = CW.StyledButton(text='Ok')
+
+    # Cancel (Styled Button)
+        self.cancel_btn = CW.StyledButton(text='Cancel')
+
+    # Apply (Styled Button)
+        self.apply_btn = CW.StyledButton(text='Apply')
+
+    # Default (Styled Button)
+        self.default_btn = CW.StyledButton(text='Default')
+
+#  -------------------------------------------------------------------------  #
+#                              MAIN LAYOUT
+#  -------------------------------------------------------------------------  #
+    # Main widget (Styled TabWidget)
+        tabwid = CW.StyledTabWidget()
+        tabwid.tabBar().setExpanding(True)
+        tabwid.tabBar().setDocumentMode(True)
+        tabwid.addTab(gui_scroll, title='Interface')
+        tabwid.addTab(plots_scroll, title='Plots')
+        tabwid.addTab(data_scroll, title='Data')
+
+    # Dialog buttons layout
+        btns_hbox = QW.QHBoxLayout()
+        btns_hbox.addWidget(self.ok_btn)
+        btns_hbox.addWidget(self.cancel_btn)
+        btns_hbox.addWidget(self.apply_btn)
+        btns_hbox.addWidget(self.default_btn)
+
+    # Adjust main layout
+        main_layout = QW.QVBoxLayout()
+        main_layout.addWidget(tabwid)
+        main_layout.addLayout(btns_hbox)
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+    # ROI-related signals
+        self.roi_col_btn.clicked.connect(self.changeRoiIconColor)
+        self.roi_selcol_btn.clicked.connect(self.changeRoiIconColor)
+        self.roi_filled_cbox.stateChanged.connect(
+            lambda chk: setattr(self, '_roi_filled', chk))
+    
+    # Mask merging rule
+        self.mask_merge_btns.selectionChanged.connect(self.changeMaskMergeRule)
+        
+    # Extended model logs
+        self.extlog_cbox.stateChanged.connect(
+            lambda chk: setattr(self, '_extended_log', chk))
+
+    # Dialog buttons signals
+        self.ok_btn.clicked.connect(lambda: self.saveEdits(exit=True))
+        self.cancel_btn.clicked.connect(self.close)
+        self.apply_btn.clicked.connect(self.saveEdits)
+        self.default_btn.clicked.connect(self.resetToDefault)
+
+
+    def readSettings(self):
+        '''
+        Read settings from settings.ini file.
+
+        '''
+        self._fontsize = pref.get_setting('GUI/fontsize')
+        self._smooth_gui = pref.get_setting('GUI/smooth_animation')
+        self._roi_col = pref.get_setting('plots/roi_color')
+        self._roi_selcol = pref.get_setting('plots/roi_selcolor')
+        self._roi_filled = pref.get_setting('plots/roi_filled')
+        self._mask_merge_type = pref.get_setting('plots/mask_merging_rule')
+        self._extended_log = pref.get_setting('data/extended_model_log')
+        self._decimal_prec = pref.get_setting('data/decimal_precision')
+
+
+    def writeSettings(self):
+        '''
+        Write settings to settings.ini file.
+
+        '''
+        pref.edit_setting('GUI/fontsize', self._fontsize)
+        pref.edit_setting('GUI/smooth_animation', self._smooth_gui)
+        pref.edit_setting('plots/roi_color', self._roi_col)
+        pref.edit_setting('plots/roi_selcolor', self._roi_selcol)
+        pref.edit_setting('plots/roi_filled', self._roi_filled)
+        pref.edit_setting('plots/mask_merging_rule', self._mask_merge_type)
+        pref.edit_setting('data/decimal_precision', self._decimal_prec)
+        pref.edit_setting('data/extended_model_log', self._extended_log)
+
+
+    def changeRoiIconColor(self):
+        '''
+        Set a new ROI (selection) color.
+
+        '''
+    # Get the current color as HEX string
+        btn = self.sender()
+        curr = self._roi_col if btn == self.roi_col_btn else self._roi_selcol
+
+    # Set new current color if new color is valid
+        new = QW.QColorDialog.getColor(QColor(curr), self)
+        if new.isValid():
+            hex = new.name(QColor.HexRgb)
+            curr = hex
+            btn.setIcon(CW.ColorIcon(hex))
+
+
+    def changeMaskMergeRule(self, selected_id: int):
+        '''
+        Change default mask merging mode based on the selected radio button.
+
+        Parameters
+        ----------
+        selected_id : int
+            Id of the selected radio button.
+
+        '''
+        rule = self.mask_merge_btns.button(selected_id).text().lower()
+        self._mask_merge_type = rule
+
+
+    def setAppFontSize(self):
+        '''
+        Change app font size. Warning: some widgets needs to be repainted to
+        apply the new fontsize.
+
+        '''
+        self._fontsize = self.fontsize_spbox.value()
+        app = QW.qApp
+        font = app.font()
+        font.setPointSize(self._fontsize)
+        app.setFont(font)
+
+
+    def resetToDefault(self):
+        '''
+        Reset all settings to default values.
+
+        '''
+        text = 'Reset preferences to default? Some changes may take effect '\
+               'after restarting the app.'
+        choice = CW.MsgBox(self, 'Quest', text)
+        if choice.yes():
+            pref.clear_settings()
+            self.close()
+
+
+    def saveEdits(self, exit=False):
+        '''
+        Save applied changes to settings and exit the dialog if required.
+
+        Parameters
+        ----------
+        exit : bool, optional
+            Whether to close the dialog after saving. The default is False.
+
+        '''
+    # Perform changes that can be applied on the fly
+        self.setAppFontSize()
+
+    # Save edits in settings.ini file
+        self.writeSettings()
+        text = 'Some changes may take effect after restarting the app.'
+        CW.MsgBox(self, 'Info', text)
+    
+    # Close dialog if requested
+        if exit:
+            self.close()

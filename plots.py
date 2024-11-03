@@ -5,11 +5,10 @@ Created on Mon Jan 23 09:14:45 2023
 @author: albdag
 """
 
-from weakref import proxy
 from numpy.typing import ArrayLike
 from typing import Iterable
 
-from PyQt5.QtCore import QObject, Qt, QSize
+from PyQt5.QtCore import QObject, Qt
 from PyQt5.QtGui import QCursor, QIcon
 from PyQt5.QtWidgets import QAction, QSizePolicy, QWidgetAction
 
@@ -137,7 +136,8 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         super(_CanvasBase, self).__init__(self.fig)
 
     # Set the default style
-        mpl_style.use('seaborn-v0_8-dark') # menu/pref to change style
+    # Should this change based on current app style (default or darkmode)?
+        mpl_style.use('seaborn-v0_8-dark') 
 
     # Set events connections for mouse-wheel zoom and mouse-wheel pan
         if wheel_zoom:
@@ -1924,7 +1924,6 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
     '''
     A class to provide a navigation toolbar linked to a canvas object.
     '''
-    # instances = []
 
     def __init__(self, canvas: _CanvasBase, QtParent:QObject|None=None, 
                  orient=Qt.Horizontal, coords=True):
@@ -1945,9 +1944,6 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
             default is True.
 
         '''
-    # # Weakly track all class instances
-    #     self.__class__.instances.append(proxy(self))
-
     # Call the constructor of the parent class
         super(NavTbar, self).__init__(canvas, QtParent, coordinates=coords)
 

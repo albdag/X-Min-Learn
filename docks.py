@@ -1220,10 +1220,11 @@ class HistogramViewer(QW.QWidget):
     # Extract the displayed array and its current mask (legacy mask)
         array, legacy_mask = self.maps_canvas.get_map(return_mask=True)
 
-    # If the legacy mask exists, intersect it with the new mask
+    # If the legacy mask exists, merge it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mask_array = iatools.binary_merge([mask_array, legacy_mask], 'I')
+            mode = pref.get_setting('plots/mask_merging_rule')
+            mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
         mask = Mask(mask_array)
 
     # Save mask file
@@ -1569,10 +1570,11 @@ class ModeViewer(CW.StyledTabWidget):
         minmap = self._current_data_object.get('data')
         mask = ~np.isin(minmap.minmap, classes)
 
-    # If a legacy mask exists, intersect it with the new mask
+    # If a legacy mask exists, merge it with the new mask
         _, legacy_mask = self.map_canvas.get_map(return_mask=True)
         if legacy_mask is not None:
-            mask = iatools.binary_merge([mask, legacy_mask], 'I')
+            mode = pref.get_setting('plots/mask_merging_rule')
+            mask = iatools.binary_merge([mask, legacy_mask], mode)
 
     # Create a new Mask object
         mask = Mask(mask)
@@ -2311,9 +2313,10 @@ class RoiEditor(QW.QWidget):
         mask = Mask.from_shape(shape, fillwith=1)
         mask.invert_region(extents)
 
-    # If the legacy mask exists, intersect it with the new mask
+    # If the legacy mask exists, merge it with the new mask
         if legacy_mask is not None:
-            mask.mask = iatools.binary_merge([mask.mask, legacy_mask], 'I')
+            mode = pref.get_setting('plots/mask_merging_rule')
+            mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
@@ -2347,11 +2350,12 @@ class RoiEditor(QW.QWidget):
             mask.invert_region(extents)
 
     # If there is a loaded image that has the same shape of the current ROI map
-    # and it has a legacy mask, intersect it with the new mask
+    # and it has a legacy mask, merge it with the new mask
         if not self.canvas.is_empty():
             array, legacy_mask = self.canvas.get_map(return_mask=True)
             if array.shape == shape and legacy_mask is not None:
-                mask.mask = iatools.binary_merge([mask.mask, legacy_mask], 'I')
+                mode = pref.get_setting('plots/mask_merging_rule')
+                mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
@@ -2693,10 +2697,11 @@ class ProbabilityMapViewer(QW.QWidget):
     # Extract the current mask (legacy mask)
         _, legacy_mask = self.maps_canvas.get_map(return_mask=True)
 
-    # If the legacy mask exists, intersect it with the new mask
+    # If the legacy mask exists, merge it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mask_array = iatools.binary_merge([mask_array, legacy_mask], 'I')
+            mode = pref.get_setting('plots/mask_merging_rule')
+            mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
         mask = Mask(mask_array)
 
     # Save mask file

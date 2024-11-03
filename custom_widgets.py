@@ -6,8 +6,6 @@ Created on Wed Apr 28 12:27:17 2021
 """
 
 import os
-from typing import Iterable, Callable
-from weakref import proxy
 
 from PyQt5 import QtWidgets as QW
 from PyQt5 import QtGui as QG
@@ -461,7 +459,6 @@ class Legend(QW.QTreeWidget):
     signals to notify each edit request, which must be catched and handled by 
     other widgets to be effective.
     '''
-    instances = []
     colorChangeRequested = QC.pyqtSignal(QW.QTreeWidgetItem, tuple) # item, col
     randomPaletteRequested = QC.pyqtSignal()
     itemRenameRequested = QC.pyqtSignal(QW.QTreeWidgetItem, str) # item, name
@@ -486,9 +483,6 @@ class Legend(QW.QTreeWidget):
             GUI parent widget of the legend. The default is None.
 
         '''
-    # Weakly track all class instances
-        self.__class__.instances.append(proxy(self))
-
     # Call the constructor of the parent class
         super(Legend, self).__init__(parent)
 

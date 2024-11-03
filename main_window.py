@@ -336,7 +336,7 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Preferences 
         self.pref_action.triggered.connect(
-            lambda: self.launch_dialog('Preferences'))
+            lambda: dialogs.Preferences(self).show())
 
     # Launch Convert Images to Input Maps 
         self.conv2inmap_action.triggered.connect(
