@@ -1726,6 +1726,7 @@ class RoiEditor(QW.QWidget):
     # Bar plot canvas
         self.barCanvas = plots.BarCanvas(size=(3.6, 2.4), wheel_zoom=False, 
                                          wheel_pan=False)
+        self.barCanvas.set_decimal_precision(0)
         self.barCanvas.setMinimumSize(300, 300)
 
     # Bar plot Navigation toolbar

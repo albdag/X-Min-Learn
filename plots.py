@@ -917,6 +917,7 @@ class BarCanvas(_CanvasBase):
         self.orient = orientation
         self.plot = None
         self.bar_width = 0.5
+        self.decimal_precision = pref.get_setting('data/decimal_precision')
         self.label_amounts = []
         self.visible_amounts = False
 
@@ -966,13 +967,15 @@ class BarCanvas(_CanvasBase):
             return
 
     # Show the amounts
-        elif enabled:
-            prec = pref.get_setting('data/decimal_precision')
+        if enabled:
             pe = [mpl_patheffects.withStroke(linewidth=2, foreground='k')]
-            self.label_amounts = self.ax.bar_label(self.plot, fmt=f'%.{prec}f',
-                                                    label_type='center',
-                                                    padding=16, color='w',
-                                                    path_effects=pe)
+            kwargs = {'fmt': f'%.{self.decimal_precision}f',
+                      'padding': 16,
+                      'label_type': 'center',
+                      'color': style.IVORY,
+                      'path_effects': pe
+                      }
+            self.label_amounts = self.ax.bar_label(self.plot, **kwargs)
 
     # Or hide the amounts
         else:
@@ -995,6 +998,19 @@ class BarCanvas(_CanvasBase):
 
         '''
         self.bar_width = width
+
+
+    def set_decimal_precision(self, precision: int):
+        '''
+        Set the number of decimal places displayed in labels.
+
+        Parameters
+        ----------
+        precision : int
+            Number of decimal places.
+            
+        '''
+        self.decimal_precision = precision
 
 
     def update_canvas(self, data: list|list[list], 
