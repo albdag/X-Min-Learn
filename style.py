@@ -293,8 +293,9 @@ SS_MENU = (
     }}
 
     QMenu::item {{
-        padding: 2px 40px 2px 10px;
         border: 1px solid transparent;
+        margin: 2px 0px 2px 0px; 
+        padding: 2px 40px 2px 10px;
     }}
 
     QMenu::item:!enabled {{
