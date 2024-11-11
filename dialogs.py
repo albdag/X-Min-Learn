@@ -1803,6 +1803,10 @@ class Preferences(QW.QDialog):
         Signals-slots connector.
 
         '''
+    # Smooth GUI
+        self.smooth_cbox.stateChanged.connect(
+            lambda chk: setattr(self, '_smooth_gui', chk))
+    
     # ROI-related signals
         self.roi_col_btn.clicked.connect(self.changeRoiIconColor)
         self.roi_selcol_btn.clicked.connect(self.changeRoiIconColor)
@@ -1811,6 +1815,10 @@ class Preferences(QW.QDialog):
     
     # Mask merging rule
         self.mask_merge_btns.selectionChanged.connect(self.changeMaskMergeRule)
+
+    # Decimal precision
+        self.decimal_spbox.valueChanged.connect(
+            lambda v: setattr(self, '_decimal_prec', v))
         
     # Extended model logs
         self.extlog_cbox.stateChanged.connect(
@@ -1834,8 +1842,8 @@ class Preferences(QW.QDialog):
         self._roi_selcol = pref.get_setting('plots/roi_selcolor')
         self._roi_filled = pref.get_setting('plots/roi_filled')
         self._mask_merge_type = pref.get_setting('plots/mask_merging_rule')
-        self._extended_log = pref.get_setting('data/extended_model_log')
         self._decimal_prec = pref.get_setting('data/decimal_precision')
+        self._extended_log = pref.get_setting('data/extended_model_log')
 
 
     def writeSettings(self):
@@ -1925,9 +1933,9 @@ class Preferences(QW.QDialog):
 
     # Save edits in settings.ini file
         self.writeSettings()
-        text = 'Some changes may take effect after restarting the app.'
-        CW.MsgBox(self, 'Info', text)
     
     # Close dialog if requested
         if exit:
+            text = 'Some changes may take effect after restarting the app.'
+            CW.MsgBox(self, 'Info', text)
             self.close()
