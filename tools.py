@@ -6600,7 +6600,7 @@ class PhaseRefiner(DraggableTool):
         prev_removed = np.count_nonzero(variance_map == 1)
 
     # Update info widgets
-        prec = self.legend.precision
+        prec = pref.get_setting('data/decimal_precision')
         self.advan_info[0].setText(self._phase)                      # original name
         self.advan_info[1].setText(str(orig_pixels))                 # original pixels
         self.advan_info[2].setText(f'{round(orig_amount, prec)} %')  # original amount
