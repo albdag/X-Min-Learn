@@ -167,7 +167,6 @@ class MineralClassifier(DraggableTool):
 
     # Set GUI
         self._init_ui()
-        self.adjustSize()
 
     # Connect signals to slots
         self._connect_slots()
