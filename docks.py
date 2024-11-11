@@ -2103,7 +2103,7 @@ class RoiEditor(QW.QWidget):
 
         '''
         rgb = False
-        col = QW.QColorDialog.getColor(initial=QColor(*old_color))
+        col = QW.QColorDialog.getColor(QColor(*old_color), self)
         if col.isValid():
             rgb = tuple(col.getRgb()[:-1])
         return rgb

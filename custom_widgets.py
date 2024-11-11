@@ -633,7 +633,7 @@ class Legend(QW.QTreeWidget):
         '''
     # Get the old color (as HEX string) and the new color (as RGB tuple)
         old_col = item.whatsThis(0)
-        new_col = QW.QColorDialog.getColor(initial=QG.QColor(old_col))
+        new_col = QW.QColorDialog.getColor(QG.QColor(old_col), self)
     # Emit the signal
         if new_col.isValid():
             rgb = tuple(new_col.getRgb()[:-1])
