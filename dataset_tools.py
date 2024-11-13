@@ -163,6 +163,7 @@ class GroundTruthDataset():
 
         '''
         df = self.dataframe[self.dataframe.iloc[:, idx].isin(targets)]
+        df.reset_index(drop=True, inplace=True)
         return GroundTruthDataset(df)
     
 
@@ -335,7 +336,7 @@ class GroundTruthDataset():
         return any(self.orig_subsets_ratios)
 
 
-    def split_features_targets(self, split_idx=-1, xtype='int64', ytype='U8',
+    def split_features_targets(self, split_idx=-1, xtype='int32', ytype='U8',
                                spliton='columns'):
         '''
         Split X features from Y targets.
@@ -345,7 +346,7 @@ class GroundTruthDataset():
         split_idx : int, optional
             The splitting index. The default is -1.
         xtype : str, optional
-            X features dtype. The default is 'int64'.
+            X features dtype. The default is 'int32'.
         ytype : str, optional
             Y targets dtype. The default is 'U8'.
         spliton : str, optional
