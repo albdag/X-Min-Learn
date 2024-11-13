@@ -9,6 +9,8 @@ import imblearn.under_sampling as US
 import pandas as pd
 import numpy as np
 
+from _base import InputMapStack, MineralMap
+import convenient_functions as cf
 import threads
 
 
@@ -55,6 +57,19 @@ class GroundTruthDataset():
         self.test_counter = {}
 
 
+    def __len__(self):
+        '''
+        Return the length of the dataset's dataframe.
+
+        Returns
+        -------
+        int
+            Dataset's length.
+
+        '''
+        return len(self.dataframe.index)
+
+
     @classmethod
     def load(cls, filepath: str, dec: str, sep: str|None=None, chunks=False):
         '''
@@ -95,7 +110,38 @@ class GroundTruthDataset():
                                     engine=engine)
 
         return cls(dataframe, filepath)
+    
 
+    @classmethod
+    def from_maps(cls, input_stack: InputMapStack, mineral_map: MineralMap,
+                  columns: str):
+        '''
+        Create new dataset from InputMap and MineralMap data.
+
+        Parameters
+        ----------
+        input_stack : InputMapStack
+            Input maps stack for dataset features.
+        mineral_map : MineralMap
+            Mineral map for dataset targets.
+        columns : str
+            Name of dataset's columns.
+
+        Returns
+        -------
+        GroundTruthDataset
+            A new ground truth dataset.
+
+        '''
+    # Construct full dataset by stacking input maps with mineral map
+        input_data = input_stack.get_feature_array()
+        minmap_data = mineral_map.minmap.flatten()[:, np.newaxis]
+        data = np.hstack((input_data, minmap_data))
+
+    # Return a new ground truth dataset
+        dataframe = pd.DataFrame(data=data, columns=columns)
+        return cls(dataframe)
+        
 
     def sub_sample(self, targets: list|tuple, idx: int):
         '''
@@ -152,6 +198,69 @@ class GroundTruthDataset():
         self.dataframe = df
         self.reset()
 
+
+    def rename_target(self, old_name: str, new_name: str):
+        '''
+        Replace target with name 'old_name' to 'new_name'. Warning: after
+        renaming, the dataset attributes will reset.
+
+        Parameters
+        ----------
+        old_name : str
+            Current target name.
+        new_name : str
+            New target name.
+
+        '''
+        self.dataframe.replace(old_name, new_name, inplace=True)
+        self.reset()
+
+
+    def merge_targets(self, targets: list[str], name: str):
+        '''
+        Rename two or more targets to the same name 'name'. Warning: after
+        merging, the dataset attributes will reset.
+
+        Parameters
+        ----------
+        targets : list[str]
+            List of target to be merged. It must contain at least two values.
+        name : str
+            New name for the merged targets.
+
+        Raises
+        ------
+        ValueError
+            Raised if provided targets are less than two.
+
+        '''
+    # Check for minimum targets amount (= 2) 
+        if (n_targets := len(targets)) < 2:
+            raise ValueError('Targets list contains less than two elements.')
+        
+        self.dataframe.replace(targets, [name] * n_targets, inplace=True)
+        self.reset()
+
+
+    def remove_where(self, column_idx: int, values: tuple|list):
+        '''
+        Remove entire row of data where column at index 'column_idx' is equal
+        to any of the values listed in 'values'. Warning: after removing rows,
+        the dataset attributes will reset.
+
+        Parameters
+        ----------
+        column_idx : int
+            Column index.
+        values : tuple | list
+            List of values to use to remove rows.
+
+        '''
+        to_remove = self.dataframe.iloc[:, column_idx].isin(values)
+        self.dataframe = self.dataframe[~ to_remove]
+        self.dataframe.reset_index(drop=True, inplace=True)
+        self.reset()
+
     
     def reset(self):
         '''
@@ -171,9 +280,10 @@ class GroundTruthDataset():
         self.test_counter.clear()
 
 
-    def save(self, outpath: str, sep: str, dec: str):
+    def save(self, outpath: str, sep: str, dec: str, split=False, 
+             max_rows=2**20): # 2**20 = Excel maximum number of rows
         '''
-        Save dataset's dataframe to CSV file.
+        Save dataset's dataframe to one or multiple CSV file(s).
 
         Parameters
         ----------
@@ -183,6 +293,12 @@ class GroundTruthDataset():
             CSV separator character.
         dec : str
             CSV decimal character.
+        split : bool, optional
+            Whether to split the dataset into multiple files. If True, the 
+            number of files is determined by 'max_rows'. The default is False.
+        max_rows : int, optional
+            If 'split' is True, this is the maximum allowed number of rows per
+            file. If 'split' is False, this is ignored. The default is 2**20.
 
         Raises
         ------
@@ -192,7 +308,17 @@ class GroundTruthDataset():
         '''
         if not outpath.lower().endswith('.csv'):
             raise TypeError('The file extension must be .csv')
-        self.dataframe.to_csv(outpath, sep=sep, index=False, decimal=dec)
+        
+    # Save multiple CSV files
+        if split:
+            split_indices = range(0, len(self.dataframe.index), max_rows)
+            dfs = (self.dataframe.iloc[i:i+max_rows, :] for i in split_indices)
+            for n, df in enumerate(dfs, start=1):
+                path = cf.extend_filename(outpath, str(n))
+                df.to_csv(path, sep=sep, index=False, decimal=dec)
+    # Save one CSV file
+        else:
+            self.dataframe.to_csv(outpath, sep=sep, index=False, decimal=dec)
 
 
     def are_subsets_split(self):
@@ -827,6 +953,26 @@ class GroundTruthDataset():
 
         '''
         return sorted(self.dataframe.iloc[:, idx].unique().tolist())
+    
+
+    def column_count(self, idx: int):
+        '''
+        Return a dictionary containing counts of unique values of column at 
+        index 'idx'. The dictionary is sorted by order of occurrence, so that 
+        the first key is the most frequently occurring element.
+
+        Parameters
+        ----------
+        idx : int
+            Column index.
+
+        Returns
+        -------
+        dict
+            Counts of unique values -> {unique: count}.
+
+        '''
+        return self.dataframe.iloc[:, idx].value_counts().to_dict()
     
 
 

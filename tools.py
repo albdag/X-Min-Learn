@@ -6,11 +6,9 @@ Created on Mon Jun 21 17:16:01 2021
 """
 import os
 from datetime import datetime
-from statistics import mode as math_mode
 import webbrowser
 
 import numpy as np
-from pandas import DataFrame, concat
 
 from PyQt5 import QtWidgets as QW
 from PyQt5 import QtCore as QC
@@ -2502,891 +2500,1429 @@ class DatasetBuilder(DraggableTool):
     One of the main tools of X-Min Learn, that allows the semi-automated
     compilation of human-readable and machine-friendly ground truth datasets.
     '''
+
     def __init__(self):
         '''
         Constructor.
 
-        Parameters
-
         '''
         super(DatasetBuilder, self).__init__()
+
     # Set tool title and icon
         self.setWindowTitle('Dataset Builder')
-        self.setWindowIcon(QIcon('Icons/compile_dataset.png'))
+        self.setWindowIcon(QIcon(r'Icons/compile_dataset.png'))
+
     # Set main attributes
-        self._features = set([])
         self.dataset = None
-    # Set GUI
+        self.elements = ['A', 'Ac', 'Ag', 'Al', 'As', 'At', 'Au', 'B',
+                         'Ba', 'Be', 'Bi', 'Br', 'C', 'Ca', 'Cd', 'Ce',
+                         'Cl', 'Co', 'Cr', 'Cs', 'Cu', 'Dy', 'Er', 'Eu',
+                         'F', 'Fe', 'Fr', 'Ga', 'Gd', 'Ge', 'H', 'He',
+                         'Hf', 'Hg', 'Ho', 'I', 'In', 'Ir', 'K', 'Kr',
+                         'La', 'Li', 'Lu', 'Mg', 'Mn', 'Mo', 'N', 'Na',
+                         'Nb', 'Nd', 'Ne', 'Ni', 'O', 'Os', 'P', 'Pa',
+                         'Pb', 'Pd', 'Pm', 'Po', 'Pr', 'Pt', 'Ra', 'Rb',
+                         'Re', 'Rh', 'Rn', 'Ru', 'S', 'Sb', 'Sc', 'Se',
+                         'Si', 'Sm', 'Sn', 'Sr', 'Ta', 'Tb', 'Tc', 'Te',
+                         'Th', 'Ti', 'Ti', 'Tm', 'U', 'V', 'W', 'Xe',
+                         'Y', 'Yb', 'Zn', 'Zr']
+
+    # Initialize GUI
         self._init_ui()
-        self.adjustSize()
+        self._connect_slots()
+
 
     def _init_ui(self):
         '''
         GUI constructor.
 
         '''
-    # Input grid of chemical elements (Grid Layout --> Group scroll area)
-        elements = ['A', 'Ac', 'Ag', 'Al', 'As', 'At', 'Au', 'B',
-                    'Ba', 'Be', 'Bi', 'Br', 'C', 'Ca', 'Cd', 'Ce',
-                    'Cl', 'Co', 'Cr', 'Cs', 'Cu', 'Dy', 'Er', 'Eu',
-                    'F', 'Fe', 'Fr', 'Ga', 'Gd', 'Ge', 'H', 'He',
-                    'Hf', 'Hg', 'Ho', 'I', 'In', 'Ir', 'K', 'Kr',
-                    'La', 'Li', 'Lu', 'Mg', 'Mn', 'Mo', 'N', 'Na',
-                    'Nb', 'Nd', 'Ne', 'Ni', 'O', 'Os', 'P', 'Pa',
-                    'Pb', 'Pd', 'Pm', 'Po', 'Pr', 'Pt', 'Ra', 'Rb',
-                    'Re', 'Rh', 'Rn', 'Ru', 'S', 'Sb', 'Sc', 'Se',
-                    'Si', 'Sm', 'Sn', 'Sr', 'Ta', 'Tb', 'Tc', 'Te',
-                    'Th', 'Ti', 'Ti', 'Tm', 'U', 'V', 'W', 'Xe',
-                    'Y', 'Yb', 'Zn', 'Zr']
-
+    # Input grid of chemical elements (StyledButtons) [-> GroupScrollArea]
+        self.elements_btns = []
         elem_grid = QW.QGridLayout()
         n_cols = 8
-        for x in range(len(elements)):
-            elem_btn = CW.StyledButton(text=elements[x])
-            elem_btn.clicked.connect(self.add_inputFeature)
-            row, col = x//n_cols, x%n_cols
+        for n, e in enumerate(self.elements):
+            elem_btn = CW.StyledButton(text=e)
+            elem_btn.setCheckable(True)
+            self.elements_btns.append(elem_btn)
+            row, col = n // n_cols, n % n_cols
             elem_grid.addWidget(elem_btn, row, col)
-        # Set fixed column width for equal button size
-        # fixed_column_width = 50
-        # # for col in range(n_cols):
-        # #     elem_grid.setColumnMinimumWidth(col, fixed_column_width)
         elem_scroll = CW.GroupScrollArea(elem_grid)
 
     # Custom feature entry (Line Edit)
-        self.customEntry_lbl = QW.QLineEdit()
-        self.customEntry_lbl.setStyleSheet(style.SS_MENU)
-        self.customEntry_lbl.setPlaceholderText('Custom feature name')
-        self.customEntry_lbl.returnPressed.connect(self.add_inputFeature)
+        self.custom_entry = QW.QLineEdit()
+        self.custom_entry.setStyleSheet(style.SS_MENU)
+        self.custom_entry.setPlaceholderText('Custom feature name')
 
-    # Selected elements list (Styled List Widget)
-        self.featureList = CW.StyledListWidget()
+    # Selected elements list (Styled ListWidget)
+        self.feature_list = CW.StyledListWidget()
+        self.feature_list.setSortingEnabled(True)
 
-    # Elements list option buttons (--> in HBoxLayout)
-        self.delElem_btn = CW.StyledButton(QIcon('Icons/generic_del.png'))
-        self.delElem_btn.setToolTip('Remove selected elements')
-        self.delElem_btn.clicked.connect(self.del_inputFeature)
+    # Delete feature (StyledButton)
+        self.delfeat_btn = CW.StyledButton(QIcon(r'Icons/remove.png'))
+        self.delfeat_btn.setToolTip('Remove selected features')
 
-        self.refresh_btn = CW.StyledButton(QIcon('Icons/forward.png'))
+    # Refresh Dataset Designer (StyledButton)
+        self.refresh_btn = CW.StyledButton(QIcon(r'Icons/validate.png'))
         self.refresh_btn.setToolTip('Refresh Dataset Designer')
-        self.refresh_btn.setEnabled(False)
-        self.refresh_btn.clicked.connect(self.refresh_designer)
 
-        elemOptions_hbox = QW.QHBoxLayout()
-        elemOptions_hbox.addWidget(self.delElem_btn, alignment=Qt.AlignLeft)
-        elemOptions_hbox.addWidget(self.refresh_btn, alignment=Qt.AlignRight)
+    # Dataset designer (DatasetDesigner)
+        self.designer = CW.DatasetDesigner()
+        self.designer.setMinimumHeight(500)
 
-    # Dataset designer 1 (X features) & Dataset designer 2 (Y ground truth labels)
-        self.xfeat_designer = self.XDatasetDesigner(self)
-        self.ylab_designer = self.YDatasetDesigner(self)
-        table_hsplit = CW.SplitterGroup((self.xfeat_designer, self.ylab_designer),
-                                        (6, 1))
+    # Designer progressbar (ProgressBar)
+        self.designer_pbar = QW.QProgressBar()
 
-    # Dataset Designer option buttons (--> in HBoxLayout)
-        self.addRow_btn = CW.StyledButton(QIcon('Icons/add_tableRow.png'),
-                                            'Add row')
-        self.addRow_btn.setEnabled(False)
-        self.addRow_btn.clicked.connect(self.add_row)
+    # Designer toolbar (StyledToolbar)
+        self.designer_tbar = CW.StyledToolbar('Designer toolbar')
+        self.designer_tbar.setEnabled(False)
 
-        self.delRow_btn = CW.StyledButton(QIcon('Icons/del_tableRow.png'),
-                                            'Remove row')
-        self.delRow_btn.setEnabled(False)
-        self.delRow_btn.clicked.connect(self.del_row)
+    # Expand designer's rows (Action) [-> Designer Toolbar]
+        self.expand_action = self.designer_tbar.addAction(
+            QIcon(r'Icons/expand_rows.png'), 'Expand rows')
 
-        self.compile_btn = CW.StyledButton(QIcon('Icons/compile_dataset.png'),
-                                             'Compile Dataset')
-        self.compile_btn.setEnabled(False)
-        self.compile_btn.clicked.connect(self.compile_dataset)
+    # Reduce designer's rows (Action) [-> Designer Toolbar]
+        self.reduce_action = self.designer_tbar.addAction(
+            QIcon(r'Icons/reduce_rows.png'), 'Reduce rows')
+        
+    # Remove selected rows (Action) [-> Designer Toolbar]
+        self.delrows_action = self.designer_tbar.addAction(
+            QIcon(r'Icons/remove.png'), 'Remove selected rows')
+        
+    # Compile dataset (WidgetAction) [-> Designer Toolbar]
+        self.compile_btn = CW.StyledButton(QIcon(r'Icons/compile_dataset.png'),
+                                           'COMPILE')
+        self.designer_tbar.addSeparator()
+        self.designer_tbar.addWidget(self.compile_btn)
 
-        table_btns = QW.QHBoxLayout()
-        table_btns.setAlignment(Qt.AlignRight)
-        table_btns.addWidget(self.addRow_btn)
-        table_btns.addWidget(self.delRow_btn)
-        table_btns.addWidget(self.compile_btn)
+    # Class refinement list (StyledListWidget)
+        self.refine_list = CW.StyledListWidget()
+        self.refine_list.setSortingEnabled(True)
 
-    # Class Refinement List (Styled List Widget)
-        self.refineList = CW.StyledListWidget()
+    # Rename selected class (StyledButton)
+        self.rename_class_btn = CW.StyledButton(QIcon(r'Icons/rename.png'))
+        self.rename_class_btn.setToolTip('Rename')
+        
+    # Delete selected class (StyledButton)
+        self.delete_class_btn = CW.StyledButton(QIcon(r'Icons/remove.png'))
+        self.delete_class_btn.setToolTip('Delete')
 
-    # Class Refinement Option buttons (--> in VBoxLayout)
-        self.renameClass_btn = CW.StyledButton(text='Rename class')
-        self.renameClass_btn.clicked.connect(self.rename_class)
+    # Merge selected classes (StyledButton)
+        self.merge_class_btn = CW.StyledButton(QIcon(r'Icons/collage.png'))
+        self.merge_class_btn.setToolTip('Merge')
+        
+    # Dataset preview area (DocumentBrowser)
+        self.preview = CW.DocumentBrowser(read_only=True)
+        self.preview.setMinimumHeight(300)
 
-        self.deleteClass_btn = CW.StyledButton(text='Delete class')
-        self.deleteClass_btn.clicked.connect(self.delete_class)
-
-        self.mergeClass_btn = CW.StyledButton(text='Merge classes')
-        self.mergeClass_btn.clicked.connect(self.merge_class)
-
-        refine_btns = QW.QVBoxLayout()
-        refine_btns.addWidget(self.renameClass_btn)
-        refine_btns.addWidget(self.deleteClass_btn)
-        refine_btns.addWidget(self.mergeClass_btn)
-
-    # Dataset preview Area (Text Edit)
-        self.previewArea = QW.QTextEdit('')
-        self.previewArea.setReadOnly(True)
-        self.previewArea.setHorizontalScrollBar(
-            CW.StyledScrollBar(Qt.Horizontal))
-        self.previewArea.setVerticalScrollBar(
-            CW.StyledScrollBar(Qt.Vertical))
-
-    # CSV decimal point selector (Combo Box)
+    # CSV decimal point selector (DecimalPointSelector)
         self.decimal_combox = CW.DecimalPointSelector()
 
-    # CSV separator character selector (Combo Box)
+    # CSV separator character selector (SeparatorSymbolSelector)
         self.separator_combox = CW.SeparatorSymbolSelector()
 
-    # Split large dataset option (Checkbox)
-        self.splitFile_cbox = QW.QCheckBox('Split dataset')
-        self.splitFile_cbox.setChecked(False)
+    # Split large dataset (CheckBox)
+        self.split_cbox = QW.QCheckBox('Split dataset')
         tip = 'Split dataset into multiple CSV files if the number of lines '\
               'exceeds Microsoft Excel rows limit (about 1 million)'
-        self.splitFile_cbox.setToolTip(tip)
+        self.split_cbox.setToolTip(tip)
+        self.split_cbox.setChecked(False)
 
-    # Save dataset button
-        self.saveCSV_btn = CW.StyledButton(QIcon('Icons/save.png'),
-                                             'Save dataset')
-        self.saveCSV_btn.clicked.connect(self.save_dataset)
-        self.saveCSV_btn.setEnabled(False)
+    # Save dataset (StyledButton)
+        self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
 
-    # Adjust main layout
-    # Input features group
-        infeat_vbox = QW.QVBoxLayout()
-        infeat_vbox.addWidget(self.customEntry_lbl)
-        infeat_vbox.addWidget(self.featureList)
-        infeat_vbox.addLayout(elemOptions_hbox)
-        infeat_vsplit = CW.SplitterGroup((elem_scroll, infeat_vbox), (0, 1),
-                                           orient=Qt.Vertical)
+    # Adjust layout
+        # Input features group (GroupArea)
+        infeat_grid = QW.QGridLayout()
+        infeat_grid.addWidget(self.custom_entry, 0, 0, 1, -1)
+        infeat_grid.addWidget(self.feature_list, 1, 0, 1, -1)
+        infeat_grid.addWidget(self.delfeat_btn, 2, 0, 1, 1)
+        infeat_grid.addWidget(self.refresh_btn, 2, 1, 1, 1)
+        
+        infeat_vsplit = CW.SplitterLayout(Qt.Vertical)
+        infeat_vsplit.addWidget(elem_scroll, 0)
+        infeat_vsplit.addLayout(infeat_grid, 1)
         infeat_group = CW.GroupArea(infeat_vsplit, 'Input features')
-    # Dataset designer group
-        designer_vbox = QW.QVBoxLayout()
-        designer_vbox.addWidget(table_hsplit)
-        designer_vbox.addLayout(table_btns)
-        designer_group = CW.GroupArea(designer_vbox, 'Dataset Designer')
-    # Dataset refinement group
-        refine_hbox = QW.QHBoxLayout()
-        refine_hbox.addWidget(self.refineList)
-        refine_hbox.addLayout(refine_btns)
-        refine_group = CW.GroupArea(refine_hbox, 'Dataset Refinement')
-    # Dataset preview group
-        preview_hbox = QW.QHBoxLayout()
-        preview_hbox.addWidget(self.previewArea)
-        preview_group = CW.GroupArea(preview_hbox, 'Dataset Info')
-    # CSV file preferences group
-        csvPref_vbox = QW.QVBoxLayout()
-        csvPref_vbox.addWidget(QW.QLabel('CSV decimal point'))
-        csvPref_vbox.addWidget(self.decimal_combox)
-        csvPref_vbox.addWidget(QW.QLabel('CSV separator'))
-        csvPref_vbox.addWidget(self.separator_combox)
-        csvPref_vbox.addWidget(self.splitFile_cbox)
-        csvPref_vbox.addWidget(self.saveCSV_btn)
-        csvPref_group = CW.GroupArea(csvPref_vbox, 'File preferences')
-    # Set main layout
-        top_hsplit = CW.SplitterGroup((infeat_group, designer_group), (1, 2))
-        bot_hsplit = CW.SplitterGroup((refine_group, preview_group,
-                                         csvPref_group), (2, 2, 1))
-        main_layout = CW.SplitterLayout(Qt.Vertical)
-        main_layout.addWidgets((top_hsplit, bot_hsplit), (2, 1))
+
+        # Output preferences group (GroupArea)
+        outpref_form = QW.QFormLayout()
+        outpref_form.setVerticalSpacing(10)
+        outpref_form.addRow('CSV decimal point', self.decimal_combox)
+        outpref_form.addRow('CSV separator', self.separator_combox)
+        outpref_form.addRow(self.split_cbox)
+        outpref_form.addRow(self.save_btn)
+        outpref_group = CW.GroupArea(outpref_form, 'Output preferences')
+
+        # Dataset designer group (GroupArea)
+        designer_grid = QW.QGridLayout()
+        designer_grid.setHorizontalSpacing(15)
+        designer_grid.addWidget(self.designer, 0, 0, 1, -1)
+        designer_grid.addWidget(self.designer_tbar, 1, 0)
+        designer_grid.addWidget(self.designer_pbar, 1, 1)
+        designer_group = CW.GroupArea(designer_grid, 'Dataset Designer')
+   
+        # Dataset refinement group (GroupArea)
+        refine_grid = QW.QGridLayout()
+        refine_grid.setColumnStretch(4, 1)
+        refine_grid.setColumnMinimumWidth(3, 15)
+        refine_grid.addWidget(self.refine_list, 0, 0, 1, 3)
+        refine_grid.addWidget(self.preview, 0, 4, -1, 1)
+        refine_grid.addWidget(self.rename_class_btn, 1, 0, 1, 1)
+        refine_grid.addWidget(self.delete_class_btn, 1, 1, 1, 1)
+        refine_grid.addWidget(self.merge_class_btn, 1, 2, 1, 1)
+        refine_group = CW.GroupArea(refine_grid, 'Dataset Refinement')
+
+        # Set main layout
+        left_vbox = QW.QVBoxLayout()
+        left_vbox.setSpacing(20)
+        left_vbox.addWidget(infeat_group)
+        left_vbox.addWidget(outpref_group)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=False, tight=True)
+
+        right_vbox = QW.QVBoxLayout()
+        right_vbox.setSpacing(20)
+        right_vbox.addWidget(designer_group)
+        right_vbox.addWidget(refine_group)
+        right_scroll = CW.GroupScrollArea(right_vbox, frame=False, tight=True)
+
+        main_layout = CW.SplitterLayout()
+        main_layout.addWidgets((left_scroll, right_scroll), (0, -1))
         self.setLayout(main_layout)
 
 
-    def add_inputFeature(self):
+    def _connect_slots(self):
         '''
-        Add a new input feature.
+        Signals-slots connector.
 
         '''
-        elem = self.sender().text()
-        if elem != '':
-            self._features.add(elem)
-            self._update_featureList()
+    # Connection of each element button
+        for btn in self.elements_btns:
+            btn.toggled.connect(self.onElementButtonToggled)
+            
+    # Input features signals
+        self.custom_entry.returnPressed.connect(self.addCustomFeature)
+        self.delfeat_btn.clicked.connect(self.removeSelectedFeatures)
+        self.refresh_btn.clicked.connect(self.refreshDesigner)
+
+    # Dataset Designer signals
+        self.expand_action.triggered.connect(self.designer.addRow)
+        self.reduce_action.triggered.connect(self.designer.delLastRow)
+        self.delrows_action.triggered.connect(self.removeSelectedRows)
+        self.compile_btn.clicked.connect(self.compileDataset)
+        
+    # Dataset refinement signals
+        self.rename_class_btn.clicked.connect(self.renameClass)
+        self.delete_class_btn.clicked.connect(self.deleteClass)
+        self.merge_class_btn.clicked.connect(self.mergeClass)
+
+    # Output dataset signals
+        self.save_btn.clicked.connect(self.saveDataset)
 
 
-    def del_inputFeature(self):
+    def onElementButtonToggled(self, toggled: bool):
         '''
-        Remove selected input features.
+        Actions to be performed when an element button is toggled on/off.
+
+        Parameters
+        ----------
+        toggled : bool
+            Toggle state of the button.
 
         '''
-        selected = self.featureList.selectedItems()
+        element = self.sender().text()
+
+    # Add element to input features list if button is toggled on
+        if toggled:
+            self.feature_list.addItem(element)
+
+    # Remove element from input features list if button is toggled off
+        else:
+            item = self.feature_list.findItems(element, Qt.MatchExactly)[0]
+            row = self.feature_list.row(item)
+            self.feature_list.takeItem(row)
+
+
+    def addCustomFeature(self):
+        '''
+        Add a new user-typed feature to input features list.
+
+        '''
+    # Do nothing if custom feature name is empty
+        name = self.custom_entry.text()
+        if name == '':
+            return
+        
+    # Do nothing if name is already present in the features list
+        if len(self.feature_list.findItems(name, Qt.MatchExactly)):
+            return
+
+    # If name is a valid chemical element, toggle on the linked button.
+    # Otherwise, just add a new item.
+        if name in self.elements:
+            self.elements_btns[self.elements.index(name)].setChecked(True)
+        else:
+            self.feature_list.addItem(name)
+
+
+    def removeSelectedFeatures(self):
+        '''
+        Remove selected features from the input features list.
+
+        '''
+    # Do nothing if no feature is selected
+        selected = self.feature_list.selectedItems()
+        if not len(selected):
+            return
+    
+    # If feature name is a valid chemical element, toggle off the linked button
         for item in selected:
-            self._features.remove(item.text())
-        self._update_featureList()
+            if (name := item.text()) in self.elements:
+                self.elements_btns[self.elements.index(name)].setChecked(False)
+
+    # Remove features
+        self.feature_list.removeSelected()
 
 
-    def _update_featureList(self):
-        '''
-        Update the list of input features.
-
-        '''
-        self.featureList.clear()
-        self.featureList.addItems(sorted(self._features))
-        self.refresh_btn.setEnabled(len(self._features) > 0)
-
-
-    def refresh_designer(self):
+    def refreshDesigner(self):
         '''
         Confirm the selected input features and populate the Dataset Designer.
 
         '''
-        quest_text = 'Refresh Dataset Designer? Loaded maps will be removed.'
-        choice = CW.MsgBox(self, 'Quest', quest_text)
+    # Deny refreshing if no input feature has been added
+        if not self.feature_list.count():
+            return CW.MsgBox(self, 'Crit', 'Feature list cannot be empty.')
+        
+        text = 'Refresh Dataset Designer? Any progress will be lost.'
+        choice = CW.MsgBox(self, 'QuestWarn', text)
         if choice.yes():
-            cols = sorted(self._features)
-            self.xfeat_designer.refresh(cols)
-            self.ylab_designer.refresh()
-            self.addRow_btn.setEnabled(True)
-            self.delRow_btn.setEnabled(True)
-            self.compile_btn.setEnabled(True)
+            features = [item.text() for item in self.feature_list.getItems()]
+            self.designer.refresh(features)
+            self.designer_tbar.setEnabled(True)
 
 
-    def add_row(self):
+    def removeSelectedRows(self):
         '''
-        Add one row to the Dataset Designer.
-
+        Remove selected rows from the Dataset Designer.
+        
         '''
-        self.xfeat_designer.addRow()
-        self.ylab_designer.addRow()
+        selected_rows = {idx.row() for idx in self.designer.selectedIndexes()}
+        for row in sorted(selected_rows, reverse=True):
+            self.designer.delRow(row)
 
 
-    def del_row(self):
+    def compileDataset(self):
         '''
-        Remove last row from the Dataset Designer.
-
-        '''
-        self.xfeat_designer.delRow()
-        self.ylab_designer.delRow()
-
-
-    def compile_dataset(self):
-        '''
-        Extract the data from the loaded samples and compile the Ground Truth
-        Dataset.
+        Extract data from the loaded samples and compile a new ground truth
+        dataset.
 
         '''
-        checked_samples = []
-        nrows = self.xfeat_designer.rowCount()
-        pbar = CW.PopUpProgBar(self, nrows, 'Compiling dataset', cancel=False)
+        dataset = None
+        nrows = self.designer.rowCount()
+        nfeat = self.designer.columnCount() - 3 # -fillrow, -separator, -minmap
 
-    # Check 0 --> no samples (0 rows)
+    # Deny compiling dataset if the Dataset Designer is empty
         if nrows == 0:
-            pbar.reset()
-            return CW.MsgBox(self, 'Crit', 'The Dataset Designer is empty.')
+            return CW.MsgBox(self, 'Crit', 'Dataset Designer is empty.')
 
-        for row in range(nrows):
-            xfeat = self.xfeat_designer.getRowData(row)
-            ylab = self.ylab_designer.getRowData(row)
-            sample = xfeat + ylab
+        self.designer_pbar.setRange(0, nrows)
+        for row in range(nrows): # iterate through each row (= sample)
+            inmaps, minmap = self.designer.getRowData(row)
+        
+        # Deny compiling dataset if maps are missing or invalid
+            if len(inmaps) < nfeat or minmap is None:
+                self.designer_pbar.reset()
+                return CW.MsgBox(self, 'Crit', f'Invalid maps in row {row+1}.')
+            
+        # Deny compiling dataset if maps have different shapes in same sample
+            shapes = [map_.shape for map_ in inmaps + [minmap]]
+            if len(set(shapes)) > 1:
+                common_shape = cf.most_frequent(inmaps + [minmap])
+                unfitting = [shp != common_shape for shp in shapes]
+                # Set warning status to unfitting maps in linked cell widgets
+                for n, unfit in enumerate(unfitting, start=1):
+                    if unfit:
+                        # +1 skips fill-row column, +2 skips separator too
+                        col = n + 2 if n == len(unfitting) else n + 1
+                        self.designer.cellWidget(row, col).setStatus('Warning')
+                # Send informative error message
+                self.designer_pbar.reset()
+                txt = f'A total of {unfitting.count(True)} map(s) do not fit '\
+                      f'the shape of sample in row {row + 1}.\nTip: They are '\
+                       'indicated with a yellow line.'
+                return CW.MsgBox(self, 'Crit', txt)
+        
+        # Construct a new GroundTruthDataset ('gtd')
+            instack = InputMapStack(inmaps)
+            columns = self.designer.columns[1:-2] + ['Class']
+            gtd = dtools.GroundTruthDataset.from_maps(instack, minmap, columns)
+        
+        # Merge gtd with global dataset
+            if dataset is None:
+                dataset = gtd
+            else:
+                dataset.merge(gtd)
 
-        # Check 1 --> missing maps
-            if min(map(len, sample)) == 0:
-                pbar.reset()
-                return CW.MsgBox(self, 'Crit', f'Missing maps in row {row+1}.')
+            self.designer_pbar.setValue(row + 1)
+        
+    # Remove all rows of data with the protected '_ND_' class
+        dataset.remove_where(-1, ('_ND_', ))
 
-        # Check 2 --> wrong maps shape within same sample
-            warnings = 0
-            shapes = [s.shape for s in sample]
-            shp_mode = math_mode(shapes)
-            unfitting = [s != shp_mode for s in shapes]
-            for col, u in enumerate(unfitting, start=1):
-                warnings += u #boolean as 0 or 1
-                if col == len(unfitting): # last column is always the Y column
-                    self.ylab_designer.cellWidget(row, 0).setWarning(u)
-                else:
-                    self.xfeat_designer.cellWidget(row, col).setWarning(u)
+    # Conclude dataset compilation operations
+        self.dataset = dataset
+        self.updateUniqueClasses()
+        self.updatePreview()
+        self.designer_pbar.reset()
+        CW.MsgBox(self, 'Info', 'Dataset successfully compiled.')
 
-            if warnings > 0:
-                pbar.reset()
-                warn_text = f'{warnings} maps do not fit the shape of the '\
-                            f'sample in row {row+1}.\nTip: They are indicated '\
-                             'with a yellow line.'
-                return CW.MsgBox(self, 'Warn', warn_text)
-
-        # All checks completed --> add the sample to 'checked_samples'
-            checked_samples.append(sample)
-
-    # Prepare the dataset for compilation
-        headers = self.xfeat_designer.col_lbls[1:] + ['Class']
-        self.dataset = DataFrame(columns = headers)
-
-    # For each sample link to every column (key) a flattened 1D array (value)
-    # and then merge all samples into a singular dataset (concat)
-        for n, sam in enumerate(checked_samples, start=1):
-            sample_dict = dict(zip(headers, [arr.flatten() for arr in sam]))
-            self.dataset = concat([self.dataset, DataFrame(sample_dict)],
-                                   ignore_index=True)
-            # self.dataset = self.dataset.append(DataFrame(sample_dict), ignore_index=True)
-            pbar.setValue(n)
-
-        self._update_unique_classes()
-        self.saveCSV_btn.setEnabled(True)
-        CW.MsgBox(self, 'Info', 'Dataset compiled successfully.')
-
-
-    def _update_unique_classes(self):
+ 
+    def updateUniqueClasses(self):
         '''
-        Update the list of unique classes found in the dataset.
-
-        '''
-        unq = self.dataset.Class.unique()
-        self.refineList.clear()
-        self.refineList.addItems(sorted(unq))
-        self._update_dataset_preview()
-
-
-    def _update_dataset_preview(self):
-        '''
-        Update the Dataset Preview.
+        Update the list of unique dataset classes in the dataset refiner list.
 
         '''
-        preview = repr(self.dataset)
-        class_count = repr(self.dataset.Class.value_counts())
-        text = f'DATAFRAME PREVIEW\n\n{preview}\n\n\n'\
-               f'PER-CLASS DATA COUNT\n\n{class_count}'
-        self.previewArea.setText(text)
+        self.refine_list.clear()
+        self.refine_list.addItems(self.dataset.column_unique(-1))
 
 
-    def isClassNameAvailable(self, name: str):
+    def updatePreview(self):
         '''
-        Check if a class name is available or if it is already present in the
-        dataset. If not available, user can still choose to overwrite it.
-
-        Parameters
-        ----------
-        name : str
-            The class name.
-
-        Returns
-        -------
-        available : bool
-            Whether or not the class name is available.
+        Update the dataset preview.
 
         '''
-        available = name not in self.dataset.Class.values
-        if not available:
-            quest_text = f'{name} already exists in the dataset. Overwrite it?'
-            choice = CW.MsgBox(self, 'Quest', quest_text)
-            available = choice.yes()
-        return available
+        prev = repr(self.dataset.dataframe)
+        class_count = self.dataset.column_count(-1)
+        cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
+        txt = f'DATAFRAME PREVIEW\n\n{prev}\n\n\nPER-CLASS DATA COUNT\n\n{cnt}'
+        self.preview.setText(txt)
 
 
-    def rename_class(self):
+    def renameClass(self):
         '''
         Rename a class in the dataset.
 
-        Returns
-        -------
-        None.
-
         '''
-        selected = self.refineList.selectedItems()
-    # Just exit function if no classes are selected
+    # Do nothing if no classes are selected
+        selected = self.refine_list.selectedItems()
         if len(selected) == 0:
             return
         
-    # Only one class can be renamed at a time (send warning)
+    # Deny renaming if more than one class is selected
         elif len(selected) > 1:
             return CW.MsgBox(self, 'Warn', 'Rename one class at a time.')
+    
+    # Do nothing if the dialog is canceled or the class is not renamed
+        old_name = selected[0].text()
+        name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
+                                           'Rename class (max. 8 ASCII '\
+                                           'characters):', text=f'{old_name}')
+        if not ok or name == old_name:
+            return
         
-    # Length of 'selected' is one, so 'item' is the first element in the list
-        else:
-            item = selected[0]
-            new_name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
-                                                  f'Rename {item.text()}:',
-                                                  flags=Qt.MSWindowsFixedSizeDialogHint)
-            if ok and self.isClassNameAvailable(new_name):
-                pbar = CW.PopUpProgBar(self, 1, cancel=False)
-                pbar.setValue(0)
-                self.dataset.replace(item.text(), new_name, inplace=True)
-                self._update_unique_classes()
-                pbar.setValue(1)
+    # Deny renaming to protected '_ND_' class
+        if name == '_ND_':
+            return CW.MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+        
+    # Deny renaming if the name already exists
+        if name in self.dataset.column_unique(-1):
+            return CW.MsgBox(self, 'Crit', f'{name} is already taken.')
+
+    # Deny renaming if the new name is not an ASCII <= 8 characters string
+        if not 0 < len(name) <= 8 or not name.isascii():
+            return CW.MsgBox(self, 'Crit', 'Invalid name.')
+
+    # If we are here, the name is valid. Conclude renaming operations
+        pbar = CW.PopUpProgBar(self, 2, 'Editing dataset', cancel=False)
+        pbar.setValue(0)
+        self.dataset.rename_target(old_name, name)
+        pbar.setValue(1)
+        self.updateUniqueClasses()
+        self.updatePreview()
+        pbar.setValue(2)
 
 
-    def delete_class(self):
+    def deleteClass(self):
         '''
-        Remove data with the selected classes from the dataset.
+        Remove rows of data with the selected classes from the dataset.
 
         '''
     # Do nothing if no data is selected
-        selected = self.refineList.selectedItems()
+        selected = self.refine_list.selectedItems()
         if not len(selected):
             return
 
         choice = CW.MsgBox(self, 'Quest', 'Remove selected classes?')
         if choice.yes():
             targets = [item.text() for item in selected]
-            pbar = CW.PopUpProgBar(self, 1, cancel=False)
+            pbar = CW.PopUpProgBar(self, 2, 'Editing dataset', cancel=False)
             pbar.setValue(0)
-            self.dataset = self.dataset[~self.dataset.Class.isin(targets)]
-            self.dataset.reset_index(drop=True, inplace=True)
-            self._update_unique_classes()
+            self.dataset.remove_where(-1, targets)
             pbar.setValue(1)
+            self.updateUniqueClasses()
+            self.updatePreview()
+            pbar.setValue(2)
 
 
-    def merge_class(self):
+    def mergeClass(self):
         '''
         Unify two or more classes in the dataset under a new name.
 
         '''
-        selected = self.refineList.selectedItems()
-    # Just exit function if no classes are selected
+    # Do nothing if no classes are selected
+        selected = self.refine_list.selectedItems()
         if len(selected) == 0:
             return
         
-    # At least two classes must be selected (send warning)
-        elif len(selected) == 1:
+    # Deny merging if less than two classes are selected
+        if len(selected) < 2:
             return CW.MsgBox(self, 'Warn', 'Select at least two classes.')
         
-        else:
-            targets = [item.text() for item in selected]
-            name, ok = QW.QInputDialog.getText(self, 'Merge classes',
-                                                  f'Merge {targets} and '\
-                                                  'rename them as:',
-                                                  flags=Qt.MSWindowsFixedSizeDialogHint)
-            if ok and self.isClassNameAvailable(name):
-                pbar = CW.PopUpProgBar(self, 1, cancel=False)
-                pbar.setValue(0)
-                self.dataset.replace(targets, [name]*len(targets), inplace=True)
-                self._update_unique_classes()
-                pbar.setValue(1)
+    # Do nothing if the dialog is canceled
+        targets = [item.text() for item in selected]
+        text = f'Merge {targets} in a new class (max. 8 ASCII characters):'
+        name, ok = QW.QInputDialog.getText(self, 'X-Min Learn', text)
+        if not ok:
+            return
+        
+    # Deny renaming to protected '_ND_' class
+        if name == '_ND_':
+            return CW.MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+    
+    # Deny renaming if the name already exists (excluding selected classes)
+        if name not in targets and name in self.dataset.column_unique(-1):
+            return CW.MsgBox(self, 'Crit', f'{name} is already taken.')
+
+    # Deny renaming if the new name is not an ASCII <= 8 characters string
+        if not 0 < len(name) <= 8 and not name.isascii():
+            return CW.MsgBox(self, 'Crit', 'Invalid name.')
+    
+    # If we are here, the name is valid. Conclude merging operations
+        pbar = CW.PopUpProgBar(self, 2, 'Editing dataset', cancel=False)
+        pbar.setValue(0)
+        self.dataset.merge_targets(targets, name)
+        pbar.setValue(1)
+        self.updateUniqueClasses()
+        self.updatePreview()
+        pbar.setValue(2)
 
 
-    def save_dataset(self):
+    def saveDataset(self):
         '''
         Save the ground truth dataset as one or multiple CSV file(s).
 
         '''
+    # Deny saving dataset if no dataset is compiled
+        if self.dataset is None:
+            return CW.MsgBox(self, 'Crit', 'No dataset compiled.')
+        
     # Do nothing if outpath is invalid or file dialog is canceled
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save new dataset',
-                                                    pref.get_dir('out'),
-                                                    'CSV file (*.csv)')
-        if not outpath:
+        path, _ = QW.QFileDialog.getSaveFileName(self, 'Save dataset',
+                                                 pref.get_dir('out'),
+                                                 'CSV file (*.csv)')
+        if not path:
             return
         
-        pref.set_dir('out', os.path.dirname(outpath))
+        pref.set_dir('out', os.path.dirname(path))
 
+        pbar = CW.PulsePopUpProgBar(self, 'Saving dataset')
+        pbar.startPulse()
         dec = self.decimal_combox.currentText()
         sep = self.separator_combox.currentText()
-
-    # Set the number of output csv files (subsets) if requested
-        nfiles = 1
-        if self.splitFile_cbox.isChecked():
-            batch_size = 2**20 # Excel maximum number of rows
-            nfiles += len(self.dataset) // batch_size
-
-    # Disable the save button during saving operations, then re-enable it
-        self.sender().setEnabled(False)
-        subsets = np.array_split(self.dataset, nfiles)
-        pbar = CW.PopUpProgBar(self, len(subsets), 'Saving dataset',
-                               cancel=False)
-
-        for idx, ss in enumerate(subsets, start=1):
-            if (nfiles - 1): # if there is more than one file to save
-                path = cf.extend_filename(outpath, str(idx)) 
-            else:
-                path = outpath
-
-            ss.to_csv(path, sep=sep, index=False, decimal=dec)
-            pbar.setValue(idx)
-
-        self.sender().setEnabled(True)
-
-        CW.MsgBox(self, 'Info', 'Dataset saved succesfully.')
+        self.dataset.save(path, sep, dec, split=self.split_cbox.isChecked())
+        pbar.stopPulse()
+        CW.MsgBox(self, 'Info', 'Dataset succesfully saved.')
 
 
-    class XDatasetDesigner(CW.StyledTable):
-        '''
-        Table widget for the Dataset Builder tool. It allows the user to import
-        input maps data for the automatic compilation of ground truth datasets.
-        '''
 
-        def __init__(self, parent=None):
-            '''
-            Constructor.
+# class DatasetBuilderOLD(DraggableTool):
+#     '''
+#     One of the main tools of X-Min Learn, that allows the semi-automated
+#     compilation of human-readable and machine-friendly ground truth datasets.
+#     '''
+#     def __init__(self):
+#         '''
+#         Constructor.
 
-            Parameters
-            ----------
-            parent : QWidget or None, optional
-                The GUI parent of this widget. The default is None.
+#         Parameters
 
-            '''
-        # Call the constructor of the parent class
-            self.parent = parent
-            super().__init__(1, 1, parent=self.parent)
+#         '''
+#         super(DatasetBuilderOLD, self).__init__()
+#     # Set tool title and icon
+#         self.setWindowTitle('Dataset Builder')
+#         self.setWindowIcon(QIcon('Icons/compile_dataset.png'))
+#     # Set main attributes
+#         self._features = set([])
+#         self.dataset = None
+#     # Set GUI
+#         self._init_ui()
+#         self.adjustSize()
 
-        # Initialize the horizontal header
-            self.horizontalHeader().setSectionResizeMode(1) # Stretch
-            self.col_lbls = ['Input Maps']
-            self.setHorizontalHeaderLabels(self.col_lbls)
+#     def _init_ui(self):
+#         '''
+#         GUI constructor.
+
+#         '''
+#     # Input grid of chemical elements (Grid Layout --> Group scroll area)
+#         elements = ['A', 'Ac', 'Ag', 'Al', 'As', 'At', 'Au', 'B',
+#                     'Ba', 'Be', 'Bi', 'Br', 'C', 'Ca', 'Cd', 'Ce',
+#                     'Cl', 'Co', 'Cr', 'Cs', 'Cu', 'Dy', 'Er', 'Eu',
+#                     'F', 'Fe', 'Fr', 'Ga', 'Gd', 'Ge', 'H', 'He',
+#                     'Hf', 'Hg', 'Ho', 'I', 'In', 'Ir', 'K', 'Kr',
+#                     'La', 'Li', 'Lu', 'Mg', 'Mn', 'Mo', 'N', 'Na',
+#                     'Nb', 'Nd', 'Ne', 'Ni', 'O', 'Os', 'P', 'Pa',
+#                     'Pb', 'Pd', 'Pm', 'Po', 'Pr', 'Pt', 'Ra', 'Rb',
+#                     'Re', 'Rh', 'Rn', 'Ru', 'S', 'Sb', 'Sc', 'Se',
+#                     'Si', 'Sm', 'Sn', 'Sr', 'Ta', 'Tb', 'Tc', 'Te',
+#                     'Th', 'Ti', 'Ti', 'Tm', 'U', 'V', 'W', 'Xe',
+#                     'Y', 'Yb', 'Zn', 'Zr']
+
+#         elem_grid = QW.QGridLayout()
+#         n_cols = 8
+#         for x in range(len(elements)):
+#             elem_btn = CW.StyledButton(text=elements[x])
+#             elem_btn.clicked.connect(self.add_inputFeature)
+#             row, col = x//n_cols, x%n_cols
+#             elem_grid.addWidget(elem_btn, row, col)
+#         # Set fixed column width for equal button size
+#         # fixed_column_width = 50
+#         # # for col in range(n_cols):
+#         # #     elem_grid.setColumnMinimumWidth(col, fixed_column_width)
+#         elem_scroll = CW.GroupScrollArea(elem_grid)
+
+#     # Custom feature entry (Line Edit)
+#         self.customEntry_lbl = QW.QLineEdit()
+#         self.customEntry_lbl.setStyleSheet(style.SS_MENU)
+#         self.customEntry_lbl.setPlaceholderText('Custom feature name')
+#         self.customEntry_lbl.returnPressed.connect(self.add_inputFeature)
+
+#     # Selected elements list (Styled List Widget)
+#         self.featureList = CW.StyledListWidget()
+
+#     # Elements list option buttons (--> in HBoxLayout)
+#         self.delElem_btn = CW.StyledButton(QIcon('Icons/generic_del.png'))
+#         self.delElem_btn.setToolTip('Remove selected elements')
+#         self.delElem_btn.clicked.connect(self.del_inputFeature)
+
+#         self.refresh_btn = CW.StyledButton(QIcon('Icons/forward.png'))
+#         self.refresh_btn.setToolTip('Refresh Dataset Designer')
+#         self.refresh_btn.setEnabled(False)
+#         self.refresh_btn.clicked.connect(self.refresh_designer)
+
+#         elemOptions_hbox = QW.QHBoxLayout()
+#         elemOptions_hbox.addWidget(self.delElem_btn, alignment=Qt.AlignLeft)
+#         elemOptions_hbox.addWidget(self.refresh_btn, alignment=Qt.AlignRight)
+
+#     # Dataset designer 1 (X features) & Dataset designer 2 (Y ground truth labels)
+#         self.xfeat_designer = self.XDatasetDesigner(self)
+#         self.ylab_designer = self.YDatasetDesigner(self)
+#         table_hsplit = CW.SplitterGroup((self.xfeat_designer, self.ylab_designer),
+#                                         (6, 1))
+
+#     # Dataset Designer option buttons (--> in HBoxLayout)
+#         self.addRow_btn = CW.StyledButton(QIcon('Icons/add_tableRow.png'),
+#                                             'Add row')
+#         self.addRow_btn.setEnabled(False)
+#         self.addRow_btn.clicked.connect(self.add_row)
+
+#         self.delRow_btn = CW.StyledButton(QIcon('Icons/del_tableRow.png'),
+#                                             'Remove row')
+#         self.delRow_btn.setEnabled(False)
+#         self.delRow_btn.clicked.connect(self.del_row)
+
+#         self.compile_btn = CW.StyledButton(QIcon('Icons/compile_dataset.png'),
+#                                              'Compile Dataset')
+#         self.compile_btn.setEnabled(False)
+#         self.compile_btn.clicked.connect(self.compile_dataset)
+
+#         table_btns = QW.QHBoxLayout()
+#         table_btns.setAlignment(Qt.AlignRight)
+#         table_btns.addWidget(self.addRow_btn)
+#         table_btns.addWidget(self.delRow_btn)
+#         table_btns.addWidget(self.compile_btn)
+
+#     # Class Refinement List (Styled List Widget)
+#         self.refineList = CW.StyledListWidget()
+
+#     # Class Refinement Option buttons (--> in VBoxLayout)
+#         self.renameClass_btn = CW.StyledButton(text='Rename class')
+#         self.renameClass_btn.clicked.connect(self.rename_class)
+
+#         self.deleteClass_btn = CW.StyledButton(text='Delete class')
+#         self.deleteClass_btn.clicked.connect(self.delete_class)
+
+#         self.mergeClass_btn = CW.StyledButton(text='Merge classes')
+#         self.mergeClass_btn.clicked.connect(self.merge_class)
+
+#         refine_btns = QW.QVBoxLayout()
+#         refine_btns.addWidget(self.renameClass_btn)
+#         refine_btns.addWidget(self.deleteClass_btn)
+#         refine_btns.addWidget(self.mergeClass_btn)
+
+#     # Dataset preview Area (Text Edit)
+#         self.previewArea = QW.QTextEdit('')
+#         self.previewArea.setReadOnly(True)
+#         self.previewArea.setHorizontalScrollBar(
+#             CW.StyledScrollBar(Qt.Horizontal))
+#         self.previewArea.setVerticalScrollBar(
+#             CW.StyledScrollBar(Qt.Vertical))
+
+#     # CSV decimal point selector (Combo Box)
+#         self.decimal_combox = CW.DecimalPointSelector()
+
+#     # CSV separator character selector (Combo Box)
+#         self.separator_combox = CW.SeparatorSymbolSelector()
+
+#     # Split large dataset option (Checkbox)
+#         self.splitFile_cbox = QW.QCheckBox('Split dataset')
+#         self.splitFile_cbox.setChecked(False)
+#         tip = 'Split dataset into multiple CSV files if the number of lines '\
+#               'exceeds Microsoft Excel rows limit (about 1 million)'
+#         self.splitFile_cbox.setToolTip(tip)
+
+#     # Save dataset button
+#         self.saveCSV_btn = CW.StyledButton(QIcon('Icons/save.png'),
+#                                              'Save dataset')
+#         self.saveCSV_btn.clicked.connect(self.save_dataset)
+#         self.saveCSV_btn.setEnabled(False)
+
+#     # Adjust main layout
+#     # Input features group
+#         infeat_vbox = QW.QVBoxLayout()
+#         infeat_vbox.addWidget(self.customEntry_lbl)
+#         infeat_vbox.addWidget(self.featureList)
+#         infeat_vbox.addLayout(elemOptions_hbox)
+#         infeat_vsplit = CW.SplitterGroup((elem_scroll, infeat_vbox), (0, 1),
+#                                            orient=Qt.Vertical)
+#         infeat_group = CW.GroupArea(infeat_vsplit, 'Input features')
+#     # Dataset designer group
+#         designer_vbox = QW.QVBoxLayout()
+#         designer_vbox.addWidget(table_hsplit)
+#         designer_vbox.addLayout(table_btns)
+#         designer_group = CW.GroupArea(designer_vbox, 'Dataset Designer')
+#     # Dataset refinement group
+#         refine_hbox = QW.QHBoxLayout()
+#         refine_hbox.addWidget(self.refineList)
+#         refine_hbox.addLayout(refine_btns)
+#         refine_group = CW.GroupArea(refine_hbox, 'Dataset Refinement')
+#     # Dataset preview group
+#         preview_hbox = QW.QHBoxLayout()
+#         preview_hbox.addWidget(self.previewArea)
+#         preview_group = CW.GroupArea(preview_hbox, 'Dataset Info')
+#     # CSV file preferences group
+#         csvPref_vbox = QW.QVBoxLayout()
+#         csvPref_vbox.addWidget(QW.QLabel('CSV decimal point'))
+#         csvPref_vbox.addWidget(self.decimal_combox)
+#         csvPref_vbox.addWidget(QW.QLabel('CSV separator'))
+#         csvPref_vbox.addWidget(self.separator_combox)
+#         csvPref_vbox.addWidget(self.splitFile_cbox)
+#         csvPref_vbox.addWidget(self.saveCSV_btn)
+#         csvPref_group = CW.GroupArea(csvPref_vbox, 'File preferences')
+#     # Set main layout
+#         top_hsplit = CW.SplitterGroup((infeat_group, designer_group), (1, 2))
+#         bot_hsplit = CW.SplitterGroup((refine_group, preview_group,
+#                                          csvPref_group), (2, 2, 1))
+#         main_layout = CW.SplitterLayout(Qt.Vertical)
+#         main_layout.addWidgets((top_hsplit, bot_hsplit), (2, 1))
+#         self.setLayout(main_layout)
 
 
-        def init_firstCol(self, row):
-            '''
-            Initialize the first column of the table to include a special button
-            that allows user to import the entire row of data.
+#     def add_inputFeature(self):
+#         '''
+#         Add a new input feature.
 
-            Parameters
-            ----------
-            row : int
-                Index of row.
-
-            '''
-        # Set resize mode to ResizeToContent(3) only for first column(0)
-            self.horizontalHeader().setSectionResizeMode(0, 3)
-
-        # Special button to fill the entire row of data
-            fillRow_btn = CW.StyledButton(QIcon('Icons/generic_add_blue.png'))
-            fillRow_btn.setObjectName(str(row)) # to easily access the row
-            fillRow_btn.setToolTip('Fill entire row')
-            fillRow_btn.clicked.connect(self.smart_fillRow)
-            self.setCellWidget(row, 0, fillRow_btn)
+#         '''
+#         elem = self.sender().text()
+#         if elem != '':
+#             self._features.add(elem)
+#             self._update_featureList()
 
 
-        def init_rowWidgets(self, row):
-            '''
-            Initialize the widgets (see DatasetDesignerWidget class) held by each
-            cell in the given row.
+#     def del_inputFeature(self):
+#         '''
+#         Remove selected input features.
 
-            Parameters
-            ----------
-            row : int
-                Index of row.
-
-            '''
-        # Initialize the DatasetDesignerWidgets in every column except the 
-        # first, because it holds the special "fill row" button (for details  
-        # see init_firstCol function)
-            for col in range(1, self.columnCount()):
-                col_lbl = self.horizontalHeaderItem(col).text()
-                wid = self.parent.DatasetDesignerWidget('input', col_lbl, self)
-                self.setCellWidget(row, col, wid)
-
-        # Set resize mode of vertical header to ResizeToContent(3)
-            self.verticalHeader().setSectionResizeMode(row, 3)
+#         '''
+#         selected = self.featureList.selectedItems()
+#         for item in selected:
+#             self._features.remove(item.text())
+#         self._update_featureList()
 
 
-        def refresh(self, columns):
-            '''
-            Reset and re-initialize the table with new column names.
+#     def _update_featureList(self):
+#         '''
+#         Update the list of input features.
 
-            Parameters
-            ----------
-            columns : list
-                List of column names.
-
-            '''
-        # Clear all and set new column names
-            self.clear()
-            self.setColumnCount(len(columns) + 1)
-            self.col_lbls = [''] + columns
-            self.setHorizontalHeaderLabels(self.col_lbls)
-
-        # Initialize the table
-            for row in range(self.rowCount()):
-                self.init_firstCol(row)
-                self.init_rowWidgets(row)
+#         '''
+#         self.featureList.clear()
+#         self.featureList.addItems(sorted(self._features))
+#         self.refresh_btn.setEnabled(len(self._features) > 0)
 
 
-        def addRow(self):
-            '''
-            Add a row to the table.
+#     def refresh_designer(self):
+#         '''
+#         Confirm the selected input features and populate the Dataset Designer.
 
-            '''
-            row = self.rowCount()
-            self.insertRow(row)
-            self.init_firstCol(row)
-            self.init_rowWidgets(row)
-
-
-        def delRow(self):
-            '''
-            Remove last row from the table.
-
-            '''
-            row = self.rowCount() - 1
-            if row >= 0:
-                self.removeRow(row)
+#         '''
+#         quest_text = 'Refresh Dataset Designer? Loaded maps will be removed.'
+#         choice = CW.MsgBox(self, 'Quest', quest_text)
+#         if choice.yes():
+#             cols = sorted(self._features)
+#             self.xfeat_designer.refresh(cols)
+#             self.ylab_designer.refresh()
+#             self.addRow_btn.setEnabled(True)
+#             self.delRow_btn.setEnabled(True)
+#             self.compile_btn.setEnabled(True)
 
 
-        def smart_fillRow(self):
-            '''
-            Try to fill an entire row of the table by automatically importing 
-            and ordering multiple input maps based on their filename.
+#     def add_row(self):
+#         '''
+#         Add one row to the Dataset Designer.
 
-            '''
-        # Do nothing if path is invalid or file dialog is canceled
-            paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
-                                                       pref.get_dir('in'),
-                                                       'ASCII maps (*.txt *.gz)')
-            if not paths:
-                return
+#         '''
+#         self.xfeat_designer.addRow()
+#         self.ylab_designer.addRow()
+
+
+#     def del_row(self):
+#         '''
+#         Remove last row from the Dataset Designer.
+
+#         '''
+#         self.xfeat_designer.delRow()
+#         self.ylab_designer.delRow()
+
+
+#     def compile_dataset(self):
+#         '''
+#         Extract the data from the loaded samples and compile the Ground Truth
+#         Dataset.
+
+#         '''
+#         checked_samples = []
+#         nrows = self.xfeat_designer.rowCount()
+#         pbar = CW.PopUpProgBar(self, nrows, 'Compiling dataset', cancel=False)
+
+#     # Check 0 --> no samples (0 rows)
+#         if nrows == 0:
+#             pbar.reset()
+#             return CW.MsgBox(self, 'Crit', 'The Dataset Designer is empty.')
+
+#         for row in range(nrows):
+#             xfeat = self.xfeat_designer.getRowData(row)
+#             ylab = self.ylab_designer.getRowData(row)
+#             sample = xfeat + ylab
+
+#         # Check 1 --> missing maps
+#             if min(map(len, sample)) == 0:
+#                 pbar.reset()
+#                 return CW.MsgBox(self, 'Crit', f'Missing maps in row {row+1}.')
+
+#         # Check 2 --> wrong maps shape within same sample
+#             warnings = 0
+#             shapes = [s.shape for s in sample]
+#             shp_mode = math_mode(shapes)
+#             unfitting = [s != shp_mode for s in shapes]
+#             for col, u in enumerate(unfitting, start=1):
+#                 warnings += u #boolean as 0 or 1
+#                 if col == len(unfitting): # last column is always the Y column
+#                     self.ylab_designer.cellWidget(row, 0).setWarning(u)
+#                 else:
+#                     self.xfeat_designer.cellWidget(row, col).setWarning(u)
+
+#             if warnings > 0:
+#                 pbar.reset()
+#                 warn_text = f'{warnings} maps do not fit the shape of the '\
+#                             f'sample in row {row+1}.\nTip: They are indicated '\
+#                              'with a yellow line.'
+#                 return CW.MsgBox(self, 'Warn', warn_text)
+
+#         # All checks completed --> add the sample to 'checked_samples'
+#             checked_samples.append(sample)
+
+#     # Prepare the dataset for compilation
+#         headers = self.xfeat_designer.col_lbls[1:] + ['Class']
+#         self.dataset = DataFrame(columns = headers)
+
+#     # For each sample link to every column (key) a flattened 1D array (value)
+#     # and then merge all samples into a singular dataset (concat)
+#         for n, sam in enumerate(checked_samples, start=1):
+#             sample_dict = dict(zip(headers, [arr.flatten() for arr in sam]))
+#             self.dataset = concat([self.dataset, DataFrame(sample_dict)],
+#                                    ignore_index=True)
+#             # self.dataset = self.dataset.append(DataFrame(sample_dict), ignore_index=True)
+#             pbar.setValue(n)
+
+#         self._update_unique_classes()
+#         self.saveCSV_btn.setEnabled(True)
+#         CW.MsgBox(self, 'Info', 'Dataset compiled successfully.')
+
+
+#     def _update_unique_classes(self):
+#         '''
+#         Update the list of unique classes found in the dataset.
+
+#         '''
+#         unq = self.dataset.Class.unique()
+#         self.refineList.clear()
+#         self.refineList.addItems(sorted(unq))
+#         self._update_dataset_preview()
+
+
+#     def _update_dataset_preview(self):
+#         '''
+#         Update the Dataset Preview.
+
+#         '''
+#         preview = repr(self.dataset)
+#         class_count = repr(self.dataset.Class.value_counts())
+#         text = f'DATAFRAME PREVIEW\n\n{preview}\n\n\n'\
+#                f'PER-CLASS DATA COUNT\n\n{class_count}'
+#         self.previewArea.setText(text)
+
+
+#     def isClassNameAvailable(self, name: str):
+#         '''
+#         Check if a class name is available or if it is already present in the
+#         dataset. If not available, user can still choose to overwrite it.
+
+#         Parameters
+#         ----------
+#         name : str
+#             The class name.
+
+#         Returns
+#         -------
+#         available : bool
+#             Whether or not the class name is available.
+
+#         '''
+#         available = name not in self.dataset.Class.values
+#         if not available:
+#             quest_text = f'{name} already exists in the dataset. Overwrite it?'
+#             choice = CW.MsgBox(self, 'Quest', quest_text)
+#             available = choice.yes()
+#         return available
+
+
+#     def rename_class(self):
+#         '''
+#         Rename a class in the dataset.
+
+#         Returns
+#         -------
+#         None.
+
+#         '''
+#         selected = self.refineList.selectedItems()
+#     # Just exit function if no classes are selected
+#         if len(selected) == 0:
+#             return
+        
+#     # Only one class can be renamed at a time (send warning)
+#         elif len(selected) > 1:
+#             return CW.MsgBox(self, 'Warn', 'Rename one class at a time.')
+        
+#     # Length of 'selected' is one, so 'item' is the first element in the list
+#         else:
+#             item = selected[0]
+#             new_name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
+#                                                   f'Rename {item.text()}:',
+#                                                   flags=Qt.MSWindowsFixedSizeDialogHint)
+#             if ok and self.isClassNameAvailable(new_name):
+#                 pbar = CW.PopUpProgBar(self, 1, cancel=False)
+#                 pbar.setValue(0)
+#                 self.dataset.replace(item.text(), new_name, inplace=True)
+#                 self._update_unique_classes()
+#                 pbar.setValue(1)
+
+
+#     def delete_class(self):
+#         '''
+#         Remove data with the selected classes from the dataset.
+
+#         '''
+#     # Do nothing if no data is selected
+#         selected = self.refineList.selectedItems()
+#         if not len(selected):
+#             return
+
+#         choice = CW.MsgBox(self, 'Quest', 'Remove selected classes?')
+#         if choice.yes():
+#             targets = [item.text() for item in selected]
+#             pbar = CW.PopUpProgBar(self, 1, cancel=False)
+#             pbar.setValue(0)
+#             self.dataset = self.dataset[~self.dataset.Class.isin(targets)]
+#             self.dataset.reset_index(drop=True, inplace=True)
+#             self._update_unique_classes()
+#             pbar.setValue(1)
+
+
+#     def merge_class(self):
+#         '''
+#         Unify two or more classes in the dataset under a new name.
+
+#         '''
+#         selected = self.refineList.selectedItems()
+#     # Just exit function if no classes are selected
+#         if len(selected) == 0:
+#             return
+        
+#     # At least two classes must be selected (send warning)
+#         elif len(selected) == 1:
+#             return CW.MsgBox(self, 'Warn', 'Select at least two classes.')
+        
+#         else:
+#             targets = [item.text() for item in selected]
+#             name, ok = QW.QInputDialog.getText(self, 'Merge classes',
+#                                                   f'Merge {targets} and '\
+#                                                   'rename them as:',
+#                                                   flags=Qt.MSWindowsFixedSizeDialogHint)
+#             if ok and self.isClassNameAvailable(name):
+#                 pbar = CW.PopUpProgBar(self, 1, cancel=False)
+#                 pbar.setValue(0)
+#                 self.dataset.replace(targets, [name]*len(targets), inplace=True)
+#                 self._update_unique_classes()
+#                 pbar.setValue(1)
+
+
+#     def save_dataset(self):
+#         '''
+#         Save the ground truth dataset as one or multiple CSV file(s).
+
+#         '''
+#     # Do nothing if outpath is invalid or file dialog is canceled
+#         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save new dataset',
+#                                                     pref.get_dir('out'),
+#                                                     'CSV file (*.csv)')
+#         if not outpath:
+#             return
+        
+#         pref.set_dir('out', os.path.dirname(outpath))
+
+#         dec = self.decimal_combox.currentText()
+#         sep = self.separator_combox.currentText()
+
+#     # Set the number of output csv files (subsets) if requested
+#         nfiles = 1
+#         if self.splitFile_cbox.isChecked():
+#             batch_size = 2**20 # Excel maximum number of rows
+#             nfiles += len(self.dataset) // batch_size
+
+#     # Disable the save button during saving operations, then re-enable it
+#         self.sender().setEnabled(False)
+#         subsets = np.array_split(self.dataset, nfiles)
+#         pbar = CW.PopUpProgBar(self, len(subsets), 'Saving dataset',
+#                                cancel=False)
+
+#         for idx, ss in enumerate(subsets, start=1):
+#             if (nfiles - 1): # if there is more than one file to save
+#                 path = cf.extend_filename(outpath, str(idx)) 
+#             else:
+#                 path = outpath
+
+#             ss.to_csv(path, sep=sep, index=False, decimal=dec)
+#             pbar.setValue(idx)
+
+#         self.sender().setEnabled(True)
+
+#         CW.MsgBox(self, 'Info', 'Dataset saved succesfully.')
+
+
+#     class XDatasetDesigner(CW.StyledTable):
+#         '''
+#         Table widget for the Dataset Builder tool. It allows the user to import
+#         input maps data for the automatic compilation of ground truth datasets.
+#         '''
+
+#         def __init__(self, parent=None):
+#             '''
+#             Constructor.
+
+#             Parameters
+#             ----------
+#             parent : QWidget or None, optional
+#                 The GUI parent of this widget. The default is None.
+
+#             '''
+#         # Call the constructor of the parent class
+#             self.parent = parent
+#             super().__init__(1, 1, parent=self.parent)
+
+#         # Initialize the horizontal header
+#             self.horizontalHeader().setSectionResizeMode(1) # Stretch
+#             self.col_lbls = ['Input Maps']
+#             self.setHorizontalHeaderLabels(self.col_lbls)
+
+
+#         def init_firstCol(self, row):
+#             '''
+#             Initialize the first column of the table to include a special button
+#             that allows user to import the entire row of data.
+
+#             Parameters
+#             ----------
+#             row : int
+#                 Index of row.
+
+#             '''
+#         # Set resize mode to ResizeToContent(3) only for first column(0)
+#             self.horizontalHeader().setSectionResizeMode(0, 3)
+
+#         # Special button to fill the entire row of data
+#             fillRow_btn = CW.StyledButton(QIcon('Icons/generic_add_blue.png'))
+#             fillRow_btn.setObjectName(str(row)) # to easily access the row
+#             fillRow_btn.setToolTip('Fill entire row')
+#             fillRow_btn.clicked.connect(self.smart_fillRow)
+#             self.setCellWidget(row, 0, fillRow_btn)
+
+
+#         def init_rowWidgets(self, row):
+#             '''
+#             Initialize the widgets (see DatasetDesignerWidget class) held by each
+#             cell in the given row.
+
+#             Parameters
+#             ----------
+#             row : int
+#                 Index of row.
+
+#             '''
+#         # Initialize the DatasetDesignerWidgets in every column except the 
+#         # first, because it holds the special "fill row" button (for details  
+#         # see init_firstCol function)
+#             for col in range(1, self.columnCount()):
+#                 col_lbl = self.horizontalHeaderItem(col).text()
+#                 wid = self.parent.DatasetDesignerWidget('input', col_lbl, self)
+#                 self.setCellWidget(row, col, wid)
+
+#         # Set resize mode of vertical header to ResizeToContent(3)
+#             self.verticalHeader().setSectionResizeMode(row, 3)
+
+
+#         def refresh(self, columns):
+#             '''
+#             Reset and re-initialize the table with new column names.
+
+#             Parameters
+#             ----------
+#             columns : list
+#                 List of column names.
+
+#             '''
+#         # Clear all and set new column names
+#             self.clear()
+#             self.setColumnCount(len(columns) + 1)
+#             self.col_lbls = [''] + columns
+#             self.setHorizontalHeaderLabels(self.col_lbls)
+
+#         # Initialize the table
+#             for row in range(self.rowCount()):
+#                 self.init_firstCol(row)
+#                 self.init_rowWidgets(row)
+
+
+#         def addRow(self):
+#             '''
+#             Add a row to the table.
+
+#             '''
+#             row = self.rowCount()
+#             self.insertRow(row)
+#             self.init_firstCol(row)
+#             self.init_rowWidgets(row)
+
+
+#         def delRow(self):
+#             '''
+#             Remove last row from the table.
+
+#             '''
+#             row = self.rowCount() - 1
+#             if row >= 0:
+#                 self.removeRow(row)
+
+
+#         def smart_fillRow(self):
+#             '''
+#             Try to fill an entire row of the table by automatically importing 
+#             and ordering multiple input maps based on their filename.
+
+#             '''
+#         # Do nothing if path is invalid or file dialog is canceled
+#             paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
+#                                                        pref.get_dir('in'),
+#                                                        'ASCII maps (*.txt *.gz)')
+#             if not paths:
+#                 return
             
-            pref.set_dir('in', os.path.dirname(paths[0]))
+#             pref.set_dir('in', os.path.dirname(paths[0]))
 
-            pbar = CW.PopUpProgBar(self, len(paths), 'Loading Maps')
-            for n, p in enumerate(paths, start=1):
-                if pbar.wasCanceled(): 
-                    break
-                try:
-                    name = cf.path2filename(p)
-                    matching_col = cf.guessMap(name, self.col_lbls) # !!! find a more elegant solution
-                # If a filename matches with a column, then add it
-                    if matching_col:
-                        row = int(self.sender().objectName())
-                        col = self.col_lbls.index(matching_col)
-                        self.cellWidget(row, col).addMap(p)
+#             pbar = CW.PopUpProgBar(self, len(paths), 'Loading Maps')
+#             for n, p in enumerate(paths, start=1):
+#                 if pbar.wasCanceled(): 
+#                     break
+#                 try:
+#                     name = cf.path2filename(p)
+#                     matching_col = cf.guessMap(name, self.col_lbls) # !!! find a more elegant solution
+#                 # If a filename matches with a column, then add it
+#                     if matching_col:
+#                         row = int(self.sender().objectName())
+#                         col = self.col_lbls.index(matching_col)
+#                         self.cellWidget(row, col).addMap(p)
 
-                except Exception as e:
-                    pbar.setWindowModality(Qt.NonModal)
-                    CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
-                    pbar.setWindowModality(Qt.WindowModal)
+#                 except Exception as e:
+#                     pbar.setWindowModality(Qt.NonModal)
+#                     CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
+#                     pbar.setWindowModality(Qt.WindowModal)
 
-                finally:
-                    pbar.setValue(n)
-
-
-        def getRowData(self, row):
-            '''
-            Extract map data from the given row.
-
-            Parameters
-            ----------
-            row : int
-                Index of row.
-
-            Returns
-            -------
-            rowData : list
-                List of map data in the form of numpy arrays.
-
-            '''
-            rowData = []
-            for col in range(self.columnCount()):
-                if col != 0:
-                    rowData.append(self.cellWidget(row, col).data)
-            return rowData
+#                 finally:
+#                     pbar.setValue(n)
 
 
-    class YDatasetDesigner(CW.StyledTable):
-        '''
-        Table widget for the Dataset Builder tool. It allows the user to import
-        labels in the form of already classified mineral maps data in order to
-        automatically compile a ground truth dataset.
-        '''
+#         def getRowData(self, row):
+#             '''
+#             Extract map data from the given row.
 
-        def __init__(self, parent=None):
-            '''
-            YDatasetDesigner class constructor
+#             Parameters
+#             ----------
+#             row : int
+#                 Index of row.
 
-            Parameters
-            ----------
-            parent : QWidget or None, optional
-                The GUI parent of the widget. The default is None.
+#             Returns
+#             -------
+#             rowData : list
+#                 List of map data in the form of numpy arrays.
 
-            '''
-        # Call the constructor of the parent class
-            self.parent = parent
-            super().__init__(1, 1, parent=self.parent)
-
-        # Initialize the horizontal header
-            self.horizontalHeader().setSectionResizeMode(1) # Stretch
-            self.col_lbl = ['Mineral Map']
-            self.setHorizontalHeaderLabels(self.col_lbl)
+#             '''
+#             rowData = []
+#             for col in range(self.columnCount()):
+#                 if col != 0:
+#                     rowData.append(self.cellWidget(row, col).data)
+#             return rowData
 
 
-        def init_rowWidget(self, row):
-            '''
-            Initialize the widgets (see DatasetDesignerWidget class) held by the
-            cell in the given row.
+#     class YDatasetDesigner(CW.StyledTable):
+#         '''
+#         Table widget for the Dataset Builder tool. It allows the user to import
+#         labels in the form of already classified mineral maps data in order to
+#         automatically compile a ground truth dataset.
+#         '''
 
-            Parameters
-            ----------
-            row : int
-                Index of row.
+#         def __init__(self, parent=None):
+#             '''
+#             YDatasetDesigner class constructor
 
-            '''
-        # Initialize the DatasetDesignerWidget in the one and only cell
-            wid = self.parent.DatasetDesignerWidget('output', self.col_lbl, self)
-            self.setCellWidget(row, 0, wid)
+#             Parameters
+#             ----------
+#             parent : QWidget or None, optional
+#                 The GUI parent of the widget. The default is None.
 
-        # Set resize mode of vertical header to ResizeToContent(3)
-            self.verticalHeader().setSectionResizeMode(row, 3)
+#             '''
+#         # Call the constructor of the parent class
+#             self.parent = parent
+#             super().__init__(1, 1, parent=self.parent)
 
-
-        def refresh(self):
-            '''
-            Reset and re-initialize the table.
-
-            '''
-            self.clear()
-            self.setHorizontalHeaderLabels(self.col_lbl)
-            for row in range(self.rowCount()):
-                self.init_rowWidget(row)
+#         # Initialize the horizontal header
+#             self.horizontalHeader().setSectionResizeMode(1) # Stretch
+#             self.col_lbl = ['Mineral Map']
+#             self.setHorizontalHeaderLabels(self.col_lbl)
 
 
-        def addRow(self):
-            '''
-            Add a row to the table.
+#         def init_rowWidget(self, row):
+#             '''
+#             Initialize the widgets (see DatasetDesignerWidget class) held by the
+#             cell in the given row.
 
-            '''
-            row = self.rowCount()
-            self.insertRow(row)
-            self.init_rowWidget(row)
+#             Parameters
+#             ----------
+#             row : int
+#                 Index of row.
 
+#             '''
+#         # Initialize the DatasetDesignerWidget in the one and only cell
+#             wid = self.parent.DatasetDesignerWidget('output', self.col_lbl, self)
+#             self.setCellWidget(row, 0, wid)
 
-        def delRow(self):
-            '''
-            Remove last row from the table.
-
-            '''
-            row = self.rowCount() - 1
-            if row >= 0:
-                self.removeRow(row)
-
-
-        def getRowData(self, row):
-            '''
-            Extract map data from the given row.
-
-            Parameters
-            ----------
-            row : int
-                Index of row.
-
-            Returns
-            -------
-            rowData : list
-                List (of one element) of map data in the form of numpy arrays.
-
-            '''
-            rowData = [self.cellWidget(row, 0).data]
-            return rowData
+#         # Set resize mode of vertical header to ResizeToContent(3)
+#             self.verticalHeader().setSectionResizeMode(row, 3)
 
 
-    class DatasetDesignerWidget(QW.QWidget):
-        '''
-        Base widget used by the Dataset Designer tool to load and manage map
-        data. See XDatasetDesigner and YDatasetDesigner classes for details.
-        '''
+#         def refresh(self):
+#             '''
+#             Reset and re-initialize the table.
 
-        def __init__(self, mapType, mapName, parent=None):
-            '''
-            Constructor.
-
-            Parameters
-            ----------
-            mapType : str
-                Describer for the role of map data. Must be 'input' or 'output'.
-            mapName : str
-                Name of the map.
-            parent : QTableWidget or None, optional
-                The table that holds this widget. The default is None.
-
-            '''
-        # Raise error if mapType is not valid
-            assert mapType in ('input', 'output')
-
-        # Call the constructor of the parent class
-            self.parent = parent
-            super().__init__(parent)
-
-        # Define main attributes
-            self.mapType = mapType
-            self.mapName = mapName
-            self.data = np.array([])
-
-        # Add file button
-            self.add_btn = CW.StyledButton(QIcon('Icons/smooth_add.png'))
-            self.add_btn.setFlat(True)
-            self.add_btn.clicked.connect(lambda: self.addMap())
-
-        # Remove file button
-            self.del_btn = CW.StyledButton(QIcon('Icons/smooth_del.png'))
-            self.del_btn.setFlat(True)
-            self.del_btn.setEnabled(False)
-            self.del_btn.clicked.connect(self.delMap)
-
-        # Info color line (Frame)
-            self.infoFrame = QW.QFrame()
-            self.infoFrame.setFrameStyle(QW.QFrame.HLine | QW.QFrame.Plain)
-            self.infoFrame.setLineWidth(3)
-            self.infoFrame.setMidLineWidth(3)
-            self.infoFrame.setStyleSheet("color: red;")
-
-        # Adjust Layout
-            layout = QW.QVBoxLayout()
-            layout.addWidget(self.add_btn, alignment=Qt.AlignHCenter)
-            layout.addWidget(self.del_btn, alignment=Qt.AlignHCenter)
-            layout.addWidget(self.infoFrame)
-            self.setLayout(layout)
+#             '''
+#             self.clear()
+#             self.setHorizontalHeaderLabels(self.col_lbl)
+#             for row in range(self.rowCount()):
+#                 self.init_rowWidget(row)
 
 
-        def addMap(self, path=None):
-            '''
-            Load map data from file.
+#         def addRow(self):
+#             '''
+#             Add a row to the table.
 
-            Parameters
-            ----------
-            path : Path-like or None, optional
-                Map filepath. If None, it can be selected interactively. The
-                default is None.
-
-            '''
-        # If path is missing, prompt user to load a file, defining the expected
-        # file extension based on map role
-            if path == None:
-                if self.mapType == 'input':
-                    filext_filter = 'ASCII file (*.txt *.gz)'
-                else:
-                    filext_filter = '''Mineral maps (*.mmp)
-                                       Legacy mineral maps (*.txt *.gz)'''
-                path, _ = QW.QFileDialog.getOpenFileName(self, f'Load {self.mapName} Map',
-                                                         pref.get_dir('in'),
-                                                         filext_filter)
-        # If path is valid, load the data
-            if path:
-                pref.set_dir('in', os.path.dirname(path))
-                try:
-                    if self.mapType == 'input':
-                        self.data = InputMap.load(path).map
-                    else:
-                        self.data = MineralMap.load(path).minmap
-
-                    self.add_btn.setEnabled(False)
-                    self.del_btn.setEnabled(True)
-                    self.infoFrame.setStyleSheet("color: lightgreen;")
-                    self.setToolTip(path)
-
-                except ValueError:
-                    CW.MsgBox(self.parent.parent, 'Crit', 
-                              f'Unexpected file:\n{path}.')
+#             '''
+#             row = self.rowCount()
+#             self.insertRow(row)
+#             self.init_rowWidget(row)
 
 
-        def delMap(self):
-            '''
-            Remove loaded map data.
+#         def delRow(self):
+#             '''
+#             Remove last row from the table.
 
-            '''
-            self.add_btn.setEnabled(True)
-            self.del_btn.setEnabled(False)
-            self.data = np.array([])
-            self.infoFrame.setStyleSheet("color: red;")
-            self.setToolTip('')
+#             '''
+#             row = self.rowCount() - 1
+#             if row >= 0:
+#                 self.removeRow(row)
 
 
-        def setWarning(self, show):
-            '''
-            Show/hide a warning in the form of a yellow info line (Frame).
+#         def getRowData(self, row):
+#             '''
+#             Extract map data from the given row.
 
-            Parameters
-            ----------
-            show : bool
-                Show/hide the warning.
+#             Parameters
+#             ----------
+#             row : int
+#                 Index of row.
 
-            '''
-            color = 'yellow' if show else 'lightgreen'
-            self.infoFrame.setStyleSheet("color: %s;" %(color))
+#             Returns
+#             -------
+#             rowData : list
+#                 List (of one element) of map data in the form of numpy arrays.
+
+#             '''
+#             rowData = [self.cellWidget(row, 0).data]
+#             return rowData
+
+
+#     class DatasetDesignerWidget(QW.QWidget):
+#         '''
+#         Base widget used by the Dataset Designer tool to load and manage map
+#         data. See XDatasetDesigner and YDatasetDesigner classes for details.
+#         '''
+
+#         def __init__(self, mapType, mapName, parent=None):
+#             '''
+#             Constructor.
+
+#             Parameters
+#             ----------
+#             mapType : str
+#                 Describer for the role of map data. Must be 'input' or 'output'.
+#             mapName : str
+#                 Name of the map.
+#             parent : QTableWidget or None, optional
+#                 The table that holds this widget. The default is None.
+
+#             '''
+#         # Raise error if mapType is not valid
+#             assert mapType in ('input', 'output')
+
+#         # Call the constructor of the parent class
+#             self.parent = parent
+#             super().__init__(parent)
+
+#         # Define main attributes
+#             self.mapType = mapType
+#             self.mapName = mapName
+#             self.data = np.array([])
+
+#         # Add file button
+#             self.add_btn = CW.StyledButton(QIcon('Icons/smooth_add.png'))
+#             self.add_btn.setFlat(True)
+#             self.add_btn.clicked.connect(lambda: self.addMap())
+
+#         # Remove file button
+#             self.del_btn = CW.StyledButton(QIcon('Icons/smooth_del.png'))
+#             self.del_btn.setFlat(True)
+#             self.del_btn.setEnabled(False)
+#             self.del_btn.clicked.connect(self.delMap)
+
+#         # Info color line (Frame)
+#             self.infoFrame = QW.QFrame()
+#             self.infoFrame.setFrameStyle(QW.QFrame.HLine | QW.QFrame.Plain)
+#             self.infoFrame.setLineWidth(3)
+#             self.infoFrame.setMidLineWidth(3)
+#             self.infoFrame.setStyleSheet("color: red;")
+
+#         # Adjust Layout
+#             layout = QW.QVBoxLayout()
+#             layout.addWidget(self.add_btn, alignment=Qt.AlignHCenter)
+#             layout.addWidget(self.del_btn, alignment=Qt.AlignHCenter)
+#             layout.addWidget(self.infoFrame)
+#             self.setLayout(layout)
+
+
+#         def addMap(self, path=None):
+#             '''
+#             Load map data from file.
+
+#             Parameters
+#             ----------
+#             path : Path-like or None, optional
+#                 Map filepath. If None, it can be selected interactively. The
+#                 default is None.
+
+#             '''
+#         # If path is missing, prompt user to load a file, defining the expected
+#         # file extension based on map role
+#             if path == None:
+#                 if self.mapType == 'input':
+#                     filext_filter = 'ASCII file (*.txt *.gz)'
+#                 else:
+#                     filext_filter = '''Mineral maps (*.mmp)
+#                                        Legacy mineral maps (*.txt *.gz)'''
+#                 path, _ = QW.QFileDialog.getOpenFileName(self, f'Load {self.mapName} Map',
+#                                                          pref.get_dir('in'),
+#                                                          filext_filter)
+#         # If path is valid, load the data
+#             if path:
+#                 pref.set_dir('in', os.path.dirname(path))
+#                 try:
+#                     if self.mapType == 'input':
+#                         self.data = InputMap.load(path).map
+#                     else:
+#                         self.data = MineralMap.load(path).minmap
+
+#                     self.add_btn.setEnabled(False)
+#                     self.del_btn.setEnabled(True)
+#                     self.infoFrame.setStyleSheet("color: lightgreen;")
+#                     self.setToolTip(path)
+
+#                 except ValueError:
+#                     CW.MsgBox(self.parent.parent, 'Crit', 
+#                               f'Unexpected file:\n{path}.')
+
+
+#         def delMap(self):
+#             '''
+#             Remove loaded map data.
+
+#             '''
+#             self.add_btn.setEnabled(True)
+#             self.del_btn.setEnabled(False)
+#             self.data = np.array([])
+#             self.infoFrame.setStyleSheet("color: red;")
+#             self.setToolTip('')
+
+
+#         def setWarning(self, show):
+#             '''
+#             Show/hide a warning in the form of a yellow info line (Frame).
+
+#             Parameters
+#             ----------
+#             show : bool
+#                 Show/hide the warning.
+
+#             '''
+#             color = 'yellow' if show else 'lightgreen'
+#             self.infoFrame.setStyleSheet("color: %s;" %(color))
 
 
 
-class PixelEditor(QW.QWidget):
+class PixelEditor(QW.QWidget): # !!! CURRENTLY NOT IMPLEMENTED
     def __init__(self, XMapsInfo, originalData, edits, parent):
         self.parent = parent
         self.XMapsPath, self.XMapsData = XMapsInfo

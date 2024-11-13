@@ -3909,3 +3909,384 @@ class PercentLineEdit(QW.QFrame):
         return r
 
 
+class DatasetDesigner(StyledTable):
+    '''
+    A special styled TableWidget used in the DatasetBuilder tool to allow user-
+    friendly creation of ground truth datasets. 
+
+    '''
+
+    def __init__(self, parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
+        super(DatasetDesigner, self).__init__(0, 4, parent=parent)
+
+    # Set selection behaviour
+        self.setSelectionBehavior(QW.QAbstractItemView.SelectRows)
+
+    # Initialize horizontal headers
+        self.columns = ['', 'Input Maps', '', 'Mineral Map']
+        self.setHorizontalHeaderLabels(self.columns)
+        self.resizeHorizontalHeader()
+
+
+    def resizeHorizontalHeader(self):
+        '''
+        Resize column headers to fill all the available space. Fill-row column,
+        separator column and mineral map column will instead resize to their 
+        content.
+
+        '''
+    # Stretch = 1, ResizeToContent = 3
+        header = self.horizontalHeader()
+        header.setSectionResizeMode(1) # All columns
+        header.setSectionResizeMode(0, 3) # Fill-row 
+        header.setSectionResizeMode(self.columnCount() - 2, 3) # Separator
+        header.setSectionResizeMode(self.columnCount() - 1, 3) # Mineral Map
+
+
+    def setFillRowButton(self, row: int):
+        '''
+        Initialize the first column of given 'row' to include the "fill row" 
+        button, which allows user to import an entire row of feature data.
+
+        Parameters
+        ----------
+        row : int
+            Index of row.
+
+        '''
+        btn = StyledButton(QG.QIcon(r'Icons/generic_add_blue.png'))
+        btn.setToolTip('Load multiple features at once')
+        btn.clicked.connect(self.fillRow)
+        self.setCellWidget(row, 0, btn)
+
+
+    def setRowWidgets(self, row: int):
+        '''
+        Initialize the cell widgets of given 'row' as StatusFileLoader widgets
+        (see StatusFileLoader class for more details).
+
+        Parameters
+        ----------
+        row : int
+            Index of row.
+
+        '''
+        n_columns = self.columnCount()
+
+    # Initialize every input map column with InputMap file filter
+        for col in range(1, n_columns - 2):
+            wid = StatusFileLoader('ASCII maps (*.txt *.gz)')
+            self.setCellWidget(row, col, wid)
+
+    # Initialize mineral map column with MineralMap file filter
+        mmap_filter = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
+        wid = StatusFileLoader(mmap_filter)
+        self.setCellWidget(row, n_columns - 1, wid)
+
+    # Set resize mode of vertical header to ResizeToContent(3)
+        self.verticalHeader().setSectionResizeMode(row, 3)
+
+
+    def refresh(self, features: list[str]):
+        '''
+        Reset and re-initialize the table with new features names.
+
+        Parameters
+        ----------
+        features : list[str]
+            List of features names.
+
+        '''
+    # Clear all and set new column names
+        self.clear()
+        self.setColumnCount(len(features) + 3)
+        self.columns = [''] + features + ['', 'Mineral Map']
+        self.setHorizontalHeaderLabels(self.columns)
+        self.resizeHorizontalHeader()
+
+    # Initialize the table
+        for row in range(self.rowCount()):
+            self.setFillRowButton(row)
+            self.setRowWidgets(row)
+
+
+    def addRow(self):
+        '''
+        Add a row to the table.
+
+        '''
+        row = self.rowCount()
+        self.insertRow(row)
+        self.setFillRowButton(row)
+        self.setRowWidgets(row)
+
+
+    def delRow(self, row: int):
+        '''
+        Remove 'row' from the table.
+
+        Parameters
+        ----------
+        row : int
+            Row to be removed. 
+
+        '''
+        if 0 <= row < self.rowCount():
+            self.removeRow(row)
+
+
+    def delLastRow(self):
+        '''
+        Remove last row from the table
+
+        '''
+        self.delRow(self.rowCount() - 1)
+
+
+    def fillRow(self): # Should we instead skip name fitting and have free imports?
+        '''
+        Try to fill an entire row of Input Maps by automatically import and 
+        identify multiple files based on their name fitting with column names.
+
+        '''
+    # Do nothing if path is invalid or file dialog is canceled
+        paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
+                                                    pref.get_dir('in'),
+                                                    'ASCII maps (*.txt *.gz)')
+        if not paths:
+            return
+        
+        pref.set_dir('in', os.path.dirname(paths[0]))
+
+        required_maps = self.columns[1:-2]
+        pbar = PopUpProgBar(self, len(paths), 'Loading maps')
+        bad_files = []
+        for n, p in enumerate(paths, start=1):
+            if pbar.wasCanceled(): 
+                break
+            try:
+                matching_col = cf.guessMap(cf.path2filename(p), required_maps) # !!! find a more elegant solution
+            # If a filename matches with a column, then add it
+                if matching_col:
+                    row = self.indexAt(self.sender().pos()).row()
+                    col = self.columns.index(matching_col)
+                    self.cellWidget(row, col).addFile(p)
+
+            except FileNotFoundError:
+                bad_files.append(p)
+            finally:
+                pbar.setValue(n)
+    
+    # Send error if one or more files cannot be read
+        if len(bad_files):
+            text = 'One or more files have been deleted, removed or renamed.'
+            MsgBox(self, 'Crit', text, '\n'.join(bad_files))
+
+
+    def getRowData(self, row: int):
+        '''
+        Extract map data from the given row.
+
+        Parameters
+        ----------
+        row : int
+            Index of row.
+
+        Returns
+        -------
+        input_maps : list[InputMap]
+            List of valid input maps.
+
+        mineral_map : MineralMap or None
+            Mineral map or None if invalid.
+
+        '''
+        n_columns = self.columnCount()
+        input_maps, mineral_map = [], None
+
+        pbar = PopUpProgBar(self, n_columns - 1, 'Loading maps data')
+
+        for col in range(1, n_columns):
+            try:
+                # Skip separator column
+                if col == n_columns - 2: 
+                    continue
+                wid = self.cellWidget(row, col)
+                path = wid.filepath
+                # Extract Mineral Map
+                if col == n_columns - 1:
+                    mineral_map = MineralMap.load(path)
+                # Extract Input Map
+                else: 
+                    input_maps.append(InputMap.load(path))
+            except:
+                wid.setStatus('Invalid')
+            finally:
+                pbar.setValue(col)
+
+        return input_maps, mineral_map
+
+
+
+class StatusFileLoader(QW.QWidget):
+    '''
+    Interactive widget useful to load filepaths and provide visual feedback on
+    their status (valid, invalid or with warnings).
+    '''
+
+    def __init__(self, filext='', parent=None):
+        '''
+        Constructor.
+
+        Parameters
+        ----------
+        filext : str
+            File extension filter. An empty string means all files. The default
+            is ''.
+        parent : QObject | None, optional
+            The GUI parent of this object. The default is None.
+
+        '''
+        super(StatusFileLoader, self).__init__(parent)
+
+    # Define main attributes
+        self.filter = filext
+        self.filepath = None
+        self.status = 'Invalid'
+
+    # Initialize GUI and connect signals to slots
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self):
+        '''
+        GUI constructor.
+
+        '''
+    # Add file (StyledButton)
+        self.add_btn = StyledButton(QG.QIcon(r'Icons/smooth_add.png'))
+        self.add_btn.setFlat(True)
+
+    # Remove file (StyledButton)
+        self.del_btn = StyledButton(QG.QIcon(r'Icons/smooth_del.png'))
+        self.del_btn.setFlat(True)
+        self.del_btn.setEnabled(False)
+
+    # Status file path (PathLabel)
+        self.status_path = PathLabel(full_display=False)
+        self.status_path.setFrameWidth(2)
+        self.status_path.setFrameColor(style.BTN_RED)
+
+    # Adjust layout
+        layout = QW.QGridLayout()
+        layout.setContentsMargins(1, 1, 1, 1)
+        layout.addWidget(self.add_btn, 0, 0, QC.Qt.AlignBottom)
+        layout.addWidget(self.del_btn, 0, 1, QC.Qt.AlignBottom)
+        layout.addWidget(self.status_path, 1, 0, 1, -1)
+        self.setLayout(layout)
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+        self.add_btn.clicked.connect(self.loadFile)
+        self.del_btn.clicked.connect(self.removeFile)
+
+
+    def loadFile(self):
+        '''
+        Load file from an open file dialog.
+
+        '''
+        path, _ = QW.QFileDialog.getOpenFileName(
+            self, f'Load file', pref.get_dir('in'), self.filter)
+        if path:
+            pref.set_dir('in', os.path.dirname(path))
+            self.addFile(path)
+
+
+    def addFile(self, path: str):
+        '''
+        Add filepath 'path'. This function can be used to add a path directly 
+        without showing an open file dialog.
+
+        Parameters
+        ----------
+        path : str
+            Filepath to be added.
+
+        '''
+    # Raise error if filepath is invalid
+        if not os.path.exists(path):
+            raise FileNotFoundError(f'File not found: {path}') 
+
+        self.filepath = path
+        self.status_path.setPath(path)
+        self.setStatus('Valid')
+        self.add_btn.setEnabled(False)
+        self.del_btn.setEnabled(True)
+
+
+    def removeFile(self):
+        '''
+        Remove loaded filepath.
+
+        '''
+        self.filepath = None
+        self.status_path.clearPath()
+        self.setStatus('Invalid')
+        self.add_btn.setEnabled(True)
+        self.del_btn.setEnabled(False)
+
+
+    def getStatus(self):
+        '''
+        Get the current file status.
+
+        Returns
+        -------
+        str
+            Current status. Can be 'Valid', 'Invalid' or 'Warning'.
+
+        '''
+        return self.status
+
+
+    def setStatus(self, status: str):
+        '''
+        Set current status of file to 'status'. This visually changes the color
+        of the label frame to green (Valid), red (Invalid) or yellow (Warning).
+
+        Parameters
+        ----------
+        status : str
+            Required status. It must be one of ('Valid', 'Invalid', 'Warning').
+
+        Raises
+        ------
+        ValueError
+            Raised if status is an invalid string.
+
+        '''
+        if status == 'Valid':
+            self.status_path.setFrameColor(style.BTN_GREEN)
+        elif status == 'Invalid':
+            self.status_path.setFrameColor(style.BTN_RED)
+        elif status == 'Warning':
+            self.status_path.setFrameColor(style.WARNING)
+        else:
+            raise ValueError(f'Invalid status: {status}.')
+        
+        self.status = status

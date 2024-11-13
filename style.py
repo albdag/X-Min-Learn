@@ -29,6 +29,7 @@ XML_PETROLEUM = '#005858'       # (0, 88, 88)
 # Special button colors
 BTN_GREEN = '#4CAF50'           # (76, 175, 80)
 BTN_RED = '#ED4337'             # (237, 67, 55)
+WARNING = '#FFCC00'             # (255, 204, 0)
 
 # Histogram mask color
 HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
