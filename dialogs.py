@@ -19,7 +19,7 @@ import dataset_tools as dtools
 import image_analysis_tools as iatools
 import plots
 import preferences as pref
-from style import BTN_GREEN
+import style
 import threads
 
 
@@ -516,7 +516,7 @@ class MergeDatasets(QW.QDialog):
         self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
 
     # Merge datasets (Styled Button)
-        self.merge_btn = CW.StyledButton(text='Merge', bg_color=BTN_GREEN)
+        self.merge_btn = CW.StyledButton(text='Merge', bg_color=style.OK_GREEN)
 
     # Merged dataset preview area (Document Browser)
         self.merged_info = CW.DocumentBrowser(read_only=True)
@@ -1049,7 +1049,7 @@ class ImageToInputMap(QW.QDialog):
         self.map_ext_combox.addItems(['.gz', '.txt'])
 
     # Convert (Styled Button)
-        self.convert_btn = CW.StyledButton(text='Convert', bg_color=BTN_GREEN)
+        self.convert_btn = CW.StyledButton(text='Convert', bg_color=style.OK_GREEN)
         
     # Progress bar (ProgressBar)
         self.progbar = QW.QProgressBar()
@@ -1229,7 +1229,7 @@ class ImageToMineralMap(QW.QDialog):
         self.delta_spbox.setToolTip('Minimum color variance to split classes')
 
     # Convert (Styled Button)
-        self.convert_btn = CW.StyledButton(text='Convert', bg_color=BTN_GREEN)
+        self.convert_btn = CW.StyledButton(text='Convert', bg_color=style.OK_GREEN)
 
     # Legend (Legend)
         self.legend = CW.Legend()
@@ -1547,7 +1547,7 @@ class DummyMapsBuilder(QW.QDialog):
         self.scale_spbox.setToolTip('Scale of Gamma distribution function')
 
     # Generate random map (Styled Button)
-        self.rand_btn = CW.StyledButton(text='Randomize', bg_color=BTN_GREEN)
+        self.rand_btn = CW.StyledButton(text='Randomize', bg_color=style.OK_GREEN)
 
     # Save map (Styled Button)
         self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')

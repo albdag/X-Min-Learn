@@ -277,11 +277,11 @@ class MineralClassifier(DraggableTool):
 
     # Classify button (Styled Button)
         self.classify_btn = CW.StyledButton(text='CLASSIFY',
-                                              bg_color=style.BTN_GREEN)
+                                              bg_color=style.OK_GREEN)
         self.classify_btn.setEnabled(False)
 
     # Interrupt classification process button (StyledButton)
-        self.stop_btn = CW.StyledButton(text='STOP', bg_color=style.BTN_RED)
+        self.stop_btn = CW.StyledButton(text='STOP', bg_color=style.BAD_RED)
 
 #  -------------------------------------------------------------------------  #
 #                                VIEWER PANEL 
@@ -4418,13 +4418,13 @@ class ModelLearner(DraggableTool):
 
     # Start learning button (Styled Button)
         self.start_learn_btn = CW.StyledButton(text='LEARN', 
-                                                 bg_color=style.BTN_GREEN)
+                                                 bg_color=style.OK_GREEN)
         self.start_learn_btn.setToolTip('Start learning session')
         self.start_learn_btn.setEnabled(False)
 
     # Stop learning button (Styled Button)
         self.stop_learn_btn = CW.StyledButton(text='STOP', 
-                                                 bg_color=style.BTN_RED)
+                                                 bg_color=style.BAD_RED)
         self.stop_learn_btn.setToolTip('Stop learning session')
         self.stop_learn_btn.setEnabled(False)
 
@@ -4462,7 +4462,7 @@ class ModelLearner(DraggableTool):
 
     # Split ground truth dataset button (Styled Button)
         self.split_dataset_btn = CW.StyledButton(text='SPLIT', 
-                                                   bg_color=style.BTN_GREEN)
+                                                   bg_color=style.OK_GREEN)
         self.split_dataset_btn.setToolTip('Split ground truth dataset into '\
                                           'train, validation and test sets')
         self.split_dataset_btn.setEnabled(False)
@@ -4624,12 +4624,12 @@ class ModelLearner(DraggableTool):
 
     # Start balancing button (Styled Button)
         self.start_balancing_btn = CW.StyledButton(text='Start', 
-                                                     bg_color=style.BTN_GREEN)
+                                                     bg_color=style.OK_GREEN)
         self.start_balancing_btn.setToolTip('Start balancing session')
 
     # Stop balancing button (Styled Button)
         self.stop_balancing_btn = CW.StyledButton(text='Stop',
-                                                    bg_color=style.BTN_RED)
+                                                    bg_color=style.BAD_RED)
         self.stop_balancing_btn.setToolTip('Stop balancing session')
 
     # Cancel balancing button (Styled Button)
@@ -6513,12 +6513,12 @@ class PhaseRefiner(DraggableTool):
 
     # Apply refinement (Styled Button)
         self.apply_btn = CW.StyledButton(text='APPLY', 
-                                           bg_color=style.BTN_GREEN)
+                                           bg_color=style.OK_GREEN)
         self.apply_btn.setToolTip('Apply filter')
 
     # Cancel refinements (Styled Button)
         self.cancel_btn = CW.StyledButton(text='CANCEL',
-                                            bg_color=style.BTN_RED)
+                                            bg_color=style.BAD_RED)
         self.cancel_btn.setToolTip('Revert all edits')
 
     # Save refinements (Styled Button)

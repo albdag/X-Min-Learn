@@ -4185,7 +4185,7 @@ class StatusFileLoader(QW.QWidget):
     # Status file path (PathLabel)
         self.status_path = PathLabel(full_display=False)
         self.status_path.setFrameWidth(2)
-        self.status_path.setFrameColor(style.BTN_RED)
+        self.status_path.setFrameColor(style.BAD_RED)
 
     # Adjust layout
         layout = QW.QGridLayout()
@@ -4281,11 +4281,11 @@ class StatusFileLoader(QW.QWidget):
 
         '''
         if status == 'Valid':
-            self.status_path.setFrameColor(style.BTN_GREEN)
+            self.status_path.setFrameColor(style.OK_GREEN)
         elif status == 'Invalid':
-            self.status_path.setFrameColor(style.BTN_RED)
+            self.status_path.setFrameColor(style.BAD_RED)
         elif status == 'Warning':
-            self.status_path.setFrameColor(style.WARNING)
+            self.status_path.setFrameColor(style.WARN_YELLOW)
         else:
             raise ValueError(f'Invalid status: {status}.')
         

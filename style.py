@@ -26,10 +26,10 @@ SAN_MARINO = '#497096'          # (73, 112, 150)
 SAN_MARINO_LIGHT = '#DCE5EE'    # (220, 229, 238)
 XML_PETROLEUM = '#005858'       # (0, 88, 88)
 
-# Special button colors
-BTN_GREEN = '#4CAF50'           # (76, 175, 80)
-BTN_RED = '#ED4337'             # (237, 67, 55)
-WARNING = '#FFCC00'             # (255, 204, 0)
+# Special status colors
+OK_GREEN = '#4CAF50'            # (76, 175, 80)
+BAD_RED = '#ED4337'             # (237, 67, 55)
+WARN_YELLOW = '#FFCC00'         # (255, 204, 0)
 
 # Histogram mask color
 HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
