@@ -2286,10 +2286,11 @@ class SplitterGroup(QW.QSplitter):
 
 class FramedLabel(QW.QLabel):
     '''
-    A label decorated with a black squared frame. Its text is user-selectable
-    and its size policy is fixed to avoid visual glitches when using monitors
-    with different resolutions.
+    A label decorated with a squared frame. Its text is user-selectable and its
+    size policy is fixed to avoid visual glitches when using monitors with
+    different resolutions.
     '''
+
     def __init__(self, text='', parent: QC.QObject|None=None):
         '''
         Constructor.
@@ -2310,6 +2311,38 @@ class FramedLabel(QW.QLabel):
 
     # Set stylesheet
         self.setStyleSheet(style.SS_MENU + 'QLabel {border: 1px solid black;}')
+
+
+    def setFrameColor(self, color: str|tuple[int]):
+        '''
+        Change the color of the label frame.
+
+        Parameters
+        ----------
+        color : str | tuple[int]
+            Color as HEX string or RGB triplet.
+
+        '''
+    # Convert RGB triplet to HEX string
+        if isinstance(color, tuple):
+            color = iatools.rgb2hex(color)
+        
+        ss = f'QLabel {{border-color: {color};}}'
+        self.setStyleSheet(self.styleSheet() + ss)
+
+
+    def setFrameWidth(self, width: int):
+        '''
+        Change the width of the label frame.
+
+        Parameters
+        ----------
+        width : int
+            Frame width.
+
+        '''
+        ss = f'QLabel {{border-width: {width}px;}}'
+        self.setStyleSheet(self.styleSheet() + ss)
 
 
 
