@@ -5222,12 +5222,12 @@ class ModelLearner(DraggableTool):
             pbar.setValue(1)
 
         # Check if parent model shares the same features of loaded dataset
-            if pmodel.features != self.dataset.features_names():
+            if pmodel.features != self.dataset.columns_names()[:-1]:
                 raise ValueError('The model and the loaded dataset do not '\
                                  'share the same features.')
             
         # Check if parent model shares the same targets of loaded dataset
-            if pmodel.targets != self.dataset.targets_names():
+            if pmodel.targets != self.dataset.column_unique(-1):
                 raise ValueError('The model and the loaded dataset do not '\
                                  'share the same target classes.')
             pbar.setValue(2)
@@ -5379,7 +5379,7 @@ class ModelLearner(DraggableTool):
             var_dict = self.model.variables
             var_dict['algorithm'] = algm_name
             var_dict['optimizer'] = optim_name
-            var_dict['input_features'] = self.dataset.features_names()
+            var_dict['input_features'] = self.dataset.columns_names()[:-1]
             var_dict['class_encoder'] = self.dataset.encoder
             var_dict['device'] = device
             var_dict['seed'] = self.seed_generator.seed

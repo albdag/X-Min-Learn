@@ -798,34 +798,35 @@ class GroundTruthDataset():
         return (tr_ratio, vd_ratio, ts_ratio)
     
 
-    def features_names(self):
+    def columns_names(self):
         '''
-        Return the names of input features. This function can be called when
-        dataset has not been split yet, but assumes that the feature data is
-        stored in all but the last column of the dataframe.
+        Return a list of the dataset columns names.
 
         Returns
         -------
         list
-            Input features names
+            Columns names.
             
         '''
-        return self.dataframe.columns.to_list()[:-1]
+        return self.dataframe.columns.to_list()
     
 
-    def targets_names(self):
+    def column_unique(self, idx: int):
         '''
-        Return the names of output target classes. This function can be called
-        when dataset has not been split yet, but assumes that the target data
-        is stored in the last column of the dataframe.
+        Return a list of unique values of column with index 'idx'.
+
+        Parameters
+        ----------
+        idx : int
+            Column index.
 
         Returns
         -------
         list
-            List of sorted classes names.
+            List of sorted unique values.
 
         '''
-        return sorted(self.dataframe.iloc[:, -1].unique().tolist())
+        return sorted(self.dataframe.iloc[:, idx].unique().tolist())
     
 
 

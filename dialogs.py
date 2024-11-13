@@ -908,7 +908,7 @@ class SubSampleDataset(QW.QDialog):
         # Split dataset features from targets and update widgets
             try:
                 self._dataset.split_features_targets(split_idx=-1)
-                self.original_classes.addItems(self._dataset.targets_names())
+                self.original_classes.addItems(self._dataset.column_unique(-1))
                 self.save_btn.setEnabled(True)
             except Exception as e:
                 self._dataset = None
