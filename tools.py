@@ -157,7 +157,7 @@ class MineralClassifier(DraggableTool):
 
     # Initialize main attributes
         self._mask = None
-        self._nodata_color = [0, 0, 0]
+        self._nodata_color = (0, 0, 0)
 
     # Initialize classification state and attributes
         self._isBusyClassifying = False
