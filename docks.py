@@ -2230,7 +2230,7 @@ class RoiEditor(QW.QWidget):
 
     # Show the dialog to type the ROI name
         text = 'Type name (max 8 ASCII characters)'
-        name, ok = QW.QInputDialog.getText(self, 'X-Min Learn', text)
+        name, ok = QW.QInputDialog.getText(self, self.windowTitle(), text)
 
     # Proceed only if the new name is an ASCII <= 8 characters string
         if ok and 0 < len(name) < 9 and name.isascii():

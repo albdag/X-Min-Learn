@@ -2912,9 +2912,9 @@ class DatasetBuilder(DraggableTool):
     
     # Do nothing if the dialog is canceled or the class is not renamed
         old_name = selected[0].text()
-        name, ok = QW.QInputDialog.getText(self, 'X-Min Learn',
-                                           'Rename class (max. 8 ASCII '\
-                                           'characters):', text=f'{old_name}')
+        label = 'Rename class (max. 8 ASCII characters):'
+        name, ok = QW.QInputDialog.getText(self, self.windowTitle(), label,
+                                           text=old_name)
         if not ok or name == old_name:
             return
         
@@ -2979,7 +2979,7 @@ class DatasetBuilder(DraggableTool):
     # Do nothing if the dialog is canceled
         targets = [item.text() for item in selected]
         text = f'Merge {targets} in a new class (max. 8 ASCII characters):'
-        name, ok = QW.QInputDialog.getText(self, 'X-Min Learn', text)
+        name, ok = QW.QInputDialog.getText(self, self.windowTitle(), text)
         if not ok:
             return
         
