@@ -841,7 +841,7 @@ class MineralClassifier(DraggableTool):
 
         '''
     # Clone mineral map
-        minmap_thr = MineralMap(minmap.minmap, minmap.probmap, minmap.palette)
+        minmap_thr = minmap.copy()
     
     # Use confidence threshold to alter the cloned mineral map 
         thresh = self.conf_slider.value() / 100.
