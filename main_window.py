@@ -301,7 +301,7 @@ class MainWindow(QW.QMainWindow):
     # Connect all panes toggle view actions with a custom slot to force showing
     # them when they are tabified
         for p, a, in zip(self.panes, self.panes_tva):
-            a.toggled.connect(lambda t, p=p: self.setPaneVisibility(p, t))
+            a.triggered.connect(lambda t, p=p: self.setPaneVisibility(p, t))
 
     # Data Manager pane actions 
         self.dataManager.updateSceneRequested.connect(self.update_scene)
