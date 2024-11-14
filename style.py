@@ -782,6 +782,34 @@ SS_MAINWINDOW = (
         );
         border: 1px solid {BLACK_PEARL};
     }}
+
+    QTabBar::tab {{
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {IVORY}, stop: 0.75 {IVORY}, stop: 1 {CASPER_LIGHT}
+        );
+        border: 1px solid {BLACK_PEARL};
+        border-bottom-color: {CASPER}; 
+        border-top-left-radius: 2px;
+        border-top-right-radius: 2px;
+        padding: 5px 10px 5px 10px;
+        margin: 5px 2px 0px 0px;
+    }}
+
+    QTabBar::tab:selected,
+    QTabBar::tab:hover {{
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {SAN_MARINO_LIGHT}, stop: 0.75 {SAN_MARINO_LIGHT}, 
+            stop: 1 {CASPER_LIGHT}
+        );
+        margin-top: 3px;
+    }}
+
+    QTabBar::tab:selected {{
+        border-bottom-color: {SAN_MARINO};
+        border-bottom-width: 2px;
+    }}
     '''
 )
 
