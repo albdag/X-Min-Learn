@@ -1805,13 +1805,13 @@ class Preferences(QW.QDialog):
         '''
     # Smooth GUI
         self.smooth_cbox.stateChanged.connect(
-            lambda chk: setattr(self, '_smooth_gui', chk))
+            lambda chk: setattr(self, '_smooth_gui', bool(chk)))
     
     # ROI-related signals
         self.roi_col_btn.clicked.connect(self.changeRoiIconColor)
         self.roi_selcol_btn.clicked.connect(self.changeRoiIconColor)
         self.roi_filled_cbox.stateChanged.connect(
-            lambda chk: setattr(self, '_roi_filled', chk))
+            lambda chk: setattr(self, '_roi_filled', bool(chk)))
     
     # Mask merging rule
         self.mask_merge_btns.selectionChanged.connect(self.changeMaskMergeRule)
@@ -1822,7 +1822,7 @@ class Preferences(QW.QDialog):
         
     # Extended model logs
         self.extlog_cbox.stateChanged.connect(
-            lambda chk: setattr(self, '_extended_log', chk))
+            lambda chk: setattr(self, '_extended_log', bool(chk)))
 
     # Dialog buttons signals
         self.ok_btn.clicked.connect(lambda: self.saveEdits(exit=True))
