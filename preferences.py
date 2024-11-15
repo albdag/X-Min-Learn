@@ -5,7 +5,7 @@ Created on Tue Dec 14 14:09:21 2021
 @author: albdag
 """
 
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings, QByteArray
 
 
 # SETTINGS
@@ -14,6 +14,7 @@ settings = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
 settings_dict = {
     'GUI/fontsize': (10, int),
     'GUI/smooth_animation': (False, bool),
+    'GUI/window_state': (None, QByteArray),
     'plots/roi_color': ('#19232d', str),
     'plots/roi_selcolor': ('#55ffff', str),
     'plots/roi_filled': (False, bool),

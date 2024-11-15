@@ -71,7 +71,10 @@ class MainWindow(QW.QMainWindow):
 
 
     def _init_panes(self):
-        '''Initialize window panes (QDockWidgets).'''
+        '''
+        Initialize window panes (QDockWidget).
+
+        '''
     # Data Manager
         self.dataManager = docks.DataManager()
 
@@ -87,13 +90,11 @@ class MainWindow(QW.QMainWindow):
     # Probability Maps Viewer
         self.pmapViewer = docks.ProbabilityMapViewer(self.dataViewer.canvas)
         # Share pmap and data viewer axis
-        # CF.shareAxis(self.pmapViewer.canvas.ax, self.dataViewer.canvas.ax)
         self.dataViewer.canvas.share_axis(self.pmapViewer.canvas.ax)
 
     # RGBA Composite Maps Viewer
         self.rgbaViewer = docks.RgbaCompositeMapViewer()
         # Share rgba and data viewer axis
-        # CF.shareAxis(self.rgbaViewer.canvas.ax, self.dataViewer.canvas.ax)
         self.dataViewer.canvas.share_axis(self.rgbaViewer.canvas.ax)
 
     # Create panes 
@@ -113,10 +114,11 @@ class MainWindow(QW.QMainWindow):
         self.panes = (manager_pane, histogram_pane, mode_pane, roi_pane, 
                       probmap_pane, rgba_pane)
         
-    # Store the panes toggle view actions and set their icons
+    # Store the panes toggle view actions, set their icons and their objectName
         self.panes_tva = []
         for p in self.panes:
             action = p.toggleViewAction()
+            p.setObjectName(p.title) # required for saving pane state
             if p.icon is not None:
                 action.setIcon(p.icon)
                 action.setIconVisibleInMenu(True)
@@ -138,6 +140,7 @@ class MainWindow(QW.QMainWindow):
         w = max([p.trueWidget().minimumSizeHint().width() for p in self.panes])
         self.resizeDocks(self.panes, [w] * len(self.panes), QC.Qt.Horizontal)
         
+
     def _init_actions(self):
         '''Initialize actions shared by menu and toolbars.'''
     # Quit app action
@@ -216,12 +219,14 @@ class MainWindow(QW.QMainWindow):
         self.aboutqt_action.setStatusTip('About Qt toolkit')
 
 
-
-
     def _init_toolbars(self):
-        '''Initialize main toolbars.'''
+        '''
+        Initialize main toolbars.
+
+        '''
     # Tools toolbar
         self.tools_toolbar = QW.QToolBar('Tools toolbar')
+        self.tools_toolbar.setObjectName('ToolsToolbar') # to save its state
         self.tools_toolbar.setFloatable(False)
         self.tools_toolbar.setStyleSheet(style.SS_MAINTOOLBAR)
         # import data actions (button menu), followed by a separator
@@ -233,6 +238,7 @@ class MainWindow(QW.QMainWindow):
     
     # Panes toolbar
         self.panes_toolbar = QW.QToolBar('Panes toolbar')
+        self.panes_toolbar.setObjectName('PanesToolbar') # to save its state
         self.panes_toolbar.setFloatable(False)
         self.panes_toolbar.setStyleSheet(style.SS_MAINTOOLBAR)
         self.panes_toolbar.addActions(self.panes_tva)
@@ -660,9 +666,31 @@ class MainWindow(QW.QMainWindow):
     #         self.phaseRefinerDialog = dialogs.PhaseRefiner(minMap.copy(), self)
     #         self.phaseRefinerDialog.show()
 
-    def closeEvent(self, event):
+
+    def show(self):
+        '''
+        Reimplementation of the show() method, to just include the restore of
+        the last saved window state.
+
+        '''
+        self.restoreState(pref.get_setting('GUI/window_state'), version=0)
+        super(MainWindow, self).show()
+        
+
+    def closeEvent(self, event: QG.QCloseEvent):
+        '''
+        Reimplementation of the closeEvent, to just ask for user confirm and
+        save the current state of the window.
+
+        Parameters
+        ----------
+        event : QG.QCloseEvent
+            The close event.
+
+        '''
         choice = CW.MsgBox(self, 'Quest', 'Exit application?')
         if choice.yes():
+            pref.edit_setting('GUI/window_state', self.saveState(version=0))
             event.accept()
         else:
             event.ignore()
