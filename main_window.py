@@ -32,6 +32,9 @@ class MainWindow(QW.QMainWindow):
         self.statusBar()
         self.setStyleSheet(style.SS_MAINWINDOW)
 
+    # Set main window attributes
+        self.floating_tools = []
+
     # Initialize GUI
         self._init_ui()
     
@@ -303,7 +306,13 @@ class MainWindow(QW.QMainWindow):
         
 
     def _connect_slots(self):
-        '''Signal-slot connector.'''
+        '''
+        Signals-slots connector.
+
+        '''
+    # Detach tool from main tabWidget when double clicked on tab
+        self.tabWidget.tabBarDoubleClicked.connect(self.popOutTool)
+
     # Connect all panes toggle view actions with a custom slot to force showing
     # them when they are tabified
         for p, a, in zip(self.panes, self.panes_tva):
@@ -474,16 +483,87 @@ class MainWindow(QW.QMainWindow):
                     self.dataManager.topLevelItem(idx)))
             
         else:
-            tool = None
+            print(f'{toolname} not implemented.')
+            return
 
+    # Show tool as a new tab in the tab widget or as a floating window
         if isinstance(tool, tools.DraggableTool):
             if tabbed:
                 self.tabWidget.addTab(tool)
             else:
+                self.addFloatingTool(tool)
                 tool.show()
 
-        else:
-            print(f'{toolname} not implemented.')
+
+    def popOutTool(self, index: int):
+        '''
+        Detach the tab at index 'index' from the main TabWidget and display it
+        as a separate floating window. The tab must contain a DraggableTool for
+        it to be detached.
+
+        Parameters
+        ----------
+        index : int
+            The index of the tab to be detached.
+
+        '''
+        tool = self.tabWidget.widget(index)
+        scroll_area = self.tabWidget.scrollArea(index)
+        
+        if isinstance(tool, tools.DraggableTool):
+        # Pop-out tool and add it to floating tools list to keep it alive
+            self.tabWidget.removeTab(index)
+            self.addFloatingTool(tool)
+        # Set the tool as floating widget (parent=None)
+            tool.setParent(None)
+            tool.setVisible(True)
+            tool.move(0, 0)
+            tool.adjustSize()
+        # Remove scroll area that contained the tool in the tabWidget
+            scroll_area.deleteLater()
+
+
+    def addFloatingTool(self, tool: tools.DraggableTool):
+        '''
+        Add 'tool' to the floating tools list. This function also connects the
+        tool's signals to the removeFloatingTool slot, in order to remove its 
+        reference as long as it is no more floating (see 'removeFloatinTool').
+
+        Parameters
+        ----------
+        tool : tools.DraggableTool
+            Floating tool.
+
+        '''
+    # Safety: do nothing if tool is not a DraggableTool
+        if not isinstance(tool, tools.DraggableTool): 
+            return
+        
+    # Catch 'closed' and 'tabified' signals to remove tool from floating list
+        self.floating_tools.append(tool)
+        tool.closed.connect(lambda: self.removeFloatingTool(tool))
+        tool.tabified.connect(lambda: self.removeFloatingTool(tool))
+
+
+    def removeFloatingTool(self, tool: tools.DraggableTool):
+        '''
+        Remove 'tool' reference from floating tools list and disconnect its 
+        signals. This function should be called after a floating tool has been
+        tabified or closed.
+
+        Parameters
+        ----------
+        tool : tools.DraggableTool
+            Tabified or closed tool.
+
+        '''
+    # Safety: do nothing if tool is not a DraggableTool
+        if not isinstance(tool, tools.DraggableTool): 
+            return
+        
+    # Disconnect tool signals to avoid unwanted loops, then remove it
+        tool.disconnect() 
+        self.floating_tools.remove(tool)
 
 
     def load(self, datatype):
@@ -737,26 +817,29 @@ class MainTabWidget(QW.QTabWidget):
         '''
     # Tab 'X' button pressed --> close the tab
         self.tabCloseRequested.connect(self.closeTab)
-    # Tab Double-clicked --> detach the tab
-        self.tabBarDoubleClicked.connect(self.popOut)
 
 
     def addTab(self, widget: tools.DraggableTool | QW.QWidget):
         '''
         Reimplementation of the default addTab function. A GroupScrollArea is
-        set as the <widget> container. This helps in the visualization of
+        set as the 'widget' container. This helps in the visualization of
         complex widgets across different sized screens.
 
         Parameters
         ----------
-        widget : DraggableTool | QWidget
+        widget : DraggableTool or QWidget
             The widget to be added as tab.
 
         '''
+    # Insert widget in a scroll area, add it and set it as the current tab
         icon, title = widget.windowIcon(), widget.windowTitle()
-        widget = CW.GroupScrollArea(widget, frame=False)
-        super(MainTabWidget, self).addTab(widget, icon, title)
-        self.setCurrentWidget(widget)
+        scroll = CW.GroupScrollArea(widget, frame=False)
+        super(MainTabWidget, self).addTab(scroll, icon, title)
+        self.setCurrentWidget(scroll)
+
+    # Send 'tabified' signal if a draggable tool is added
+        if isinstance(widget, tools.DraggableTool):
+            widget.tabified.emit()
 
 
     def widget(self, index):
@@ -800,9 +883,9 @@ class MainTabWidget(QW.QTabWidget):
         return scroll_area
 
 
-    def closeTab(self, index):
+    def closeTab(self, index: int):
         '''
-        Close the tab at index <index>. Triggers the closeEvent of the widget.
+        Close the tab at index 'index'. Triggers the closeEvent of the widget.
 
         Parameters
         ----------
@@ -818,73 +901,37 @@ class MainTabWidget(QW.QTabWidget):
             scroll_area.deleteLater()
 
 
-    def popIn(self, widget: tools.DraggableTool):
-        '''
-        Re-insert a tab that was displayed as a separate window into the 
-        MainTabWidget.
-
-        Parameters
-        ----------
-        widget : tools.DraggableTool
-            The detached widget.
-            
-        '''
-    # Suppress updates temporarily for better performances
-        self.setUpdatesEnabled(False)
-        self.addTab(widget)
-        self.setUpdatesEnabled(True)
-
-
-    def popOut(self, index):
-        '''
-        Detach the tab from the MainTabWidget and display it as a separate
-        window.
-
-        Parameters
-        ----------
-        index : int
-            The indec of the tab to be detached.
-
-        '''
-        wid = self.widget(index)
-        scroll_area = self.scrollArea(index)
-    # Only pop out draggable tools
-        if isinstance(wid, tools.DraggableTool):
-            self.removeTab(index)
-            wid.setParent(None)
-            wid.setVisible(True)
-            wid.move(0, 0)
-            wid.adjustSize()
-            scroll_area.deleteLater()
-
-
-    def dragEnterEvent(self, e):
+    def dragEnterEvent(self, event: QG.QDragEnterEvent):
         '''
         Reimplementation of the default dragEnterEvent function. Customized to
         accept only DraggableTool instances.
 
         Parameters
         ----------
-        e : dragEvent
-            The dragEvent triggered by the user's drag action.
+        event : QDragEntervent
+            The drag enter event triggered by the user's drag action.
 
         '''
-        if isinstance(e.source(), tools.DraggableTool):
-            e.accept()
+        if isinstance(event.source(), tools.DraggableTool):
+            event.accept()
 
-    def dropEvent(self, e):
+
+    def dropEvent(self, event: QG.QDropEvent):
         '''
         Reimplementation of the default dropEvent function. Customized to
-        accept only DraggableTool instances.
+        accept only DraggableTool instances and add them as new tabs. 
 
         Parameters
         ----------
-        e : dropEvent
-            The dropEvent triggered by the user's drag & drop action.
+        event : QDropEvent
+            The drop event triggered by the user's drag & drop action.
 
         '''
-        widget = e.source()
+        widget = event.source()
         if isinstance(widget, tools.DraggableTool):
-            e.setDropAction(QC.Qt.MoveAction)
-            e.accept()
-            self.popIn(widget)
+            event.setDropAction(QC.Qt.MoveAction)
+            event.accept()
+        # Suppress updates temporarily for better performances
+            self.setUpdatesEnabled(False)
+            self.addTab(widget)
+            self.setUpdatesEnabled(True)

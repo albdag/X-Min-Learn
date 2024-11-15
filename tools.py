@@ -35,6 +35,9 @@ class DraggableTool(QW.QWidget):
     for more details.
     '''
 
+    closed = QC.pyqtSignal()
+    tabified = QC.pyqtSignal()
+
     def __init__(self, parent=None):
         '''
         DraggableTool class constructor.
@@ -104,7 +107,7 @@ class DraggableTool(QW.QWidget):
             drag.exec_(Qt.MoveAction)
 
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QG.QCloseEvent):
         '''
         Reimplementation of the closeEvent default function. It adds a question
         dialog to confirm the closing action. It returns True if the event is
@@ -130,6 +133,7 @@ class DraggableTool(QW.QWidget):
     # latter case the MainTabWidget catches the event output and use that info
     # to "choose" to close or not close the corresponding tab.
         if choice.yes():
+            self.closed.emit()
             return event.accept()
         else:
             return event.ignore()
