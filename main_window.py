@@ -747,16 +747,6 @@ class MainWindow(QW.QMainWindow):
     #         self.phaseRefinerDialog.show()
 
 
-    def show(self):
-        '''
-        Reimplementation of the show() method, to just include the restore of
-        the last saved window state.
-
-        '''
-        self.restoreState(pref.get_setting('GUI/window_state'), version=0)
-        super(MainWindow, self).show()
-        
-
     def closeEvent(self, event: QG.QCloseEvent):
         '''
         Reimplementation of the closeEvent, to just ask for user confirm and
