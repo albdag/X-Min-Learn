@@ -882,7 +882,7 @@ class MineralClassifier(DraggableTool):
     # changed, update the _nodata_color attribute instead
         class_name = legend_item.text(1)
         if class_name == '_ND_':
-             self._nodata_color = list(color)
+             self._nodata_color = color
         else:
             minmap.set_phase_color(class_name, color)
 
