@@ -576,6 +576,7 @@ class Legend(QW.QTreeWidget):
         highlight.setCheckable(True)
         highlight.setChecked(i == self._highlighted_item)
         highlight.toggled.connect(lambda t: self.requestItemHighlight(t, i))
+        menu.addAction(highlight)
 
     # Extract mask
         menu.addAction(QG.QIcon(r'Icons/mask.png'), 'Extract mask', 
