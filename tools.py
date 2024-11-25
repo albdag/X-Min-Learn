@@ -7099,7 +7099,7 @@ class PhaseRefiner(DraggableTool):
             return
         
     # Compute refinement operations
-        current_map = (self.minmap.minmap == self._phase).astype('uint8')
+        current_map = (self.minmap.minmap == self._phase)
         refined_map = self.computeAdvancedRefinement(current_map)
         variance_map = 2 * refined_map + current_map
 
