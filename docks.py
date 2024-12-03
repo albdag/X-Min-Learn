@@ -595,6 +595,7 @@ class DataManager(QW.QTreeWidget):
         
         pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
+        errors = []
         for n, p in enumerate(paths, start=1):
             if pbar.wasCanceled(): 
                 break
@@ -603,13 +604,17 @@ class DataManager(QW.QTreeWidget):
                 group.inmaps.addData(xmap)
 
             except Exception as e:
-                pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
-                pbar.setWindowModality(Qt.WindowModal)
+                errors.append((p, e))
 
             finally:
                 pbar.setValue(n)
 
+    # Send detailed error message if any file failed to be loaded
+        if n_err := len(errors):
+            dtext = '\n'.join((f'{path}: {exc}' for path, exc in errors))
+            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+
+    # Auto expand group
         self.expandRecursively(self.indexFromItem(group))
 
 
@@ -638,6 +643,7 @@ class DataManager(QW.QTreeWidget):
         
         pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
+        errors = []
         for n, p in enumerate(paths, start=1):
             if pbar.wasCanceled(): 
                 break
@@ -649,13 +655,17 @@ class DataManager(QW.QTreeWidget):
                 group.minmaps.addData(mmap)
 
             except Exception as e:
-                pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
-                pbar.setWindowModality(Qt.WindowModal)
+                errors.append((p, e))
 
             finally:
                 pbar.setValue(n)
 
+    # Send detailed error message if any file failed to be loaded
+        if n_err := len(errors):
+            dtext = '\n'.join((f'{path}: {exc}' for path, exc in errors))
+            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+
+    # Auto expand group
         self.expandRecursively(self.indexFromItem(group))
 
 
@@ -684,6 +694,7 @@ class DataManager(QW.QTreeWidget):
         
         pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
+        errors = []
         for n, p in enumerate(paths, start=1):
             if pbar.wasCanceled(): 
                 break
@@ -692,13 +703,17 @@ class DataManager(QW.QTreeWidget):
                 group.masks.addData(mask)
 
             except Exception as e:
-                pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{p}.', str(e))
-                pbar.setWindowModality(Qt.WindowModal)
+                errors.append((p, e))
 
             finally:
                 pbar.setValue(n)
 
+    # Send detailed error message if any file failed to be loaded
+        if n_err := len(errors):
+            dtext = '\n'.join((f'{path}: {exc}' for path, exc in errors))
+            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+
+    # Auto expand group
         self.expandRecursively(self.indexFromItem(group))
 
 
@@ -921,6 +936,7 @@ class DataManager(QW.QTreeWidget):
         '''
         items = self.getSelectedDataObjects()
         pbar = CW.PopUpProgBar(self, len(items), 'Reloading data')
+        errors = []
         for n, i in enumerate(items, start=1):
             if pbar.wasCanceled(): 
                 break
@@ -934,12 +950,17 @@ class DataManager(QW.QTreeWidget):
                 if path_exists:
                     i.setObjectData(data.load(path))
                     i.setEdited(False)
+
             except Exception as e:
-                pbar.setWindowModality(Qt.NonModal)
-                CW.MsgBox(self, 'Crit', f'Unexpected file: {name}', str(e))
-                pbar.setWindowModality(Qt.WindowModal)
+                errors.append((name, path, e))
+
             finally:
                 pbar.setValue(n)
+
+    # Send detailed error message if any file failed to be refreshed
+        if n_err := len(errors):
+            dtext = '\n'.join((f'{fn} ({fp}): {ex}' for fn, fp, ex in errors))
+            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
 
         self.refreshView()
 
