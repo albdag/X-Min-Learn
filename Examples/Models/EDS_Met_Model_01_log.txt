@@ -1,39 +1,25 @@
-ALGM_NAME
+VERSION
+2
+
+
+ALGORITHM
 'Softmax Regression'
 
 
-LOSS_NAME
+LOSS
 'Cross-Entropy loss'
 
 
-OPTIM_NAME
+OPTIMIZER
 'SGD'
 
 
-REGRESSORDEGREE
-1
+INPUT FEATURES
+['Al', 'BSE', 'Ca', 'Fe', 'K', 'Mg', 'Mn', 'Na', 'Si', 'Ti']
 
 
-STANDARDS
-(tensor([ 42.9209, 158.3755,  22.8870,  17.5917,   9.7909,  10.6764,   2.1016,
-          5.1153,  55.6858,  24.2252]), tensor([47.5761, 55.4823, 30.7246, 22.8060, 13.3710, 13.7431,  2.3859,  5.7906,
-        45.7572, 55.9864]))
-
-
-PARENTMODEL_PATH
-''
-
-
-GT_DATASET_PATH
-'C:/Users/dagos/Desktop/Working Directory/Datasets/EDS_Met_Dataset.csv'
-
-
-TVT_RATEOS
-(0.5, 0.25, 0.25)
-
-
-BALANCING_INFO
-[{'Strategy': {0: '799 -> 85242', 1: '4472 -> 85242', 2: '8949 -> 85242', 3: '128394 -> 85242', 4: '29899 -> 85242', 5: '7902 -> 85242', 6: '1472 -> 85242', 7: '205624 -> 85242', 8: '2614 -> 85242', 9: '8485 -> 85242', 10: '232146 -> 85242', 11: '48817 -> 85242', 12: '148311 -> 85242', 13: '26 -> 85242', 14: '609 -> 85242', 15: '23906 -> 85242'}, 'OS': 'SMOTE', 'US': 'RandUS', 'n-neigh_US': 3, 'k-neigh_OS': 5, 'm-neigh_OS': 10, 'Seed': 64874, 'New TVT rateos': (0.62, 0.19, 0.19)}]
+CLASS ENCODER
+{'AlSi': 0, 'Amp': 1, 'Ap': 2, 'Bt': 3, 'Chl': 4, 'Ep': 5, 'FeOx': 6, 'Grt': 7, 'Ilm': 8, 'Kfs': 9, 'Pl': 10, 'Px': 11, 'Qtz': 12, 'Rt': 13, 'Ttn': 14, 'Wm': 15}
 
 
 DEVICE
@@ -44,41 +30,53 @@ SEED
 64874
 
 
+PARENT MODEL PATH
+''
+
+
+DATASET PATH
+'C:/Users/dagos/Desktop/Working Directory/Datasets/EDS_Met_Dataset.csv'
+
+
+TVT RATIOS
+(0.5, 0.25, 0.25)
+
+
+BALANCING INFO
+[{'Strategy': {0: '799 -> 85242', 1: '4472 -> 85242', 2: '8949 -> 85242', 3: '128394 -> 85242', 4: '29899 -> 85242', 5: '7902 -> 85242', 6: '1472 -> 85242', 7: '205624 -> 85242', 8: '2614 -> 85242', 9: '8485 -> 85242', 10: '232146 -> 85242', 11: '48817 -> 85242', 12: '148311 -> 85242', 13: '26 -> 85242', 14: '609 -> 85242', 15: '23906 -> 85242'}, 'OS': 'SMOTE', 'US': 'RandUS', 'n-neigh_US': 3, 'k-neigh_OS': 5, 'm-neigh_OS': 10, 'Seed': 64874, 'New TVT rateos': (0.62, 0.19, 0.19)}]
+
+
+POLYNOMIAL DEGREE
+1
+
+
 EPOCHS
 700
 
 
-LR
+LEARNING RATE
 0.1
 
 
-WD
+WEIGHT DECAY
 0.001
 
 
-MTM
+MOMENTUM
 0.9
+
+
+BATCH SIZE
+0
 
 
 ACCURACY
 [0.9403595058773844, 0.9188082015330363, 0.9190029398446317]
 
 
-LOSS
-[0.2524853050708771, 0.26840877532958984]
-
-
-F1_SCORES
+F1 SCORES
 array([[0.94036757, 0.94033013, 0.94033013],
        [0.9188082 , 0.77332835, 0.93308531],
        [0.91900294, 0.77426583, 0.93324703]])
-
-
-ORDERED_XFEAT
-['Al', 'BSE', 'Ca', 'Fe', 'K', 'Mg', 'Mn', 'Na', 'Si', 'Ti']
-
-
-Y_DICT
-{'AlSi': 0, 'Amp': 1, 'Ap': 2, 'Bt': 3, 'Chl': 4, 'Ep': 5, 'FeOx': 6, 'Grt': 7, 'Ilm': 8, 'Kfs': 9, 'Pl': 10, 'Px': 11, 'Qtz': 12, 'Rt': 13, 'Ttn': 14, 'Wm': 15}
 
 

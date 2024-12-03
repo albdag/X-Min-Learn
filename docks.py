@@ -268,6 +268,13 @@ class DataManager(QW.QTreeWidget):
         # Separator
             menu.addSeparator()
 
+        # Correct data source
+            fix_source_action = QW.QAction(QIcon(r'Icons/fix.png'), 
+                                           'Correct data source')
+            fix_source_action.setEnabled(item.get('not_found'))
+            fix_source_action.triggered.connect(lambda: self.fixDataSource(item))
+            menu.addAction(fix_source_action)
+
         # Refresh data source
             menu.addAction(QIcon(r'Icons/refresh.png'), 'Refresh data source',
                            self.refreshDataSource)
@@ -833,6 +840,80 @@ class DataManager(QW.QTreeWidget):
                 ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
 
 
+    def fixDataSource(self, item: CW.DataObject):
+    # Identify correct item data type by looking at its subgroup, because item
+    # can contain None data if they failed to be loaded
+        subgroup = item.parent()
+        subgroup_name = subgroup.name
+        if subgroup_name == 'Input Maps':
+            ftype = 'ASCII maps (*.txt *.gz)'
+        elif subgroup_name == 'Mineral Maps':
+            ftype = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
+        elif subgroup_name == 'Masks':
+            ftype = 'Masks (*.msk);;Text file (*.txt)'
+        else:
+            return
+    
+    # Do nothing if path is invalid or file dialog is canceled
+        path, _ = QW.QFileDialog.getOpenFileName(self, 'Correct data source',
+                                                 pref.get_dir('in'), ftype)
+        if not path:
+            return
+        
+        root_fld = os.path.dirname(path)
+        pref.set_dir('in', root_fld)
+    
+    # Fix item file source and data
+        try:
+        # Setting object data also sets its filepath to data.filepath
+            if item.get('data') is None:
+                item.setObjectData(subgroup.datatype.load(path))
+        # Setting object path also changes its data to the data stored in path
+            else:
+                item.setFilepath(path)
+        # In any case, toggle off the 'not_found' and 'edited' status
+            item.setNotFound(False)
+            item.setEdited(False)
+            
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', f'Unexpected file: {path}', str(e))
+
+    # Try applying fix to data objects in the same group that are also not found
+    # by checking all the files in the same root folder of the loaded file
+        available_files = os.listdir(root_fld)
+        for obj in self.getItemParentGroup(item).getAllDataObjects():
+        # Skip object if has not the 'not_found' status
+            if not obj.get('not_found'): 
+                continue
+        # Get object info. If object is 'not_found', its path shouldn't be None
+            obj_data, obj_path = obj.get('data', 'filepath')
+            obj_fname = cf.path2filename(obj_path)
+            obj_type = obj.parent().datatype
+       
+            for f in available_files:
+            # Skip files with invalid extensions or unfitting filename
+                f_name, f_ext = os.path.splitext(f)
+                if f_ext.lower() in obj_type._FILEXT and f_name == obj_fname:
+                    f_path = os.path.join(root_fld, f)
+                else:
+                    continue
+            # Fix object file source and data
+                try:
+                    if obj_data is None:
+                    # Setting data also sets filepath to data.filepath
+                        obj.setObjectData(obj_type.load(f_path))
+                    else:
+                    # Setting path also changes data to the data stored in path
+                        obj.setFilepath(f_path)
+                # In any case, toggle off the 'not_found' and 'edited' status
+                    obj.setNotFound(False)
+                    obj.setEdited(False)
+                except:
+                    continue
+                        
+        self.refreshView()
+
+                    
     def refreshDataSource(self):
         '''
         Re-load the selected data from its original source.
@@ -844,16 +925,18 @@ class DataManager(QW.QTreeWidget):
             if pbar.wasCanceled(): 
                 break
             try:
-                item_data, item_name = i.get('data', 'name')
-                path = item_data.filepath
-                if path is None: raise FileNotFoundError
-                i.setData(0, 100, item_data.load(path))
-            # Change the edited state of item
-                i.setEdited(False)
-            except FileNotFoundError:
+                data, path, name = i.get('data', 'filepath', 'name')
+                # None path indicates unsaved data and cannot be refreshed
+                if path is None: 
+                    continue
+                path_exists = os.path.exists(path)
+                i.setNotFound(not path_exists)
+                if path_exists:
+                    i.setObjectData(data.load(path))
+                    i.setEdited(False)
+            except Exception as e:
                 pbar.setWindowModality(Qt.NonModal)
-                err = f'Filepath to {item_name} was deleted, moved or renamed.'
-                CW.MsgBox(self, 'Crit', err)
+                CW.MsgBox(self, 'Crit', f'Unexpected file: {name}', str(e))
                 pbar.setWindowModality(Qt.WindowModal)
             finally:
                 pbar.setValue(n)

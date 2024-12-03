@@ -60,6 +60,23 @@ class DataGroup(QW.QTreeWidgetItem):
         self.subgroups = (self.inmaps, self.minmaps, self.masks)
         self.addChildren(self.subgroups)
 
+    
+    def getAllDataObjects(self):
+        '''
+        Return the data objects from all subgroups in a single list.
+
+        Returns
+        -------
+        objects : list[DataObject]
+            All data objects
+
+        '''
+        objects = []
+        # include points data (maybe?)
+        for subgr in self.subgroups:
+            objects.extend(subgr.getChildren())
+        return objects
+
 
     def setShapeWarnings(self):
         '''
@@ -67,11 +84,8 @@ class DataGroup(QW.QTreeWidgetItem):
         from the sample overall trending shape.
 
         '''
-    # Collect in a single list the objects from all subgroup
-        # include points data (maybe?)
-        objects = []
-        for subgr in self.subgroups:
-            objects.extend(subgr.getChildren())
+    # Collect in a single list the objects from all subgroups
+        objects = self.getAllDataObjects()
 
     # Extract the shape from each object data and obtain the trending shape  
         if len(objects):
@@ -147,6 +161,10 @@ class DataSubGroup(QW.QTreeWidgetItem):
     function is to provide a better organization and visualization of the data
     in the manager. Therefore they offer less customization options to users.
     '''
+
+    datatype_dict = {'Input Maps': InputMap, 'Mineral Maps': MineralMap,
+                     'Masks': Mask}
+    
     def __init__(self, name):
         '''
         DataSubGroup class constructor.
@@ -161,6 +179,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
 
     # Set main attributes
         self.name = name
+        self.datatype = self.datatype_dict.get(name, None)
 
     # Set the flags. Data subgroups can be selected but cannot be edited
         self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
@@ -249,17 +268,14 @@ class DataObject(QW.QTreeWidgetItem):
     developer.
     '''
 
-    def __init__(self, data):
+    def __init__(self, data: InputMap|MineralMap|Mask|None):
         '''
         DataObject class constructor.
 
         Parameters
         ----------
-        data : InputMap, MineralMap, Mask, PointAnalysis [in future]
+        data : InputMap or MineralMap or Mask or None or PointAnalysis [in future]
             The data linked to the data object.
-
-        parent : QTreeWidget, QTreeWidgetItem, None
-            This object's parent. The default is None.
 
         '''
     # Set the data object type to 'User Type' for more customization options
@@ -268,29 +284,43 @@ class DataObject(QW.QTreeWidgetItem):
     # Set the flags. A data object is selectable and editable by the user.
         self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
                       QC.Qt.ItemIsEnabled | QC.Qt.ItemIsEditable)
+        
+    # Set status stack [102 = not_found, 101 = edited, 0 = Empty status] 
+        self._status_stack = [102, 101, 0] 
 
     # Set the data with custom role. It is a user-role (int in [0, 256]) that
     # does not overwrite any default Qt role. It is set arbitrarily to 100
-        self.setData(0, 100, data)
-    # Set the display name of data as its filename, using a DisplayRole (= 0)
-        self.setData(0, 0, self.generateDisplayName())
-    # Set the "edited" state as False, using a user-role (= 101).
-        self.setData(0, 101, False)
-    # A save icon is shown if item is edited --> DecorationRole (= 1)
-        self.setData(0, 1, QG.QIcon())
-    # A tooltip indicates if item is edited --> ToolTipRole (= 3)
-        self.setData(0, 3, '')
-    # Set the "warning" state as False, using a user-role (= 102).
-        self.setData(0, 102, False)
-    # A warn icon is shown (2nd col) if item has warnings --> DecorationRole (= 1)
-        self.setData(1, 1, QG.QIcon())
-    # A tooltip (2nd col) indicates if item has warnings --> ToolTipRole (= 3)
-        self.setData(1, 3, '')
-
+        self.setData(0, 100, data) # Object data - CustomRole (100)
+        self.setData(0, 110, None if data is None else data.filepath) # Object filepath - CustomRole (110)
+        self.setData(0, 0, self.generateDisplayName()) # Display name - DisplayRole (0)
+    # Set object file status types
+        self.setData(0, 101, False) # File edited status - CustomRole (101)
+        self.setData(0, 102, False) # File missing status - CustomRole (102)
+        self.setData(0, 1, QG.QIcon()) # Status icon - DecorationRole (1)
+        self.setData(0, 3, '') # Status tooltip - ToolTipRole (3)
+    # Set data shape warning state
+        self.setData(0, 103, False) # Data shape warning - CustomRole (103)
+        self.setData(1, 1, QG.QIcon()) # Warning icon - DecorationRole (1)
+        self.setData(1, 3, '') # Warning tooltip - ToolTipRole (= 3)
     # Set the "checked" state for togglable data (Masks and Points [in future])
         if isinstance(data, (Mask,)): # add PointAnalysis class
-            self.setData(0, 10, QC.Qt.Unchecked) # CheckedRole (= 10)
+            self.setData(0, 10, QC.Qt.Unchecked) # CheckedRole (10)
 
+
+    def filepathValid(self):
+        '''
+        Return if the DataObject filepath is valid. A filepath is valid if it
+        exists or if it is None, which indicates an unsaved datum.
+
+        Returns
+        -------
+        bool
+            Whether the filepath is valid or not.
+
+        '''
+        filepath = self.get('filepath')
+        return filepath is None or os.path.exists(filepath)
+    
 
     def generateDisplayName(self):
         '''
@@ -303,8 +333,7 @@ class DataObject(QW.QTreeWidgetItem):
             Display name.
 
         '''
-        data = self.get('data')
-        filepath = data.filepath
+        data, filepath = self.get('data', 'filepath')
         if filepath is None:
             if isinstance(data, (InputMap, MineralMap)):
                 obj_type = 'map'
@@ -392,13 +421,15 @@ class DataObject(QW.QTreeWidgetItem):
         '''
     # Define a dictionary holding all the object's attributes
         attributes = {'data' : self.data(0, 100),
+                      'filepath' : self.data(0, 110),
                       'name' : self.data(0, 0),
                       'is_edited' : self.data(0, 101),
-                      'has_warning' : self.data(0, 102),
-                      'save_icon' : self.data(0, 1),
+                      'not_found' : self.data(0, 102),
+                      'has_warning' : self.data(0, 103),
+                      'status_icon' : self.data(0, 1),
                       'warn_icon' : self.data(1, 1),
-                      'edit_tooltip' : self.data(0, 3),
-                      'warn_tooltip' : self.data(1, 3),
+                      'status_tip' : self.data(0, 3),
+                      'warn_tip' : self.data(1, 3),
                       'checked' : self.data(0, 10)
                       }
 
@@ -406,44 +437,161 @@ class DataObject(QW.QTreeWidgetItem):
         out = [attributes[a] for a in args]
         if len(out) == 1: out = out[0]
         return out
+    
 
-
-    def setEdited(self, edited:bool):
+    def setObjectData(self, data: InputMap|MineralMap|Mask):
         '''
-        Toggle on/off the edited state of this object both internally and 
+        Set 'data' as the DataObject data. This function also updates the 
+        filepath.
+
+        Parameters
+        ----------
+        data : InputMap or MineralMap or Mask
+            The object data. Must be a valid data type.
+
+        '''
+        if isinstance(data, (InputMap, MineralMap, Mask)):  # add POINTS
+            self.setData(0, 100, data)
+            self.setData(0, 110, data.filepath)
+
+
+    def setFilepath(self, path: str):
+        '''
+        Set 'path' as new DataObject filepath. This function also changes the
+        data.
+
+        Parameters
+        ----------
+        path : str
+            New filepath.
+
+        Raises
+        ------
+        Exception
+            Raised if the filepath is not valid.
+
+        '''      
+    # Do nothing if data is None
+        data = self.get('data')  
+        if data is None:
+            return
+
+    # Load new data from filepath. If filepath is invalid for the current data
+    # type, this will raise an error.
+        data = data.load(path)
+        
+    # If we are here, data loading was successfull and we can set new object's
+    # data and filepath
+        self.setData(0, 100, data)
+        self.setData(0, 110, path)
+
+
+    def setName(self, name: str):
+        '''
+        Set object displayed name as 'name'.
+
+        Parameters
+        ----------
+        name : str
+            Displayed name.
+
+        '''
+        self.setData(0, 0, name)
+        
+
+    def setEdited(self, toggle: bool):
+        '''
+        Toggle on/off the file edited status of this object both internally and 
         visually (icon and tooltip).
 
         Parameters
         ----------
-        edited : bool
-            Edited state.
+        toggle : bool
+            Toggle on/off file edited status.
 
         '''
-    # Set the 'isEdited' attribute
-        self.setData(0, 101, edited)
-    # Show/hide the save icon
-        icon = QG.QIcon('Icons/edit_white.png') if edited else QG.QIcon()
+    # Set the 'is_edited' attribute
+        self.setData(0, 101, toggle)
+    # Show/hide the save status icon and tooltip
+        self._toggleStatus(101, toggle)
+
+
+    def setNotFound(self, toggle: bool):
+        '''
+        Toggle on/off the file not found status of this object both internally 
+        and visually (icon and tooltip).
+
+        Parameters
+        ----------
+        toggle : bool
+            Toggle on/off file not found status.
+
+        '''
+    # Set the 'not_found' attribute
+        self.setData(0, 102, toggle)
+    # Show/hide the not found status icon and tooltip
+        self._toggleStatus(102, toggle)
+
+
+    def _toggleStatus(self, status: int, toggle: bool):
+        '''
+        Visually toggle on or off the provided status. This functions alters
+        the status stack, so that if 'status' is toggle on, it will be placed
+        as the last (hence visible) element of the stack, otherwise it will be
+        placed as the first element of the stack. This allows for stackable
+        status with a "last toggled on is visible" rule. 
+
+        Parameters
+        ----------
+        status : int
+            Status to be toggled on/off.
+        toggle : bool
+            Toggle state.
+
+        '''
+    # Do nothing if 'status' is invalid.
+        if not status in self._status_stack:
+            return
+        
+    # Move status to last position in stack if toggled else at the beginning
+        idx = len(self._status_stack) - 1 if toggle else 0
+        status = self._status_stack.pop(self._status_stack.index(status))
+        self._status_stack.insert(idx, status) 
+        
+    # Visually show the last status in the stack (show status icon and tooltip)
+        last = self._status_stack[-1]
+
+        if last == 0: # Empty status
+            icon = QG.QIcon()
+            tooltip = ''
+        elif last == 101: # File edited status
+            icon = QG.QIcon(r'Icons/edit_white.png')
+            tooltip = 'Edits not saved'
+        elif last == 102: # File not found status
+            icon = QG.QIcon(r'Icons/file_error.png')
+            tooltip = 'File was deleted, moved or renamed'
+        else: # invalid status, should not be possible
+            return
+        
         self.setData(0, 1, icon)
-    # Show/hide the edited tooltip
-        text = 'Edits not saved' if edited else ''
-        self.setData(0, 3, text)
+        self.setData(0, 3, tooltip)
 
 
-    def setWarning(self, warning:bool):
+    def setWarning(self, warning: bool):
         '''
-        Toggle on/off the warning state of this object both internally and 
-        visually (icon and tooltip).
+        Toggle on/off the shape warning state of this object both internally 
+        and visually (icon and tooltip).
 
         Parameters
         ----------
         warning : bool
-            Warning state.
+            Shape warning state.
 
         '''
     # Set the 'has_warning' attribute
-        self.setData(1, 102, warning)
-    # Show/hide the warn icon
-        icon = QG.QIcon('Icons/warnIcon.png') if warning else QG.QIcon()
+        self.setData(1, 103, warning)
+    # Show/hide the warning icon
+        icon = QG.QIcon(r'Icons/warnIcon.png') if warning else QG.QIcon()
         self.setData(1, 1, icon)
     # Show/hide the warning tooltip
         text = 'Unfitting shapes' if warning else ''

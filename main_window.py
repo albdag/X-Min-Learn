@@ -597,9 +597,12 @@ class MainWindow(QW.QMainWindow):
     # Actions to be performed when item is a data object
         elif isinstance(item, CW.DataObject):
 
-        # Extract item data, name and parent (sample). Also get mask if present
-            i_data, i_name = item.get('data', 'name')
+        # Extract item data, filepath, name and parent group (sample) 
+            i_data, i_path, i_name = item.get('data', 'filepath', 'name')
             sample = self.dataManager.getItemParentGroup(item)
+        # Check for source file existence
+            item.setNotFound(not item.filepathValid())
+        # Also get mask if present
             mask = sample.getCompositeMask('checked')
             if mask is not None:
                 mask = mask.mask
@@ -608,7 +611,7 @@ class MainWindow(QW.QMainWindow):
             if item.holdsMap():
                 title = f'{sample.text(0)} - {i_name}'
                 self.dataViewer._displayedObject = item
-                self.dataViewer.currPath.setPath(i_data.filepath)
+                self.dataViewer.currPath.setPath(i_path)
 
         # Actions to be performed if item holds input map data
             if item.holdsInputMap():
