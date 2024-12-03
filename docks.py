@@ -611,8 +611,9 @@ class DataManager(QW.QTreeWidget):
 
     # Send detailed error message if any file failed to be loaded
         if n_err := len(errors):
-            dtext = '\n'.join((f'{path}: {exc}' for path, exc in errors))
-            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+            text = f'A total of {n_err} file(s) failed to load.'
+            dtext = '\n\n'.join((f'{path}: {exc}' for path, exc in errors))
+            CW.MsgBox(self, 'Crit', text, dtext)
 
     # Auto expand group
         self.expandRecursively(self.indexFromItem(group))
@@ -662,8 +663,9 @@ class DataManager(QW.QTreeWidget):
 
     # Send detailed error message if any file failed to be loaded
         if n_err := len(errors):
-            dtext = '\n'.join((f'{path}: {exc}' for path, exc in errors))
-            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+            text = f'A total of {n_err} file(s) failed to load.'
+            dtext = '\n\n'.join((f'{path}: {exc}' for path, exc in errors))
+            CW.MsgBox(self, 'Crit', text, dtext)
 
     # Auto expand group
         self.expandRecursively(self.indexFromItem(group))
@@ -710,8 +712,9 @@ class DataManager(QW.QTreeWidget):
 
     # Send detailed error message if any file failed to be loaded
         if n_err := len(errors):
-            dtext = '\n'.join((f'{path}: {exc}' for path, exc in errors))
-            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+            text = f'A total of {n_err} file(s) failed to load.'
+            dtext = '\n\n'.join((f'{path}: {exc}' for path, exc in errors))
+            CW.MsgBox(self, 'Crit', text, dtext)
 
     # Auto expand group
         self.expandRecursively(self.indexFromItem(group))
@@ -959,8 +962,9 @@ class DataManager(QW.QTreeWidget):
 
     # Send detailed error message if any file failed to be refreshed
         if n_err := len(errors):
-            dtext = '\n'.join((f'{fn} ({fp}): {ex}' for fn, fp, ex in errors))
-            CW.MsgBox(self, 'Crit', f'{n_err} file(s) failed to load.', dtext)
+            text = f'A total of {n_err} file(s) failed to load.'
+            dtext = '\n\n'.join((f'{fn} ({fp}): {ex}' for fn, fp, ex in errors))
+            CW.MsgBox(self, 'Crit', text, dtext)
 
         self.refreshView()
 
