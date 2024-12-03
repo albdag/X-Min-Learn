@@ -15,6 +15,7 @@ class InputMap():
     object consists of an input map array (e.g., X-Ray map).
     '''
     _DTYPE = 'int32'
+    _FILEXT = ('.gz', '.txt')
 
     def __init__(self, map_array: np.ndarray, filepath: str|None=None):
         '''
@@ -48,7 +49,7 @@ class InputMap():
 
         Raises
         ------
-        TypeError
+        ValueError
             The file type is not supported (not one of .gz and .txt).
 
         Returns
@@ -65,7 +66,7 @@ class InputMap():
             return cls(inmap, filepath)
 
     # Any other file extension is discarded.
-        raise TypeError('This file is not supported.')
+        raise ValueError('This file is not supported.')
     
 
     def copy(self):
@@ -142,6 +143,7 @@ class MineralMap():
 
     _DTYPE_STR = 'U8'
     _DTYPE_INT = 'uint8'
+    _FILEXT = ('.mmp', '.gz', '.txt')
 
 
     def __init__(self, minmap_array: np.ndarray, 
@@ -229,7 +231,7 @@ class MineralMap():
 
         Raises
         ------
-        TypeError
+        ValueError
             The file type is not supported (not one of .mmp, .gz and .txt).
 
         Returns
@@ -264,7 +266,7 @@ class MineralMap():
             palette = None
 
     # Any other file extension is discarded and exits the function.
-        else: raise TypeError('This file is not supported.')
+        else: raise ValueError('This file is not supported.')
 
     # Instantiate a new Mineral Map object
         return cls(minmap, probmap, palette, filepath)
@@ -958,6 +960,7 @@ class RoiMap():
 
     _DTYPE_STR = 'U8'
     _ND = ''
+    _FILEXT = ('.rmp')
 
     def __init__(self, map_array: np.ndarray, roilist: list[list[str, tuple]], 
                  filepath:str|None=None):
@@ -1005,7 +1008,7 @@ class RoiMap():
 
         Raises
         ------
-        TypeError
+        ValueError
             The file extension is not supported (not '.rmp').
 
         Returns
@@ -1024,7 +1027,7 @@ class RoiMap():
             roilist = file['roilist'].tolist()
 
     # Any other file extension is discarded and exits the function.
-        else: raise TypeError('This file is not supported.')
+        else: raise ValueError('This file is not supported.')
 
     # Instantiate a new Roi Map object
         return cls(map_array, roilist, filepath)
@@ -1333,6 +1336,8 @@ class Mask():
     consists of a boolean 2D array where 1's represent masked (hidden) pixels.
     '''
 
+    _FILEXT = ('.msk', '.txt')
+
     def __init__(self, mask_array: np.ndarray, filepath: str|None=None):
         '''
         Mask class constructor.
@@ -1367,7 +1372,7 @@ class Mask():
 
         Raises
         ------
-        TypeError
+        ValueError
             The file type is not supported (not .msk or .txt).
 
         Returns
@@ -1389,7 +1394,7 @@ class Mask():
             mask_array = np.loadtxt(filepath, dtype=bool) # hic sunt leones
 
     # Any other file extension is discarded and exits the function.
-        else: raise TypeError('This file is not supported.')
+        else: raise ValueError('This file is not supported.')
 
     # Instantiate a new Mask object
         return cls(mask_array, filepath)
