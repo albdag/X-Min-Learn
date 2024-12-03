@@ -528,26 +528,13 @@ class DataManager(QW.QTreeWidget):
 
         '''
 
-        item_data = item.get('data')
-        path = None
+        item_data, path = item.get('data', 'filepath')
 
-    # If overwrite is True, check if the original path still exists. If not,
-    # set path to None. If it exists, double check if user really wants to
-    # overwrite the file
-        if overwrite:
-            path = item_data.filepath
-            if path is not None and os.path.exists(path):
-                choice = CW.MsgBox(self, 'Quest', 'Overwrite this file?')
-                if choice.no(): 
-                    return
-            else:
-                path = None
-
-    # Prompt user to select a filepath if path is None
-        if path is None:
+    # Select filepath if overwrite is not requested (= saveAs), path is None or
+    # path is invalid (moved, renamed, deleted)
+        if not overwrite or path is None or not item.filepathValid():
             if item.holdsInputMap():
-                filext = '''Compressed ASCII map (*.gz)
-                            ASCII map (*.txt)'''
+                filext = 'Compressed ASCII map (*.gz);;ASCII map (*.txt)'
             elif item.holdsMineralMap():
                 filext = 'Mineral maps (*.mmp)'
             elif item.holdsMask():
@@ -556,19 +543,33 @@ class DataManager(QW.QTreeWidget):
             else: 
                 return # safety
 
-            path, _ = QW.QFileDialog.getSaveFileName(self, 'Save Map',
+            path, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
                                                      pref.get_dir('out'),
                                                      filext)
+            if path:
+                pref.set_dir('out', os.path.dirname(path))
+            else:
+                return
+    
+    # Otherwise, double check if user really wants to overwrite the file 
+        else:
+            choice = CW.MsgBox(self, 'Quest', 'Overwrite this file?')
+            if choice.no(): 
+                return
 
-    # Finally, if there is a valid path, save the data
-        if path:
-            pref.set_dir('out', os.path.dirname(path))
-            try:
-                item_data.save(path)
-            # Set the item edited status to False
-                item.setEdited(False)
-            except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save file.', str(e))
+    # Save the data
+        try:
+            item_data.save(path)
+        # Ensure that DataObjects is populated with updated data and filepath
+            item.setObjectData(item_data) 
+        # All edits have been saved, so the edited status is set to False
+            item.setEdited(False)
+            
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', 'Failed to save file.', str(e))
+        
+        finally:
+            self.refreshView()
 
 
     def loadInputMaps(self, group: CW.DataGroup, paths: list|None=None):
