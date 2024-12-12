@@ -1093,6 +1093,7 @@ class MineralClassifier(DraggableTool):
             choice = CW.MsgBox(self, 'QuestWarn', text)
             if choice.yes():
                 self.stopClassification()
+                self.closed.emit()
                 event.accept()
             else:
                 event.ignore()
@@ -6323,6 +6324,7 @@ class ModelLearner(DraggableTool):
             if choice.yes():
                 self.stopBalancingSession()
                 self.stopLearningSession()
+                self.closed.emit()
                 event.accept()
             else:
                 event.ignore()
