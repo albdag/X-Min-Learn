@@ -11,7 +11,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
-import preferences as pref
 import style
 
 
@@ -50,7 +49,6 @@ if __name__ == "__main__":
 
     from main_window import MainWindow
     main_win = MainWindow()
-    main_win.restoreState(pref.get_setting('GUI/window_state'), version=0)
     main_win.show()
     loader.finish(main_win)
     sys.exit(app.exec())

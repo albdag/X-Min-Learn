@@ -41,8 +41,8 @@ class MainWindow(QW.QMainWindow):
     # Connect signals with slots
         self._connect_slots()
 
-    # Show window in full screen
-        self.showMaximized()
+    # Restore last window state (toolboxes and panes)
+        self.restoreState(pref.get_setting('GUI/window_state'), version=0)
 
 
     def _init_ui(self):
