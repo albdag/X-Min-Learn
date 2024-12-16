@@ -43,7 +43,7 @@ class PanHandler(panhandler):
     Reimplemantation of the 'panhandler' class from mpl_interactions library. 
     It simply adds a couple of functions to control the type of cursor.
     '''
-    _pressCursor = QCursor(Qt.ClosedHandCursor)
+    _pressCursor = QCursor(Qt.SizeAllCursor)
     _releaseCursor = QCursor(Qt.ArrowCursor)
 
     def __init__(self, fig: Figure, button=2):
@@ -62,9 +62,9 @@ class PanHandler(panhandler):
         super(PanHandler, self).__init__(fig, button)
         self.wheelButton = button
 
-    def press(self, event: MouseEvent):
+    def _press(self, event: MouseEvent):
         '''
-        Reimplementation of the press event. It just changes the cursor.
+        Reimplementation of the _press function. It just changes the cursor.
 
         Parameters
         ----------
@@ -72,15 +72,15 @@ class PanHandler(panhandler):
             The mouse press event.
 
         '''
+        super(PanHandler, self)._press(event)
         if event.button == self.wheelButton:
             self._releaseCursor = self.fig.canvas.cursor()
             self.fig.canvas.setCursor(self._pressCursor)
-            super(PanHandler, self).press(event)
 
 
-    def release(self, event: MouseEvent):
+    def _release(self, event: MouseEvent):
         '''
-        Reimplementation of the release event. It just changes the cursor.
+        Reimplementation of the _release function. It just changes the cursor.
 
         Parameters
         ----------
@@ -88,9 +88,9 @@ class PanHandler(panhandler):
             The mouse release event.
 
         '''
+        super(PanHandler, self)._release(event)
         if event.button == self.wheelButton:
             self.fig.canvas.setCursor(self._releaseCursor)
-            super(PanHandler, self).release(event)
 
 
 
@@ -150,6 +150,19 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
 
 
+    def has_toolbar(self) -> bool:
+        '''
+        Check if canvas has a linked navigation toolbar.
+
+        Returns
+        -------
+        bool
+            Whether the canvas has a toolbar.
+
+        '''
+        return hasattr(self, "toolbar") and self.toolbar is not None
+
+
     def clear_canvas(self, deep_clear=False):
         '''
         Generic canvas clearing actions. To be reimplemented in each subclass.
@@ -166,6 +179,10 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
     # Hide the axis (borders and ticks)
         self.ax.axis('off')
+
+    # Reset the navigation toolbar stack to fix unwanted glitches with clims 
+        if self.has_toolbar:
+            self.toolbar.update()
 
 
     def mouseMoveEvent(self, event: MouseEvent):
@@ -254,14 +271,9 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
     # Show the axis (borders and ticks)
         self.ax.axis('on')
 
-        # try:
-        #     # disconnect the zoom factory
-        #     self._id_zoom()
-        #     # reconnect the zoom factory
-        #     self._id_zoom = self.wheelZoomHandler()
-        # except AttributeError:
-        #     # Wheelzoom is not enabled
-        #     pass
+    # Reset the navigation toolbar stack to fix unwanted glitches with clims 
+        if self.has_toolbar:
+            self.toolbar.update()
 
 
     # Inspired by https://gist.github.com/tacaswell/3144287
@@ -620,24 +632,30 @@ class ImageCanvas(_CanvasBase):
             Upper limit. The default is None.
 
         '''
-        if not self.is_empty():
+    # Do nothing if canvas is empty
+        if self.is_empty():
+            return
 
-        # We use the vmin, vmax args if provided
-            if vmin is not None and vmax is not None:
-                self.image.set_clim(vmin, vmax)
-            # Set colorbar clim. Fixes a bug with item highlight of legends 
-                if self.contains_discretemap() and self.cbar is not None:
-                    self.cbar.mappable.set_clim(vmin, vmax)
+    # We use the vmin, vmax args if provided
+        if vmin is not None and vmax is not None:
+            self.image.set_clim(vmin, vmax)
+        # Set colorbar clim. Fixes a bug with item highlight of legends 
+            if self.contains_discretemap() and self.cbar is not None:
+                self.cbar.mappable.set_clim(vmin, vmax)
 
-        # Otherwise we use the current image clims (reset clims)
-            else:
-                array = self.get_map()
-                vmin, vmax = np.nanmin(array), np.nanmax(array)
-                self.image.set_clim(vmin, vmax)
-            # Re-apply boundary norm if image is a discrete map
-                if self.contains_discretemap():
-                    norm = self.set_boundary_norm(int(vmax + 1))
-                    self.image.set_norm(norm)
+    # Otherwise we use the current image clims (reset clims)
+        else:
+            array = self.get_map()
+            vmin, vmax = np.nanmin(array), np.nanmax(array)
+            self.image.set_clim(vmin, vmax)
+        # Re-apply boundary norm if image is a discrete map
+            if self.contains_discretemap():
+                norm = self.set_boundary_norm(int(vmax + 1))
+                self.image.set_norm(norm)
+
+    # Reset the navigation toolbar stack to fix unwanted glitches with clims 
+        if self.has_toolbar:
+            self.toolbar.update()
 
 
     def clear_canvas(self):
@@ -687,21 +705,24 @@ class ImageCanvas(_CanvasBase):
         the Navigation Toolbar.
 
         '''
-        if not self.is_empty():
-            data = self.image.get_array()
-            extents = (-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5)
-        # Fix axes extents
-            self.ax.set_xlim(extents[:2])
-            self.ax.set_ylim(extents[2:])
-        # Fix image extents (correct aspect ratio)
-            self.image.set_extent(extents)
-        # Force re-applying current clims (fix colormap bug of discrete maps)
-            self.update_clim(*self.image.get_clim())
-        # Fix image zoom issues when pressing home button multiple times
-            if self.fig.get_tight_layout():
-                self.fig.tight_layout()
-        # Render the canvas
-            self.draw_idle()
+    # Do nothing if canvas is empty
+        if self.is_empty():
+            return
+        
+        data = self.image.get_array()
+        extents = (-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5)
+    # Fix axes extents
+        self.ax.set_xlim(extents[:2])
+        self.ax.set_ylim(extents[2:])
+    # Fix image extents (correct aspect ratio)
+        self.image.set_extent(extents)
+    # Force re-applying current clims (fix colormap bug of discrete maps)
+        self.update_clim(*self.image.get_clim())
+    # Fix image zoom issues when pressing home button multiple times
+        if self.fig.get_tight_layout():
+            self.fig.tight_layout()
+    # Render the canvas
+        self.draw_idle()
 
 
     def zoom_to(self, x: int, y: int):
@@ -2188,14 +2209,14 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
 
 
 
-    def getTrueActions(self):
+    def getTrueActions(self) -> list[QAction]:
         '''
         Returns a list of the true actions (= NOT QWidgetActions) held by the
         toolbar.
 
         Returns
         -------
-        actions : list
+        actions : list[QAction]
             True actions.
 
         '''
@@ -2339,10 +2360,9 @@ class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
 
 
     def updateCursor(self):
-        if self.active:
-            self.canvas.setCursor(QCursor(Qt.PointingHandCursor))
-        # else:
-        #     self.canvas.setCursor(QG.QCursor(QC.Qt.ArrowCursor))
+        cursor = Qt.PointingHandCursor if self.active else Qt.ArrowCursor
+        self.canvas.setCursor(QCursor(cursor))
+
 
     def update_(self, event):
         if self.active:
@@ -2364,8 +2384,9 @@ class RectSel(mpl_widgets.RectangleSelector):
             The ax where the selector must be drawn.
         onselect : function
             Callback function that is called after the selection is created.
-        useblit : bool, optional
-            Whether to use blitting for faster rendering. The default is True.
+        interactive : bool, optional
+            Whether a drawn rectangle selector can be moved or resized. The 
+            default is True.
         btns : list or None, optional
             List of mouse buttons that can trigger the drawing event. Left = 1,
             Middle = 2 and Right = 3. If None all the buttons are included. The
@@ -2533,10 +2554,8 @@ class RectSel(mpl_widgets.RectangleSelector):
         active, the pointing hand cursor is set, otherwise the arrow cursor.
 
         '''
-        if self.active:
-            self.canvas.setCursor(QCursor(Qt.PointingHandCursor))
-        else:
-            self.canvas.setCursor(QCursor(Qt.ArrowCursor))
+        cursor = Qt.PointingHandCursor if self.active else Qt.ArrowCursor
+        self.canvas.setCursor(QCursor(cursor))
 
 
 
