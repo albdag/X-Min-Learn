@@ -33,7 +33,7 @@ class MainWindow(QW.QMainWindow):
         self.setStyleSheet(style.SS_MAINWINDOW)
 
     # Set main window attributes
-        self.floating_tools = []
+        self.open_tools = []
 
     # Initialize GUI
         self._init_ui()
@@ -381,19 +381,19 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Dataset Builder 
         self.ds_builder_action.triggered.connect(
-            lambda: self.launch_tool('DatasetBuilder'))
+            lambda: self.openTool('DatasetBuilder'))
 
     # Launch Model Learner 
         self.model_learner_action.triggered.connect(
-            lambda: self.launch_tool('ModelLearner'))
+            lambda: self.openTool('ModelLearner'))
 
     # Launch Mineral Classifier 
         self.classifier_action.triggered.connect(
-            lambda: self.launch_tool('MineralClassifier'))
+            lambda: self.openTool('MineralClassifier'))
 
     # Launch Phase Refiner 
         self.refiner_action.triggered.connect(
-            lambda: self.launch_tool('PhaseRefiner'))
+            lambda: self.openTool('PhaseRefiner'))
 
 
     def about(self):
@@ -452,7 +452,7 @@ class MainWindow(QW.QMainWindow):
         print(f'{dialogname} not implemented.')
 
 
-    def launch_tool(self, toolname, tabbed=True):
+    def openTool(self, toolname, tabbed=True):
     # Force garbage collection every time a new tool instance gets opened
         gc.collect()
         
@@ -488,10 +488,12 @@ class MainWindow(QW.QMainWindow):
 
     # Show tool as a new tab in the tab widget or as a floating window
         if isinstance(tool, tools.DraggableTool):
+            tool.closed.connect(lambda: self.closeTool(tool))
+            self.open_tools.append(tool)
+
             if tabbed:
                 self.tabWidget.addTab(tool)
             else:
-                self.addFloatingTool(tool)
                 tool.show()
 
 
@@ -508,62 +510,30 @@ class MainWindow(QW.QMainWindow):
 
         '''
         tool = self.tabWidget.widget(index)
-        scroll_area = self.tabWidget.scrollArea(index)
-        
+        point = self.tabWidget.tabBar().tabRect(index).center()
+
         if isinstance(tool, tools.DraggableTool):
-        # Pop-out tool and add it to floating tools list to keep it alive
-            self.tabWidget.removeTab(index)
-            self.addFloatingTool(tool)
-        # Set the tool as floating widget (parent=None)
+        # Set tool as floating (parent=None) and remove it from tab widget
             tool.setParent(None)
+            self.tabWidget.closeTab(index)
+        # Move tool close to where it was originally tabbed
+            parent_point = self.tabWidget.tabBar().mapToParent(point)
+            QC.QTimer.singleShot(0, lambda: tool.move(parent_point))
             tool.setVisible(True)
-            tool.move(0, 0)
-            tool.adjustSize()
-        # Remove scroll area that contained the tool in the tabWidget
-            scroll_area.deleteLater()
+            
 
-
-    def addFloatingTool(self, tool: tools.DraggableTool):
-        '''
-        Add 'tool' to the floating tools list. This function also connects the
-        tool's signals to the removeFloatingTool slot, in order to remove its 
-        reference as long as it is no more floating (see 'removeFloatinTool').
-
-        Parameters
-        ----------
-        tool : tools.DraggableTool
-            Floating tool.
-
-        '''
+    def closeTool(self, tool: tools.DraggableTool):
     # Safety: do nothing if tool is not a DraggableTool
         if not isinstance(tool, tools.DraggableTool): 
             return
         
-    # Catch 'closed' and 'tabified' signals to remove tool from floating list
-        self.floating_tools.append(tool)
-        tool.closed.connect(lambda: self.removeFloatingTool(tool))
-        tool.tabified.connect(lambda: self.removeFloatingTool(tool))
-
-
-    def removeFloatingTool(self, tool: tools.DraggableTool):
-        '''
-        Remove 'tool' reference from floating tools list and disconnect its 
-        signals. This function should be called after a floating tool has been
-        tabified or closed.
-
-        Parameters
-        ----------
-        tool : tools.DraggableTool
-            Tabified or closed tool.
-
-        '''
-    # Safety: do nothing if tool is not a DraggableTool
-        if not isinstance(tool, tools.DraggableTool): 
-            return
+        if not tool.isFloating():
+            tab_index = self.tabWidget.indexOf(tool)
+            self.tabWidget.closeTab(tab_index)
         
-    # Disconnect tool signals to avoid unwanted loops, then remove it
-        tool.disconnect() 
-        self.floating_tools.remove(tool)
+        tool.disconnect()
+        tool.killReferences()
+        self.open_tools.remove(tool)
 
 
     def load(self, datatype):
@@ -808,8 +778,8 @@ class MainTabWidget(QW.QTabWidget):
         Signals-slots connector.
 
         '''
-    # Tab 'X' button pressed --> close the tab
-        self.tabCloseRequested.connect(self.closeTab)
+    # Tab 'X' button pressed --> triggers the closeEvent of the widget
+        self.tabCloseRequested.connect(lambda idx: self.widget(idx).close())
 
 
     def addTab(self, widget: tools.DraggableTool | QW.QWidget):
@@ -835,10 +805,10 @@ class MainTabWidget(QW.QTabWidget):
             widget.tabified.emit()
 
 
-    def widget(self, index):
+    def widget(self, index: int):
         '''
-        Reimplementation of the default widget function. Returns the widget
-        held by the tab at <index> bypassing the GroupScrollArea widget that
+        Reimplementation of the default 'widget' function. Returns the widget
+        held by the tab at 'index' by passing the GroupScrollArea widget that
         contains it (see addTab function for more details).
 
         Parameters
@@ -857,7 +827,7 @@ class MainTabWidget(QW.QTabWidget):
         return wid
 
 
-    def scrollArea(self, index):
+    def scrollArea(self, index: int):
         '''
         Returns the scroll area that holds the widget.
 
@@ -874,11 +844,11 @@ class MainTabWidget(QW.QTabWidget):
         '''
         scroll_area = super(MainTabWidget, self).widget(index)
         return scroll_area
-
+          
 
     def closeTab(self, index: int):
         '''
-        Close the tab at index 'index'. Triggers the closeEvent of the widget.
+        Close the tab at index 'index'.
 
         Parameters
         ----------
@@ -886,12 +856,70 @@ class MainTabWidget(QW.QTabWidget):
             The tab index in the tab bar.
 
         '''
-    # The tab is closed only if the widget closeEvent is accepted
-        closed = self.widget(index).close()
-        if closed:
-            scroll_area = self.scrollArea(index)
-            self.removeTab(index)
-            scroll_area.deleteLater()
+    # 'removeTab' just removes the tab from the TabBar but not the widget page,
+    # so we manually do it by deleting the scroll area that wraps the tool
+        scroll_area = self.scrollArea(index)
+        self.removeTab(index) 
+        scroll_area.deleteLater()
+
+
+    def indexOf(self, widget: tools.DraggableTool | QW.QWidget) -> int:
+        '''
+        Reimplementation of the default 'indexOf' function. Returns the index
+        of the tab that contains 'widget'. If the widget is not found, the
+        index will be -1. Please note that this function expects 'widget' to be
+        the actual displayed widget and not the scroll area that wraps it (see
+        also indexOfScrollArea function). 
+
+        Parameters
+        ----------
+        widget : tools.DraggableTool | QW.QWidget
+            Widget. 
+
+        Returns
+        -------
+        idx : int
+            Index of the widget.
+
+        '''
+        widgets = self.getAllWidgets()
+        idx = -1 if widget not in widgets else widgets.index(widget)
+        return idx
+    
+
+    def indexOfScrollArea(self, scroll_area: CW.GroupScrollArea) -> int:
+        '''
+        Return the index of the tab that contains 'scroll_area'. If the scroll
+        area is not fiund, the index will be -1. This function should not be 
+        used to get the index of the actual displayed widget, but rather of the
+        scroll area that wraps it (see also indexOf function).  
+
+        Parameters
+        ----------
+        scroll_area : CW.GroupScrollArea
+            Scroll area.
+
+        Returns
+        -------
+        int
+            Index of the scroll area.
+        '''
+        super(MainTabWidget, self).indexOf(scroll_area)
+    
+
+    def getAllWidgets(self) -> list[tools.DraggableTool, QW.QWidget]:
+        '''
+        Return a list of all the widgets (not the scroll areas that wrap them)
+        included in the tab widget.
+
+
+        Returns
+        -------
+        list[tools.DraggableTool, QW.QWidget]
+            List of widgets.
+
+        '''
+        return [self.widget(idx) for idx in range(self.count())]
 
 
     def dragEnterEvent(self, event: QG.QDragEnterEvent):

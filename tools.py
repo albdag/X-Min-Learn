@@ -57,24 +57,18 @@ class DraggableTool(QW.QWidget):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
 
-    # def dragEnterEvent(self, e): # NOT USEFUL HERE.
-    #     '''
-    #     Reimplementation of the dragEnterEvent default functions. It just
-    #     accepts the event if the tool is not anchored (floating tool).
+    def isFloating(self) -> bool:
+        '''
+        Check if the tool is floating (i.e., is not tabbed).
 
-    #     Parameters
-    #     ----------
-    #     e : dragEvent
-    #         The drag event triggered by the user.
+        Returns
+        -------
+        bool
+            Whether the tool is floating.
 
-    #     Returns
-    #     -------
-    #     None.
+        '''
+        return self.parent() == None
 
-    #     '''
-
-    #     if self.is_floating():
-    #         e.accept()
 
     def mouseMoveEvent(self, e):
         '''
@@ -105,6 +99,16 @@ class DraggableTool(QW.QWidget):
             drag.setMimeData(mimeData)
             drag.setPixmap(pixmap)
             drag.exec_(Qt.MoveAction)
+
+
+    def killReferences(self):
+        '''
+        Remove all the references that keep the tool alive. This function must 
+        be called in order to properly close the tool.
+
+        '''
+        for child in self.findChildren(QW.QWidget):
+            child.disconnect()
 
 
     def closeEvent(self, event: QG.QCloseEvent):
@@ -1075,7 +1079,18 @@ class MineralClassifier(DraggableTool):
 
         if success:
             CW.MsgBox(self, 'Info', 'Classification completed successfully.')
-                                    
+
+
+    def killReferences(self):
+        '''
+        Reimplementation of the 'killReferences' method from the parent class.
+        It also stops any active classification thread.
+
+        '''
+        if self._isBusyClassifying:
+            self.stopClassification()
+        super(MineralClassifier, self).killReferences()
+                               
 
     def closeEvent(self, event):
         '''
@@ -6304,6 +6319,19 @@ class ModelLearner(DraggableTool):
                 CW.MsgBox(self, 'Info', 'Model saved successfully.')
             except Exception as e:
                 CW.MsgBox(self, 'Crit', 'Failed to save model.', str(e))
+
+
+    def killReferences(self):
+        '''
+        Reimplementation of the 'killReferences' method from the parent class.
+        It also stops any active balancing or learning thread.
+
+        '''
+        running, _ = self._threadRunning()
+        if running:
+            self.stopBalancingSession()
+            self.stopLearningSession()
+        super(ModelLearner, self).killReferences()
                 
 
     def closeEvent(self, event: QG.QCloseEvent):
@@ -7521,8 +7549,16 @@ class PhaseRefiner(DraggableTool):
             CW.MsgBox(self, 'Info', 'Map saved successfully.')
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
-                                               
 
+
+    def killReferences(self):
+        '''
+        Reimplementation of the 'killReferences' method from the parent class.
+        It also deletes the ROI selector, thus disconnecting its signals.
+
+        '''
+        del self.roi_sel
+        super(PhaseRefiner, self).killReferences()
 
 # class ModelLearner_OLD(DraggableTool):
 
