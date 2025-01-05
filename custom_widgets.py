@@ -84,17 +84,19 @@ class DataGroup(QW.QTreeWidgetItem):
         from the sample overall trending shape.
 
         '''
-    # Collect in a single list the objects from all subgroups
+    # Collect in a single list the objects data from all subgroups
         objects = self.getAllDataObjects()
+        obj_data = [o.get('data') for o in objects]
 
     # Extract the shape from each object data and obtain the trending shape  
-        if len(objects):
-            shapes = [o.get('data').shape for o in objects]
+        if any(obj_data): # returns False if all data in the list are None
+            shapes = (d.shape for d in obj_data if d is not None)
             trend_shape = cf.most_frequent(shapes)
 
-    # Set a warning state to each object whose data shape differs from trend
-            for idx, shp in enumerate(shapes):
-                objects[idx].setWarning(shp != trend_shape)
+        # Set a warning state to each object whose data shape differs from trend
+            for idx, data in enumerate(obj_data):
+                warn = data is not None and data.shape != trend_shape
+                objects[idx].setWarning(warn)
 
 
     def getCompositeMask(self, include='selected', mode='intersection',
@@ -165,7 +167,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
     datatype_dict = {'Input Maps': InputMap, 'Mineral Maps': MineralMap,
                      'Masks': Mask}
     
-    def __init__(self, name):
+    def __init__(self, name: str):
         '''
         DataSubGroup class constructor.
 
@@ -191,7 +193,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
         self.setFont(0, font)
         self.setText(0, name)
 
-    def isEmpty(self):
+    def isEmpty(self) -> bool:
         '''
         Check if this DataSubGroup object is populated with data or not.
 
@@ -205,10 +207,9 @@ class DataSubGroup(QW.QTreeWidgetItem):
         return empty
 
 
-    def addData(self, data):
+    def addData(self, data: InputMap|MineralMap|Mask):
         '''
-        Add data to the subgroup in the form of data objects (i.e., instances
-        of DataObject).
+        Add data to the subgroup in the form of data objects.
 
         Parameters
         ----------
@@ -216,11 +217,11 @@ class DataSubGroup(QW.QTreeWidgetItem):
             The data to be added to the subgroup.
 
         '''
-        self.addChild(DataObject(data))
-        self.parent().setShapeWarnings()
+        if isinstance(data, self.datatype):
+            self.addChild(DataObject(data))
 
 
-    def delChild(self, child):
+    def delChild(self, child: 'DataObject'):
         '''
         Remove child DataObject from the subgroup.
 
@@ -228,32 +229,36 @@ class DataSubGroup(QW.QTreeWidgetItem):
         ----------
         child : DataObject
             The child to be removed
+            
         '''
         self.takeChild(self.indexOfChild(child))
-        self.parent().setShapeWarnings()
 
 
-    def clear(self):
-        '''
-        Remove all children from the subgroup.
-
-        '''
-        self.takeChildren()
-        self.parent().setShapeWarnings()
-
-
-    def getChildren(self):
+    def getChildren(self) -> list['DataObject']:
         '''
         Get all the DataObject items owned by this subgroup.
 
         Returns
         -------
-        children : List
+        children : List[DataObject]
             List of DataObject children.
 
         '''
         children = [self.child(idx) for idx in range(self.childCount())]
         return children
+    
+
+    def group(self) -> DataGroup:
+        '''
+        Get the parent group that holds this subgroup.
+
+        Returns
+        -------
+        DataGroup
+            Parent group.
+
+        '''
+        return self.parent()
 
 
 
@@ -305,6 +310,25 @@ class DataObject(QW.QTreeWidgetItem):
     # Set the "checked" state for togglable data (Masks and Points [in future])
         if isinstance(data, (Mask,)): # add PointAnalysis class
             self.setData(0, 10, QC.Qt.Unchecked) # CheckedRole (10)
+
+
+    def setInvalidFilepath(self, path: str):
+        '''
+        Invalidate object by setting its filepath to invalid filepath 'path'
+        and its status to "not found". This function is useful to set a pointer
+        to data that has been deleted, removed or renamed, by keeping its
+        original filepath.
+
+        Parameters
+        ----------
+        filepath : str
+            The invalid filepath. It must not link to an existent file.
+
+        '''
+        if not os.path.exists(path):
+            self.setData(0, 110, path) # set invalid filepath
+            self.setData(0, 0, self.generateDisplayName()) # auto generate name
+            self.setNotFound(True) # set as 'not found'
 
 
     def filepathValid(self):
@@ -531,6 +555,9 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(0, 102, toggle)
     # Show/hide the not found status icon and tooltip
         self._toggleStatus(102, toggle)
+    # Set empty object data if 'not found'
+        if toggle and self.get('data') is not None:
+            self.setData(0, 100, None)
 
 
     def _toggleStatus(self, status: int, toggle: bool):
@@ -596,6 +623,33 @@ class DataObject(QW.QTreeWidgetItem):
     # Show/hide the warning tooltip
         text = 'Unfitting shapes' if warning else ''
         self.setData(1, 3, text)
+
+
+    def setChecked(self, checked: bool):
+        '''
+        Set the check state of this object to 'checked'.
+
+        Parameters
+        ----------
+        checked : bool
+            Check state. Only checked (=True) or unchecked (=False) states are
+            accepted.
+        '''
+        checkstate = QC.Qt.Checked if checked else QC.Qt.Unchecked
+        self.setData(0, 10, checkstate)
+
+
+    def subgroup(self) -> DataSubGroup:
+        '''
+        Return the parent subgroup that holds this data object.
+
+        Returns
+        -------
+        DataSubGroup
+            Parent subgroup.
+
+        '''
+        return self.parent()
 
 
 class Legend(QW.QTreeWidget):
@@ -3499,7 +3553,7 @@ class SampleMapsSelector(QW.QWidget):
         for c in subgr.getChildren():
             item = DataObject(c.get('data'))
             if self.checkable:
-                item.setCheckState(0, QC.Qt.Checked)
+                item.setChecked(True)
             self.maps_list.addTopLevelItem(item)
 
     # Send a signal to inform that maps data changed

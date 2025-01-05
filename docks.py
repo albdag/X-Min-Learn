@@ -94,7 +94,6 @@ class Pane(QW.QDockWidget):
 
 
 
-
 class DataManager(QW.QTreeWidget):
     '''
     A widget for loading, accessing and managing input and output data.
@@ -131,13 +130,6 @@ class DataManager(QW.QTreeWidget):
     # Enable custom context menu
         self.setContextMenuPolicy(Qt.CustomContextMenu)
 
-    # Connect the signals to the custom slots
-        self.itemClicked.connect(self.viewData)
-        # self.itemChanged.connect(self.viewData) # too much triggers
-        # self.itemActivated.connect(self.viewData) # never triggers
-        self.itemDoubleClicked.connect(self.onEdit)
-        self.customContextMenuRequested.connect(self.showContextMenu)
-
     # Set custom scrollbars
         self.setHorizontalScrollBar(CW.StyledScrollBar(Qt.Horizontal))
         self.setVerticalScrollBar(CW.StyledScrollBar(Qt.Vertical))
@@ -145,6 +137,22 @@ class DataManager(QW.QTreeWidget):
     # Set the style-sheet (custom icons for expanded and collapsed branches and
     # right-click menu when editing items name)
         self.setStyleSheet(style.SS_DATAMANAGER)
+
+    # Connect signals to custom slots
+        self._connect_slots()
+
+
+    def _connect_slots(self):
+        '''
+        Signals-slots connector.
+
+        '''
+    # User's interactions signals
+        self.itemClicked.connect(self.viewData)
+        # self.itemChanged.connect(self.viewData) # too much triggers
+        # self.itemActivated.connect(self.viewData) # never triggers
+        self.itemDoubleClicked.connect(self.onEdit)
+        self.customContextMenuRequested.connect(self.showContextMenu)
 
 
     def onEdit(self, item, column=0):
@@ -203,13 +211,13 @@ class DataManager(QW.QTreeWidget):
             load_submenu = menu.addMenu(QIcon(r'Icons/import.png'), 'Load...')
         # - Input maps
             load_submenu.addAction(QIcon(r'Icons/inmap.png'), 'Input maps', 
-                                   lambda: self.loadInputMaps(item))
+                                   lambda: self.loadData(item.inmaps))
         # - Mineral maps
             load_submenu.addAction(QIcon(r'Icons/minmap.png'), 'Mineral maps',
-                                   lambda: self.loadMineralMaps(item))
+                                   lambda: self.loadData(item.minmaps))
         # - Masks
             load_submenu.addAction(QIcon(r'Icons/mask.png'), 'Masks',
-                                   lambda: self.loadMasks(item))
+                                   lambda: self.loadData(item.masks))
             
         # Separator
             menu.addSeparator()
@@ -218,11 +226,13 @@ class DataManager(QW.QTreeWidget):
             menu.addAction(QIcon(r'Icons/rename.png'), 'Rename',
                            lambda: self.onEdit(item))
 
-        # Clear group
-            menu.addAction(QIcon(r'Icons/clear.png'), 'Clear', self.clearGroup)
+        # Clear selected groups
+            menu.addAction(QIcon(r'Icons/clear.png'), 'Clear', 
+                           self.clearSelectedGroups)
 
-        # Delete group
-            menu.addAction(QIcon(r'Icons/remove.png'), 'Delete', self.delGroup)
+        # Delete selected groups
+            menu.addAction(QIcon(r'Icons/remove.png'), 'Delete', 
+                           self.delSelectedGroups)
 
     # CONTEXT MENU ON SUBGROUP
         elif isinstance(item, CW.DataSubGroup):
@@ -251,9 +261,8 @@ class DataManager(QW.QTreeWidget):
                 menu.addSeparator()
 
         # Clear subgroup
-            clear_subgroup = menu.addAction(QIcon(r'Icons/clear.png'), 'Clear')
-            clear_subgroup.triggered.connect(item.clear)
-            clear_subgroup.triggered.connect(self.clearView)
+            menu.addAction(QIcon(r'Icons/clear.png'), 'Clear',
+                           self.clearSelectedSubgroups)
 
     # CONTEXT MENU ON DATA OBJECTS
         elif isinstance(item, CW.DataObject):
@@ -336,13 +345,13 @@ class DataManager(QW.QTreeWidget):
         menu.exec(QCursor.pos())
 
 
-    def getAllGroups(self):
+    def getAllGroups(self) -> list[CW.DataGroup]:
         '''
         Get all the groups.
 
         Returns
         -------
-        groups : list
+        groups : list[DataGroup]
             List of DataGroup objects.
 
         '''
@@ -351,9 +360,10 @@ class DataManager(QW.QTreeWidget):
         return groups
 
 
-    def getItemParentGroup(self, item):
+    def getItemParentGroup(self, item: CW.DataGroup|CW.DataSubGroup|
+                           CW.DataObject) -> CW.DataGroup|None:
         '''
-        Get the item's group (i.e, an instance of DataGroup).
+        Get the item's group.
 
         Parameters
         ----------
@@ -363,7 +373,8 @@ class DataManager(QW.QTreeWidget):
         Returns
         -------
         group : DataGroup or None
-            The item's group. Returns None when <item> is not a valid item.
+            The item's group. Returns None when 'item' is not a valid item or
+            it is not owned by any group.
 
         '''
     # Item is group
@@ -371,10 +382,11 @@ class DataManager(QW.QTreeWidget):
             group = item
     # Item is subgroup
         elif isinstance(item, CW.DataSubGroup):
-            group = item.parent()
+            group = item.group()
     # Item is data object
         elif isinstance(item, CW.DataObject):
-            group = item.parent().parent()
+            subgroup = item.subgroup()
+            group = None if subgroup is None else subgroup.group()
     # Item is invalid (safety)
         else:
             group = None
@@ -382,136 +394,209 @@ class DataManager(QW.QTreeWidget):
         return group
 
 
-    def getSelectedGroupsIndexes(self):
+    def getSelectedGroupsIndexes(self) -> list[int]:
         '''
-        Get the indices of the selected groups (i.e., instances of DataGroup).
+        Get the indices of the selected groups.
 
         Returns
         -------
-        groups_idx: list
+        groups_idx: list[int]
             List of indices of selected groups.
 
         '''
         items = self.selectedItems()
-    # Groups are the top level items of the DataManager.
-    # IndexOfTopLevelItem returns -1 if the item is not a toplevelitem
+    # Groups are the top-level items of the DataManager; indexOfTopLevelItem 
+    # returns -1 if the item is not a top-level item (i.e., is not a group)
         indexes = map(lambda i: self.indexOfTopLevelItem(i), items)
-        groups_idx = filter(lambda idx: idx != -1, indexes)
-        return  groups_idx
+        groups_idx = [idx for idx in indexes if idx != -1]
+        return groups_idx
+    
 
-
-    def getSelectedDataObjects(self):
+    def getSelectedSubgroups(self) -> list[CW.DataSubGroup]:
         '''
-        Get the selected data objects (i.e., instances of DataObject).
+        Get the selected data subgroups.
 
         Returns
         -------
-        data_obj : list
-            The selected data objects.
+        subgroups: list[DataSubGroup]
+            List of selected data subgroups.
+
+        '''
+        items = self.selectedItems()
+        subgroups = [i for i in items if isinstance(i, CW.DataSubGroup)]
+        return subgroups
+
+
+    def getSelectedDataObjects(self) -> list[CW.DataObject]:
+        '''
+        Get the selected data objects.
+
+        Returns
+        -------
+        data_obj : list[DataObject]
+            List of selected data objects.
 
         '''
         items = self.selectedItems()
         data_obj = [i for i in items if isinstance(i, CW.DataObject)]
         return data_obj
+    
 
-
-    def addGroup(self, return_group=False):
+    def getAllDataObjects(self) -> list[CW.DataObject]:
         '''
-        Add a new group (i.e., an instance of DataGroup) to the manager.
-
-        Parameters
-        ----------
-        return_group : bool, optional
-            Optionally return the group. The default is False.
+        Get all data object from all groups in a single list.
 
         Returns
         -------
-        DataGroup or None.
+        list[DataObject]
+            List of all data objects.
 
         '''
-    # Automatically rename the group as 'New Sample' + a progressive integer id
-        unnamed_groups = self.findItems('New Sample', Qt.MatchContains)
-        text = 'New Sample'
-        if (n := len(unnamed_groups)): 
-            text += f' ({n})'
-        new_group = CW.DataGroup(text)
+        objects = []
+        for group in self.getAllGroups():
+            objects.extend(group.getAllDataObjects())
+        return objects
+
+
+    def addGroup(self, name: str|None=None) -> CW.DataGroup:
+        '''
+        Add a new group to the manager and return it.
+
+        Parameters
+        ----------
+        name : str or None, optional
+            Name to assign to group. If None, a default name is assigned. The
+            default is None.
+
+        Returns
+        -------
+        DataGroup.
+
+        '''
+    # If name is None, rename the group as 'New Sample' + progressive ID
+        if name is None:
+            unnamed_groups = self.findItems('New Sample', Qt.MatchContains)
+            name = 'New Sample'
+            if (n := len(unnamed_groups)): 
+                name += f' ({n})'
+    
+    # Add a new DataGroup as a top level item of the Data Manager
+        new_group = CW.DataGroup(name)
         self.addTopLevelItem(new_group)
-        if return_group: 
-            return new_group
+        return new_group
         
 
-    def delGroup(self):
+    def delSelectedGroups(self):
         '''
-        Remove selected groups (i.e., instances of DataGroup) from the 
-        manager.
+        Remove selected groups.
 
         '''
-
-        selected = self.getSelectedGroupsIndexes()
+    # Check for user confirm
         choice = CW.MsgBox(self, 'Quest', 'Remove selected sample(s)?')
-        if choice.yes():
-            for idx in sorted(selected, reverse=True):
-                self.takeTopLevelItem(idx)
+        if choice.no():
+            return
 
-        self.clearView()
+        for idx in sorted(self.getSelectedGroupsIndexes(), reverse=True):
+            self.takeTopLevelItem(idx)
+        self.refreshView()
 
 
-    def clearGroup(self):
+    def clearSelectedGroups(self):
         '''
-        Clear the data from selected groups (i.e., instances of DataGroup).
-
-        '''
-        selected = self.getSelectedGroupsIndexes()
-        for idx in selected:
-            group = self.topLevelItem(idx)
-            group.clear()
-        self.clearView()
-
-
-    def delData(self):
-        '''
-        Delete the selected data objects (i.e., instances of DataObject).
+        Clear data from selected groups.
 
         '''
-        items = self.getSelectedDataObjects()
-        choice = CW.MsgBox(self, 'Quest', 'Remove selected data?')
-        if choice.yes():
-            for i in reversed(items):
-                subgroup = i.parent()
-                subgroup.delChild(i)
+    # Check for user confirm
+        choice = CW.MsgBox(self, 'Quest', 'Clear selected sample(s)?')
+        if choice.no():
+            return
+
+        for idx in self.getSelectedGroupsIndexes():
+            self.topLevelItem(idx).clear()
+        self.refreshView()
+
+
+    def clearSelectedSubgroups(self):
+        '''
+        Clear data from selected subgroups.
+
+        '''
+    # Check for user confirm
+        choice = CW.MsgBox(self, 'Quest', 'Clear selected data?')
+        if choice.no():
+            return
+    
+    # Clear out subgroups
+        subgroups = self.getSelectedSubgroups()
+        groups = [self.getItemParentGroup(s) for s in subgroups]
+        for subgr in subgroups:
+            subgr.takeChildren()
+
+    # Check for unfitting maps shapes within the samples
+        for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
+            self.topLevelItem(idx).setShapeWarnings()
 
         self.refreshView()
 
 
-    def loadData(self, subgroup):
+    def delData(self):
         '''
-        Load data to a subgroup (i.e., instance of DataSubGroup). This is a
-        generic loading function that checks the subgroup type and then calls
-        the specialized loading function.
+        Delete the selected data objects.
+
+        '''
+    # Check for user confirm
+        choice = CW.MsgBox(self, 'Quest', 'Remove selected data?')
+        if choice.no():
+            return
+    
+    # Delete data objects
+        items = self.getSelectedDataObjects()
+        groups = [self.getItemParentGroup(i) for i in items]
+        for i in reversed(items):
+            i.subgroup().delChild(i)
+
+    # Check for unfitting maps shapes within the samples
+        for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
+            self.topLevelItem(idx).setShapeWarnings()
+
+        self.refreshView()
+
+
+    def loadData(self, subgroup: CW.DataSubGroup, paths: list[str]|None=None):
+        '''
+        Load data objects to a subgroup. This is a wrapper loading function 
+        that checks the subgroup type and then calls the specialized loading 
+        function.
 
         Parameters
         ----------
         subgroup : DataSubGroup
             The subgroup to be populated with data.
+        paths : list[str] or None, optional
+            A list of filepaths to data. If None, user will be prompt to load
+            them from disk. The default is None.
 
         '''
-        group = subgroup.parent()
-        name = subgroup.text(0)
+        group = subgroup.group()
+        name = subgroup.name
 
         if name == 'Input Maps':
-            self.loadInputMaps(group)
+            self.loadInputMaps(group, paths)
 
         elif name == 'Mineral Maps':
-            self.loadMineralMaps(group)
+            self.loadMineralMaps(group, paths)
 
         elif name == 'Masks':
-            self.loadMasks(group)
+            self.loadMasks(group, paths)
 
-        elif name == 'Point Analysis':
-            # implement
-            pass
+        # elif name == 'Point Analysis': TODO
+        #     pass
 
-        else: return
+        else: 
+            return
+        
+    # Check for unfitting maps shapes
+        group.setShapeWarnings()
 
 
     def saveData(self, item: CW.DataObject, overwrite=True):
@@ -572,25 +657,37 @@ class DataManager(QW.QTreeWidget):
             self.refreshView()
 
 
-    def loadInputMaps(self, group: CW.DataGroup, paths: list|None=None):
+    def hasUnsavedData(self) -> bool:
         '''
-        Specialized loading function to load input maps to a group (i.e., an
-        instance of DataGroup).
+        Check if the manager contains unsaved data.
+
+        Returns
+        -------
+        bool
+            Whether manager contains unsaved data.
+
+        '''
+        return any((obj.get('is_edited') for obj in self.getAllDataObjects()))
+
+
+    def loadInputMaps(self, group: CW.DataGroup, paths: list[str]|None=None):
+        '''
+        Specialized loading function to load input maps to a group.
 
         Parameters
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list or None, optional
+        paths : list[str] or None, optional
             A list of filepaths to data. If None, user will be prompt to load
             them from disk. The default is None.
 
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
-            paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
-                                                       pref.get_dir('in'),
-                                                       'ASCII maps (*.txt *.gz)')
+            ftypes = 'ASCII maps (*.txt *.gz)'
+            paths, _ = QW.QFileDialog.getOpenFileNames(
+                self, 'Load input maps', pref.get_dir('in'), ftypes)
         if not paths:
             return
         
@@ -603,6 +700,11 @@ class DataManager(QW.QTreeWidget):
             try:
                 xmap = InputMap.load(p)
                 group.inmaps.addData(xmap)
+        
+            except FileNotFoundError: # add item with "not found" status
+                item = CW.DataObject(None)
+                item.setInvalidFilepath(p)
+                group.inmaps.addChild(item)
 
             except Exception as e:
                 errors.append((p, e))
@@ -620,26 +722,24 @@ class DataManager(QW.QTreeWidget):
         self.expandRecursively(self.indexFromItem(group))
 
 
-    def loadMineralMaps(self, group: CW.DataGroup, paths: list|None=None):
+    def loadMineralMaps(self, group: CW.DataGroup, paths: list[str]|None=None):
         '''
-        Specialized loading function to load mineral maps to a group (i.e., an
-        instance of DataGroup).
+        Specialized loading function to load mineral maps to a group.
 
         Parameters
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list or None, optional
+        paths : list[str] or None, optional
             A list of filepaths to data. If None, user will be prompt to load
             them from disk. The default is None.
 
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
-            paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load mineral maps',
-                                                       pref.get_dir('in'),
-                                                       '''Mineral maps (*.mmp)
-                                                          Legacy mineral maps (*.txt *.gz)''')
+            ftypes = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
+            paths, _ = QW.QFileDialog.getOpenFileNames(
+                self, 'Load mineral maps', pref.get_dir('in'), ftypes)
         if not paths:
             return
         
@@ -655,6 +755,11 @@ class DataManager(QW.QTreeWidget):
                 if mmap.is_obsolete():
                     mmap.save(cf.extend_filename(p, '', '.mmp'))
                 group.minmaps.addData(mmap)
+        
+            except FileNotFoundError: # add item with "not found" status
+                item = CW.DataObject(None)
+                item.setInvalidFilepath(p)
+                group.minmaps.addChild(item)
 
             except Exception as e:
                 errors.append((p, e))
@@ -672,26 +777,24 @@ class DataManager(QW.QTreeWidget):
         self.expandRecursively(self.indexFromItem(group))
 
 
-    def loadMasks(self, group: CW.DataGroup, paths: list|None=None):
+    def loadMasks(self, group: CW.DataGroup, paths: list[str]|None=None):
         '''
-        Specialized loading function to load masks to a group (i.e., an
-        instance of DataGroup).
+        Specialized loading function to load masks to a group.
 
         Parameters
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list or None, optional
+        paths : list[str] or None, optional
             A list of filepaths to data. If None, user will be prompt to load
             them from disk. The default is None.
 
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
-            paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load masks',
-                                                       pref.get_dir('in'),
-                                                       '''Masks (*.msk)
-                                                          Text file (*.txt)''')
+            ftypes = 'Masks (*.msk);;Text file (*.txt)'
+            paths, _ = QW.QFileDialog.getOpenFileNames(
+                self, 'Load masks', pref.get_dir('in'), ftypes)
         if not paths:
             return
         
@@ -704,6 +807,11 @@ class DataManager(QW.QTreeWidget):
             try:
                 mask = Mask.load(p)
                 group.masks.addData(mask)
+        
+            except FileNotFoundError: # add item with "not found" status
+                item = CW.DataObject(None)
+                item.setInvalidFilepath(p)
+                group.masks.addChild(item)
 
             except Exception as e:
                 errors.append((p, e))
@@ -789,21 +897,20 @@ class DataManager(QW.QTreeWidget):
         group.masks.getChildren()[-1].setEdited(True)
 
 
-    def checkMasks(self, checked, group):
+    def checkMasks(self, checked: bool, group: CW.DataGroup):
         '''
-        (Un)check all masks loaded in a group.
+        Check or uncheck all masks loaded in a group.
 
         Parameters
         ----------
         checked : bool
             Whether to check or uncheck the masks.
         group : DataGroup
-            The group whose masks should be (un)checked.
+            The group whose masks should be checked or unchecked.
 
         '''
-        checkstate = Qt.Checked if checked else Qt.Unchecked
         for child in group.masks.getChildren():
-            child.setCheckState(0, checkstate)
+            child.setChecked(checked)
         self.refreshView()
 
 
@@ -860,6 +967,18 @@ class DataManager(QW.QTreeWidget):
 
 
     def fixDataSource(self, item: CW.DataObject):
+        '''
+        Repair the data source of 'item' by selecting a valid filepath. This 
+        function attempts to automatically fix all the invalid items in the 
+        same group of 'item' using the parent folder of the selected filepath 
+        as a reference. 
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            Item to be repaired.
+
+        '''
     # Identify correct item data type by looking at its subgroup, because item
     # can contain None data if they failed to be loaded
         subgroup = item.parent()
@@ -890,7 +1009,8 @@ class DataManager(QW.QTreeWidget):
         # Setting object path also changes its data to the data stored in path
             else:
                 item.setFilepath(path)
-        # In any case, toggle off the 'not_found' and 'edited' status
+
+        # Toggle off the 'not_found' and 'edited' status 
             item.setNotFound(False)
             item.setEdited(False)
             
@@ -900,14 +1020,15 @@ class DataManager(QW.QTreeWidget):
     # Try applying fix to data objects in the same group that are also not found
     # by checking all the files in the same root folder of the loaded file
         available_files = os.listdir(root_fld)
-        for obj in self.getItemParentGroup(item).getAllDataObjects():
+        group = self.getItemParentGroup(item)
+        for obj in group.getAllDataObjects():
         # Skip object if has not the 'not_found' status
             if not obj.get('not_found'): 
                 continue
         # Get object info. If object is 'not_found', its path shouldn't be None
             obj_data, obj_path = obj.get('data', 'filepath')
             obj_fname = cf.path2filename(obj_path)
-            obj_type = obj.parent().datatype
+            obj_type = obj.subgroup().datatype
        
             for f in available_files:
             # Skip files with invalid extensions or unfitting filename
@@ -924,11 +1045,16 @@ class DataManager(QW.QTreeWidget):
                     else:
                     # Setting path also changes data to the data stored in path
                         obj.setFilepath(f_path)
-                # In any case, toggle off the 'not_found' and 'edited' status
+
+                # Toggle off the 'not_found' and 'edited' status
                     obj.setNotFound(False)
                     obj.setEdited(False)
+
                 except:
                     continue
+
+    # Check for maps shapes warnings within the group
+        group.setShapeWarnings()
                         
         self.refreshView()
 
@@ -939,6 +1065,7 @@ class DataManager(QW.QTreeWidget):
 
         '''
         items = self.getSelectedDataObjects()
+        groups = [self.getItemParentGroup(i) for i in items]
         pbar = CW.PopUpProgBar(self, len(items), 'Reloading data')
         errors = []
         for n, i in enumerate(items, start=1):
@@ -952,6 +1079,7 @@ class DataManager(QW.QTreeWidget):
                 path_exists = os.path.exists(path)
                 i.setNotFound(not path_exists)
                 if path_exists:
+                    data = i.subgroup().datatype if data is None else data
                     i.setObjectData(data.load(path))
                     i.setEdited(False)
 
@@ -961,13 +1089,17 @@ class DataManager(QW.QTreeWidget):
             finally:
                 pbar.setValue(n)
 
+    # Check for unfitting maps shapes within the samples
+        for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
+            self.topLevelItem(idx).setShapeWarnings()
+
+        self.refreshView()
+
     # Send detailed error message if any file failed to be refreshed
         if n_err := len(errors):
             text = f'A total of {n_err} file(s) failed to load.'
             dtext = '\n\n'.join((f'{fn} ({fp}): {ex}' for fn, fp, ex in errors))
             CW.MsgBox(self, 'Crit', text, dtext)
-
-        self.refreshView()
 
 
     def viewData(self, item):
