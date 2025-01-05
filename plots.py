@@ -202,7 +202,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             self.setFocus()
 
 
-    def get_navigation_context_menu(self, navtbar):
+    def get_navigation_context_menu(self, navtbar: 'NavTbar') -> CW.StyledMenu:
         '''
         Return a default context menu with actions extracted from the provided
         navigation toolbar.
@@ -215,7 +215,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         Returns
         -------
         menu
-            A StyledMenu() populated with actions.
+            A StyledMenu populated with actions.
 
         '''
         menu = CW.StyledMenu()
@@ -224,7 +224,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         ntbar_actions = navtbar.getTrueActions()
 
     # Get the hidden 'Show toolbar' action
-        hide_ntbar = navtbar.findChildren(QAction)[1]
+        hide_ntbar = navtbar.showToolbarAction()
         hide_ntbar.setText('Show navigation toolbar')
 
     # Add actions to menu
@@ -2097,6 +2097,19 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         navtbar.fixHomeAction()
         navtbar.insertLogscaleAction(2)
         return navtbar
+    
+
+    def showToolbarAction(self) -> QAction:
+        '''
+        Return the hidden checkable 'show navigation toolbar' action.
+
+        Returns
+        -------
+        QAction
+            Show toolbar action.
+
+        '''
+        return self.findChildren(QAction)[1]
     
 
     def insertLabelizeAction(self, before_idx: int):
