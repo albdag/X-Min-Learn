@@ -1141,6 +1141,83 @@ class DataManager(QW.QTreeWidget):
             self.clear()
             self.clearView()
 
+    
+    def resetConfig(self):
+        '''
+        Reset the Data Manager to its default state and configuration.
+
+        '''
+        self.clear()
+            
+
+    def getConfig(self) -> dict:
+        '''
+        Take a snapshot of the current state and configuration of the Data
+        Manager.
+
+        Returns
+        -------
+        dict
+            Current state and configuration.
+
+        '''
+        config = {}
+        for group in self.getAllGroups():
+            sample_name = group.text(0)
+            config[sample_name] = {}
+
+            for subgr in group.subgroups:
+                if subgr.name == 'Masks':
+                    attributes = ('name', 'filepath', 'checked')
+                else:
+                    attributes = ('name', 'filepath')
+
+                data = [c.get(*attributes) for c in subgr.getChildren()]
+                config[sample_name][subgr.name] = data
+        
+        return config
+
+
+    def loadConfig(self, config: dict):
+        '''
+        Set the state and configuration of the Data Manager to those provided
+        in 'config'.
+
+        Parameters
+        ----------
+        config : dict
+            Reference state and configuration.
+
+        '''
+    # Clear out the manager from previous data
+        self.clear()
+    
+    # Add each sample and populate them with data
+        for sample, data in config.items():
+            group = self.addGroup(sample)
+        
+        # Populate with input maps data
+            if len(data['Input Maps']):
+                inmap_names, inmap_paths = zip(*data['Input Maps'])
+                self.loadData(group.inmaps, inmap_paths)
+                for idx, child in enumerate(group.inmaps.getChildren()):
+                    child.setName(inmap_names[idx])
+
+        # Populate with mineral maps data
+            if len(data['Mineral Maps']):
+                minmap_names, minmap_paths = zip(*data['Mineral Maps'])
+                self.loadData(group.minmaps, minmap_paths)
+                for idx, child in enumerate(group.minmaps.getChildren()):
+                    child.setName(minmap_names[idx])
+
+        # Populate with masks data
+            if len(data['Masks']):
+                mask_names, mask_paths, mask_checkstates = zip(*data['Masks'])
+                self.loadData(group.masks, mask_paths)
+                for idx, child in enumerate(group.masks.getChildren()):
+                    child.setName(mask_names[idx])
+                    child.setChecked(mask_checkstates[idx])
+
 
 
 class HistogramViewer(QW.QWidget):
@@ -1148,7 +1225,9 @@ class HistogramViewer(QW.QWidget):
     A widget to visualize and interact with histograms of input maps data.
     '''
 
-    def __init__(self, maps_canvas, parent=None):
+    scalerRangeChanged = pyqtSignal()
+
+    def __init__(self, maps_canvas: plots.ImageCanvas, parent=None):
         '''
         HistogramViewer class constructor.
 
@@ -1269,8 +1348,8 @@ class HistogramViewer(QW.QWidget):
         self.mask_action.triggered.connect(self.extractMaskFromScaler)
 
     # Set scaler extent when interacting with vmin and vmax inputs
-        self.scaler_vmin.valueChanged.connect(lambda: self.setScalerExtents())
-        self.scaler_vmax.valueChanged.connect(lambda: self.setScalerExtents())
+        self.scaler_vmin.valueChanged.connect(self.onScalerRangeChanged)      
+        self.scaler_vmax.valueChanged.connect(self.onScalerRangeChanged)
 
     # Number of bins selection
         self.bin_slider.valueChanged.connect(self.setHistBins)
@@ -1297,26 +1376,46 @@ class HistogramViewer(QW.QWidget):
         menu.exec(QCursor.pos())
 
 
-    def onScalerToggled(self, toggled):
+    def onScalerToggled(self, toggled: bool):
+        '''
+        Slot triggered when scaler is toggled on/off from the scaler toolbar.
+
+        Parameters
+        ----------
+        toggled : bool
+            Toggle state of the scaler.
+
+        '''
+    # Change state and visibility of the span selector
         self.scaler.set_active(toggled)
         self.scaler.set_visible(toggled)
+
+    # Enable/disable scaler toolbar actions and widgets
         self.mask_action.setEnabled(toggled)
         self.scaler_vmin.setEnabled(toggled)
         self.scaler_vmax.setEnabled(toggled)
 
-
+    # Update the scaler extents
         if not self.canvas.is_empty():
             if toggled:
-                self.setScalerExtents(update_span=False)
+                self.updateScalerExtents(update_span=False)
             else:
                 self.applyScaling(None, None)
 
             self.canvas.draw()
 
 
+    def onScalerRangeChanged(self):
+        '''
+        Slot triggered when the upper or the lower bound of the scaler are 
+        modified from the respective widgets in the scaler toolbar.
+
+        '''
+        self.updateScalerExtents(update_span=True)
+        self.scalerRangeChanged.emit()
 
 
-    def onSpanSelect(self, vmin, vmax):
+    def onSpanSelect(self, vmin: float, vmax: float):
         '''
         Slot triggered after interacting with the span selector. Highlights
         in the data viewer the pixels that fall within the selected area in the
@@ -1324,61 +1423,69 @@ class HistogramViewer(QW.QWidget):
 
         Parameters
         ----------
-        xmin : float
+        vmin : float
             Lower range bound.
-        xmax : float
+        vmax : float
             Upper range bound.
 
-        Returns
-        -------
-        None.
-
         '''
+    # Do nothing if the histogram canvas is empty
         if self.canvas.is_empty():
             return
 
+    # Adjust values to integers. Empty ranges are converted to (0, 0).
         vmin, vmax = round(vmin), round(vmax)
         if vmin == vmax:
             vmin, vmax = 0, 0
 
+    # Update vmin and vmax values in the scaler toolbar. We temporarily block 
+    # their signals to avoid unwanted loop with 'onScalerRangeChanged' function
         self.scaler_vmin.blockSignals(True)
         self.scaler_vmax.blockSignals(True)
-
         self.scaler_vmin.setValue(vmin)
         self.scaler_vmax.setValue(vmax)
-
         self.scaler_vmin.blockSignals(False)
         self.scaler_vmax.blockSignals(False)
 
-        self.setScalerExtents(update_span=False)
+    # Update scaler extents
+        self.updateScalerExtents(update_span=False)
+        self.scalerRangeChanged.emit()
 
 
+    def applyScaling(self, vmin: int|None, vmax: int|None):
+        '''
+        Set the maps canvas clims to 'vmin' and 'vmax'.
 
+        Parameters
+        ----------
+        vmin : int | None
+            Lower range value. If None, the clims are reset.
+        vmax : int | None
+            Upper range value. If None, the clims are reset.
 
-
-
-    def applyScaling(self, vmin, vmax):
+        '''
+    # Set vmin and vmax to None if one of them lies outside the map data range
         if vmin is not None and vmax is not None:
             array = self.maps_canvas.image.get_array()
             if vmin >= array.max() or vmax <= array.min():
                 vmin, vmax = None, None
+
+    # Update clims and redraw canvas
         self.maps_canvas.update_clim(vmin, vmax)
         self.maps_canvas.draw()
 
 
-
-
-
-    def setScalerExtents(self, update_span=True):
+    def updateScalerExtents(self, update_span=True):
         '''
         Select a range in the histogram using the vmin and vmax line edits in
-        the Navigation Toolbar. This function calls the onSpanSelect function
-        without using the histogram spanner (= fromDragging set to False, see
-        onSpanSelect function for more details).
+        the Navigation Toolbar. If 'update_span' is True, this function also
+        updates the span selector.
 
-        Returns
-        -------
-        None.
+        Parameters
+        ----------
+        update_span : bool, optional
+            Whether the span selector should be updated as well. The default is
+            True.
 
         '''
         if self.canvas.is_empty():
@@ -1387,8 +1494,6 @@ class HistogramViewer(QW.QWidget):
         vmin = self.scaler_vmin.value()
         vmax = self.scaler_vmax.value()
 
-
-        
         if vmax > vmin:
             self.applyScaling(vmin, vmax)
             self.warn_icon.setVisible(False)
@@ -1407,22 +1512,16 @@ class HistogramViewer(QW.QWidget):
             self.canvas.draw()
 
 
-
-
     def hideScaler(self):
         '''
         Hides the spanner view from the histogram canvas. Since this function
         has no canvas draw() call, it must be triggered before update_canvas().
 
-        Returns
-        -------
-        None.
-
         '''
         self.scaler.set_visible(False)
 
 
-    def setHistBins(self, value):
+    def setHistBins(self, value: int):
         '''
         Set the number of bins of the histogram.
 
@@ -1430,10 +1529,6 @@ class HistogramViewer(QW.QWidget):
         ----------
         value : int
             Number of bins.
-
-        Returns
-        -------
-        None.
 
         '''
         self.bin_slider.setToolTip(f'Bins = {value}')
@@ -1444,10 +1539,6 @@ class HistogramViewer(QW.QWidget):
         '''
         Extract a mask from the range selected in the histogram scaler and save
         it to file.
-
-        Returns
-        -------
-        None.
 
         '''
     # Do nothing if no map is displayed in the maps canvas
@@ -1478,7 +1569,88 @@ class HistogramViewer(QW.QWidget):
                 mask.save(outpath)
             except Exception as e:
                 return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            
 
+    def resetConfig(self):
+        '''
+        Reset the Histogram Viewer to its default state and configuration.
+
+        '''
+
+    # Reset navigation toolbar actions
+        self.navtbar.showToolbarAction().setChecked(True)
+        self.navtbar.setVisible(True)
+        self.navtbar.log_action.setChecked(True)
+        self.navtbar.mode = self.navtbar.mode.NONE 
+        self.navtbar._update_buttons_checked()
+
+    # Reset scaler and scaler toolbar actions
+        self.scaler_action.setChecked(False)
+        self.scaler_vmin.setValue(0)
+        self.scaler_vmax.setValue(0)
+        self.scaler.extents = (0, 0)
+
+    # Reset number of bins
+        self.bin_slider.setSliderPosition(50)
+        self.setHistBins(50)
+
+
+    def getConfig(self) -> dict:
+        '''
+        Take a snapshot of the current state and configuration of the Histogram
+        Viewer.
+
+        Returns
+        -------
+        dict
+            Current state and configuration.
+
+        '''
+        config = {key: {} for key in ('Canvas', 'NavTbar', 'Scaler')}
+
+        config['Canvas']['Logscale'] = self.canvas.log
+        config['Canvas']['Bins'] = self.canvas.nbins
+
+        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
+        config['NavTbar']['ActiveMode'] = self.navtbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
+
+        config['Scaler']['Enabled'] = self.scaler_action.isChecked()
+        config['Scaler']['Extents'] = [round(e) for e in self.scaler.extents]
+
+        return config
+    
+
+    def loadConfig(self, config: dict):
+        '''
+        Set the state and configuration of the Histogram Viewer to those 
+        provided in 'config'.
+
+        Parameters
+        ----------
+        config : dict
+            Reference state and configuration.
+
+        '''
+    # Update navigation toolbar actions
+        logscale, nbins = config['Canvas'].values()
+        show_ntbar, ntbar_mode = config['NavTbar'].values()
+        self.navtbar.showToolbarAction().setChecked(show_ntbar)
+        self.navtbar.setVisible(show_ntbar)
+        self.navtbar.log_action.setChecked(logscale)
+        self.navtbar.mode = type(self.navtbar.mode)(ntbar_mode)
+        self.navtbar._update_buttons_checked()
+
+    # Update scaler and scaler toolbar actions
+        scaler_enabled, (vmin, vmax) = config['Scaler'].values()
+        self.scaler_action.setChecked(scaler_enabled)
+        self.scaler_vmin.setValue(vmin)
+        self.scaler_vmax.setValue(vmax)
+        self.scaler.extents = (vmin, vmax)
+
+    # Update number of bins
+        self.bin_slider.setSliderPosition(nbins)
+        self.setHistBins(nbins)
+        
 
 # !!! EXPERIMENTAL
     # def resizeEvent(self, e):
@@ -1642,7 +1814,7 @@ class ModeViewer(CW.StyledTabWidget):
         self.legend.update(minmap)
 
 
-    def clear_all(self):
+    def clearAll(self):
         '''
         Reset all components of the ModeViewer.
 
@@ -1830,6 +2002,50 @@ class ModeViewer(CW.StyledTabWidget):
                 mask.save(outpath)
             except Exception as e:
                 return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            
+
+    def resetConfig(self):
+        '''
+        Reset the Mode Viewer to its default state and configuration.
+
+        '''
+        self.navTbar.showToolbarAction().setChecked(True)
+        self.navTbar.setVisible(True)
+        self.navTbar.lbl_action.setChecked(False)
+
+
+    def getConfig(self) -> dict:
+        '''
+        Take a snapshot of the current state and configuration of the Mode
+        Viewer.
+
+        Returns
+        -------
+        dict
+            Current state and configuration.
+
+        '''
+        config = {'NavTbar': {}}
+        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
+        config['NavTbar']['Labelize'] = self.navTbar.lbl_action.isChecked()
+        return config
+    
+
+    def loadConfig(self, config: dict):
+        '''
+        Set the state and configuration of the Mode Viewer to those provided in
+        'config'.
+
+        Parameters
+        ----------
+        config : dict
+            Reference state and configuration.
+
+        '''
+        show_ntbar, labelize = config['NavTbar'].values()
+        self.navTbar.showToolbarAction().setChecked(show_ntbar)
+        self.navTbar.setVisible(show_ntbar)
+        self.navTbar.lbl_action.setChecked(labelize)
 
 
 
@@ -1841,7 +2057,7 @@ class RoiEditor(QW.QWidget):
 
     rectangleSelectorUpdated = pyqtSignal()
 
-    def __init__(self, maps_canvas, parent=None):
+    def __init__(self, maps_canvas: plots.ImageCanvas, parent=None):
         '''
         Constructor.
 
@@ -2002,7 +2218,7 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Load ROI map from file
-        self.load_action.triggered.connect(self.loadRoiMap)
+        self.load_action.triggered.connect(lambda: self.loadRoiMap())
 
     # Save ROI map to file
         self.save_action.triggered.connect(self.saveRoiMap)
@@ -2644,7 +2860,7 @@ class RoiEditor(QW.QWidget):
 
         '''
         self.current_roimap = None
-        self.mappath.clear()
+        self.mappath.clearPath()
         self.table.setRowCount(0)
 
     # Remove all patches from canvas
@@ -2652,11 +2868,17 @@ class RoiEditor(QW.QWidget):
             self.removePatchFromCanvas(idx)
 
 
-    def loadRoiMap(self):
+    def loadRoiMap(self, path: str|None=None):
         '''
         Wrapper function to easily load a new ROI map. If a previous ROI map
         exists, this function removes it, after user confirm. The function also
         redraws the canvas.
+
+        Parameters
+        ----------
+        path : str or None, optional
+            Filepath to ROI map. If None, user will be prompt to load it from
+            disk. The default is None.
 
         '''
     # Show a warning if a ROI map was already loaded
@@ -2669,10 +2891,11 @@ class RoiEditor(QW.QWidget):
             if choice.no():
                 return
 
-    # Do nothing if filepath is invalid or the file dialog is canceled
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
-                                                 pref.get_dir('in'),
-                                                 'ROI maps (*.rmp)')
+        # Do nothing if filepath is invalid or the file dialog is canceled
+        if path is None:
+            path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
+                                                     pref.get_dir('in'),
+                                                     'ROI maps (*.rmp)')
         if not path:
             return
         
@@ -2757,6 +2980,92 @@ class RoiEditor(QW.QWidget):
                 CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
 
 
+    def resetConfig(self):
+        '''
+        Reset the ROI Editor to its default state and configuration.
+
+        '''
+    # Reset ROI rectangle selector
+        self.current_selection = None
+        self.rect_sel.extents = (0., 0., 0., 0.)
+        self.draw_action.setChecked(False)
+        self.rect_sel.set_active(False)
+        self.rect_sel.set_visible(False)
+    
+    # Reset ROI map (patches and table)
+        self.removeCurrentRoiMap()
+        self.hideroi_btn.setChecked(False)
+        self._redraw()
+
+    # Reset bar plot and its navigation toolbar
+        self.barCanvas.clear_canvas()
+        self.navTbar.showToolbarAction().setChecked(True)
+        self.navTbar.setVisible(True)
+        self.navTbar.lbl_action.setChecked(False)
+
+
+    def getConfig(self) -> dict:
+        '''
+        Take a snapshot of the current state and configuration of the ROI 
+        Editor.
+
+        Returns
+        -------
+        dict
+            Current state and configuration.
+
+        '''
+        config = {key: {} for key in ('Selector', 'RoiMap', 'NavTbar')}
+
+        config['Selector']['Extents'] = self.rect_sel.extents
+        config['Selector']['FixedExtents'] = self.current_selection
+        config['Selector']['Active'] = self.rect_sel.active
+
+        config['RoiMap']['Path'] = self.mappath.fullpath
+        config['RoiMap']['Visible'] = not self.hideroi_btn.isChecked()
+
+        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
+        config['NavTbar']['Labelize'] = self.navTbar.lbl_action.isChecked()
+
+        return config
+
+
+    def loadConfig(self, config: dict):
+        '''
+        Set the state and configuration of the ROI Editor to those provided in
+        'config'.
+
+        Parameters
+        ----------
+        config : dict
+            Reference state and configuration.
+
+        '''
+    # Update ROI rectangle selector (requires ImageCanvas' extents to be updated first)
+        extents, fixed_extents, selector_active = config['Selector'].values()
+        self.rect_sel.extents = extents
+        self.current_selection = fixed_extents
+        self.draw_action.setChecked(selector_active)
+        self.rect_sel.set_active(selector_active)
+        self.rect_sel.set_visible(selector_active)
+
+    # Update ROI map and linked table and bar plot
+        self.removeCurrentRoiMap()
+        self.hideroi_btn.setChecked(not config['RoiMap']['Visible'])
+
+        if (roimap_path := config['RoiMap']['Path']) != '':
+            self.loadRoiMap(roimap_path) # this also updates canvas and barplot
+        else:
+            self.barCanvas.clear_canvas()        
+            self._redraw()
+
+    # Update bar plot navigation toolbar
+        show_ntbar, labelize = config['NavTbar'].values()
+        self.navTbar.showToolbarAction().setChecked(show_ntbar)
+        self.navTbar.setVisible(show_ntbar)
+        self.navTbar.lbl_action.setChecked(labelize)
+
+
 
 class ProbabilityMapViewer(QW.QWidget):
     '''
@@ -2765,7 +3074,9 @@ class ProbabilityMapViewer(QW.QWidget):
 
     '''
 
-    def __init__(self, maps_canvas):
+    probabilityRangeChanged = pyqtSignal()
+
+    def __init__(self, maps_canvas: plots.ImageCanvas):
         '''
         Constructor.
 
@@ -2782,6 +3093,7 @@ class ProbabilityMapViewer(QW.QWidget):
 
         self._init_ui()
         self._connect_slots()
+
 
     def _init_ui(self):
         '''
@@ -2855,8 +3167,8 @@ class ProbabilityMapViewer(QW.QWidget):
         self.toggle_range_action.toggled.connect(self.onViewRangeToggled)
 
     # Set min and max range actions
-        self.min_input.valueChanged.connect(self.setViewRange)
-        self.max_input.valueChanged.connect(self.setViewRange)
+        self.min_input.valueChanged.connect(self.onViewRangeChanged)
+        self.max_input.valueChanged.connect(self.onViewRangeChanged)
 
     # Extract mask action
         self.mask_action.triggered.connect(self.extractMaskFromRange)
@@ -2879,14 +3191,15 @@ class ProbabilityMapViewer(QW.QWidget):
         menu.exec(QCursor.pos())
 
 
-    def onViewRangeToggled(self, toggled):
+    def onViewRangeToggled(self, toggled: bool):
         '''
-        Actions to be performed when the set view range action is toggled.
+        Slot triggered when the view range is toggled on/off in the probability
+        range toolbar.
 
         Parameters
         ----------
         toggled : bool
-            Toggled state of the action.
+            Toggle state of the view range.
 
         '''
     # Enable/disable all functions in the View Range Toolbar
@@ -2896,13 +3209,24 @@ class ProbabilityMapViewer(QW.QWidget):
     
     # Change the view range or reset it to default values
         if toggled:
-            self.setViewRange()
+            self.updateViewRange()
         else:
             self.canvas.update_clim()
             self.canvas.draw()
+
+
+    def onViewRangeChanged(self):
+        '''
+        Slot triggered when the upper or the lower bound of the probability
+        view range are modified from the respective widgets in the probability
+        range toolbar.
+
+        '''
+        self.updateViewRange()
+        self.probabilityRangeChanged.emit()
     
 
-    def setViewRange(self):
+    def updateViewRange(self):
         '''
         Change the view range (clims) of the probability map.
 
@@ -2956,6 +3280,70 @@ class ProbabilityMapViewer(QW.QWidget):
                 mask.save(outpath)
             except Exception as e:
                 CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+
+
+    def resetConfig(self):
+        '''
+        Reset the Probability Map Viewer to its default state and configuration.
+
+        '''
+    # Reset navigation toolbar actions
+        self.navTbar.showToolbarAction().setChecked(True)
+        self.navTbar.setVisible(True)
+        self.navTbar.mode = self.navTbar.mode.NONE 
+        self.navTbar._update_buttons_checked()
+
+    # Reset view range toolbar actions
+        self.toggle_range_action.setChecked(False)
+        self.min_input.setValue(0.0)
+        self.max_input.setValue(1.0)
+
+
+    def getConfig(self) -> dict:
+        '''
+        Take a snapshot of the current state and configuration of the 
+        Probability Map Viewer.
+
+        Returns
+        -------
+        dict
+            Current state and configuration.
+
+        '''
+        config = {key: {} for key in ('NavTbar', 'ViewRange')}
+
+        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
+        config['NavTbar']['ActiveMode'] = self.navTbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
+
+        config['ViewRange']['Enabled'] = self.toggle_range_action.isChecked()
+        config['ViewRange']['Range'] = [self.min_input.value(), self.max_input.value()]
+
+        return config
+    
+
+    def loadConfig(self, config: dict):
+        '''
+        Set the state and configuration of the Probability Map Viewer to those
+        provided in 'config'.
+
+        Parameters
+        ----------
+        config : dict
+            Reference state and configuration.
+
+        '''
+    # Update navigation toolbar actions
+        show_ntbar, ntbar_mode = config['NavTbar'].values()
+        self.navTbar.showToolbarAction().setChecked(show_ntbar)
+        self.navTbar.setVisible(show_ntbar)
+        self.navTbar.mode = type(self.navTbar.mode)(ntbar_mode)
+        self.navTbar._update_buttons_checked()
+
+    # Update view range toolbar actions
+        view_range_enabled, (vmin, vmax) = config['ViewRange'].values()
+        self.toggle_range_action.setChecked(view_range_enabled)
+        self.min_input.setValue(vmin)
+        self.max_input.setValue(vmax)
             
 
 
@@ -2966,14 +3354,15 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     '''
 
+    channels = ('R', 'G', 'B', 'A')
+    rgbaModified = pyqtSignal()
+
     def __init__(self):
         '''
         Constructor.
 
         '''
         super(RgbaCompositeMapViewer, self).__init__()
-
-        self.channels = ('R', 'G', 'B', 'A')
 
     # Canvas
         self.canvas = plots.ImageCanvas(cbar=False)
@@ -3020,30 +3409,43 @@ class RgbaCompositeMapViewer(QW.QWidget):
     # - Clear each individual channel
         for c in self.channels:
             clear_submenu.addAction(
-                f'{c} channel', lambda c=c: self.clear_channel(c))
+                f'{c} channel', lambda c=c: self.clearChannel(c))
     # - Separator
         clear_submenu.addSeparator()
     # - Clear all channels
         clear_submenu.addAction(
-            'Clear all', lambda: self.clear_channel(*self.channels))
+            'Clear all', lambda: self.clearChannel(*self.channels))
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
 
-    def clear_channel(self, *args):
-        if not self.canvas.is_empty():
-            rgba_map = self.canvas.image.get_array()
-            for arg in args:
-                # [R=0, G=0, B=0, A=1]
-                idx = self.channels.index(arg)
-                rgba_map[:, :, idx] = 1 if idx == 3 else 0
-                self.rgba_lbls[idx].clearPath()
+    def clearChannel(self, *args):
+        '''
+        Clear provided RGBA channels.
 
-            self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
+        Parameters
+        ----------
+        *args
+            Sequence of channel strings. Valid strings are 'R', 'G', 'B', 'A'.
+
+        '''
+    # Do nothing if canvas is empty
+        if self.canvas.is_empty():
+            return
+        
+        rgba_map = self.canvas.image.get_array()
+        for arg in args:
+            # [R=0, G=0, B=0, A=1]
+            idx = self.channels.index(arg)
+            rgba_map[:, :, idx] = 1 if idx == 3 else 0
+            self.rgba_lbls[idx].clearPath()
+
+        self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
+        self.rgbaModified.emit()
 
 
-    def set_channel(self, channel, inmap):
+    def setChannel(self, channel: str, inmap: InputMap):
         '''
         Set one channel's data.
 
@@ -3052,7 +3454,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         channel : str
             One of 'R', 'G', 'B' and 'A'.
         inmap : InputMap
-            Input map to be set as channel <channel>.
+            Input map to be set as channel 'channel'.
 
         '''
         assert channel in self.channels
@@ -3080,12 +3482,81 @@ class RgbaCompositeMapViewer(QW.QWidget):
     # Update the channel path label
         self.rgba_lbls[idx].setPath(filepath)
 
+    # Send signal
+        self.rgbaModified.emit()
 
-    def clear_all(self):
+
+    def clearAll(self):
         '''
         Clear all channels.
 
         '''
         # Important: clear channel must be called before clear canvas
-        self.clear_channel('R', 'G', 'B', 'A')
+        self.clearChannel('R', 'G', 'B', 'A')
         self.canvas.clear_canvas()
+
+
+    def resetConfig(self):
+        '''
+        Reset the RGBA Composite Map Viewer to its default state and 
+        configuration.
+
+        '''
+    # Reset navigation toolbar actions
+        self.navTbar.showToolbarAction().setChecked(True)
+        self.navTbar.setVisible(True)
+        self.navTbar.mode = self.navTbar.mode.NONE 
+        self.navTbar._update_buttons_checked()
+
+    # Clear all channels
+        self.clearAll()
+
+
+    def getConfig(self) -> dict:
+        '''
+        Take a snapshot of the current state and configuration of the RGBA
+        Composite Map Viewer.
+
+        Returns
+        -------
+        dict
+            Current state and configuration.
+
+        '''
+        config = {key: {} for key in ('NavTbar', 'Channels')}
+
+        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
+        config['NavTbar']['ActiveMode'] = self.navTbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
+
+        for ch, lbl in zip(self.channels, self.rgba_lbls):
+            config['Channels'][ch] = lbl.fullpath
+
+        return config
+    
+
+    def loadConfig(self, config: dict):
+        '''
+        Set the state and configuration of the RGBA Composite Map Viewer to 
+        those provided in 'config'.
+
+        Parameters
+        ----------
+        config : dict
+            Reference state and configuration.
+
+        '''
+    # Update navigation toolbar actions
+        show_ntbar, ntbar_mode = config['NavTbar'].values()
+        self.navTbar.showToolbarAction().setChecked(show_ntbar)
+        self.navTbar.setVisible(show_ntbar)
+        self.navTbar.mode = type(self.navTbar.mode)(ntbar_mode)
+        self.navTbar._update_buttons_checked()
+
+    # Update R, G, B, A channels
+        self.clearAll()
+        for ch, path in config['Channels'].items():
+            if os.path.exists(path):
+                try:
+                    self.setChannel(ch, InputMap.load(path))
+                except ValueError: # triggered by InputMap.load()
+                    continue

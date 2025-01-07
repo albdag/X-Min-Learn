@@ -5,11 +5,16 @@ Created on Sun Mar  5 19:31:39 2023
 @author: albdag
 """
 import gc
+import json
+import os
+import pickle
+import zipfile
 
 from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
+import convenient_functions as cf
 import custom_widgets as CW
 import dialogs
 import docks
@@ -25,7 +30,7 @@ class MainWindow(QW.QMainWindow):
 
     # Set main window properties
         self.resize(1600, 900)
-        # self.setWindowTitle('New project') TODO
+        self.setWindowTitle('New project[*]') 
         self.setWindowIcon(QG.QIcon(r'Icons/XML_logo.png'))
         self.setDockOptions(self.AllowTabbedDocks)
         self.setAnimated(pref.get_setting('GUI/smooth_animation'))
@@ -33,6 +38,7 @@ class MainWindow(QW.QMainWindow):
         self.setStyleSheet(style.SS_MAINWINDOW)
 
     # Set main window attributes
+        self.project_path = None
         self.open_tools = []
 
     # Initialize GUI
@@ -145,12 +151,34 @@ class MainWindow(QW.QMainWindow):
         
 
     def _init_actions(self):
-        '''Initialize actions shared by menu and toolbars.'''
+        '''
+        Initialize actions shared by menu and toolbars.
+        
+        '''
+    # New project action
+        self.new_project_action = QW.QAction(
+            QG.QIcon(r'Icons/empty.png'), '&New project')
+        self.new_project_action.setShortcut('Ctrl+N')
+
+    # Open project action
+        self.open_project_action = QW.QAction(
+            QG.QIcon(r'Icons/open.png'), '&Open project')
+        self.open_project_action.setShortcut('Ctrl+O')
+
+    # Save project action
+        self.save_project_action = QW.QAction(
+            QG.QIcon(r'Icons/save.png'), '&Save project')
+        self.save_project_action.setShortcut('Ctrl+S')
+
+    # Save project as... action
+        self.save_project_as_action = QW.QAction(
+            QG.QIcon(r'Icons/save_as.png'), '&Save project as...')
+        self.save_project_as_action.setShortcut('Ctrl+Shift+S')
+
     # Quit app action
         self.close_action = QW.QAction('&Exit')
-        self.close_action.setShortcut('Ctrl+Q')
 
-    # Import X-Ray Maps Action 
+    # Import Input Maps Action 
         self.load_inmaps_action = QW.QAction(
             QG.QIcon(r'Icons/inmap.png'), '&Input Maps')
         self.load_inmaps_action.setShortcut('Ctrl+I')
@@ -162,12 +190,12 @@ class MainWindow(QW.QMainWindow):
 
     # Import Masks Action
         self.load_masks_action = QW.QAction(
-            QG.QIcon(r'Icons/mask.png'), 'Masks')
+            QG.QIcon(r'Icons/mask.png'), 'Mas&ks')
+        self.load_masks_action.setShortcut('Ctrl+K')
 
     # Launch Preferences Action
         self.pref_action = QW.QAction(
-            QG.QIcon(r'Icons/wrench.png'), '&Preferences')
-        self.pref_action.setShortcut('Ctrl+P')
+            QG.QIcon(r'Icons/wrench.png'), 'Preferences')
 
     # Launch Convert Image to Input Map Action
         self.conv2inmap_action = QW.QAction('Image to Input Map')
@@ -232,7 +260,6 @@ class MainWindow(QW.QMainWindow):
         self.tools_toolbar.setObjectName('ToolsToolbar') # to save its state
         self.tools_toolbar.setFloatable(False)
         self.tools_toolbar.setStyleSheet(style.SS_MAINTOOLBAR)
-        # import data actions (button menu), followed by a separator
         self.tools_toolbar.addActions(
             (self.ds_builder_action, self.model_learner_action,
              self.classifier_action, self.refiner_action))
@@ -252,18 +279,27 @@ class MainWindow(QW.QMainWindow):
 
 
     def _init_menu(self):
-        '''Initialize main menu.'''
+        '''
+        Initialize main menu.
+        
+        '''
     # Set custom stylesheet to menu bar
         menu_bar = self.menuBar()
         menu_bar.setStyleSheet(style.SS_MENUBAR + style.SS_MENU)
 
     # File Menu
         file_menu = menu_bar.addMenu('&File')
+        file_menu.addActions(
+            (self.new_project_action, self.open_project_action, 
+             self.save_project_action, self.save_project_as_action))
+        file_menu.addSeparator()
+
         import_submenu = file_menu.addMenu(
             QG.QIcon(r'Icons/import.png'), '&Import...')
         import_submenu.addActions(
             (self.load_inmaps_action, self.load_minmaps_action,
               self.load_masks_action))
+        
         file_menu.addActions((self.pref_action, self.close_action))
 
     # Dataset Menu
@@ -303,7 +339,7 @@ class MainWindow(QW.QMainWindow):
         # Help (user-guide?)
         # Separator
         # Check updates (link to github page?)
-        
+
 
     def _connect_slots(self):
         '''
@@ -319,15 +355,25 @@ class MainWindow(QW.QMainWindow):
             a.triggered.connect(lambda t, p=p: self.setPaneVisibility(p, t))
 
     # Data Manager pane actions 
-        self.dataManager.updateSceneRequested.connect(self.update_scene)
-        self.dataManager.clearSceneRequested.connect(self.clear_scene)
-        self.dataManager.rgbaChannelSet.connect(self.set_rgba_channel)
+        self.dataManager.updateSceneRequested.connect(self.updateScene)
+        self.dataManager.clearSceneRequested.connect(self.clearScene)
+        self.dataManager.rgbaChannelSet.connect(self.setRgbaChannel)
+        self.dataManager.model().dataChanged.connect(
+            lambda: self.setWindowModified(True))
+        self.dataManager.model().rowsRemoved.connect(
+            lambda: self.setWindowModified(True))
+        
+    # Histogram Viewer pane actions
+        self.histViewer.scalerRangeChanged.connect(
+            lambda: self.setWindowModified(True))
 
     # Mode Viewer pane actions
-        self.modeViewer.updateSceneRequested.connect(self.update_scene)
+        self.modeViewer.updateSceneRequested.connect(self.updateScene)
 
     # ROI Editor pane actions
         self.roiEditor.rectangleSelectorUpdated.connect(self.updateHistogram)
+        self.roiEditor.rectangleSelectorUpdated.connect(
+            lambda: self.setWindowModified(True))
 
         self.roiEditor.autoroi_dial.maps_selector.sampleUpdateRequested.connect(
             lambda: self.roiEditor.autoroi_dial.maps_selector.updateCombox(
@@ -337,17 +383,34 @@ class MainWindow(QW.QMainWindow):
             lambda idx: self.roiEditor.autoroi_dial.maps_selector.updateList(
                 self.dataManager.topLevelItem(idx)))
         
+        self.roiEditor.table.model().dataChanged.connect(
+            lambda: self.setWindowModified(True))
+        self.roiEditor.table.model().rowsRemoved.connect(
+            lambda: self.setWindowModified(True))
+        
+    # Probability Map Viewer pane actions
+        self.pmapViewer.probabilityRangeChanged.connect(
+            lambda: self.setWindowModified(True))
+        
+    # RGBA Viewer pane actions
+        self.rgbaViewer.rgbaModified.connect(
+            lambda: self.setWindowModified(True))
+        
+    # Project actions
+        self.new_project_action.triggered.connect(self.newProject)
+        self.open_project_action.triggered.connect(self.openProject)
+        self.save_project_action.triggered.connect(
+            lambda: self.saveProject(overwrite=True))
+        self.save_project_as_action.triggered.connect(
+            lambda: self.saveProject(overwrite=False))
+        
     # Quit app 
         self.close_action.triggered.connect(self.close)
 
-    # Import X-Ray Maps  
-        self.load_inmaps_action.triggered.connect(lambda: self.load('inmaps'))
-
-    # Import Mineral Maps 
-        self.load_minmaps_action.triggered.connect(lambda: self.load('minmaps'))
-
-    # Import Masks 
-        self.load_masks_action.triggered.connect(lambda: self.load('masks'))
+    # Import data  
+        self.load_inmaps_action.triggered.connect(self.importData)
+        self.load_minmaps_action.triggered.connect(self.importData)
+        self.load_masks_action.triggered.connect(self.importData)
 
     # Launch Preferences 
         self.pref_action.triggered.connect(
@@ -536,42 +599,63 @@ class MainWindow(QW.QMainWindow):
         self.open_tools.remove(tool)
 
 
-    def load(self, datatype):
+    def importData(self):
+        '''
+        Wrapper function to load data in the Data Manager. The type of data to
+        be loaded is automatically retrieved from the sender action.
+
+        '''
     # Get currently active group. If none, build a new one
         current_item = self.dataManager.currentItem()
         group = self.dataManager.getItemParentGroup(current_item)
         if group is None:
-            group = self.dataManager.addGroup(return_group=True)
+            group = self.dataManager.addGroup()
 
-        if datatype == 'inmaps':
-            self.dataManager.loadInputMaps(group)
+    # Import data in the proper subgroup depending on loading data type
+        sender_action = self.sender()
 
-        elif datatype == 'minmaps':
-            self.dataManager.loadMineralMaps(group)
+        if sender_action == self.load_inmaps_action:
+            self.dataManager.loadData(group.inmaps)
 
-        elif datatype == 'masks':
-            self.dataManager.loadMasks(group)
+        elif sender_action == self.load_minmaps_action:
+            self.dataManager.loadData(group.minmaps)
 
-        # elif datatype == 'pntdata':
-        #     self.dataManager.loadPointData(group)
+        elif sender_action == self.load_masks_action:
+            self.dataManager.loadData(group.masks)
 
-        else:
-            raise NameError(f'{datatype} is not a valid datatype')
+        else: # safety
+            return
 
 
-    def update_scene(self, item):
+    def updateScene(self, item: CW.DataObject|CW.DataSubGroup|CW.DataGroup):
+        '''
+        Main control function for rendering data in the Data Viewer and in the 
+        panes. 
+
+        Parameters
+        ----------
+        item : DataObject or DataSubGroup or DataGroup
+            Item to be rendered. Canonically, it should be a DataObject; if a
+            DataSubGroup or a DataGroup is passed, this function attempts to
+            re-render the currently displayed data object.
+
+        '''
     # Re-call this function to refresh the displayed map if item is (sub)group
         if isinstance(item, (CW.DataGroup, CW.DataSubGroup)):
-            self.update_scene(self.dataViewer._displayedObject)
+            self.updateScene(self.dataViewer._displayedObject)
 
     # Actions to be performed when item is a data object
         elif isinstance(item, CW.DataObject):
 
-        # Extract item data, filepath, name and parent group (sample) 
+        # Extract item data, filepath, name and parent group (sample)
             i_data, i_path, i_name = item.get('data', 'filepath', 'name')
             sample = self.dataManager.getItemParentGroup(item)
+        # Exit function and clear the scene if the sample is None
+            if sample is None:
+                return self.clearScene()
         # Check for source file existence
-            item.setNotFound(not item.filepathValid())
+            if not item.filepathValid():
+                item.setNotFound(True)
         # Also get mask if present
             mask = sample.getCompositeMask('checked')
             if mask is not None:
@@ -588,11 +672,11 @@ class MainWindow(QW.QMainWindow):
                 inmap = i_data.map if mask is None else i_data.get_masked(mask)
 
                 self.dataViewer.canvas.draw_heatmap(inmap, title)
-                self.modeViewer.clear_all()
+                self.modeViewer.clearAll()
                 self.pmapViewer.canvas.clear_canvas()
                 self.updateHistogram()
                 if self.histViewer.scaler_action.isChecked():
-                    self.histViewer.setScalerExtents()
+                    self.histViewer.updateScalerExtents()
    
 
         # Actions to be performed if item holds mineral map data
@@ -607,7 +691,7 @@ class MainWindow(QW.QMainWindow):
                 self.modeViewer.update(item, title)
                 self.pmapViewer.canvas.draw_heatmap(pmap, title)
                 if self.pmapViewer.toggle_range_action.isChecked():
-                    self.pmapViewer.setViewRange()
+                    self.pmapViewer.updateViewRange()
                 self.histViewer.hideScaler()
                 self.histViewer.canvas.clear_canvas()
 
@@ -620,26 +704,30 @@ class MainWindow(QW.QMainWindow):
                 displ_item = self.dataViewer._displayedObject
                 displ_sample = self.dataManager.getItemParentGroup(displ_item)
                 if sample == displ_sample:
-                    self.update_scene(displ_item)
+                    self.updateScene(displ_item)
 
 
         # Actions to be performed if item holds point data
             # elif currentItem.holdsPointsData(): pass
 
-    # Exit function if item is not a gruop, a subgroup or a data object
+    # Exit function if item is not a group, a subgroup or a data object
         else:
             return
 
 
-    def clear_scene(self):
+    def clearScene(self):
+        '''
+        Clear the current view of the Data Viewer and the panes.
+
+        '''
         self.dataViewer._displayedObject = None
         self.dataViewer.currPath.clearPath()
         self.dataViewer.canvas.clear_canvas()
-        self.modeViewer.clear_all()
+        self.modeViewer.clearAll()
         self.pmapViewer.canvas.clear_canvas()
         self.histViewer.hideScaler()
         self.histViewer.canvas.clear_canvas()
-        self.rgbaViewer.clear_all()
+        self.rgbaViewer.clearAll()
 
 
     def updateHistogram(self):
@@ -665,17 +753,236 @@ class MainWindow(QW.QMainWindow):
         self.histViewer.canvas.update_canvas(data, roi_mask, title)
 
 
-    def set_rgba_channel(self, channel):
+    def setRgbaChannel(self, channel: str):
+        '''
+        Set current item in the Data Manager as channel 'channel' in the RGBA
+        Map Viewer pane.
+
+        Parameters
+        ----------
+        channel : str
+            RGBA channel. Must be one of 'R', 'G', 'B', 'A'.
+
+        '''
     # Get the current item in the data manager. If it is valid (= a DataObject
     # holding an Input Map), send its data to the RGBA Composite Maps Viewer
         item = self.dataManager.currentItem()
         if isinstance(item, CW.DataObject) and item.holdsInputMap():
-            self.rgbaViewer.set_channel(channel, item.get('data'))
+            self.rgbaViewer.setChannel(channel, item.get('data'))
 
         # Force show the RGBA pane to provide feedback
             self.setPaneVisibility(self.panes[5], True)
 
 
+    def saveProject(self, overwrite=True) -> bool:
+        '''
+        Save current project to disk.
+
+        Parameters
+        ----------
+        overwrite : bool, optional
+           Whether the current project path should be overwritten. If False,
+           user is prompted to select a new file destination (save as). The
+           default is True.
+
+        Returns
+        -------
+        bool
+            Whether the project was saved or not.
+
+        '''
+    # Do not save the project if the filepath is invalid
+        path = self.project_path
+        if not overwrite or path is None:   
+            path, _ = QW.QFileDialog.getSaveFileName(self, 'Save project',
+                                                     pref.get_dir('out'),
+                                                     'X-Min Learn project (*.xmj)')
+            if not path:
+                return False
+
+    # Send warning and ask for user's choice if Data Manager has unsaved data
+        if self.dataManager.hasUnsavedData():
+            text = 'Unsaved edits in the Data Manager will not be saved '\
+                   'automatically. Proceed anyway?'
+            choice = CW.MsgBox(self, 'QuestWarn', text)  
+            if choice.no():
+                return False      
+
+    # Collect project data
+        project_info = {
+            'Name': cf.path2filename(path),
+            'Version': QW.qApp.applicationVersion()
+        }
+        
+        current_view = {
+            'Path': self.dataViewer.currPath.fullpath,
+            'Zoom': [
+                self.dataViewer.canvas.ax.get_xlim(),
+                self.dataViewer.canvas.ax.get_ylim()
+            ]
+        }
+        
+        panes_data = {
+            p.objectName(): p.trueWidget().getConfig() for p in self.panes
+        }
+        
+        tools_data = {} # TODO
+
+    # Save project data to file
+        try:
+            with zipfile.ZipFile(path, 'w') as xmj:
+                xmj.writestr('ProjectInfo', json.dumps(project_info, indent=4))
+                xmj.writestr('CurrentView', json.dumps(current_view, indent=4))
+                xmj.writestr('PanesData', json.dumps(panes_data, indent=4))
+                xmj.writestr('ToolsData', pickle.dumps(tools_data))
+        except Exception as e:
+            CW.MsgBox(self, 'Crit', 'Failed to save project.', str(e))
+            return False
+
+    # Set the app default output directory to 'path' only after the project has 
+    # been successfully saved
+        pref.set_dir('out', os.path.dirname(path))
+
+    # Update window attributes 
+        self.project_path = path
+        self.setWindowTitle(f'{project_info['Name']}[*]')
+        self.setWindowModified(False)
+        return True
+
+
+    def projectSafeToClose(self) -> bool:
+        '''
+        Check if the current project can be closed without data loss.
+
+        Returns
+        -------
+        bool
+            Whether the project is safe to close.
+
+        '''
+    # Project is safe to close if no tool is open and window is not modified
+        if not self.isWindowModified() and not len(self.open_tools):
+            return True
+
+    # Otherwise, ask for user's choice to save the current project
+        btns = QW.QMessageBox.Yes | QW.QMessageBox.No | QW.QMessageBox.Cancel
+        choice = CW.MsgBox(self, 'QuestWarn', 'Save current project?', 
+                           btns=btns, def_btn=QW.QMessageBox.Yes)
+    
+    # User wants to save -> launch 'saveProject' function and return its output
+        if choice.yes(): 
+            return self.saveProject()
+    
+    # User does not want to save -> the project is safe to close
+        elif choice.no():
+            return True
+    
+    # User canceled the choice dialog -> the project is not safe to close
+        else:
+            return False
+
+
+    def newProject(self):
+        '''
+        Initialize a new project.
+
+        '''
+    # Deny creating a new project if the current project is not safe to close
+        if not self.projectSafeToClose():
+            return
+        
+    # Clear scene
+        self.clearScene()
+
+    # Reset panes GUI state
+        for pane in self.panes:
+            pane.trueWidget().resetConfig()
+        
+    # Kill floating and tabbed tools
+        for tool in reversed(self.open_tools):
+            self.closeTool(tool)
+   
+    # Update window attributes and properties
+        self.project_path = None
+        self.setWindowTitle('New project[*]')
+        self.setWindowModified(False)       
+
+
+    def openProject(self):
+        '''
+        Load and open a project from disk.
+
+        '''
+    # Deny opening a project if the current project is not safe to close
+        if not self.projectSafeToClose():
+            return
+            
+    # Do nothing if project path is invalid (file dialog is canceled)
+        path, _ = QW.QFileDialog.getOpenFileName(self, 'Open project',
+                                                 pref.get_dir('in'),
+                                                 'X-Min Learn project (*.xmj)')
+        if not path:
+            return
+        
+    # Retrive data from project file
+        try: 
+            with zipfile.ZipFile(path, 'r') as xmj:
+                project_info = json.loads(xmj.read('ProjectInfo'))
+                current_view = json.loads(xmj.read('CurrentView'))
+                panes_data = json.loads(xmj.read('PanesData'))
+                tools_data = pickle.loads(xmj.read('ToolsData'))
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', 'Failed to open project.', str(e))
+        
+    # Ask for user's choice if the project and the app version do not coincide
+        if (vers := project_info['Version']) != QW.qApp.applicationVersion():
+            choice = CW.MsgBox(self, 'QuestWarn', 'This project was saved in '\
+                               f'a different version: {vers}. Proceed anyway?')
+            if choice.no():
+                return
+
+    # Initialize a list to store any loading error
+        loading_errors = []
+
+    # Clear scene
+        self.clearScene()
+
+    # Load current view limits (zoom)
+        xlim, ylim = current_view['Zoom']
+        self.dataViewer.canvas.ax.set(xlim=xlim, ylim=ylim)
+
+    # Load panes states
+        for pane in self.panes:
+            pane_name = pane.objectName()
+            try:
+                pane.trueWidget().loadConfig(panes_data[pane_name])
+            except Exception as e:
+                loading_errors.append((pane_name, e))
+
+    # Load current view object
+        for item in self.dataManager.getAllDataObjects():
+            if item.get('filepath') == current_view['Path']:
+                self.dataManager.setCurrentItem(item)
+                self.updateScene(item)
+                break
+
+    # Close currently opened tools and load project's tools states 
+    # TODO...
+
+    # Set the app defualt input directory to 'path' after project is loaded to 
+    # avoid it being replaced by the paths of data loaded within the individual
+    # panes and tools 
+        pref.set_dir('in', os.path.dirname(path))
+
+    # Update window attributes and properties
+        self.project_path = path
+        self.setWindowTitle(f'{project_info['Name']}[*]')
+        self.setWindowModified(False)   
+
+    # Send any catched loading error via warning
+        if len(loading_errors):
+            CW.MsgBox(self, 'Warn', 'Found corrupted data in the project.',
+                      '\n\n'.join((f'{k} -> {e}' for k, e in loading_errors)))
 
 
     # def run_Preferences(self):
@@ -722,8 +1029,9 @@ class MainWindow(QW.QMainWindow):
 
     def closeEvent(self, event: QG.QCloseEvent):
         '''
-        Reimplementation of the closeEvent, to just ask for user confirm and
-        save the current state of the window.
+        Reimplementation of the closeEvent. It shows a dialog to save the
+        project if it has been modified. The current state of the window is
+        automatically saved on exit.
 
         Parameters
         ----------
@@ -731,10 +1039,15 @@ class MainWindow(QW.QMainWindow):
             The close event.
 
         '''
-        choice = CW.MsgBox(self, 'Quest', 'Exit application?')
-        if choice.yes():
+        if self.projectSafeToClose():
+        # Avoid to manually have to close floating tools if main app is closed
+            for tool in reversed(self.open_tools):
+                self.closeTool(tool)
+
+        # Save the current state of main window's panes and toolbars
             pref.edit_setting('GUI/window_state', self.saveState(version=0))
             event.accept()
+            
         else:
             event.ignore()
 
