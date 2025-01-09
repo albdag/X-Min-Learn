@@ -644,10 +644,13 @@ class MainWindow(QW.QMainWindow):
     # Actions to be performed when item is a data object
         elif isinstance(item, CW.DataObject):
 
-        # Extract item data, filepath, name and parent group (sample)
-            i_data, i_path, i_name = item.get('data', 'filepath', 'name')
+        # Exit function and clear the scene if item has been deleted (safety)
+            try:
+                i_data, i_path, i_name = item.get('data', 'filepath', 'name')
+            except RuntimeError:
+                return self.clearScene()     
+        # Exit function and clear the scene if item has no valid parent group
             sample = self.dataManager.getItemParentGroup(item)
-        # Exit function and clear the scene if the sample is None
             if sample is None:
                 return self.clearScene()
         # Check for source file existence

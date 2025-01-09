@@ -514,8 +514,11 @@ class DataManager(QW.QTreeWidget):
         if choice.no():
             return
 
+    # After removing the group we also clear it to prevent a bug where the 
+    # currently displayed object, if was owned by the group, still points at it 
         for idx in sorted(self.getSelectedGroupsIndexes(), reverse=True):
-            self.takeTopLevelItem(idx)
+            group = self.takeTopLevelItem(idx)
+            group.clear()
         self.refreshView()
 
 
