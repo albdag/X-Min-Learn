@@ -605,11 +605,8 @@ class MainWindow(QW.QMainWindow):
         be loaded is automatically retrieved from the sender action.
 
         '''
-    # Get currently active group. If none, build a new one
-        current_item = self.dataManager.currentItem()
-        group = self.dataManager.getItemParentGroup(current_item)
-        if group is None:
-            group = self.dataManager.addGroup()
+    # Build a new group
+        group = self.dataManager.addGroup()
 
     # Import data in the proper subgroup depending on loading data type
         sender_action = self.sender()
