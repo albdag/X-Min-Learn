@@ -32,7 +32,7 @@ class InputMap():
         '''
 
     # Define the principal attributes
-        self.map = map_array
+        self.map = map_array.astype(self._DTYPE)
         self.shape = self.map.shape
         self.filepath = filepath
 
@@ -61,7 +61,7 @@ class InputMap():
         _, filext = os.path.splitext(filepath)
 
     # Proper file extensions (.gz or .txt) instantiate a new Input Map object
-        if filext in ('.gz', '.txt'):
+        if filext in cls._FILEXT:
             inmap = np.loadtxt(filepath, dtype=cls._DTYPE)
             return cls(inmap, filepath)
 
@@ -125,11 +125,13 @@ class InputMap():
 
         Raises
         ------
-        AssertionError
+        ValueError
             The outpath extension is not one of ('.gz', '.txt').
 
         '''
-        assert os.path.splitext(outpath)[1] in ('.gz', '.txt')
+        if (ext := os.path.splitext(outpath)[1]) not in self._FILEXT:
+            raise ValueError(f'Unsupported file extension: {ext}.')
+
         np.savetxt(outpath, self.map, delimiter=' ', fmt='%d')
         self.filepath = outpath
 
@@ -171,7 +173,7 @@ class MineralMap():
 
         '''
     # Define the principal attributes
-        self.minmap = minmap_array
+        self.minmap = minmap_array.astype(self._DTYPE_STR)
         self.shape = self.minmap.shape
         self.probmap = np.zeros(self.shape) if probmap_array is None else probmap_array
         self.palette = palette_dict
@@ -825,15 +827,17 @@ class MineralMap():
 
         Raises
         ------
-        AssertionError
+        ValueError
             The outpath has not the '.mmp' extension.
 
         '''
-        with open (outpath, 'wb') as op:
-            assert os.path.splitext(outpath)[1] == '.mmp'
-            np.savez(op, minmap=self.minmap,
-                         probmap=self.probmap,
-                         palette=self.palette) #!!! add other properties (like the name) as attributes? Could be saved as a dictionary. Should also be done in InputMaps
+        with open(outpath, 'wb') as op:
+            if (ext := os.path.splitext(outpath)[1]) != '.mmp':
+                raise ValueError(f'Unsupported file extension: {ext}.')
+            
+            np.savez(op, minmap=self.minmap, probmap=self.probmap,
+                     palette=self.palette) #!!! add metadata as a dictionary. Should also be done in InputMaps
+
         self.filepath = outpath
 
 
@@ -958,7 +962,7 @@ class RoiMap():
     list that stores the label and the bounding box of each ROI.
     '''
 
-    _DTYPE_STR = 'U8'
+    _DTYPE = 'U8'
     _ND = ''
     _FILEXT = ('.rmp')
 
@@ -980,11 +984,8 @@ class RoiMap():
             for more details. The default is None.
 
         '''
-    # Make sure that the map has the correct dtype (string <= 8 characters)
-        assert map_array.dtype == self._DTYPE_STR
-
     # Define the principal attributes
-        self.map = map_array
+        self.map = map_array.astype(self._DTYPE)
         self.shape = map_array.shape
         self.roilist = roilist
         self.filepath = filepath
@@ -1021,7 +1022,7 @@ class RoiMap():
         _, filext = os.path.splitext(filepath)
 
     # Proper file extension (.rmp)
-        if filext == '.rmp':
+        if filext == cls._FILEXT:
             file = np.load(filepath, allow_pickle=True)
             map_array = file['map_array']
             roilist = file['roilist'].tolist()
@@ -1049,7 +1050,7 @@ class RoiMap():
             A new instance of ROI map.
 
         '''
-        map_array = np.empty(shape, dtype=cls._DTYPE_STR)
+        map_array = np.empty(shape, dtype=cls._DTYPE)
         return cls(map_array, [])
     
 
@@ -1207,7 +1208,6 @@ class RoiMap():
         return overlaps
 
 
-
     def bbox_to_extents(self, bbox: tuple):
         '''
         Convert bounding box (x0, y0, width, height) to extents (x0,x1, y0,y1).
@@ -1230,6 +1230,7 @@ class RoiMap():
         y1 = y0 + h
         extents = (x0, x1, y0, y1)
         return extents
+
 
     def extents_to_bbox(self, extents: tuple):
         '''
@@ -1318,14 +1319,17 @@ class RoiMap():
 
         Raises
         ------
-        AssertionError
+        ValueError
             The outpath extension is not '.rmp'.
 
         '''
         with open (outpath, 'wb') as op:
-            assert os.path.splitext(outpath)[1] == '.rmp'
+            if (ext := os.path.splitext(outpath)[1]) != self._FILEXT:
+                raise ValueError(f'Unsupported file extension: {ext}.')
+            
             roilist = np.array(self.roilist, object)
             np.savez(op, map_array=self.map, roilist=roilist)
+
         self.filepath = outpath
 
 
@@ -1336,6 +1340,7 @@ class Mask():
     consists of a boolean 2D array where 1's represent masked (hidden) pixels.
     '''
 
+    _DTYPE = 'bool'
     _FILEXT = ('.msk', '.txt')
 
     def __init__(self, mask_array: np.ndarray, filepath: str|None=None):
@@ -1351,11 +1356,8 @@ class Mask():
             more details. The default is None.
 
         '''
-    # Make sure that the map has the correct dtype (boolean)
-        mask_array = mask_array.astype(bool)
-
     # Define the principal attributes
-        self.mask = mask_array
+        self.mask = mask_array.astype(self._DTYPE)
         self.shape = mask_array.shape
         self.filepath = filepath
 
@@ -1391,13 +1393,13 @@ class Mask():
 
     # Compatible file extension (.txt)
         elif filext == '.txt':
-            mask_array = np.loadtxt(filepath, dtype=bool) # hic sunt leones
+            mask_array = np.loadtxt(filepath) # hic sunt leones
 
     # Any other file extension is discarded and exits the function.
         else: raise ValueError('This file is not supported.')
 
     # Instantiate a new Mask object
-        return cls(mask_array, filepath)
+        return cls(mask_array.astype(cls._DTYPE), filepath)
 
 
     @classmethod
@@ -1420,9 +1422,9 @@ class Mask():
 
         '''
         if fillwith == 0:
-            mask_array = np.zeros(shape, dtype=bool)
+            mask_array = np.zeros(shape, dtype=cls._DTYPE)
         else:
-            mask_array = np.ones(shape, dtype=bool)
+            mask_array = np.ones(shape, dtype=cls._DTYPE)
 
         return cls(mask_array)
 
@@ -1461,13 +1463,15 @@ class Mask():
 
         Raises
         ------
-        AssertionError
+        ValueError
             The outpath extension is not '.msk'.
 
         '''
         with open (outpath, 'wb') as op:
-            assert os.path.splitext(outpath)[1] == '.msk'
+            if (ext := os.path.splitext(outpath)[1]) != '.msk':
+                raise ValueError(f'Unsupported file extension: {ext}.')
             np.savez(op, mask_array=self.mask)
+
         self.filepath = outpath
 
 
