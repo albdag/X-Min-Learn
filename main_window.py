@@ -727,7 +727,6 @@ class MainWindow(QW.QMainWindow):
         self.pmapViewer.canvas.clear_canvas()
         self.histViewer.hideScaler()
         self.histViewer.canvas.clear_canvas()
-        self.rgbaViewer.clearAll()
 
 
     def updateHistogram(self):

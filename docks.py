@@ -3402,35 +3402,57 @@ class RgbaCompositeMapViewer(QW.QWidget):
     # - Separator
         clear_submenu.addSeparator()
     # - Clear all channels
-        clear_submenu.addAction(
-            'Clear all', lambda: self.clearChannel(*self.channels))
+        clear_submenu.addAction('Clear all', self.clearAllChannels)
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
 
-    def clearChannel(self, *args):
+    def clearChannel(self, channel: str):
         '''
-        Clear provided RGBA channels.
+        Clear provided RGBA channel.
 
         Parameters
         ----------
-        *args
-            Sequence of channel strings. Valid strings are 'R', 'G', 'B', 'A'.
+        channel : str
+            Channel to be cleared. Valid strings are 'R', 'G', 'B', 'A'.
 
         '''
     # Do nothing if canvas is empty
         if self.canvas.is_empty():
             return
         
+    # Default "empty" values for each RGBA channel are: R=0, B=0, G=0, A=1
         rgba_map = self.canvas.image.get_array()
-        for arg in args:
-            # [R=0, G=0, B=0, A=1]
-            idx = self.channels.index(arg)
-            rgba_map[:, :, idx] = 1 if idx == 3 else 0
-            self.rgba_lbls[idx].clearPath()
+        idx = self.channels.index(channel)
+        rgba_map[:, :, idx] = 1 if idx == 3 else 0
+        self.rgba_lbls[idx].clearPath()
 
-        self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
+    # If no loaded channel is left, clear the canvas; otherwise redraw it
+        if all(map(lambda lbl: lbl.fullpath == '', self.rgba_lbls)):
+            self.canvas.clear_canvas()
+        else:
+            self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
+        
+    # Emit signal
+        self.rgbaModified.emit()
+
+
+    def clearAllChannels(self):
+        '''
+        Clear all RGBA channels.
+
+        '''
+    # Do nothing if canvas is empty
+        if self.canvas.is_empty():
+            return
+        
+    # Clear canvas and all path labels
+        self.canvas.clear_canvas()
+        for lbl in self.rgba_lbls:
+            lbl.clearPath()
+
+    # Emit signal
         self.rgbaModified.emit()
 
 
@@ -3475,16 +3497,6 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.rgbaModified.emit()
 
 
-    def clearAll(self):
-        '''
-        Clear all channels.
-
-        '''
-        # Important: clear channel must be called before clear canvas
-        self.clearChannel('R', 'G', 'B', 'A')
-        self.canvas.clear_canvas()
-
-
     def resetConfig(self):
         '''
         Reset the RGBA Composite Map Viewer to its default state and 
@@ -3498,7 +3510,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.navTbar._update_buttons_checked()
 
     # Clear all channels
-        self.clearAll()
+        self.clearAllChannels()
 
 
     def getConfig(self) -> dict:
@@ -3542,7 +3554,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.navTbar._update_buttons_checked()
 
     # Update R, G, B, A channels
-        self.clearAll()
+        self.clearAllChannels()
         for ch, path in config['Channels'].items():
             if os.path.exists(path):
                 try:
