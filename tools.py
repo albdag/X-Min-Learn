@@ -207,7 +207,7 @@ class MineralClassifier(DraggableTool):
                                                'Load')
         
     # Get mask from class choice (RadioButton)
-        self.mask_radbtn_2 = QW.QRadioButton('Get from class')
+        self.mask_radbtn_2 = QW.QRadioButton('Get from output map')
         self.mask_radbtn_2.setStyleSheet(style.SS_RADIOBUTTON)
 
     # Minmap selector to get mask from (Auto Update Combobox)
