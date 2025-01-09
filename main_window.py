@@ -225,7 +225,7 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Model Learner Action
         self.model_learner_action = QW.QAction(
-            QG.QIcon(r'Icons/merge.png'), 'Model &Learner')
+            QG.QIcon(r'Icons/model_learner.png'), 'Model &Learner')
         self.model_learner_action.setShortcut('Ctrl+Alt+L')
         self.model_learner_action.setStatusTip('Build machine learning models')
 

@@ -208,7 +208,7 @@ class DataManager(QW.QTreeWidget):
         elif isinstance(item, CW.DataGroup):
 
         # Load data submenu
-            load_submenu = menu.addMenu(QIcon(r'Icons/import.png'), 'Load...')
+            load_submenu = menu.addMenu(QIcon(r'Icons/import.png'), 'Import...')
         # - Input maps
             load_submenu.addAction(QIcon(r'Icons/inmap.png'), 'Input maps', 
                                    lambda: self.loadData(item.inmaps))
@@ -238,7 +238,7 @@ class DataManager(QW.QTreeWidget):
         elif isinstance(item, CW.DataSubGroup):
 
         # Load data
-            menu.addAction(QIcon(r'Icons/generic_add.png'), 'Load', 
+            menu.addAction(QIcon(r'Icons/import.png'), 'Import', 
                            lambda: self.loadData(item))
         
         # Separator
@@ -291,6 +291,7 @@ class DataManager(QW.QTreeWidget):
                 if g != group:
                     move_submenu.addAction(
                         g.name, lambda g=g: self.moveItemTo(item, g))
+            move_submenu.setEnabled(len(move_submenu.actions()))
                     
         # Separator
             menu.addSeparator()
@@ -325,8 +326,7 @@ class DataManager(QW.QTreeWidget):
                                self.invertInputMap)
 
             # RGBA submenu
-                rgba_submenu = menu.addMenu(QIcon(r'Icons/rgba_2.png'),
-                                            'Set as RGBA channel...')
+                rgba_submenu = menu.addMenu('Set as RGBA channel...')
                 for c in ('R', 'G', 'B', 'A'):
                     rgba_submenu.addAction(
                         f'{c} channel', lambda c=c: self.rgbaChannelSet.emit(c))

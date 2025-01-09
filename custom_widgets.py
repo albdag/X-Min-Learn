@@ -804,7 +804,8 @@ class Legend(QW.QTreeWidget):
                        lambda: self.requestClassRename(i))
 
     # Merge classes
-        merge = menu.addAction('Merge', self.requestClassMerge)
+        merge = menu.addAction(QG.QIcon(r'Icons/merge.png'), 'Merge', 
+                               self.requestClassMerge)
         merge.setEnabled(len(self.selectedItems()) > 1)
 
     # Separator
@@ -837,7 +838,7 @@ class Legend(QW.QTreeWidget):
         menu.addAction(highlight)
 
     # Extract mask
-        menu.addAction(QG.QIcon(r'Icons/mask.png'), 'Extract mask', 
+        menu.addAction(QG.QIcon(r'Icons/add_mask.png'), 'Extract mask', 
                        self.requestMaskFromClass)
 
     # Show the menu in the same spot where the user triggered the event

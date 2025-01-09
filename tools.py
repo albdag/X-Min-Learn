@@ -2663,7 +2663,7 @@ class DatasetBuilder(DraggableTool):
         self.delete_class_btn.setToolTip('Delete')
 
     # Merge selected classes (StyledButton)
-        self.merge_class_btn = CW.StyledButton(QIcon(r'Icons/collage.png'))
+        self.merge_class_btn = CW.StyledButton(QIcon(r'Icons/merge.png'))
         self.merge_class_btn.setToolTip('Merge')
         
     # Dataset preview area (DocumentBrowser)
@@ -4257,7 +4257,7 @@ class ModelLearner(DraggableTool):
 
     # Set widget attributes
         self.setWindowTitle('Model Learner')
-        self.setWindowIcon(QIcon(r'Icons/merge.png'))
+        self.setWindowIcon(QIcon(r'Icons/model_learner.png'))
 
 # Main attributes -------------------------------------------------------------
 
