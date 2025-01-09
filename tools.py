@@ -2532,18 +2532,54 @@ class DatasetBuilder(DraggableTool):
 
     # Set main attributes
         self.dataset = None
-        self.elements = ['A', 'Ac', 'Ag', 'Al', 'As', 'At', 'Au', 'B',
-                         'Ba', 'Be', 'Bi', 'Br', 'C', 'Ca', 'Cd', 'Ce',
-                         'Cl', 'Co', 'Cr', 'Cs', 'Cu', 'Dy', 'Er', 'Eu',
-                         'F', 'Fe', 'Fr', 'Ga', 'Gd', 'Ge', 'H', 'He',
-                         'Hf', 'Hg', 'Ho', 'I', 'In', 'Ir', 'K', 'Kr',
-                         'La', 'Li', 'Lu', 'Mg', 'Mn', 'Mo', 'N', 'Na',
-                         'Nb', 'Nd', 'Ne', 'Ni', 'O', 'Os', 'P', 'Pa',
-                         'Pb', 'Pd', 'Pm', 'Po', 'Pr', 'Pt', 'Ra', 'Rb',
-                         'Re', 'Rh', 'Rn', 'Ru', 'S', 'Sb', 'Sc', 'Se',
-                         'Si', 'Sm', 'Sn', 'Sr', 'Ta', 'Tb', 'Tc', 'Te',
-                         'Th', 'Ti', 'Ti', 'Tm', 'U', 'V', 'W', 'Xe',
-                         'Y', 'Yb', 'Zn', 'Zr']
+        self.elements = {
+            'Ac': 'Actinium (Z=89)',     'Ag': 'Silver (Z=47)',      
+            'Al': 'Aluminum (Z=13)',     'Ar': 'Argon (Z=18)',      
+            'As': 'Arsenic (Z=33)',      'At': 'Astatine (Z=85)',   
+            'Au': 'Gold (Z=79)',         'B': 'Boron (Z=5)',        
+            'Ba': 'Barium (Z=56)',       'Be': 'Beryllium (Z=4)',   
+            'Bi': 'Bismuth (Z=83)',      'Br': 'Bromine (Z=35)',    
+            'C': 'Carbon (Z=6)',         'Ca': 'Calcium (Z=20)',    
+            'Cd': 'Cadmium (Z=48)',      'Ce': 'Cerium (Z=58)',     
+            'Cl': 'Chlorine (Z=17)',     'Co': 'Cobalt (Z=27)',     
+            'Cr': 'Chromium (Z=24)',     'Cs': 'Cesium (Z=55)',     
+            'Cu': 'Copper (Z=29)',       'Dy': 'Dysprosium (Z=66)', 
+            'Er': 'Erbium (Z=68)',       'Eu': 'Europium (Z=63)',   
+            'F': 'Fluorine (Z=9)',       'Fe': 'Iron (Z=26)',       
+            'Fr': 'Francium (Z=87)',     'Ga': 'Gallium (Z=31)',    
+            'Gd': 'Gadolinium (Z=64)',   'Ge': 'Germanium (Z=32)',  
+            'H': 'Hydrogen (Z=1)',       'He': 'Helium (Z=2)',      
+            'Hf': 'Hafnium (Z=72)',      'Hg': 'Mercury (Z=80)',    
+            'Ho': 'Holmium (Z=67)',      'I': 'Iodine (Z=53)',      
+            'In': 'Indium (Z=49)',       'Ir': 'Iridium (Z=77)',    
+            'K': 'Potassium (Z=19)',     'Kr': 'Krypton (Z=36)',    
+            'La': 'Lanthanum (Z=57)',    'Li': 'Lithium (Z=3)',     
+            'Lu': 'Lutetium (Z=71)',     'Mg': 'Magnesium (Z=12)',  
+            'Mn': 'Manganese (Z=25)',    'Mo': 'Molybdenum (Z=42)', 
+            'N': 'Nitrogen (Z=7)',       'Na': 'Sodium (Z=11)',     
+            'Nb': 'Niobium (Z=41)',      'Nd': 'Neodymium (Z=60)',  
+            'Ne': 'Neon (Z=10)',         'Ni': 'Nickel (Z=28)',     
+            'O': 'Oxygen (Z=8)',         'Os': 'Osmium (Z=76)',     
+            'P': 'Phosphorus (Z=15)',    'Pa': 'Protactinium (Z=91)',
+            'Pb': 'Lead (Z=82)',         'Pd': 'Palladium (Z=46)',  
+            'Pm': 'Promethium (Z=61)',   'Po': 'Polonium (Z=84)',   
+            'Pr': 'Praseodymium (Z=59)', 'Pt': 'Platinum (Z=78)',   
+            'Ra': 'Radium (Z=88)',       'Rb': 'Rubidium (Z=37)',   
+            'Re': 'Rhenium (Z=75)',      'Rh': 'Rhodium (Z=45)',    
+            'Rn': 'Radon (Z=86)',        'Ru': 'Ruthenium (Z=44)',  
+            'S': 'Sulfur (Z=16)',        'Sb': 'Antimony (Z=51)',   
+            'Sc': 'Scandium (Z=21)',     'Se': 'Selenium (Z=34)',   
+            'Si': 'Silicon (Z=14)',      'Sm': 'Samarium (Z=62)',   
+            'Sn': 'Tin (Z=50)',          'Sr': 'Strontium (Z=38)',  
+            'Ta': 'Tantalum (Z=73)',     'Tb': 'Terbium (Z=65)',    
+            'Tc': 'Technetium (Z=43)',   'Te': 'Tellurium (Z=52)',  
+            'Th': 'Thorium (Z=90)',      'Ti': 'Titanium (Z=22)',   
+            'Tl': 'Thallium (Z=81)',     'Tm': 'Thulium (Z=69)',    
+            'U': 'Uranium (Z=92)',       'V': 'Vanadium (Z=23)',    
+            'W': 'Tungsten (Z=74)',      'Xe': 'Xenon (Z=54)',      
+            'Y': 'Yttrium (Z=39)',       'Yb': 'Ytterbium (Z=70)',  
+            'Zn': 'Zinc (Z=30)',         'Zr': 'Zirconium (Z=40)' 
+        }
 
     # Initialize GUI
         self._init_ui()
@@ -2559,8 +2595,9 @@ class DatasetBuilder(DraggableTool):
         self.elements_btns = []
         elem_grid = QW.QGridLayout()
         n_cols = 8
-        for n, e in enumerate(self.elements):
-            elem_btn = CW.StyledButton(text=e)
+        for n, (k, v) in enumerate(self.elements.items()):
+            elem_btn = CW.StyledButton(text=k)
+            elem_btn.setToolTip(v)
             elem_btn.setCheckable(True)
             self.elements_btns.append(elem_btn)
             row, col = n // n_cols, n % n_cols
@@ -2765,8 +2802,12 @@ class DatasetBuilder(DraggableTool):
         Add a new user-typed feature to input features list.
 
         '''
-    # Do nothing if custom feature name is empty
+    # Retrieve the feature name and then clear the entry widget to free it for
+    # a new entry to be written
         name = self.custom_entry.text()
+        self.custom_entry.clear()
+
+    # Do nothing if custom feature name is empty
         if name == '':
             return
         
@@ -2776,8 +2817,8 @@ class DatasetBuilder(DraggableTool):
 
     # If name is a valid chemical element, toggle on the linked button.
     # Otherwise, just add a new item.
-        if name in self.elements:
-            self.elements_btns[self.elements.index(name)].setChecked(True)
+        if name in (keys := self.elements.keys()):
+            self.elements_btns[list(keys).index(name)].setChecked(True)
         else:
             self.feature_list.addItem(name)
 
@@ -2794,8 +2835,8 @@ class DatasetBuilder(DraggableTool):
     
     # If feature name is a valid chemical element, toggle off the linked button
         for item in selected:
-            if (name := item.text()) in self.elements:
-                self.elements_btns[self.elements.index(name)].setChecked(False)
+            if (name := item.text()) in (keys := self.elements.keys()):
+                self.elements_btns[list(keys).index(name)].setChecked(False)
 
     # Remove features
         self.feature_list.removeSelected()
