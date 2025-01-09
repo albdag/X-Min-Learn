@@ -1077,7 +1077,7 @@ class BarCanvas(_CanvasBase):
             return
 
     # Remove the previous plot if there is one
-        if self.plot is not None: 
+        if not self.is_empty(): 
             self.ax.clear()
 
     # Set the grid on for y or x axis
