@@ -695,8 +695,6 @@ class DataManager(QW.QTreeWidget):
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
-            if pbar.wasCanceled(): 
-                break
             try:
                 xmap = InputMap.load(p)
                 group.inmaps.addData(xmap)
@@ -747,8 +745,6 @@ class DataManager(QW.QTreeWidget):
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
-            if pbar.wasCanceled(): 
-                break
             try:
                 mmap = MineralMap.load(p)
                 # Convert legacy mineral maps to new file format (mmp)
@@ -802,8 +798,6 @@ class DataManager(QW.QTreeWidget):
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
-            if pbar.wasCanceled(): 
-                break
             try:
                 mask = Mask.load(p)
                 group.masks.addData(mask)
@@ -840,7 +834,6 @@ class DataManager(QW.QTreeWidget):
     # Invert the input map arrays held in each item
         progBar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
-            if progBar.wasCanceled(): break
             i.get('data').invert()
         # Set edited state to True for item
             i.setEdited(True)
@@ -861,7 +854,6 @@ class DataManager(QW.QTreeWidget):
     # Invert the mask arrays held in each item
         progBar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
-            if progBar.wasCanceled(): break
             i.get('data').invert()
         # Set edited state to True for item
             i.setEdited(True)
@@ -1069,8 +1061,6 @@ class DataManager(QW.QTreeWidget):
         pbar = CW.PopUpProgBar(self, len(items), 'Reloading data')
         errors = []
         for n, i in enumerate(items, start=1):
-            if pbar.wasCanceled(): 
-                break
             try:
                 data, path, name = i.get('data', 'filepath', 'name')
                 # None path indicates unsaved data and cannot be refreshed
@@ -2900,8 +2890,7 @@ class RoiEditor(QW.QWidget):
             return
         
         pref.set_dir('in', os.path.dirname(path))
-        progbar = CW.PopUpProgBar(self, 4, 'Loading data', cancel=False)
-        progbar.setValue(0)
+        progbar = CW.PopUpProgBar(self, 4, 'Loading data')
 
     # Remove old (current) ROI map
         self.removeCurrentRoiMap()

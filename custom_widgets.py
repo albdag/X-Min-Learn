@@ -2682,41 +2682,112 @@ class PathLabel(FramedLabel):
 
 
 class PopUpProgBar(QW.QProgressDialog):
-# !!! Should the parent be None by default to delete the pbar after execution? (because it has no parent alive)
-    def __init__(self, parent, n_iter, label='', cancel=True, forceShow=False):
-        btn_text = 'Abort' if cancel else None
+
+    def __init__(self, parent: QW.QWidget|None, n_iter: int, label='', 
+                 autoDelete=True):
+        '''
+        A customized modal progress bar dialog, that automatically shows and 
+        hides itself. Ideal for quick, non-threaded operations. 
+
+        Parameters
+        ----------
+        parent : QWidget or None
+            The GUI parent of this object. If not None, the dialog will popup
+            centered with it.
+        n_iter : int
+            Total number of operations to be performed. It is set as the upper
+            range value of the progress bar.
+        label : str, optional
+            The text label to show in the dialog. The default is ''.
+        autoDelete : bool, optional
+            Whether the dialog should be deleted after it has been hidden. The
+            default is True.
+
+        '''
+    # Initialize custom progress dialog. Cancel button is forced to be None.
         flags = QC.Qt.Tool | QC.Qt.WindowTitleHint | QC.Qt.WindowStaysOnTopHint
-        super(PopUpProgBar, self).__init__(label, btn_text, 0, n_iter, parent,
-                                           flags=flags)
-        self.setWindowModality(QC.Qt.ApplicationModal) # experimental --> original was QC.Qt.WindowModal
+        super().__init__(label, None, 0, n_iter, parent, flags=flags)
+
+    # Set attributes
+        self.autoDelete=autoDelete
+    
+    # Set widget properties
+        self.setMinimumDuration(0)
+        self.setValue(0)
+        self.setWindowModality(QC.Qt.ApplicationModal) 
         self.setWindowTitle('Please wait...')
-        if forceShow:
-            self.forceShow()
-        else:
-            self.setMinimumDuration(1000)
-        # ONE OF THE FOLLOWING PRODUCES BUG OF DIALOGS NOT HIDDEN IN WINDOW PREVIEW (NOT REALLY TRUE!)
-        # self.setAutoReset(True)
-        # self.setAutoClose(True)
-        # The real reason is because the window is modal and some instances of this class are called
-        # inside a paintEvent (read the doc for QProgressDialog)
-        # MAYBE SOLVED WITH THE FLAG <QT.TOOL>
+
 
     def increase(self):
+        '''
+        Convenient function to increase the value of the progress bar by one.
+
+        '''
         self.setValue(self.value() + 1)
 
 
+    def hideEvent(self, event: QG.QHideEvent):
+        '''
+        Reimplementation of the default 'hideEvent' method. If 'autoDelete' is
+        True, this requests the destruction of the progress dialog immediately 
+        after it is hidden.
+
+        Parameters
+        ----------
+        event : QG.QHideEvent
+            The triggered hide event.
+
+        '''
+        event.accept()
+        if self.autoDelete:
+            self.deleteLater()
+
+
+    def reject(self):
+        '''
+        We do not support the PopUpProgBar dialog being rejected via default 
+        triggers such as pressing the ESC key or clicking the 'X' button. Thus,
+        we reimplement the default 'reject' method so that it returns nothing.
+        '''
+        return
 
 
 class PulsePopUpProgBar(PopUpProgBar):
-    def __init__(self, parent, label='', cancel=False):
-        super(PulsePopUpProgBar, self).__init__(parent, 1, label, cancel, True)
+
+    def __init__(self, parent:QW.QWidget|None, **kwargs):
+        '''
+        Special variant of the PopUpProgBar class, that shows a progress dialog
+        with undetermined state (a.k.a. pulse progress bar). Ideal when dealing
+        with one or more operations whose lenght can be extremely variable.
+
+        Parameters
+        ----------
+        parent : QWidget or None
+            The GUI parent of this object. If not None, the dialog will popup
+            centered with it.
+        
+        **kwargs
+            Parent class arguments (see 'PopUpProgBar' class).
+            
+        '''
+        super().__init__(parent, 1, **kwargs)
         self.setAutoReset(False)
 
+
     def startPulse(self):
+        '''
+        Start pulsing the progress bar.
+
+        '''
         self.setValue(1)
         self.setRange(0, 0)
 
+
     def stopPulse(self):
+        '''
+        Stop pulsing and reset the progress bar.
+
+        '''
         self.reset()
 
 
@@ -4274,8 +4345,6 @@ class DatasetDesigner(StyledTable):
         pbar = PopUpProgBar(self, len(paths), 'Loading maps')
         bad_files = []
         for n, p in enumerate(paths, start=1):
-            if pbar.wasCanceled(): 
-                break
             try:
                 matching_col = cf.guessMap(cf.path2filename(p), required_maps) # !!! find a more elegant solution
             # If a filename matches with a column, then add it
@@ -4316,7 +4385,7 @@ class DatasetDesigner(StyledTable):
         n_columns = self.columnCount()
         input_maps, mineral_map = [], None
 
-        pbar = PopUpProgBar(self, n_columns - 1, 'Loading maps data')
+        pbar = PopUpProgBar(self, n_columns - 1, 'Loading data')
 
         for col in range(1, n_columns):
             try:

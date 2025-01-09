@@ -1382,9 +1382,7 @@ class MineralClassifier(DraggableTool):
                 return 
             
             pref.set_dir('in', os.path.dirname(path))
-
-            pbar = CW.PopUpProgBar(self, 3, 'Loading data', cancel=False)
-            pbar.setValue(0)
+            pbar = CW.PopUpProgBar(self, 3, 'Loading data')
 
         # Try loading the ROI map. Exit function if something goes wrong
             try:
@@ -2951,13 +2949,12 @@ class DatasetBuilder(DraggableTool):
             return CW.MsgBox(self, 'Crit', 'Invalid name.')
 
     # If we are here, the name is valid. Conclude renaming operations
-        pbar = CW.PopUpProgBar(self, 2, 'Editing dataset', cancel=False)
-        pbar.setValue(0)
+        pbar = CW.PopUpProgBar(self, 2, 'Editing dataset')
         self.dataset.rename_target(old_name, name)
-        pbar.setValue(1)
+        pbar.increase()
         self.updateUniqueClasses()
         self.updatePreview()
-        pbar.setValue(2)
+        pbar.increase()
 
 
     def deleteClass(self):
@@ -2973,13 +2970,12 @@ class DatasetBuilder(DraggableTool):
         choice = CW.MsgBox(self, 'Quest', 'Remove selected classes?')
         if choice.yes():
             targets = [item.text() for item in selected]
-            pbar = CW.PopUpProgBar(self, 2, 'Editing dataset', cancel=False)
-            pbar.setValue(0)
+            pbar = CW.PopUpProgBar(self, 2, 'Editing dataset')
             self.dataset.remove_where(-1, targets)
-            pbar.setValue(1)
+            pbar.increase()
             self.updateUniqueClasses()
             self.updatePreview()
-            pbar.setValue(2)
+            pbar.increase()
 
 
     def mergeClass(self):
@@ -3016,13 +3012,12 @@ class DatasetBuilder(DraggableTool):
             return CW.MsgBox(self, 'Crit', 'Invalid name.')
     
     # If we are here, the name is valid. Conclude merging operations
-        pbar = CW.PopUpProgBar(self, 2, 'Editing dataset', cancel=False)
-        pbar.setValue(0)
+        pbar = CW.PopUpProgBar(self, 2, 'Editing dataset')
         self.dataset.merge_targets(targets, name)
-        pbar.setValue(1)
+        pbar.increase()
         self.updateUniqueClasses()
         self.updatePreview()
-        pbar.setValue(2)
+        pbar.increase()
 
 
     def saveDataset(self):
@@ -3043,7 +3038,7 @@ class DatasetBuilder(DraggableTool):
         
         pref.set_dir('out', os.path.dirname(path))
 
-        pbar = CW.PulsePopUpProgBar(self, 'Saving dataset')
+        pbar = CW.PulsePopUpProgBar(self, label='Saving dataset')
         pbar.startPulse()
         dec = self.decimal_combox.currentText()
         sep = self.separator_combox.currentText()
@@ -5166,7 +5161,7 @@ class ModelLearner(DraggableTool):
 
     # Set up a temporary popup progress bar
         n_chunks = self.dataset_reader.chunks_number(path)
-        pbar = CW.PopUpProgBar(self, n_chunks, 'Loading dataset', cancel=False)
+        pbar = CW.PopUpProgBar(self, n_chunks, 'Loading dataset')
         
     # Connect dataset reader thread signals with popup progress bar
         self.dataset_reader.thread.iterCompleted.connect(pbar.setValue)
@@ -5179,9 +5174,6 @@ class ModelLearner(DraggableTool):
 
     # Launch CSV chunk reader thread
         self.dataset_reader.read_threaded(path)
-    
-    # Program removal of temporary progress bar to avoid visual glitches
-        pbar.deleteLater()
 
 
     def _parseDatasetReaderResult(self, result: tuple, success: bool):
@@ -5280,18 +5272,18 @@ class ModelLearner(DraggableTool):
             self.dataset.reset()
 
     # Split features [X] from targets [Y] expressed as labels
-        pbar = CW.PopUpProgBar(self, 4, 'Splitting dataset', cancel=False)
+        pbar = CW.PopUpProgBar(self, 4, 'Splitting dataset')
         try:
             x_dtype, y_dtype = InputMap._DTYPE, MineralMap._DTYPE_STR
             self.dataset.split_features_targets(xtype=x_dtype, ytype=y_dtype)
-            pbar.setValue(1)
+            pbar.increase()
 
     # Update encoder. Inherit from parent model encoder if present.    
             parent_enc = {}
             if (pmodel_path := self.pmodel_path.fullpath) != '':
                 parent_enc = mltools.EagerModel.load(pmodel_path).encoder
             self.dataset.update_encoder(parent_enc)
-            pbar.setValue(2)
+            pbar.increase()
 
     # Split dataset into train, validation and test sets
             tr_ratio = self.train_ratio_spbox.value() / 100
@@ -5299,7 +5291,7 @@ class ModelLearner(DraggableTool):
             ts_ratio = self.test_ratio_spbox.value() / 100
             seed = self.seed_generator.seed
             self.dataset.split_subsets(tr_ratio, vd_ratio, ts_ratio, seed) 
-            pbar.setValue(3)
+            pbar.increase()
 
         except Exception as e:
             pbar.reset()
@@ -5315,7 +5307,7 @@ class ModelLearner(DraggableTool):
         self.start_learn_btn.setEnabled(True)
         self.test_model_btn.setEnabled(False)
         self.save_model_btn.setEnabled(False)
-        pbar.setValue(4)
+        pbar.increase()
 
 
     def updateSubsetCounterWidget(self, subset: str):
@@ -5775,7 +5767,7 @@ class ModelLearner(DraggableTool):
         try:
         # Import parent model
             pmodel = mltools.EagerModel.load(path)
-            pbar.setValue(1)
+            pbar.increase()
 
         # Check if parent model shares the same features of loaded dataset
             if pmodel.features != self.dataset.columns_names()[:-1]:
@@ -5786,7 +5778,7 @@ class ModelLearner(DraggableTool):
             if pmodel.targets != self.dataset.column_unique(-1):
                 raise ValueError('The model and the loaded dataset do not '\
                                  'share the same target classes.')
-            pbar.setValue(2)
+            pbar.increase()
 
         # Update GUI
             lr, wd, mtm, _ = pmodel.hyperparameters
@@ -5803,7 +5795,7 @@ class ModelLearner(DraggableTool):
             self.algm_combox.setCurrentText(pmodel.algorithm)
             self.algm_combox.setEnabled(False)
             self.optim_combox.setCurrentText(pmodel.optimizer)
-            pbar.setValue(3)
+            pbar.increase()
             CW.MsgBox(self, 'Info', 'Model loaded successfully.')
         
         except Exception as e:
@@ -7237,22 +7229,21 @@ class PhaseRefiner(DraggableTool):
         operations.
 
         '''
-        pbar = CW.PopUpProgBar(self, 3, 'Applying filter', cancel=False, 
-                                 forceShow=True)
+        pbar = CW.PopUpProgBar(self, 3, 'Applying filter')
 
     # Compute basic refinement operations. An encoded refined map is returned.
-        pbar.setValue(1)
+        pbar.increase()
         refined_encoded = self.computeBasicRefinement()
 
     # Decode the refined mineral map
         refined = np.empty(refined_encoded.shape, dtype=self.minmap._DTYPE_STR)
         for _id, lbl in self.minmap.encoder.items():
             refined[refined_encoded == _id] = lbl
-        pbar.setValue(2)
+        pbar.increase()
 
     # Apply edits to current mineral map
         self.minmap.edit_minmap(refined, alter_probmap=True)
-        pbar.setValue(3)
+        pbar.increase()
 
         
     def refineAdvanced(self):
