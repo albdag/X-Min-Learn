@@ -277,6 +277,24 @@ class DataManager(QW.QTreeWidget):
         # Separator
             menu.addSeparator()
 
+        # Move item up
+            menu.addAction(QIcon(r'Icons/arrow_up.png'), 'Move up',
+                           lambda: self.moveItemUp(item))
+            
+        # Move item down
+            menu.addAction(QIcon(r'Icons/arrow_down.png'), 'Move down',
+                           lambda: self.moveItemDown(item))
+
+        # Move item to group
+            move_submenu = menu.addMenu('Move to sample...')
+            for g in self.getAllGroups():
+                if g != group:
+                    move_submenu.addAction(
+                        g.name, lambda g=g: self.moveItemTo(item, g))
+                    
+        # Separator
+            menu.addSeparator()
+
         # Correct data source
             fix_source_action = QW.QAction(QIcon(r'Icons/fix.png'), 
                                            'Correct data source')
@@ -515,6 +533,88 @@ class DataManager(QW.QTreeWidget):
             self.topLevelItem(idx).clear()
         self.refreshView()
 
+    
+    def moveItemTo(self, item: CW.DataObject, dst_group: CW.DataGroup):
+        '''
+        Move 'item' from its original group to another existent group 
+        'dst_group'.
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            Item to be moved.
+        dst_group : CW.DataGroup
+            Destination group. 
+
+        '''
+    # Do nothing if source group is invalid or is the destination group
+        src_group = self.getItemParentGroup(item)
+        if src_group is None or src_group == dst_group:
+            return
+        
+    # Delete data from the source subgroup
+        src_subgr = item.subgroup()
+        src_subgr.delChild(item)
+
+    # Append data to destination subgroup
+        dtype = src_subgr.datatype
+        dst_subgr = [s for s in dst_group.subgroups if s.datatype == dtype][0]
+        dst_subgr.addChild(item)
+
+    # Check for unfitting maps shapes on both source and destination groups
+        src_group.setShapeWarnings()
+        dst_group.setShapeWarnings()
+
+    # Force viewing the moved item to provide better feedback
+        self.setCurrentItem(item)
+        self.refreshView()
+
+
+    def moveItemUp(self, item: CW.DataObject):
+        '''
+        Move 'item' up by one position within its subgroup.
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            Item to be moved.
+
+        '''
+    # Do nothing if the group is invalid
+        group = self.getItemParentGroup(item)
+        if group is None:
+            return
+    
+    # Move item within its subgroup
+        item.subgroup().moveChildUp(item)
+
+    # Force viewing the moved item to provide better feedback
+        self.setCurrentItem(item)
+        self.refreshView()
+
+
+    def moveItemDown(self, item: CW.DataObject):
+        '''
+        Move 'item' down by one position within its subgroup.
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            Item to be moved.
+
+        '''
+    # Do nothing if the group is invalid
+        group = self.getItemParentGroup(item)
+        if group is None:
+            return
+    
+    # Move item within its subgroup
+        item.subgroup().moveChildDown(item)
+
+    # Force viewing the moved item to provide better feedback
+        self.setCurrentItem(item)
+        self.refreshView()
+        
 
     def clearSelectedSubgroups(self):
         '''
@@ -1153,8 +1253,7 @@ class DataManager(QW.QTreeWidget):
         '''
         config = {}
         for group in self.getAllGroups():
-            sample_name = group.text(0)
-            config[sample_name] = {}
+            config[group.name] = {}
 
             for subgr in group.subgroups:
                 if subgr.name == 'Masks':
@@ -1163,7 +1262,7 @@ class DataManager(QW.QTreeWidget):
                     attributes = ('name', 'filepath')
 
                 data = [c.get(*attributes) for c in subgr.getChildren()]
-                config[sample_name][subgr.name] = data
+                config[group.name][subgr.name] = data
         
         return config
 

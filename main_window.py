@@ -660,7 +660,7 @@ class MainWindow(QW.QMainWindow):
 
         # Actions to be performed if the item holds map data in general
             if item.holdsMap():
-                title = f'{sample.text(0)} - {i_name}'
+                title = f'{sample.name} - {i_name}'
                 self.dataViewer._displayedObject = item
                 self.dataViewer.currPath.setPath(i_path)
 

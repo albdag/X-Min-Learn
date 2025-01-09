@@ -60,6 +60,20 @@ class DataGroup(QW.QTreeWidgetItem):
         self.subgroups = (self.inmaps, self.minmaps, self.masks)
         self.addChildren(self.subgroups)
 
+
+    @property
+    def name(self) -> str:
+        '''
+        Return the displayed name of the group.
+
+        Returns
+        -------
+        str
+            Name of the group.
+
+        '''
+        return self.text(0)
+
     
     def getAllDataObjects(self):
         '''
@@ -234,6 +248,46 @@ class DataSubGroup(QW.QTreeWidgetItem):
         self.takeChild(self.indexOfChild(child))
 
 
+    def moveChildUp(self, child: 'DataObject'):
+        '''
+        Move child DataObject up by one position.
+
+        Parameters
+        ----------
+        child : DataObject
+            The child to be moved.
+
+        '''
+    # Do nothing if child is already in top position 
+        idx = self.indexOfChild(child)
+        if idx == 0:
+            return
+        
+    # Remove and re-insert child 
+        self.takeChild(idx)
+        self.insertChild(idx - 1, child)
+
+
+    def moveChildDown(self, child: 'DataObject'):
+        '''
+        Move child DataObject down by one position.
+
+        Parameters
+        ----------
+        child : DataObject
+            The child to be moved.
+
+        '''
+    # Do nothing if child is already in last position 
+        idx = self.indexOfChild(child)
+        if idx == self.childCount() - 1:
+            return
+        
+    # Remove and re-insert child 
+        self.takeChild(idx)
+        self.insertChild(idx + 1, child)
+
+
     def getChildren(self) -> list['DataObject']:
         '''
         Get all the DataObject items owned by this subgroup.
@@ -248,13 +302,14 @@ class DataSubGroup(QW.QTreeWidgetItem):
         return children
     
 
-    def group(self) -> DataGroup:
+    def group(self) -> DataGroup|None:
         '''
-        Get the parent group that holds this subgroup.
+        Get the parent group that holds this subgroup or None if it hasn't got
+        one.
 
         Returns
         -------
-        DataGroup
+        DataGroup or None
             Parent group.
 
         '''
@@ -639,13 +694,14 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(0, 10, checkstate)
 
 
-    def subgroup(self) -> DataSubGroup:
+    def subgroup(self) -> DataSubGroup|None:
         '''
-        Return the parent subgroup that holds this data object.
+        Return the parent subgroup that holds this data object or None if it 
+        hasn't got one.
 
         Returns
         -------
-        DataSubGroup
+        DataSubGroup or None
             Parent subgroup.
 
         '''
