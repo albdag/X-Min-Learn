@@ -272,7 +272,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         self.ax.axis('on')
 
     # Reset the navigation toolbar stack to fix unwanted glitches with clims 
-        if self.has_toolbar:
+        if self.has_toolbar():
             self.toolbar.update()
 
 
