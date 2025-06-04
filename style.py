@@ -10,6 +10,7 @@ from PyQt5.QtGui import QColor, QFont, QPalette
 
 import preferences as pref
 
+
 #  -------------------------------------------------------------------------  #
 #                              GUI COLORS 
 #  -------------------------------------------------------------------------  #
@@ -33,123 +34,6 @@ WARN_YELLOW = '#FFCC00'         # (255, 204, 0)
 
 # Histogram mask color
 HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
-
-
-#  -------------------------------------------------------------------------  #
-#                                  FONT 
-#  -------------------------------------------------------------------------  #
-
-def getFont(family: str): # !!!
-    pointsize = pref.get_setting('GUI/fontsize')
-    
-    if family == 'default':
-        font = QFont()
-        font.setPointSize(pointsize)
-    else:
-        font = QFont(family, pointsize)
-
-    return font
-
-
-#  -------------------------------------------------------------------------  #
-#                                PALETTE 
-#  -------------------------------------------------------------------------  #
-
-def getPalette(kind: str):
-    palette = QPalette()
-    
-    if kind == 'default':
-    # Window (A general background color)
-        palette.setColor(QPalette.Active, QPalette.Window, QColor(CASPER)) 
-        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(CASPER)) 
-
-    # WindowText (A general foreground color)
-        palette.setColor(QPalette.WindowText, QColor(BLACK_PEARL))
-
-    # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
-        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
-
-    # AlternateBase (Alternate background in views with alternating row colors)
-        # palette.setColor(QPalette.AlternateBase, Qt.red)
-
-    # ToolTips background & text
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
-
-    # PlaceholderText (Placeholder color for various text input widgets)
-        palette.setColor(QPalette.PlaceholderText, QColor(CASPER))
-
-    # Text (The foreground color used with Base)
-        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(CASPER))
-
-    # Button (The general button background color)
-        palette.setColor(QPalette.Active, QPalette.Button, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Button, QColor(CASPER))
-
-    # ButtonText (A foreground color used with the Button color)
-        palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Disabled, QPalette.ButtonText, Qt.darkGray)
-
-    # Highlight and highlighted text
-        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
-        palette.setColor(QPalette.HighlightedText, QColor(BLACK_PEARL))
-
-        # palette.setColor(QPalette.BrightText, Qt.red)
-        # palette.setColor(QPalette.Link, Qt.red)
-
-
-    elif kind == 'darkmode': # not ready to use yet. Stylesheets need reworking
-    # Window (A general background color)
-        palette.setColor(QPalette.Active, QPalette.Window, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(BLACK_PEARL)) 
-
-    # WindowText (A general foreground color)
-        palette.setColor(QPalette.WindowText, QColor(IVORY))
-
-    # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
-        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
-
-    # AlternateBase (Alternate background in views with alternating row colors)
-        # palette.setColor(QPalette.AlternateBase, Qt.red)
-
-    # ToolTips background & text
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
-
-    # PlaceholderText (Placeholder color for various text input widgets)
-        palette.setColor(QPalette.PlaceholderText, QColor(CASPER))
-
-    # Text (The foreground color used with Base)
-        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(CASPER))
-
-    # Button (The general button background color)
-        palette.setColor(QPalette.Active, QPalette.Button, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Disabled, QPalette.Button, Qt.darkGray)
-
-    # ButtonText (A foreground color used with the Button color)
-        palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(CASPER))
-
-    # Highlight and highlighted text
-        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
-        palette.setColor(QPalette.HighlightedText, QColor(BLACK_PEARL))
-
-        # palette.setColor(QPalette.BrightText, Qt.red)
-        # palette.setColor(QPalette.Link, Qt.red)
-
-    return palette
 
 
 #  -------------------------------------------------------------------------  #
@@ -890,3 +774,151 @@ SS_DATAMANAGER = (
     }
     '''
 )
+
+
+#  -------------------------------------------------------------------------  #
+#                                  FONT 
+#  -------------------------------------------------------------------------  #
+
+def getFont(family: str = 'default') -> QFont:
+    '''
+    Return font of type 'family' with the pointsize specified in app settings.
+
+    Parameters
+    ----------
+    family : str, optional
+        A valid font family name. If 'default', the default PyQt font will be 
+        returned. The default is 'default'.
+
+    Returns
+    -------
+    QFont
+        Requested font.
+
+    '''
+    pointsize = pref.get_setting('GUI/fontsize')
+    
+    match family:
+        case 'default':
+            font = QFont()
+            font.setPointSize(pointsize)
+        case _:
+            font = QFont(family, pointsize)
+
+    return font
+
+
+#  -------------------------------------------------------------------------  #
+#                                PALETTE 
+#  -------------------------------------------------------------------------  #
+
+def getPalette(kind: str = 'default') -> QPalette:
+    '''
+    Return custom application palette of type 'kind'.
+
+    Parameters
+    ----------
+    kind : str, optional
+        Custom palette. At the moment, only 'default' is fully implemented. The
+        default is 'default'.
+
+    Returns
+    -------
+    QPalette
+        Custom application palette.
+        
+    '''
+    palette = QPalette()
+    
+    if kind == 'default':
+    # Window (A general background color)
+        palette.setColor(QPalette.Active, QPalette.Window, QColor(CASPER)) 
+        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(CASPER)) 
+
+    # WindowText (A general foreground color)
+        palette.setColor(QPalette.WindowText, QColor(BLACK_PEARL))
+
+    # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
+        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
+
+    # AlternateBase (Alternate background in views with alternating row colors)
+        # palette.setColor(QPalette.AlternateBase, Qt.red)
+
+    # ToolTips background & text
+        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
+        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
+
+    # PlaceholderText (Placeholder color for various text input widgets)
+        palette.setColor(QPalette.PlaceholderText, QColor(CASPER))
+
+    # Text (The foreground color used with Base)
+        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
+        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
+        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(CASPER))
+
+    # Button (The general button background color)
+        palette.setColor(QPalette.Active, QPalette.Button, QColor(IVORY))
+        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(IVORY))
+        palette.setColor(QPalette.Disabled, QPalette.Button, QColor(CASPER))
+
+    # ButtonText (A foreground color used with the Button color)
+        palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(BLACK_PEARL))
+        palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(BLACK_PEARL))
+        palette.setColor(QPalette.Disabled, QPalette.ButtonText, Qt.darkGray)
+
+    # Highlight and highlighted text
+        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
+        palette.setColor(QPalette.HighlightedText, QColor(BLACK_PEARL))
+
+        # palette.setColor(QPalette.BrightText, Qt.red)
+        # palette.setColor(QPalette.Link, Qt.red)
+
+
+    elif kind == 'darkmode': # not ready to use yet. Stylesheets need reworking
+    # Window (A general background color)
+        palette.setColor(QPalette.Active, QPalette.Window, QColor(BLACK_PEARL)) 
+        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(BLACK_PEARL)) 
+
+    # WindowText (A general foreground color)
+        palette.setColor(QPalette.WindowText, QColor(IVORY))
+
+    # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
+        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
+
+    # AlternateBase (Alternate background in views with alternating row colors)
+        # palette.setColor(QPalette.AlternateBase, Qt.red)
+
+    # ToolTips background & text
+        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
+        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
+
+    # PlaceholderText (Placeholder color for various text input widgets)
+        palette.setColor(QPalette.PlaceholderText, QColor(CASPER))
+
+    # Text (The foreground color used with Base)
+        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
+        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
+        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(CASPER))
+
+    # Button (The general button background color)
+        palette.setColor(QPalette.Active, QPalette.Button, QColor(BLACK_PEARL))
+        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(BLACK_PEARL))
+        palette.setColor(QPalette.Disabled, QPalette.Button, Qt.darkGray)
+
+    # ButtonText (A foreground color used with the Button color)
+        palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(IVORY))
+        palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(IVORY))
+        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(CASPER))
+
+    # Highlight and highlighted text
+        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
+        palette.setColor(QPalette.HighlightedText, QColor(BLACK_PEARL))
+
+        # palette.setColor(QPalette.BrightText, Qt.red)
+        # palette.setColor(QPalette.Link, Qt.red)
+
+    return palette

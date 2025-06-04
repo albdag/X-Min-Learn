@@ -13,7 +13,7 @@ from PyQt5 import QtCore as QC
 
 import numpy as np
 
-from _base import InputMap, MineralMap, Mask
+from _base import *
 import convenient_functions as cf
 import image_analysis_tools as iatools
 import preferences as pref
@@ -21,15 +21,14 @@ import style
 
 
 class DataGroup(QW.QTreeWidgetItem):
-    '''
-    A class for data groups. A data group can be considered as a rock sample,
-    that holds both input maps (under the 'Input Maps' subgroup), mineral maps
-    (under the 'Mineral Maps' subgroup) and [in future] point analysis data
-    (under the 'Point Analysis' subgroup).
-    '''
-    def __init__(self, name):
+
+    def __init__(self, name: str) -> None:
         '''
-        DataGroup class constructor.
+        A specialized TreeWidgetItem for the Data Manager pane (for details see
+        'docks.DataManager' class). This is the the top-level item (i.e., with
+        highest hierarchy) of the Data Manager, holding full rock samples. It
+        includes three fixed sub-groups (see 'DataSubGroup' class for details):
+        'Input Maps', 'Minearal Maps' and 'Masks'.
 
         Parameters
         ----------
@@ -37,7 +36,7 @@ class DataGroup(QW.QTreeWidgetItem):
             The name of the group.
 
         '''
-        super(DataGroup, self).__init__()
+        super().__init__()
 
     # Set the flags. Data groups are selectable and their name is editable
         self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
@@ -75,7 +74,7 @@ class DataGroup(QW.QTreeWidgetItem):
         return self.text(0)
 
     
-    def getAllDataObjects(self):
+    def getAllDataObjects(self) -> list['DataObject']:
         '''
         Return the data objects from all subgroups in a single list.
 
@@ -92,7 +91,7 @@ class DataGroup(QW.QTreeWidgetItem):
         return objects
 
 
-    def setShapeWarnings(self):
+    def setShapeWarnings(self) -> None:
         '''
         Set a warning state to every loaded data object whose shape differs
         from the sample overall trending shape.
@@ -113,8 +112,12 @@ class DataGroup(QW.QTreeWidgetItem):
                 objects[idx].setWarning(warn)
 
 
-    def getCompositeMask(self, include='selected', mode='intersection',
-                         ignore_single_mask=False):
+    def getCompositeMask(
+        self,
+        include: str = 'selected',
+        mode: str = 'intersection',
+        ignore_single_mask: bool = False
+    ) -> Mask | None:
         '''
         Get the mask array resulting from merging all the checked or selected
         masks loaded in this group.
@@ -129,30 +132,31 @@ class DataGroup(QW.QTreeWidgetItem):
             is the product of all the masks. If 'intersection' or 'I', it is
             the sum of all the masks. The default is 'union'.
         ignore_single_mask : bool, optional
-            Whether the function should not return a composite mask if only one
+            Whether the method should not return a composite mask if only one
             mask is selected/checked. The default is False.
+
+        Returns
+        -------
+        comp_mask : Mask or None
+            The composite mask object or None if no mask is included.
 
         Raises
         ------
         TypeError
-            The include argument is not one of 'selected' and 'checked'.
+            The "include" argument is not 'selected' or 'checked'.
         TypeError
-            The mode argument is not one of 'union' and 'intersection'.
-
-        Returns
-        -------
-        comp_mask : Mask object or None
-            The composite mask object or None if no mask is included.
+            The "mode" argument is not 'union' ('U') or 'intersection' ('I').
 
         '''
         cld = self.masks.getChildren()
 
-        if include == 'selected':
-            masks = [c.get('data') for c in cld if c.isSelected()]
-        elif include == 'checked':
-            masks = [c.get('data') for c in cld if c.checkState(0)]
-        else:
-            raise TypeError('f{include} is not a valid argument for include.')
+        match include:
+            case 'selected':
+                masks = [c.get('data') for c in cld if c.isSelected()]
+            case 'checked':
+                masks = [c.get('data') for c in cld if c.checkState(0)]
+            case _:
+                raise TypeError('f{include} is not a valid argument for include.')
 
         if len(masks) == 0:
             comp_mask = None
@@ -164,26 +168,27 @@ class DataGroup(QW.QTreeWidgetItem):
         return comp_mask
 
 
-    def clear(self):
+    def clear(self) -> None:
         for subgr in self.subgroups:
             subgr.takeChildren()
 
 
 
 class DataSubGroup(QW.QTreeWidgetItem):
-    '''
-    A class for data subgroups. A data subgroup is a convenient object that
-    separates the different data types within the same group. Their main
-    function is to provide a better organization and visualization of the data
-    in the manager. Therefore they offer less customization options to users.
-    '''
 
-    datatype_dict = {'Input Maps': InputMap, 'Mineral Maps': MineralMap,
-                     'Masks': Mask}
+    datatype_dict = {
+        'Input Maps': InputMap,
+        'Mineral Maps': MineralMap,
+        'Masks': Mask
+    }
     
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         '''
-        DataSubGroup class constructor.
+        A specialized TreeWidgetItem for the Data Manager pane (for details see
+        'docks.DataManager' class). This widget can hold different data types
+        within the same group (see 'DataGroup' class), in the form of Data 
+        Objects (see 'DataObject' class). Their main function is to provide a
+        better organization and visualization of data in the Data Manager.
 
         Parameters
         ----------
@@ -191,7 +196,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
             The name of the subgroup.
 
         '''
-        super(DataSubGroup, self).__init__()
+        super().__init__()
 
     # Set main attributes
         self.name = name
@@ -207,6 +212,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
         self.setFont(0, font)
         self.setText(0, name)
 
+
     def isEmpty(self) -> bool:
         '''
         Check if this DataSubGroup object is populated with data or not.
@@ -221,13 +227,13 @@ class DataSubGroup(QW.QTreeWidgetItem):
         return empty
 
 
-    def addData(self, data: InputMap|MineralMap|Mask):
+    def addData(self, data: InputMap | MineralMap | Mask):
         '''
         Add data to the subgroup in the form of data objects.
 
         Parameters
         ----------
-        data : InputMap, MineralMap, Mask or PointAnalysis [in future].
+        data : InputMap, MineralMap or Mask.
             The data to be added to the subgroup.
 
         '''
@@ -235,7 +241,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
             self.addChild(DataObject(data))
 
 
-    def delChild(self, child: 'DataObject'):
+    def delChild(self, child: 'DataObject') -> None:
         '''
         Remove child DataObject from the subgroup.
 
@@ -248,7 +254,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
         self.takeChild(self.indexOfChild(child))
 
 
-    def moveChildUp(self, child: 'DataObject'):
+    def moveChildUp(self, child: 'DataObject') -> None:
         '''
         Move child DataObject up by one position.
 
@@ -268,7 +274,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
         self.insertChild(idx - 1, child)
 
 
-    def moveChildDown(self, child: 'DataObject'):
+    def moveChildDown(self, child: 'DataObject') -> None:
         '''
         Move child DataObject down by one position.
 
@@ -302,7 +308,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
         return children
     
 
-    def group(self) -> DataGroup|None:
+    def group(self) -> DataGroup | None:
         '''
         Get the parent group that holds this subgroup or None if it hasn't got
         one.
@@ -318,28 +324,27 @@ class DataSubGroup(QW.QTreeWidgetItem):
 
 
 class DataObject(QW.QTreeWidgetItem):
-    '''
-    A class for data objects. Data objects are special containers of data, that
-    permit a convenient access to all the data-related information. Such
-    information (e.g., filepath, arrays, icons etc.) can be stored and
-    organized within a data object using different columns and item roles. The
-    data object class is a reimplementation of a QTreeWidgetItem whose type is
-    set to 'UserType' in order to unlock more customization options for the
-    developer.
-    '''
+   
+    MainData = InputMap | MineralMap | Mask # add point analysis
+    DataComponent = MainData | str | bool | QG.QIcon | QC.Qt.CheckState | None
 
-    def __init__(self, data: InputMap|MineralMap|Mask|None):
+    def __init__(self, data: MainData | None) -> None:
         '''
-        DataObject class constructor.
+        A specialized TreeWidgetItem for the Data Manager pane (for details see
+        'docks.DataManager' class). This widget is a data container, enabling
+        convenient access to all data components (e.g., status, icons, arrays,
+        filepaths), stored and organized using custom columns and item roles.
+        The widget type is set to 'UserType' (see QTreeWidgetItem for details),
+        unlocking more customization options for the developer.
 
         Parameters
         ----------
-        data : InputMap or MineralMap or Mask or None or PointAnalysis [in future]
-            The data linked to the data object.
+        data : InputMap, MineralMap, Mask or None
+            The data stored in the Data Object.
 
         '''
     # Set the data object type to 'User Type' for more customization options
-        super(DataObject, self).__init__(type = QW.QTreeWidgetItem.UserType)
+        super().__init__(type = QW.QTreeWidgetItem.UserType)
 
     # Set the flags. A data object is selectable and editable by the user.
         self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
@@ -348,8 +353,8 @@ class DataObject(QW.QTreeWidgetItem):
     # Set status stack [102 = not_found, 101 = edited, 0 = Empty status] 
         self._status_stack = [102, 101, 0] 
 
-    # Set the data with custom role. It is a user-role (int in [0, 256]) that
-    # does not overwrite any default Qt role. It is set arbitrarily to 100
+    # Set data components with custom roles. A custom role is a user-role (int
+    # in [0, 256]), that does not overwrite any default Qt role.
         self.setData(0, 100, data) # Object data - CustomRole (100)
         self.setData(0, 110, None if data is None else data.filepath) # Object filepath - CustomRole (110)
         self.setData(0, 0, self.generateDisplayName()) # Display name - DisplayRole (0)
@@ -367,10 +372,10 @@ class DataObject(QW.QTreeWidgetItem):
             self.setData(0, 10, QC.Qt.Unchecked) # CheckedRole (10)
 
 
-    def setInvalidFilepath(self, path: str):
+    def setInvalidFilepath(self, path: str) -> None:
         '''
         Invalidate object by setting its filepath to invalid filepath 'path'
-        and its status to "not found". This function is useful to set a pointer
+        and its status to "not found". This method is useful to set a pointer
         to data that has been deleted, removed or renamed, by keeping its
         original filepath.
 
@@ -386,9 +391,9 @@ class DataObject(QW.QTreeWidgetItem):
             self.setNotFound(True) # set as 'not found'
 
 
-    def filepathValid(self):
+    def filepathValid(self) -> bool:
         '''
-        Return if the DataObject filepath is valid. A filepath is valid if it
+        Whether the Data Object filepath is valid. A filepath is valid if it
         exists or if it is None, which indicates an unsaved datum.
 
         Returns
@@ -401,7 +406,7 @@ class DataObject(QW.QTreeWidgetItem):
         return filepath is None or os.path.exists(filepath)
     
 
-    def generateDisplayName(self):
+    def generateDisplayName(self) -> str:
         '''
         Generate a display name for the object based on its filepath. If the
         object has an invalid filepath, a generic name will be generated.
@@ -427,20 +432,20 @@ class DataObject(QW.QTreeWidgetItem):
         return name
 
 
-    def holdsInputMap(self):
+    def holdsInputMap(self) -> bool:
         '''
         Check if the object holds input map data.
 
         Returns
         -------
         bool
-            Wether or not the object holds input map data.
+            Whether or not the object holds input map data.
 
         '''
         return isinstance(self.get('data'), InputMap)
 
 
-    def holdsMineralMap(self):
+    def holdsMineralMap(self) -> bool:
         '''
         Check if the object holds mineral map data.
 
@@ -453,7 +458,7 @@ class DataObject(QW.QTreeWidgetItem):
         return isinstance(self.get('data'), MineralMap)
 
 
-    def holdsMap(self):
+    def holdsMap(self) -> bool:
         '''
         Check if the object holds generic map data.
 
@@ -466,7 +471,7 @@ class DataObject(QW.QTreeWidgetItem):
         return self.holdsInputMap() or self.holdsMineralMap()
 
 
-    def holdsMask(self):
+    def holdsMask(self) -> bool:
         '''
         Check if the object holds mask data.
 
@@ -482,61 +487,67 @@ class DataObject(QW.QTreeWidgetItem):
     # def holdsPointsData(self):
 
 
-    def get(self, *args):
+    def get(self, *args: str) -> list[DataComponent] | DataComponent:
         '''
-        Convenient function to get data from the object.
+        Convenient method to get data components.
 
         Parameters
         ----------
         *args : str
-            One or multiple <attributes> keys.
+            One or multiple components keys.
 
         Returns
         -------
-        out : list
-            Requested object data. It returns the first element of the list if
-            its lenght is 1.
+        out : list[DataComponent] or DataComponent
+            Requested data components. It returns the first element of the list
+            if just one data component is requested.
+
+        Raises
+        ------
+        KeyError
+            Raised if an invalid argument is passed.
 
         '''
-    # Define a dictionary holding all the object's attributes
-        attributes = {'data' : self.data(0, 100),
-                      'filepath' : self.data(0, 110),
-                      'name' : self.data(0, 0),
-                      'is_edited' : self.data(0, 101),
-                      'not_found' : self.data(0, 102),
-                      'has_warning' : self.data(0, 103),
-                      'status_icon' : self.data(0, 1),
-                      'warn_icon' : self.data(1, 1),
-                      'status_tip' : self.data(0, 3),
-                      'warn_tip' : self.data(1, 3),
-                      'checked' : self.data(0, 10)
-                      }
+    # Define a dictionary holding all the object's comppnents
+        components = {
+            'data' : self.data(0, 100),
+            'filepath' : self.data(0, 110),
+            'name' : self.data(0, 0),
+            'is_edited' : self.data(0, 101),
+            'not_found' : self.data(0, 102),
+            'has_warning' : self.data(0, 103),
+            'status_icon' : self.data(0, 1),
+            'warn_icon' : self.data(1, 1),
+            'status_tip' : self.data(0, 3),
+            'warn_tip' : self.data(1, 3),
+            'checked' : self.data(0, 10)
+        }
 
-    # Raises a keyerror if invalid arg is passed
-        out = [attributes[a] for a in args]
+    # Raises a KeyError if invalid arg is passed
+        out = [components[a] for a in args]
         if len(out) == 1: out = out[0]
         return out
     
 
-    def setObjectData(self, data: InputMap|MineralMap|Mask):
+    def setObjectData(self, data: MainData):
         '''
-        Set 'data' as the DataObject data. This function also updates the 
+        Set 'data' as the Data Object main data. This method also updates the 
         filepath.
 
         Parameters
         ----------
-        data : InputMap or MineralMap or Mask
-            The object data. Must be a valid data type.
-
+        data : InputMap, MineralMap or Mask
+            The object main data.
+            
         '''
         if isinstance(data, (InputMap, MineralMap, Mask)):  # add POINTS
             self.setData(0, 100, data)
             self.setData(0, 110, data.filepath)
 
 
-    def setFilepath(self, path: str):
+    def setFilepath(self, path: str) -> None:
         '''
-        Set 'path' as new DataObject filepath. This function also changes the
+        Set 'path' as new Data Object filepath. This method also changes the
         data.
 
         Parameters
@@ -565,9 +576,9 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(0, 110, path)
 
 
-    def setName(self, name: str):
+    def setName(self, name: str) -> None:
         '''
-        Set object displayed name as 'name'.
+        Set Data Object displayed name as 'name'.
 
         Parameters
         ----------
@@ -578,9 +589,9 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(0, 0, name)
         
 
-    def setEdited(self, toggle: bool):
+    def setEdited(self, toggle: bool) -> None:
         '''
-        Toggle on/off the file edited status of this object both internally and 
+        Toggle on/off the file edited status of Data Object both internally and 
         visually (icon and tooltip).
 
         Parameters
@@ -589,13 +600,13 @@ class DataObject(QW.QTreeWidgetItem):
             Toggle on/off file edited status.
 
         '''
-    # Set the 'is_edited' attribute
+    # Set the 'is_edited' component
         self.setData(0, 101, toggle)
     # Show/hide the save status icon and tooltip
         self._toggleStatus(101, toggle)
 
 
-    def setNotFound(self, toggle: bool):
+    def setNotFound(self, toggle: bool) -> None:
         '''
         Toggle on/off the file not found status of this object both internally 
         and visually (icon and tooltip).
@@ -606,7 +617,7 @@ class DataObject(QW.QTreeWidgetItem):
             Toggle on/off file not found status.
 
         '''
-    # Set the 'not_found' attribute
+    # Set the 'not_found' component
         self.setData(0, 102, toggle)
     # Show/hide the not found status icon and tooltip
         self._toggleStatus(102, toggle)
@@ -615,11 +626,11 @@ class DataObject(QW.QTreeWidgetItem):
             self.setData(0, 100, None)
 
 
-    def _toggleStatus(self, status: int, toggle: bool):
+    def _toggleStatus(self, status: int, toggle: bool) -> None:
         '''
-        Visually toggle on or off the provided status. This functions alters
-        the status stack, so that if 'status' is toggle on, it will be placed
-        as the last (hence visible) element of the stack, otherwise it will be
+        Visually toggle on or off the provided status. This method alters the
+        status stack, so that if 'status' is toggled on, it will be placed as
+        the last (hence visible) element of the stack, otherwise it will be
         placed as the first element of the stack. This allows for stackable
         status with a "last toggled on is visible" rule. 
 
@@ -659,9 +670,9 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(0, 3, tooltip)
 
 
-    def setWarning(self, warning: bool):
+    def setWarning(self, warning: bool) -> None:
         '''
-        Toggle on/off the shape warning state of this object both internally 
+        Toggle on/off the shape warning state of Data Object both internally 
         and visually (icon and tooltip).
 
         Parameters
@@ -680,23 +691,24 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(1, 3, text)
 
 
-    def setChecked(self, checked: bool):
+    def setChecked(self, checked: bool) -> None:
         '''
-        Set the check state of this object to 'checked'.
+        Set the check state of Data Object to 'checked'.
 
         Parameters
         ----------
         checked : bool
             Check state. Only checked (=True) or unchecked (=False) states are
             accepted.
+
         '''
         checkstate = QC.Qt.Checked if checked else QC.Qt.Unchecked
         self.setData(0, 10, checkstate)
 
 
-    def subgroup(self) -> DataSubGroup|None:
+    def subgroup(self) -> DataSubGroup | None:
         '''
-        Return the parent subgroup that holds this data object or None if it 
+        Return the parent subgroup that holds this Data Object or None if it 
         hasn't got one.
 
         Returns
@@ -708,15 +720,196 @@ class DataObject(QW.QTreeWidgetItem):
         return self.parent()
 
 
+
+class SampleMapsSelector(QW.QWidget):
+
+    sampleUpdateRequested = QC.pyqtSignal()
+    mapsUpdateRequested = QC.pyqtSignal(int) # index of sample
+    mapsDataChanged = QC.pyqtSignal()
+    mapClicked = QC.pyqtSignal(DataObject)
+
+    def __init__(
+        self,
+        maps_type: str,
+        checkable: bool = True,
+        parent: QW.QWidget | None = None
+    ) -> None:
+        '''
+        Ready to use widget that allows loading maps from a sample and show
+        them in a QTreeWidget, optionally enabling their selection through
+        dedicated checkboxes. This widget sends signals to request maps data.
+        Such signals must be catched by the widget that holds the information,
+        namely the DataManager.
+
+        Parameters
+        ----------
+        maps_type : str
+            Must be 'inmaps' to list input maps or 'minmaps' to list mineral 
+            maps.
+        checkable : bool, optional
+            Whether the individual maps in the list can be selected through
+            checkboxes. The default is True.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
+
+        Raises
+        ------
+        ValueError
+            Raised if "maps_type" is not 'inmaps' or 'minmaps'.
+
+        '''
+        super().__init__(parent)
+
+    # Set main attributes
+        self.maps_type = maps_type
+        if self.maps_type not in ('inmaps', 'minmaps'):
+            raise ValueError('Parameter "maps_type" must be "inmaps" or "minmaps".')
+        self.checkable = checkable
+
+    # Initialize GUI and connect its signals to slots
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self) -> None:
+        '''
+        GUI constructor.
+
+        '''
+    # Sample combobox (Auto Update Combo Box)
+        self.sample_combox = AutoUpdateComboBox()
+
+    # Maps list (Tree Widget)
+        self.maps_list = QW.QTreeWidget()
+        self.maps_list.setHeaderHidden(True)
+        self.maps_list.setStyleSheet(style.SS_MENU)
+
+    # Set layout
+        main_layout = QW.QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(QW.QLabel('Select sample'))
+        main_layout.addWidget(self.sample_combox)
+        main_layout.addSpacing(10)
+        main_layout.addWidget(self.maps_list)
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self) -> None: 
+        '''
+        Signals-slots connector.
+
+        '''
+    # Send combobox signals as custom signals
+        self.sample_combox.clicked.connect(self.sampleUpdateRequested.emit)
+        self.sample_combox.activated.connect(
+            lambda idx: self.mapsUpdateRequested.emit(idx))
+        
+    # Send tree widget signals as custom signals
+        self.maps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
+
+
+    def updateCombox(self, samples: list) -> None:
+        '''
+        Populate the samples combobox with the samples currently loaded in the
+        Data Manager. This method is called by the main window when the combo
+        box is clicked.
+
+        Parameters
+        ----------
+        samples : list
+            List of DataGroup objects.
+
+        '''
+        samples_names = [s.text(0) for s in samples]
+        self.sample_combox.updateItems(samples_names)
+
+    
+    def updateList(self, sample: DataGroup) -> None:
+        '''
+        Updates the list of currently loaded maps owned by the sample currently
+        selected in the samples combobox. This method is called by the main 
+        window when a new item is selected in the sample combobox.
+
+        Parameters
+        ----------
+        sample : DataGroup
+            The currently selected sample as a DataGroup.
+
+        '''
+    # Clear the input maps lists
+        self.maps_list.clear()
+
+    # Exit function if the subgroup is empty
+        subgr = sample.inmaps if self.maps_type == 'inmaps' else sample.minmaps
+        if subgr.isEmpty():
+            return
+
+    # Get every input map object and re-assemble them into the inmaps list
+        for c in subgr.getChildren():
+            item = DataObject(c.get('data'))
+            if self.checkable:
+                item.setChecked(True)
+            self.maps_list.addTopLevelItem(item)
+
+    # Send a signal to inform that maps data changed
+        self.mapsDataChanged.emit()
+
+
+    def getChecked(self) -> list[DataObject]:
+        '''
+        Get the currently checked maps.
+
+        Returns
+        -------
+        checked : list[DataObject]
+            List of checked maps.
+
+        '''
+        if self.checkable:
+            n_maps = self.maps_list.topLevelItemCount()
+            items = [self.maps_list.topLevelItem(i) for i in range(n_maps)]
+            checked = [i for i in items if i.checkState(0)]
+            return checked
+    
+
+    def itemCount(self) -> int:
+        '''
+        Return the amount of maps loaded in the maps list.
+
+        Returns
+        -------
+        int
+            Number of maps.
+
+        '''
+        return self.maps_list.topLevelItemCount()
+    
+
+    def currentItem(self) -> DataObject:
+        '''
+        Return the currently selected map.
+
+        Returns
+        -------
+        DataObject
+            Currently selected map object.
+
+        '''
+        return self.maps_list.currentItem()
+    
+
+    def clear(self) -> None:
+        '''
+        Clear out the entire widget.
+
+        '''
+        self.sample_combox.clear()
+        self.maps_list.clear()
+
+
+
 class Legend(QW.QTreeWidget):
-    '''
-    An interactive legend object for displaying and editing the names and the 
-    palette colors of mineral phases within a mineral map. Optionally, the 
-    mineral modal amounts are displayed as well. It can include a right-click 
-    context menu action for advanced interactions. This object sends various 
-    signals to notify each edit request, which must be catched and handled by 
-    other widgets to be effective.
-    '''
+
     colorChangeRequested = QC.pyqtSignal(QW.QTreeWidgetItem, tuple) # item, col
     randomPaletteRequested = QC.pyqtSignal()
     itemRenameRequested = QC.pyqtSignal(QW.QTreeWidgetItem, str) # item, name
@@ -724,10 +917,19 @@ class Legend(QW.QTreeWidget):
     itemHighlightRequested = QC.pyqtSignal(bool, QW.QTreeWidgetItem) # on/off, item
     maskExtractionRequested = QC.pyqtSignal(list) # list of classes
 
-
-    def __init__(self, amounts=True, context_menu=False, parent=None):
+    def __init__(
+        self,
+        amounts: bool = True,
+        context_menu: bool = False,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        An interactive legend object for displaying and editing the names and  
+        palette colors of mineral phases within a mineral map. Optionally, the 
+        mineral modal amounts are displayed as well. It optionally includes a
+        right-click context menu action for advanced interactions. This object
+        sends signals to notify each edit request, which must be catched and
+        handled by other widgets to be effective.
 
         Parameters
         ----------
@@ -738,11 +940,10 @@ class Legend(QW.QTreeWidget):
             Whether a context menu should popup when right-clicking on a legend
             item. The default is False.
         parent : QWidget or None, optional
-            GUI parent widget of the legend. The default is None.
+            GUI parent widget of this widget. The default is None.
 
         '''
-    # Call the constructor of the parent class
-        super(Legend, self).__init__(parent)
+        super().__init__(parent)
 
     # Define main attributes
         self._highlighted_item = None
@@ -773,7 +974,7 @@ class Legend(QW.QTreeWidget):
         self._connect_slots()
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -783,7 +984,7 @@ class Legend(QW.QTreeWidget):
             self.customContextMenuRequested.connect(self.showContextMenu)
 
 
-    def showContextMenu(self, point: QC.QPoint):
+    def showContextMenu(self, point: QC.QPoint) -> None:
         '''
         Shows a context menu with custom actions.
 
@@ -794,10 +995,11 @@ class Legend(QW.QTreeWidget):
 
         '''
 
-    # Get the item that is clicked from <point> and define a menu.
+    # Get the item that is clicked from 'point' and define a menu
         i = self.itemAt(point)
         if i is None: return
-        menu = StyledMenu()
+        menu = QW.QMenu()
+        menu.setStyleSheet(style.SS_MENU)
 
     # Rename class
         menu.addAction(QG.QIcon(r'Icons/rename.png'), 'Rename',
@@ -812,8 +1014,7 @@ class Legend(QW.QTreeWidget):
         menu.addSeparator()
  
     # Copy current color HEX string
-        menu.addAction(
-            'Copy color string', lambda: self.copyColorHexToClipboard(i))
+        menu.addAction('Copy color', lambda: self.copyColorHexToClipboard(i))
 
     # Change color
         menu.addAction(QG.QIcon(r'Icons/palette.png'), 'Set color',
@@ -845,9 +1046,9 @@ class Legend(QW.QTreeWidget):
         menu.exec(QG.QCursor.pos())
 
 
-    def onDoubleClick(self, item: QW.QTreeWidgetItem, column: int):
+    def onDoubleClick(self, item: QW.QTreeWidgetItem, column: int) -> None:
         '''
-        Wrapper function that triggers different actions depending on which 
+        Wrapper method that triggers different actions depending on which 
         column was double-clicked.
 
         Parameters
@@ -865,7 +1066,8 @@ class Legend(QW.QTreeWidget):
         else:
             self.requestItemHighlight(item != self._highlighted_item, item)
 
-    def copyColorHexToClipboard(self, item: QW.QTreeWidgetItem):
+
+    def copyColorHexToClipboard(self, item: QW.QTreeWidgetItem) -> None:
         '''
         Copy the selected phase color to the clipboard as a HEX string.
 
@@ -879,11 +1081,11 @@ class Legend(QW.QTreeWidget):
         clipboard.setText(item.whatsThis(0))
 
 
-    def requestColorChange(self, item: QW.QTreeWidgetItem):
+    def requestColorChange(self, item: QW.QTreeWidgetItem) -> None:
         '''
         Request to change the color of a class by sending a signal. The signal
         must be catched and handled by the widget that contains the legend.
-        This function is also triggered when double-clicking on the item icon.
+        This method is also triggered when double-clicking on the item icon.
 
         Parameters
         ----------
@@ -894,13 +1096,14 @@ class Legend(QW.QTreeWidget):
     # Get the old color (as HEX string) and the new color (as RGB tuple)
         old_col = item.whatsThis(0)
         new_col = QW.QColorDialog.getColor(QG.QColor(old_col), self)
+
     # Emit the signal
         if new_col.isValid():
             rgb = tuple(new_col.getRgb()[:-1])
             self.colorChangeRequested.emit(item, rgb)
 
 
-    def requestRandomColorChange(self, item: QW.QTreeWidgetItem):
+    def requestRandomColorChange(self, item: QW.QTreeWidgetItem) -> None:
         '''
         Request to randomize the color of a class by sending a signal. The
         signal must be catched and handled by the widget that contains the
@@ -915,7 +1118,11 @@ class Legend(QW.QTreeWidget):
         self.colorChangeRequested.emit(item, ())
 
 
-    def changeItemColor(self, item: QW.QTreeWidgetItem, color: tuple[int]):
+    def changeItemColor(
+        self,
+        item: QW.QTreeWidgetItem,
+        color: tuple[int, int, int]
+    ) -> None:
         '''
         Change the color of the item in the legend.
 
@@ -923,17 +1130,18 @@ class Legend(QW.QTreeWidget):
         ----------
         item : QTreeWidgetItem
             The item whose color must be changed.
-        color : tuple
-            RGB color triplet.
+        color : tuple[int, int, int]
+            RGB triplet.
 
         '''
     # Set the new color to the legend item
         item.setIcon(0, ColorIcon(color))
+
     # Also set the new whatsThis string
         item.setWhatsThis(0, iatools.rgb2hex(color))
 
 
-    def requestClassRename(self, item: QW.QTreeWidgetItem):
+    def requestClassRename(self, item: QW.QTreeWidgetItem) -> None:
         '''
         Request to change the name of a class by sending a signal. The signal
         must be catched and handled by the widget that contains the legend.
@@ -971,7 +1179,7 @@ class Legend(QW.QTreeWidget):
             return MsgBox(self, 'Crit',  'Invalid name.')
 
 
-    def renameClass(self, item: QW.QTreeWidgetItem, name: str):
+    def renameClass(self, item: QW.QTreeWidgetItem, name: str) -> None:
         '''
         Change the name of the item in the legend.
 
@@ -987,9 +1195,10 @@ class Legend(QW.QTreeWidget):
         item.setText(1, name)
 
 
-    def requestClassMerge(self):
+    def requestClassMerge(self) -> None:
         '''
-        Request to merge two or more mineral classes.
+        Request to merge two or more mineral classes. The signal must be
+        catched and handled by the widget that contains the legend.
 
         '''
     # Do nothing if less than 2 classes are selected
@@ -1022,10 +1231,11 @@ class Legend(QW.QTreeWidget):
             return MsgBox(self, 'Crit', 'Invalid name.')
 
 
-    def requestItemHighlight(self, toggled: bool, item: QW.QTreeWidgetItem):
+    def requestItemHighlight(self, toggled: bool, item: QW.QTreeWidgetItem) -> None:
         '''
         Request to highlight the selected mineral class. Highlight means to
-        show ONLY the selected class in map.
+        show ONLY the selected class in map. The signal must be catched and 
+        handled by the widget that contains the legend.
 
         Parameters
         ----------
@@ -1042,16 +1252,17 @@ class Legend(QW.QTreeWidget):
         self.itemHighlightRequested.emit(toggled, item)
 
 
-    def requestMaskFromClass(self):
+    def requestMaskFromClass(self) -> None:
         '''
-        Request to extract a mask from the selected mineral classes.
+        Request to extract a mask from the selected mineral classes. The signal
+        must be catched and handled by the widget that contains the legend.
 
         '''
         classes = [i.text(1) for i in self.selectedItems()]
         self.maskExtractionRequested.emit(classes)
 
 
-    def setPrecision(self, value: int):
+    def setPrecision(self, value: int) -> None:
         '''
         Set the number of decimals of the class amounts.
 
@@ -1065,7 +1276,7 @@ class Legend(QW.QTreeWidget):
         # self.update()
 
 
-    def addClass(self, name: str, color: tuple[int], amount: float):
+    def addClass(self, name: str, color: tuple[int, int, int], amount: float) -> None:
         '''
         Add a new mineral class to the legend.
 
@@ -1073,7 +1284,7 @@ class Legend(QW.QTreeWidget):
         ----------
         name : str
             Class name.
-        color : tuple[int]
+        color : tuple[int, int, int]
             Class color as RGB triplet. 
         amount : float
             Class modal amount. This value is ignored if legend amounts are not
@@ -1089,7 +1300,7 @@ class Legend(QW.QTreeWidget):
             item.setText(2, f'{amount}%')
 
 
-    def hasClass(self, name: str):
+    def hasClass(self, name: str) -> bool:
         '''
         Check if the given class is already displayed in the legend. The search
         is done through the class name.
@@ -1110,7 +1321,7 @@ class Legend(QW.QTreeWidget):
         return name in class_names
 
 
-    def update(self, mineral_map: MineralMap):
+    def update(self, mineral_map: MineralMap) -> None:
         '''
         Updates the legend.
 
@@ -1137,174 +1348,28 @@ class Legend(QW.QTreeWidget):
 
 
 
-
-
-
-
-# class MatrixCanvas(FigureCanvasQTAgg):
-
-#     def __init__(self, parent=None, size=(9, 9), title='',
-#                   xlab='', ylab='', cbar=True, tight=False):
-#         self.fig = Figure(figsize=size, tight_layout=tight)
-#         self.fig.patch.set(facecolor='w', edgecolor='#19232D', linewidth=2)
-#         self.ax = self.fig.add_subplot(111)
-#         super(MatrixCanvas, self).__init__(self.fig)
-
-#         self.title = title
-#         self.xlab = xlab
-#         self.ylab = ylab
-
-#         self.mtx = None
-#         self.showCbar = cbar
-#         self.cax = None
-
-#         self.init_ax()
-
-#     def init_ax(self):
-#         self.ax.set_title(self.title)
-#         self.ax.set_xlabel(self.xlab)
-#         self.ax.set_ylabel(self.ylab)
-
-#     def isEmpty(self):
-#         return self.mtx == None
-
-#     def set_ticks(self, labels, axis='both'):
-#         assert axis in ('x', 'y', 'both')
-#         if axis in ('x', 'both'):
-#             self.ax.set(xticks=np.arange(len(labels)), xticklabels=labels)
-#             self.ax.tick_params(labelbottom=True, labeltop=False)
-#         if axis in ('y', 'both'):
-#             self.ax.set(yticks=np.arange(len(labels)), yticklabels=labels)
-
-#         self.draw()
-#         self.flush_events()
-
-#     def annotate(self, data):
-#         n_rows, n_cols = data.shape
-#         row_ind = np.arange(n_rows)
-#         col_ind = np.arange(n_cols)
-#         x_coord, y_coord = np.meshgrid(col_ind, row_ind)
-
-#         for txt, x, y in zip(data.flatten(), x_coord.flatten(), y_coord.flatten()):
-#             self.ax.annotate(txt, (x, y), va='center', ha='center', color='w',
-#                               path_effects=[mpe.withStroke(linewidth=2,
-#                                                           foreground='k')])
-
-#     def remove_annotations(self):
-#         for child in self.ax.get_children():
-#             if isinstance(child, mpl_text.Annotation):
-#                 child.remove()
-
-#     def update_canvas(self, data):
-#         if self.isEmpty():
-#             self.mtx = self.ax.matshow(data, cmap='inferno', interpolation='none')
-#             if self.showCbar:
-#                 divider = make_axes_locatable(self.ax)
-#                 self.cax = divider.append_axes("right", size="5%", pad=0.1)
-#                 self.cbar = self.fig.colorbar(self.mtx, cax=self.cax)
-#         else:
-#             self.mtx.set_data(data)
-#             self.mtx.set_clim(data.min(), data.max())
-#             # set extent is to allow to plot a different shaped matrix without the need of call
-#             # clear_canvas() before
-#             self.mtx.set_extent((-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5))
-#             self.remove_annotations()
-
-#         self.annotate(data)
-#         self.draw()
-#         self.flush_events()
-
-#     def clear_canvas(self):
-#         self.mtx = None
-#         self.ax.cla()
-#         if self.showCbar and self.cax is not None:
-#             self.cax.cla()
-#         self.init_ax()
-#         self.draw()
-#         self.flush_events()
-
-
-
-
-
-
-# class CurvePlotCanvas(FigureCanvasQTAgg):
-
-#     def __init__(self, parent=None, size=(6.4, 4.8), tight=False,
-#                  title='', xlab='', ylab='', grid=True):
-#         self.fig = Figure(figsize=size, tight_layout=tight)
-#         self.fig.patch.set(facecolor='w', edgecolor='#19232D', linewidth=2)
-#         self.ax = self.fig.add_subplot(111)
-#         super(CurvePlotCanvas, self).__init__(self.fig)
-
-#         self.title = title
-#         self.xlab = xlab
-#         self.ylab = ylab
-#         self.gridOn = grid
-
-#         self.init_ax()
-
-#     def init_ax(self):
-#         self.ax.set_title(self.title)
-#         self.ax.set_xlabel(self.xlab)
-#         self.ax.set_ylabel(self.ylab)
-#         self.ax.grid(self.gridOn)
-
-#     def add_curve(self, xdata, ydata, label='', color='k'):
-#         self.ax.plot(xdata, ydata, label = label, color=color)
-
-#     def has_curves(self):
-#         return bool(len(self.ax.lines))
-
-#     def update_canvas(self, data=None):
-#     # data has to be a list of tuple, each one containing xdata and ydata of a single curve
-#     # example: data = [(x1, y1), (x2, y2)]
-#         if data is not None:
-#             curves = self.ax.lines # get all the plot instances (Line2D)
-#             assert len(data) == len(curves)
-#             for n in range(len(curves)):
-#                 curves[n].set_data(data[n])
-#             self.ax.relim()
-#             self.ax.autoscale_view()
-
-#         self.ax.legend(loc='best')
-#         self.draw()
-#         self.flush_events()
-
-#     def homeAction(self):
-#         self.ax.relim()
-#         self.ax.autoscale()
-#         self.draw()
-#         self.flush_events()
-
-#     def clear_canvas(self):
-#         self.ax.cla()
-#         self.init_ax()
-#         self.draw()
-#         self.flush_events()
-
-
-
 class ColorIcon(QG.QIcon):
-    '''
-    Convenient class to generate a colored icon useful in legends.
-    '''
 
-    def __init__(self, color: tuple[int]|str, edgecolor=style.IVORY, lw=1,
-                 size=(64, 64)):
+    def __init__(
+        self,
+        color: tuple[int, int, int] | str,
+        edgecolor: str = style.IVORY,
+        lw: int = 1,
+        size: tuple[int, int] = (64, 64)
+    ) -> None:
         '''
-        Constructor.
+        Convenient class to generate a colored icon. Very useful in legends.
 
         Parameters
         ----------
-        color : tuple[int] or str
+        color : tuple[int, int, int] or str
             RGB triplet or HEX color string.
         edgecolor : str, optional
-            Color of the icon border, expressed as a HEX string. The default is
+            Color of the icon border, expressed as a HEX string. The default is 
             #F9F9F4 (IVORY).
         lw : int, optional
             Border line width. The default is 1.
-        size : tuple, optional
+        size : tuple[int, int], optional
             Icon size. The default is (64, 64).
 
         Raises
@@ -1336,36 +1401,45 @@ class ColorIcon(QG.QIcon):
         painter.end()
 
     # Create the icon using the pixmap
-        super(ColorIcon, self).__init__(pixmap)
+        super().__init__(pixmap)
 
 
 
 class StyledButton(QW.QPushButton):
-    '''
-    QSS-styled reimplementation of a QPushButton.
-    '''
-    def __init__(self, icon=None, text=None, bg_color=None, text_padding=1):
+
+    def __init__(
+        self,
+        icon: QG.QIcon | str | None = None,
+        text: str | None = None,
+        bg : str | None = None,
+        text_padding: int = 1,
+        parent: QW.QWidget | None = None
+     ) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QPushButton, adding extra convenient
+        parameters.
 
         Parameters
         ----------
-        icon : QIcon | None, optional
-            Button icon. The default is None.
-        text : str | None, optional
+        icon : QIcon or str or None, optional
+            Button icon. If str, is the path to icon file. The default is None.
+        text : str or None, optional
             Button text. The default is None.
-        bg_color : str | None, optional
+        bg : str or None, optional
             Background color of the button. If None the default color is used.
             The default is None.
         text_padding : int, optional
             Adds some space between the icon and the text. The default is 1.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledButton, self).__init__()
+        super().__init__(parent)
         self.setSizePolicy(QW.QSizePolicy.Preferred, QW.QSizePolicy.Fixed)
 
     # Set icon
         if icon:
+            icon = QG.QIcon(icon) if isinstance(icon, str) else icon
             self.setIcon(icon)
             if text: # add spacing between icon and text
                 text = text.rjust(text_padding + len(text))
@@ -1375,30 +1449,33 @@ class StyledButton(QW.QPushButton):
 
     # Overwrite default background color if requested
         ss = style.SS_BUTTON
-        if bg_color:
-            ss+= 'QPushButton {background-color: %s; font: bold;}' %(bg_color)
+        if bg:
+            ss+= 'QPushButton {background-color: %s; font: bold;}' %(bg)
         self.setStyleSheet(ss)
 
 
 
 class StyledComboBox(QW.QComboBox):
-    '''
-    QSS-styled reimplementation of a QComboBox, with auto-generating tooltips.
-    '''
-    def __init__(self, tooltip=None, parent=None):
+
+    def __init__(
+        self,
+        tooltip: str | None = None,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor
+        QSS-styled reimplementation of a QComboBox, adding auto-generating
+        tooltips and wheel event control.
 
         Parameters
         ----------
-        tooltip : str | None, optional
+        tooltip : str or None, optional
             Fixed combo box tooltip. If None, the tooltip automatically changes
             when the current text changes. The default is None.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledComboBox, self).__init__(parent)
+        super().__init__(parent)
 
     # Set automatic tooltip update if no tooltip is provided
         if tooltip:
@@ -1411,7 +1488,7 @@ class StyledComboBox(QW.QComboBox):
         self.setStyleSheet(style.SS_COMBOX + style.SS_MENU)
 
 
-    def wheelEvent(self, event: QG.QWheelEvent):
+    def wheelEvent(self, event: QG.QWheelEvent) -> None:
         '''
         Reimplementation of the wheelEvent to better control mouse wheel scroll
         activation of the combobox. The event will be accepted only if SHIFT is
@@ -1419,30 +1496,35 @@ class StyledComboBox(QW.QComboBox):
 
         Parameters
         ----------
-        event : QG.QWheelEvent
+        event : QWheelEvent
             The mouse wheel event.
 
         '''
         modifiers = event.modifiers()
         if modifiers & QC.Qt.ShiftModifier:
-            super(StyledComboBox, self).wheelEvent(event)
+            super().wheelEvent(event)
         else:
             event.ignore()
 
 
 
 class StyledDoubleSpinBox(QW.QDoubleSpinBox):
-    '''
-    QSS-styled reimplementation of a QDoubleSpinBox.
-    '''
-    def __init__(self, min_value=0.0, max_value=1.0, step=0.1, decimals=2, 
-                 parent=None):
+
+    def __init__(
+        self,
+        min_value: float = 0.0,
+        max_value: float = 1.0,
+        step: float = 0.1,
+        decimals: int = 2,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QDoubleSpinBox, adding extra 
+        convenient parameters and wheel event control.
 
         Parameters
         ----------
-        min_value : flaot, optional
+        min_value : float, optional
             Minimum range value. The default is 0.0.
         max_value : float, optional
             Maximum range value. The default is 1.0.
@@ -1450,11 +1532,11 @@ class StyledDoubleSpinBox(QW.QDoubleSpinBox):
             Step value. The default is 0.1.
         decimals : int, optional
             Number of displayed decimals. The default is 2.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledDoubleSpinBox, self).__init__(parent)
+        super().__init__(parent)
 
     # Set range and single step values
         self.setRange(min_value, max_value)
@@ -1467,7 +1549,7 @@ class StyledDoubleSpinBox(QW.QDoubleSpinBox):
         self.setStyleSheet(style.SS_MENU)
 
 
-    def wheelEvent(self, event: QG.QWheelEvent):
+    def wheelEvent(self, event: QG.QWheelEvent) -> None:
         '''
         Reimplementation of the wheelEvent to better control mouse wheel scroll
         activation of the spinbox. The event will be accepted only if SHIFT is
@@ -1476,51 +1558,51 @@ class StyledDoubleSpinBox(QW.QDoubleSpinBox):
 
         Parameters
         ----------
-        event : QG.QWheelEvent
+        event : QWheelEvent
             The mouse wheel event.
 
         '''
         modifiers = event.modifiers()
         if modifiers & QC.Qt.ShiftModifier:
-            super(StyledDoubleSpinBox, self).wheelEvent(event)
+            super().wheelEvent(event)
         else:
             event.ignore()
 
 
 
 class StyledListWidget(QW.QListWidget):
-    '''
-    QSS-styled reimplementation of a QListWidget.
-    '''
 
-    def __init__(self, ext_selection=True, parent=None):
+    def __init__(self, ext_sel: bool = True, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QListWidget, adding extra convenient
+        methods.
 
         Parameters
         ----------
-        ext_selection : bool, optional
+        ext_sel : bool, optional
             If extended selection mode should be enabled. The default is True.
-        parent : QObject or None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledListWidget, self).__init__(parent)
+        super().__init__(parent)
+
     # Set custom scroll bars
         self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
         self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
+
     # Set extended selection mode if requested
-        if ext_selection:
+        if ext_sel:
             self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
 
 
-    def getItems(self):
+    def getItems(self) -> list[QW.QListWidgetItem]:
         '''
         Return all items in the list.
 
         Returns
         -------
-        items : list
+        items : list[QListWidgetItem]
             List of items.
 
         '''
@@ -1528,7 +1610,7 @@ class StyledListWidget(QW.QListWidget):
         return items
     
 
-    def selectedRows(self):
+    def selectedRows(self) -> list[int]:
         '''
         Return all selected rows.
 
@@ -1543,7 +1625,7 @@ class StyledListWidget(QW.QListWidget):
         return selected_rows
     
 
-    def removeSelected(self):
+    def removeSelected(self) -> None:
         '''
         Remove all selected items from list.
 
@@ -1553,32 +1635,19 @@ class StyledListWidget(QW.QListWidget):
 
 
 
-class StyledMenu(QW.QMenu):
-    '''
-    QSS-styled reimplementation of a QMenu.
-    '''
-    def __init__(self, parent=None):
-        '''
-        Constructor
-
-        Parameters
-        ----------
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
-
-        '''
-        super(StyledMenu, self).__init__(parent)
-        self.setStyleSheet(style.SS_MENU)
-
-
-
 class StyledRadioButton(QW.QRadioButton):
     '''
-    QSS-styled reimplementation of a QRadioButton.
+    
     '''
-    def __init__(self, text='', icon: QG.QIcon|None=None, parent=None):
+    def __init__(
+        self,
+        text: str = '',
+        icon: QG.QIcon | None = None,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor
+        QSS-styled reimplementation of a QRadioButton, adding extra convenient
+        parameters.
 
         Parameters
         ----------
@@ -1586,11 +1655,11 @@ class StyledRadioButton(QW.QRadioButton):
             The text of the radio button. The default is ''.
         icon : QIcon or None, optional
             The icon of the radio button. The default is None.
-        parent : QObject or None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledRadioButton, self).__init__(text, parent)
+        super().__init__(text, parent)
         if icon is not None:
             self.setIcon(icon)
         self.setStyleSheet(style.SS_RADIOBUTTON)
@@ -1598,20 +1667,25 @@ class StyledRadioButton(QW.QRadioButton):
 
 
 class StyledScrollBar(QW.QScrollBar):
-    '''
-    QSS-styled reimplementation of a QScrollBar.
-    '''
-    def __init__(self, orientation: QC.Qt.Orientation):
+
+    def __init__(
+        self,
+        orientation: QC.Qt.Orientation,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QScrollBar, with dynamic stylesheet
+        assignment based on its orientation.
 
         Parameters
         ----------
         orientation : Qt.Orientation
             The orientation of the scroll bar.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledScrollBar, self).__init__(orientation)
+        super().__init__(orientation, parent)
 
     # Set the stylesheet
         if orientation == QC.Qt.Horizontal:
@@ -1622,12 +1696,17 @@ class StyledScrollBar(QW.QScrollBar):
 
 
 class StyledSpinBox(QW.QSpinBox):
-    '''
-    QSS-styled reimplementation of a QSpinBox.
-    '''
-    def __init__(self, min_value=0, max_value=100, step=1, parent=None):
+
+    def __init__(
+        self,
+        min_value: int = 0,
+        max_value: int = 100,
+        step: int = 1,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QSpinBox, adding extra convenient
+        parameters and wheel event control.
 
         Parameters
         ----------
@@ -1637,11 +1716,11 @@ class StyledSpinBox(QW.QSpinBox):
             Maximum range value. The default is 100.
         step : int, optional
             Step value. The default is 1.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledSpinBox, self).__init__(parent)
+        super().__init__(parent)
 
     # Set range and single step values
         self.setRange(min_value, max_value)
@@ -1651,7 +1730,7 @@ class StyledSpinBox(QW.QSpinBox):
         self.setStyleSheet(style.SS_MENU)
 
 
-    def wheelEvent(self, event: QG.QWheelEvent):
+    def wheelEvent(self, event: QG.QWheelEvent) -> None:
         '''
         Reimplementation of the wheelEvent to better control mouse wheel scroll
         activation of the spinbox. The event will be accepted only if SHIFT is
@@ -1660,7 +1739,7 @@ class StyledSpinBox(QW.QSpinBox):
 
         Parameters
         ----------
-        event : QG.QWheelEvent
+        event : QWheelEvent
             The mouse wheel event.
 
         '''
@@ -1673,12 +1752,17 @@ class StyledSpinBox(QW.QSpinBox):
 
 
 class StyledTable(QW.QTableWidget):
-    '''
-    QSS-styled reimplementation of a QTableWidget.
-    '''
-    def __init__(self, rows:int, cols:int, ext_selection=True, parent=None):
+
+    def __init__(
+        self,
+        rows: int,
+        cols: int,
+        ext_sel: bool = True,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QTableWidget, adding extra convenient
+        parameters and better corner button behaviour.
 
         Parameters
         ----------
@@ -1686,20 +1770,20 @@ class StyledTable(QW.QTableWidget):
             Number of rows.
         cols : int
             Number of columns.
-        ext_selection : bool, optional
+        ext_sel : bool, optional
             If extended selection mode should be enabled. The default is True.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledTable, self).__init__(rows, cols, parent)
+        super().__init__(rows, cols, parent)
 
     # Set custom scroll bars
         self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
         self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
 
     # Set extended selection mode if requested
-        if ext_selection:
+        if ext_sel:
             self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
 
     # Customize corner button behaviour
@@ -1713,7 +1797,7 @@ class StyledTable(QW.QTableWidget):
         self.setStyleSheet(style.SS_MENU)
 
     
-    def onCornerButtonClicked(self):
+    def onCornerButtonClicked(self) -> None:
         '''
         Select all items when not all items are currently selected. Otherwise
         deselect them all.
@@ -1726,217 +1810,200 @@ class StyledTable(QW.QTableWidget):
             self.clearSelection()
 
 
+
 class StyledTabWidget(QW.QTabWidget):
-    '''
-    QSS-styled reimplementation of a QTabWidget. Includes a reimplementation of
-    the addTab function to always have a QWidget container for the tab. 
-    '''
-    def __init__(self, wheel_scroll=False, parent=None):
+
+    def __init__(
+        self,
+        wheel_scroll: bool = False,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        QSS-styled reimplementation of a QTabWidget, adding a reimplementation
+        of the 'addTab' method to always have a QWidget container for the tab.
 
         Parameters
         ----------
         wheel_scroll : bool, optional
             Whether mouse wheel event should allow to change current tab. The 
             default is False.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StyledTabWidget, self).__init__(parent)
+        super().__init__(parent)
 
+    # Set tabs unscrollable via mouse wheel if requested 
         if not wheel_scroll: 
             self.setTabBar(self.UnscrollableTabBar())
 
     # Set stylesheet
         self.setStyleSheet(style.SS_TABWIDGET)
 
-    def addTab(self, qobject: QC.QObject, icon: QG.QIcon|None=None, 
-               title: str|None=None):
+
+    def addTab(
+        self,
+        qobject: QW.QLayout | QW.QWidget,
+        icon: QG.QIcon | None = None,
+        title: str | None = None
+    ) -> None:
         '''
-        Reimplementation of the addTab function, useful to achive consistent 
+        Reimplementation of the 'addTab' method, useful to achive consistent 
         look of the tabwidget, no matter the type of widget is set as its tab.
 
         Parameters
         ----------
-        qobject : QObject
-            Layout or widget to be added as tab. 
-        icon : QG.QIcon | None, optional
+        qobject : QLayout or QWidget
+            A layout-like or widget-like object to be added as tab. 
+        icon : QIcon or None, optional
             Tab icon. The default is None.
-        title : str | None, optional
+        title : str or None, optional
             Tab name. The default is None.
 
+        Raises
+        ------
+        TypeError
+            Raised when qobject is not a QWidget or a QLayout.
+
         '''
+        # If qobject is a layout, tab is a QWidget with layout set to qobject
         if isinstance(qobject, QW.QLayout):
             tab = QW.QWidget()
             tab.setLayout(qobject)
 
-        elif layout := qobject.layout():
-            tab = qobject
-        
-        else:
-            tab = QW.QWidget()
-            layout = QW.QVBoxLayout(tab)
-            layout.addWidget(qobject)
+        # If qobject is a widget that contains a layout, tab is the qobject.
+        # If it does not contain a layout, tab is a QWidget, containing a
+        # QVBoxLayout, containing the qobject.
+        elif isinstance(qobject, QW.QWidget):
+            if qobject.layout():
+                tab = qobject
+            else:
+                tab = QW.QWidget()
+                layout = QW.QVBoxLayout(tab)
+                layout.addWidget(qobject)
 
-        if icon:
-            super(StyledTabWidget, self).addTab(tab, icon, title)
+        # Raise TypeError if qobject is neither a QWidget nor a QLayout
         else:
-            super(StyledTabWidget, self).addTab(tab, title)
+            raise TypeError(f'Invalid qobject type: {type(qobject)}.')
+
+
+        # Add the tab with or without an icon
+        if icon:
+            super().addTab(tab, icon, title)
+        else:
+            super().addTab(tab, title)
 
 
     class UnscrollableTabBar(QW.QTabBar):
-        def __init__(self, parent=None):
+
+        def __init__(self, parent: QW.QWidget | None = None) -> None:
+            '''
+            Dedicated reimplementation of a QTabBar for the StyledTabWidget.
+            It disables tab scrolling with mouse wheel.
+
+            Parameters
+            ----------
+            parent : QW.QWidget or None, optional
+                The GUI parent of this widget. The default is None.
+
+            '''
             super().__init__(parent)
 
 
-        def wheelEvent(self, event: QG.QWheelEvent):
+        def wheelEvent(self, event: QG.QWheelEvent) -> None:
             '''
             Reimplements the wheelEvent to ignore it.
 
             Parameters
             ----------
-            event : QG.QWheelEvent
+            event : QWheelEvent
                 The wheel mouse event.
 
             '''
             event.ignore()
 
 
-class StyledToolbar(QW.QToolBar):
-    '''
-    QSS-styled reimplementation of a QToolBar.
-    '''
-    def __init__(self, title='', parent=None):
-        '''
-        Constructor.
-
-        Parameters
-        ----------
-        title : str, optional
-            The name of the toolbar. The default is ''.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
-            
-        '''
-        super(StyledToolbar, self).__init__(title, parent)
-
-    # Set stylesheet
-        self.setStyleSheet(style.SS_TOOLBAR)
-
-
 
 class AutoUpdateComboBox(StyledComboBox):
-    '''
-    A reimplementation of a Styled ComboBox with a new QtSignal which triggers 
-    when the combo box button is clicked. This signal can be connected to a
-    custom method that allows to update the list of items in the combo box.
-    '''
+
     clicked = QC.pyqtSignal()
 
-    def __init__(self, parent=None, **kwargs):
+    def __init__(self, parent: QW.QWidget | None = None, **kwargs) -> None:
         '''
-        Constructor.
+        A reimplementation of a Styled ComboBox, adding a signal which triggers 
+        when the combo box button is clicked. This signal can be connected to a
+        custom method that allows to update the list of items in the combo box.
 
         Parameters
         ----------
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
         **kwargs
             Parent class arguments (see StyledComboBox class).
 
         '''
-        super(AutoUpdateComboBox, self).__init__(parent=parent, **kwargs)
-
-    def showPopup(self):
+        super().__init__(parent=parent, **kwargs)
+        
+    def showPopup(self) -> None:
         '''
         Reimplementation of the showPopup method. It just emits the new clicked
         signal.
 
         '''
         self.clicked.emit()
-        super(AutoUpdateComboBox, self).showPopup()
+        super().showPopup()
 
-    def updateItems(self, items: list):
+
+    def updateItems(self, items: list[str]) -> None:
         '''
         Populate the combo box with new items and delete the previous ones.
 
         Parameters
         ----------
-        items : list
-            List of new items (strings).
+        items : list[str]
+            List of new items.
+
         '''
         self.clear()
         self.addItems(items)
 
 
 
-class CBoxMapLayout(QW.QGridLayout): # deprecated! Use SampleMapsSelector instead
-    cboxPressed = QC.pyqtSignal()
-
-    def __init__(self, paths, parent=None):
-        super(CBoxMapLayout, self).__init__()
-        self.parent = parent
-
-        self.setColumnStretch(0, 1)
-        self.Cbox_list = []
-
-
-        for idx, pth in enumerate(paths):
-            cbox = QW.QCheckBox(cf.path2filename(pth))
-            cbox.setObjectName(str(idx))
-            cbox.setChecked(True)
-            cbox.pressed.connect(lambda: self.cboxPressed.emit())
-            self.Cbox_list.append(cbox)
-            rename_btn = IconButton('Icons/rename.png')
-            rename_btn.setObjectName(str(idx))
-            rename_btn.setFlat(True)
-            rename_btn.clicked.connect(self.rename)
-            self.addWidget(cbox, idx, 0)
-            self.addWidget(rename_btn, idx, 1)
-
-    def rename(self):
-        name, ok = QW.QInputDialog.getText(self.parent, 'Edit Name', 'Type name:',
-                                           flags=QC.Qt.MSWindowsFixedSizeDialogHint)
-        if ok and name != '':
-            idx = self.sender().objectName()
-            self.Cbox_list[int(idx)].setText(name)
-
-
-
 class RadioBtnLayout(QW.QBoxLayout):
-    '''
-    Convenient class to group multiple radio buttons in a single layout. It 
-    makes use of the QButtonGroup class to allow further useful methods to 
-    easily access each button.
-    '''
+
     selectionChanged = QC.pyqtSignal(int) # id of button
 
-    def __init__(self, names: list[str], icons: list[QG.QIcon]|None=None, 
-                 default=0, orient='vertical', parent=None):
+    def __init__(
+        self,
+        names: list[str],
+        icons: list[QG.QIcon] | None = None,
+        default: int = 0,
+        orient: str = 'vertical',
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        Convenient class to group multiple radio buttons in a single layout. It 
+        makes use of the QButtonGroup class to easily access each button.
 
         Parameters
         ----------
-        names : list
+        names : list[str]
             List of radio button names.
-        icons : list or None, optional
+        icons : list[QIcon] or None, optional
             List of button icons. Must be the same length of names. The default
             is None.
         default : int, optional
-            The radio button selected by default. The default is 0.
+            Id of the radio button selected by default. The default is 0.
         orient : str, optional
-            Orientation of the layout. Can be 'horizontal' or 'vertical'. The
-            default is 'vertical'.
-        parent : QObject or None, optional
-            The GUI parent of this object. The default is None.
+            Orientation of the layout. Can be 'horizontal' ('h') or 'vertical'
+            ('v'). The default is 'vertical'.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         Raises
         ------
         NameError
-            Orientation string must be one of ['horizontal', 'vertical'].
+            Orient must be one of ['horizontal', 'h', 'vertical', 'v'].
         ValueError
             If provided, icons list must have the same length of names list.
 
@@ -1945,19 +2012,20 @@ class RadioBtnLayout(QW.QBoxLayout):
         self._selected_id = default
 
     # Set the orientation of the layout
-        if orient == 'horizontal':
-            direction = QW.QBoxLayout.LeftToRight
-        elif orient == 'vertical':
-            direction = QW.QBoxLayout.TopToBottom
-        else:
-            raise NameError(f'{orient} is not a valid orientation.')
+        match orient:
+            case 'horizontal' | 'h':
+                direction = QW.QBoxLayout.LeftToRight
+            case 'vertical' | 'v':
+                direction = QW.QBoxLayout.TopToBottom
+            case _:
+                raise NameError(f'{orient} is not a valid orientation.')
         
     # Check for same length of names and icons (if provided) lists
         if icons is not None and len(names) != len(icons):
             raise ValueError('Icons and names list have different lengths.')
         
     # Set a QButtonGroup working behind the scene
-        super(RadioBtnLayout, self).__init__(direction, parent)
+        super().__init__(direction, parent)
         self.btn_group = QW.QButtonGroup()
 
     # Populate the layout with styled radio buttons. Connect each radio button
@@ -1973,7 +2041,7 @@ class RadioBtnLayout(QW.QBoxLayout):
             self.addWidget(btn)
 
 
-    def onSelect(self, id_:int):
+    def onSelect(self, id_: int) -> None:
         '''
         Send the selectionChanged signal if a new button has been selected.
 
@@ -1988,7 +2056,7 @@ class RadioBtnLayout(QW.QBoxLayout):
             self.selectionChanged.emit(id_)
 
 
-    def button(self, id_:int):
+    def button(self, id_: int) -> StyledRadioButton:
         '''
         Return the radio button with given id.
 
@@ -2000,26 +2068,28 @@ class RadioBtnLayout(QW.QBoxLayout):
         Returns
         -------
         btn : StyledRadioButton
-            The radio button object.
+            The radio button with id 'id_'.
 
         '''
         btn = self.btn_group.button(id_)
         return btn
 
-    def buttons(self):
+
+    def buttons(self) -> list[StyledRadioButton]:
         '''
         Return all radio buttons.
 
         Returns
         -------
-        btns: list
-            List of radio buttons.
+        btns: list[StyledRadioButton]
+            All radio buttons.
 
         '''
         btns = self.btn_group.buttons()
         return btns
 
-    def getChecked(self, as_id=False):
+
+    def getChecked(self, as_id: bool = False) -> StyledRadioButton | int:
         '''
         Return the checked radio button.
 
@@ -2031,8 +2101,8 @@ class RadioBtnLayout(QW.QBoxLayout):
 
         Returns
         -------
-        StyledRadioButton | int
-            The checked radio button object or id.
+        StyledRadioButton or int
+            The checked radio button object or its id.
 
         '''
         if as_id: 
@@ -2042,30 +2112,29 @@ class RadioBtnLayout(QW.QBoxLayout):
 
 
 
-class IconButton(StyledButton): # !!! deprecated, use StyledButton instead
-
-    def __init__(self, iconPath, text=None):
-        super(IconButton, self).__init__(QG.QIcon(iconPath), text)
-
-
-
 class GroupArea(QW.QGroupBox):
-    '''
-    A convenient class to easily wrap a layout or a widget in a QGroupBox.
-    '''
-    def __init__(self, qobject, title=None, checkable=False, tight=False,
-                 frame=True, align=QC.Qt.AlignHCenter, parent=None):
+
+    def __init__(
+        self,
+        qobject: QW.QLayout | QW.QWidget,
+        title: str | None = None,
+        checkable: bool = False,
+        tight: bool = False,
+        frame: bool = True,
+        align: QC.Qt.Alignment = QC.Qt.AlignHCenter,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A convenient class to easily wrap a layout or a widget in a QGroupBox.
 
         Parameters
         ----------
-        qobject : QObject
+        qobject : QLayout or QWidget
             A layout-like or a widget-like object.
-        title : str | None, optional
-            The title of the wrapping group box. The default is None.
+        title : str or None, optional
+            The title of the group box. The default is None.
         checkable : bool, optional
-            Whether the wrapping group box is checkable. The default is False.
+            Whether the group box is checkable. The default is False.
         tight : bool, optional
             Whether the layout of the group box should take all the available 
             space. The default is False.
@@ -2075,77 +2144,100 @@ class GroupArea(QW.QGroupBox):
         align : Qt.Alignment, optional
             The alignment of the title. Can be Qt.AlignLeft, Qt.AlignRight or
             Qt.AlignHCenter. The default is Qt.AlignHCenter.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
+
+        Raises
+        ------
+        TypeError
+            Raised if an invalid "qobject" argument is passed.
+        ValueError
+            Raised if an invalid "align" argument is passed.
 
         '''
     # Set the title of the group box. Change the style-sheet depending on title
     # orientation.
         if title:
-            super(GroupArea, self).__init__(title, parent)
-            align_css = {QC.Qt.AlignLeft: 'top left',
-                         QC.Qt.AlignRight: 'top right',
-                         QC.Qt.AlignHCenter: 'top center'}
-            title_align_ss = ('QGroupBox::title {subcontrol-position: %s;}' 
-                              %(align_css[align]))
-            self.setStyleSheet(style.SS_GROUPAREA_TITLE + title_align_ss)
+            super().__init__(title, parent)
+
+            match align:
+                case QC.Qt.AlignLeft:
+                    align_css = 'top left'
+                case QC.Qt.AlignRight:
+                    align_css = 'top right'
+                case QC.Qt.AlignHCenter:
+                    align_css = 'top center'
+                case _:
+                    valid = ("Qt.AlignLeft", "Qt.AlignRight", "Qt.AlignHCenter")
+                    raise ValueError(f'Invalid "align": {align}. Only use {valid}.')
+
+            title_ss = ('QGroupBox::title {subcontrol-position: %s;}' %(align_css))
+            self.setStyleSheet(style.SS_GROUPAREA_TITLE + title_ss)
+        
         else:
-            super(GroupArea, self).__init__(parent)
+            super().__init__(parent)
             ss = style.SS_GROUPAREA_NOTITLE
             if not frame:
-                ss = ss + 'QGroupBox {border-width: 0px;}' 
+                ss += 'QGroupBox {border-width: 0px;}' 
             self.setStyleSheet(ss)
 
     # Set if the group box is checkable or not
         self.setCheckable(checkable)
 
-    # If the qobject is not a layout, wrap it into a layout box
+    # If the qobject is a widget, wrap it into a layout box
         if isinstance(qobject, QW.QLayout):
-            LayoutBox = qobject
-        else:
-            LayoutBox = QW.QBoxLayout(QW.QBoxLayout.TopToBottom)
-            LayoutBox.addWidget(qobject)
+            layout_box = qobject
+
+        elif isinstance(qobject, QW.QWidget):  
+            layout_box = QW.QBoxLayout(QW.QBoxLayout.TopToBottom)
+            layout_box.addWidget(qobject)
+        
+        else: # raise error for invalid qobject
+            raise TypeError(f'Invalid "qobject" type: {type(qobject)}.')
 
     # Set a tight layout if required
         if tight:
-            LayoutBox.setContentsMargins(0, 0, 0, 0)
+            layout_box.setContentsMargins(0, 0, 0, 0)
     
     # Wrap the qobject in the group box
-        self.setLayout(LayoutBox)
+        self.setLayout(layout_box)
 
 
 
 class CollapsibleArea(QW.QWidget):
-    '''
-    A convenient solution to expand/collapse an entire section of the GUI. It
-    includes an arrow button to switch from expanded to collapsed view.
-    '''
-    def __init__(self, qobject: QC.QObject, title: str, collapsed=True, 
-                 parent=None):
+
+    def __init__(
+        self,
+        qobject: QW.QLayout | QW.QWidget,
+        title: str,
+        collapsed: bool = True,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A convenient widget to expand/collapse an entire section of the GUI. It
+        includes an arrow button to switch from expanded to collapsed view.
 
         Parameters
         ----------
-        qobject : QObject
+        qobject : QLayout or QWidget
             A layout-like or a widget-like object.
         title : str
             The title of the section.
         collapsed : bool, optional
             Whether the section should be collapsed by default. The default is 
             True.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(CollapsibleArea, self).__init__(parent)
+        super().__init__(parent)
 
     # Set private attributes
         self._collapsed = collapsed
         self._section = qobject
         self._title = title
 
-    # Initialize the UI and connect signals to slots
+    # Initialize GUI and connect its signals to slots
         self._init_ui()
         self._connect_slots()
 
@@ -2155,26 +2247,26 @@ class CollapsibleArea(QW.QWidget):
             self.arrow.setArrowType(QC.Qt.RightArrow)
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
-    # Arrow button (QToolButton)
+    # Arrow button (Tool Button)
         self.arrow = QW.QToolButton()
         self.arrow.setStyleSheet(style.SS_TOOLBUTTON)
         self.arrow.setArrowType(QC.Qt.DownArrow)
         
-    # Section title (QLabel)
+    # Section title (Label)
         self.title = QW.QLabel(self._title)
         font = self.title.font()
         font.setBold(True)
         self.title.setFont(font)
 
-    # Section area (GroupArea)
+    # Section area (Group Area)
         self.area = GroupArea(self._section)
 
-    # Expand/Collapse animation (QPropertyAnimation)
+    # Expand/Collapse animation (Property Animation)
         self.animation = QC.QPropertyAnimation(self.area, b'maximumHeight')
         self.animation.setDuration(90)
 
@@ -2183,13 +2275,13 @@ class CollapsibleArea(QW.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.arrow, 0, 0)
         layout.addWidget(self.title, 0, 1)
-        layout.addWidget(LineSeparator(lw=2), 0, 2)
+        layout.addWidget(LineSeparator(), 0, 2)
         layout.addWidget(self.area, 1, 0, 1, -1)
         layout.setColumnStretch(2, 1)
         self.setLayout(layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -2198,7 +2290,7 @@ class CollapsibleArea(QW.QWidget):
         self.arrow.clicked.connect(self.onArrowClicked) 
 
 
-    def collapsed(self):
+    def collapsed(self) -> bool:
         '''
         Check if the section is currently collapsed or not.
 
@@ -2211,7 +2303,7 @@ class CollapsibleArea(QW.QWidget):
         return self._collapsed
     
 
-    def onArrowClicked(self):
+    def onArrowClicked(self) -> None:
         '''
         Slot connected to the button clicked signal from the arrow button. It 
         determines which action should be performed based on the current state
@@ -2221,7 +2313,7 @@ class CollapsibleArea(QW.QWidget):
         self.expand() if self.collapsed() else self.collapse()
 
 
-    def collapse(self):
+    def collapse(self) -> None:
         '''
         Collapse the section and change the arrow type.
 
@@ -2233,7 +2325,7 @@ class CollapsibleArea(QW.QWidget):
         self.animation.start()
 
     
-    def expand(self):
+    def expand(self) -> None:
         '''
         Expand the section and change the arrow type.
 
@@ -2247,37 +2339,47 @@ class CollapsibleArea(QW.QWidget):
 
 
 class GroupScrollArea(QW.QScrollArea):
-    '''
-    A convenient class to easily wrap a layout or a widget in a QScrollArea.
-    '''
-    def __init__(self, qobject, title=None, hscroll=True, vscroll=True, 
-                 tight=False, frame=True, parent=None):
+
+    def __init__(
+        self,
+        qobject: QW.QLayout | QW.QWidget,
+        title: str | None = None,
+        hscroll: bool = True,
+        vscroll: bool = True,
+        tight: bool = False,
+        frame: bool = True,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A convenient class to easily wrap a layout or a widget in a QScrollArea.
 
         Parameters
         ----------
-        qobject : QObject
+        qobject : QLayout or QWidget
             A layout-like or a widget-like object.
-        title : str | None, optional
+        title : str or None, optional
             If set, the qobject will be also wrapped in a GroupArea that shows
-            this title. However, this paremeter is ignored if the qobject is 
-            not a layout-like object. The default is None.
+            this title. Ignored if qobject is a widget. The default is None.
         hscroll : bool, optional
             Whether the horizontal scrollbar is shown. The default is True.
         vscroll : bool, optional
             Whether the vertical scrollbar is shown. The default is True.
         tight : bool, optional
             Whether the layout of the scroll area should take all the available 
-            space. It is ignored if qObject is a widget. The default is False.
+            space. Ignored if qobject is a widget. The default is False.
         frame : bool, optional
             Whether the scroll area should have a visible frame. The default is
             True.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
+
+        Raises
+        ------
+        TypeError
+            Raised if an invalid "qobject" argument is passed.
 
         '''
-        super(GroupScrollArea, self).__init__(parent)
+        super().__init__(parent)
 
     # Set the stylesheet
         if frame:
@@ -2296,13 +2398,18 @@ class GroupScrollArea(QW.QScrollArea):
     # If the qobject is a layout, wrap it into a QWidget or a GroupArea 
         if isinstance(qobject, QW.QLayout):
             if title is None:
-                if tight: qobject.setContentsMargins(0, 0, 0, 0)
+                if tight:
+                    qobject.setContentsMargins(0, 0, 0, 0)
                 wid = QW.QWidget()
                 wid.setLayout(qobject)
             else:
                 wid = GroupArea(qobject, title, tight=tight)
-        else:
+        
+        elif isinstance(qobject, QW.QWidget):
             wid = qobject
+
+        else: # raise error if qobject is invalid
+            raise TypeError(f'Invalid "qobject" of type {type(qobject)}.')
 
     # Wrap the qobject in the scroll bar.
         self.setWidget(wid)
@@ -2311,20 +2418,22 @@ class GroupScrollArea(QW.QScrollArea):
 
 
 class SplitterLayout(QW.QBoxLayout):
-    '''
-    A ready to use layout box that comes with pre-coded splitters dividing each
-    inserted wdget.
-    '''
-    def __init__(self, orient=QC.Qt.Horizontal, parent=None):
+
+    def __init__(
+        self,
+        orient: QC.Qt.Orientation = QC.Qt.Horizontal,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A ready to use layout box that comes with pre-coded splitters dividing
+        each inserted wdget.
 
         Parameters
         ----------
         orient : Qt.Orientation, optional
             The orientation of the latout. The default is Qt.Horizontal.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this layout. The default is None.
 
         '''
     # Set the orientation of the layout box
@@ -2334,17 +2443,17 @@ class SplitterLayout(QW.QBoxLayout):
             direction = QW.QBoxLayout.TopToBottom
 
     # Initialize the layout box and add a splitter to it. Here we are using the
-    # super function addWidget to add the splitter, because such function has
-    # been reimplemented (see below methods) and calling it would determine an
+    # super method 'addWidget' to add the splitter, because such method has
+    # been reimplemented (see below methods), and calling it would determine an
     # infinite loop where the app tries to insert the splitter inside itself.
-        super(SplitterLayout, self).__init__(direction, parent)
+        super().__init__(direction, parent)
         self.splitter = QW.QSplitter(orient)
         self.splitter.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
         self.splitter.setStyleSheet(style.SS_SPLITTER)
-        super(SplitterLayout, self).addWidget(self.splitter)
+        super().addWidget(self.splitter)
 
 
-    def insertLayout(self, layout: QW.QLayout, index: int, stretch=0):
+    def insertLayout(self, layout: QW.QLayout, index: int, stretch: int = 0) -> None:
         '''
         Insert a layout at a given index. If index is invalid, the layout is
         inserted at the end.
@@ -2364,7 +2473,7 @@ class SplitterLayout(QW.QBoxLayout):
         self.insertWidget(wid, index, stretch)
 
 
-    def addLayout(self, layout: QW.QLayout, stretch=0):
+    def addLayout(self, layout: QW.QLayout, stretch: int = 0) -> None:
         '''
         Add a layout after all the other items.
 
@@ -2379,8 +2488,11 @@ class SplitterLayout(QW.QBoxLayout):
         self.insertLayout(layout, -1, stretch)
 
 
-    def addLayouts(self, layouts: list[QW.QLayout], 
-                   stretches: list[int]|None=None):
+    def addLayouts(
+        self,
+        layouts: list[QW.QLayout],
+        stretches: list[int] | None = None
+    ) -> None:
         '''
         Add multiple layouts after all the other items. 
 
@@ -2408,7 +2520,7 @@ class SplitterLayout(QW.QBoxLayout):
             self.addLayout(l, s)
 
 
-    def insertWidget(self, widget: QW.QWidget, index: int, stretch=0):
+    def insertWidget(self, widget: QW.QWidget, index: int, stretch: int = 0) -> None:
         '''
         Insert a widget at a given index. If index is invalid, the widget is
         inserted at the end.
@@ -2427,7 +2539,7 @@ class SplitterLayout(QW.QBoxLayout):
         self.splitter.setStretchFactor(index, stretch)
 
 
-    def addWidget(self, widget: QW.QWidget, stretch=0):
+    def addWidget(self, widget: QW.QWidget, stretch: int = 0) -> None:
         '''
         Add a widget after all the other items.
 
@@ -2442,8 +2554,11 @@ class SplitterLayout(QW.QBoxLayout):
         self.insertWidget(widget, -1, stretch)
 
 
-    def addWidgets(self, widgets: list[QW.QWidget], 
-                   stretches: list[int]|None=None):
+    def addWidgets(
+        self,
+        widgets: list[QW.QWidget], 
+        stretches: list[int] | None = None
+    ) -> None:
         '''
         Add multiple widgets after all the other items. 
 
@@ -2473,19 +2588,21 @@ class SplitterLayout(QW.QBoxLayout):
 
 
 class SplitterGroup(QW.QSplitter):
-    '''
-    Convenient class to quickly group multiple widgets in a QSplitter.
-    '''
-    def __init__(self, qobjects: list[QC.QObject]|None=None, 
-                 stretches: list[int]|None=None, orient=QC.Qt.Horizontal):
+
+    def __init__(
+        self,
+        qobjects: list[QW.QLayout | QW.QWidget] | None = None, 
+        stretches: list[int] | None = None,
+        orient: QC.Qt.Orientation = QC.Qt.Horizontal
+    ) -> None:
         '''
-        Constructor
+        A convenient class to quickly group multiple widgets in a QSplitter.
 
         Parameters
         ----------
-        qobjects : list[QObject] or None, optional
-            List of layouts or widgets. If None the list will be empty. The 
-            default is None.
+        qobjects : list[QLayout or QWidget] or None, optional
+            List of layout-like or widget-like objects. If None, the list will 
+            be passed as empty. The default is None.
         stretches : list[int] or None, optional
             List of stretches for each object. Must have the same size of  
             qobjects. If None, stretches are not set. The default is None.
@@ -2494,13 +2611,15 @@ class SplitterGroup(QW.QSplitter):
 
         Raises
         ------
+        TypeError
+            Raised if an invalid object is passed in the "qobjects" argument.
         AssertionError
             Objects and stretches must have the same size.
 
         '''
     # Use super class to create the oriented splitter and set its stylesheet
         self.orient = orient
-        super(SplitterGroup, self).__init__(self.orient)
+        super().__init__(self.orient)
         self.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
         self.setStyleSheet(style.SS_SPLITTER)
 
@@ -2508,13 +2627,18 @@ class SplitterGroup(QW.QSplitter):
     # in a QWidget
         if qobjects is None:
             qobjects = []
+
         for obj in qobjects:
-            if not obj.isWidgetType():
+            if isinstance(obj, QW.QLayout):
                 w_obj = QW.QWidget()
                 w_obj.setLayout(obj)
                 self.addWidget(w_obj)
-            else:
+
+            elif isinstance(obj, QW.QWidget):
                 self.addWidget(obj)
+            
+            else: # raise error if object is invalid
+                raise TypeError(f'Invalid object type in "qobjects": {type(obj)}')
 
     # Add stretches to each object
         if stretches is not None:
@@ -2523,9 +2647,14 @@ class SplitterGroup(QW.QSplitter):
                 self.setStretchFactor(i, s)
 
 
-    def addStretchedWidget(self, widget: QW.QWidget, stretch: int, idx=-1):
+    def addStretchedWidget(
+        self,
+        widget: QW.QWidget,
+        stretch: int,
+        idx: int = -1
+    ) -> None:
         '''
-        Convenient function to add a widget to the splitter with given stretch.
+        Convenient method to add a widget to the splitter with given stretch.
         If an index is provided, the insertion position can be choosen.
 
         Parameters
@@ -2545,25 +2674,22 @@ class SplitterGroup(QW.QSplitter):
 
 
 class FramedLabel(QW.QLabel):
-    '''
-    A label decorated with a squared frame. Its text is user-selectable and its
-    size policy is fixed to avoid visual glitches when using monitors with
-    different resolutions.
-    '''
 
-    def __init__(self, text='', parent: QC.QObject|None=None):
+    def __init__(self, text: str = '', parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A label decorated with a squared frame. Its text is user-selectable and
+        its size policy is fixed to avoid visual glitches when using monitor
+        with different resolutions.
 
         Parameters
         ----------
         text : str, optional
             Label text. The default is ''.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(FramedLabel, self).__init__(text, parent)
+        super().__init__(text, parent)
     
     # Set widget attributes
         self.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
@@ -2573,13 +2699,13 @@ class FramedLabel(QW.QLabel):
         self.setStyleSheet(style.SS_MENU + 'QLabel {border: 1px solid black;}')
 
 
-    def setFrameColor(self, color: str|tuple[int]):
+    def setFrameColor(self, color: str | tuple[int, int, int]) -> None:
         '''
         Change the color of the label frame.
 
         Parameters
         ----------
-        color : str | tuple[int]
+        color : str or tuple[int, int, int]
             Color as HEX string or RGB triplet.
 
         '''
@@ -2591,7 +2717,7 @@ class FramedLabel(QW.QLabel):
         self.setStyleSheet(self.styleSheet() + ss)
 
 
-    def setFrameWidth(self, width: int):
+    def setFrameWidth(self, width: int) -> None:
         '''
         Change the width of the label frame.
 
@@ -2607,32 +2733,36 @@ class FramedLabel(QW.QLabel):
 
 
 class PathLabel(FramedLabel):
-    '''
-    A special type of FramedLabel that allow easy management and display of 
-    file paths.
-    '''
-    def __init__(self, fullpath='', full_display=True, elide=True,
-                 placeholder='', parent: QC.QObject|None=None):
+
+    def __init__(
+        self,
+        fullpath: str = '',
+        full_display: bool = True,
+        elide: bool = True,
+        placeholder: str = '',
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A special type of FramedLabel which allows easy management and display
+        of file paths.
 
         Parameters
         ----------
         fullpath : str, optional
             The full filepath. The default is ''.
         full_display : bool, optional
-            Whether the label should display the full filepath or just the file
-            name. The default is True.
+            Whether the label should display the full filepath. If False, just
+            the file name is displayed instead. The default is True.
         elide : bool, optional
             Whether the label should automatically wrap long text. The default 
             is True.
         placeholder : str, optional
-            Text to be set when the label is cleared. The default is ''.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+            Text to be displayed when the label is cleared. The default is ''.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(PathLabel, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
     # Set main attributes
         self.fullpath = fullpath
@@ -2651,9 +2781,9 @@ class PathLabel(FramedLabel):
 
 
     @property
-    def _displayedText(self):
+    def _displayedText(self) -> str:
         '''
-        Internal function that returns the string that should be displayed.
+        Internal method that returns the string that should be displayed.
 
         Returns
         -------
@@ -2670,7 +2800,7 @@ class PathLabel(FramedLabel):
         return text
 
 
-    def display(self):
+    def display(self) -> None:
         '''
         Display the filepath in the QLabel.
 
@@ -2680,7 +2810,7 @@ class PathLabel(FramedLabel):
         self.setToolTip(self.fullpath)
 
 
-    def setTextElided(self, text: str):
+    def setTextElided(self, text: str) -> None:
         '''
         Wrap long text.
 
@@ -2691,18 +2821,19 @@ class PathLabel(FramedLabel):
 
         '''
         metrics = self.fontMetrics()
-        elided = metrics.elidedText(text, QC.Qt.ElideRight, self.width()-2)
+        elided = metrics.elidedText(text, QC.Qt.ElideRight, self.width() - 2)
         self.setText(elided)
 
 
-    def setPath(self, path: str|None, auto_display=True):
+    def setPath(self, path: str | None, auto_display: bool = True) -> None:
         '''
         Set a new filepath.
 
         Parameters
         ----------
-        path : str | None
-            The new filepath.
+        path : str or None
+            The new filepath. If None, the text "*Path not found" will be
+            displayed.
         auto_display : bool, optional
             Whether the new filepath should also be automatically displayed. 
             The default is True.
@@ -2713,22 +2844,24 @@ class PathLabel(FramedLabel):
         if auto_display: self.display()
 
 
-    def clearPath(self):
+    def clearPath(self) -> None:
         '''
         Remove the current filepath.
+
         '''
         self.setText(self.placeholder)
         self.fullpath = ''
         self.setToolTip('')
 
-    def resizeEvent(self, event):
+
+    def resizeEvent(self, event: QG.QResizeEvent):
         '''
-        Reimplementation of the resizeEvent function. If text wrapping is 
+        Reimplementation of the 'resizeEvent' method. If text wrapping is 
         enabled, allows the label to elide the text adapting it to new size.
 
         Parameters
         ----------
-        event : QEvent
+        event : QResizeEvent
             The resize event.
 
         '''
@@ -2738,10 +2871,133 @@ class PathLabel(FramedLabel):
 
 
 
+class DescriptiveProgressBar(QW.QWidget):
+
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
+        '''
+        A progress bar that shows a description of the current process.
+
+        Parameters
+        ----------
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
+
+        '''
+        super().__init__(parent)
+
+    # Description label (Label)
+        self.desc = QW.QLabel()
+        self.desc.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
+
+    # Progress bar (Progress Bar)
+        self.pbar = QW.QProgressBar()
+    
+    # Adjust main layout
+        layout = QW.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.desc, alignment=QC.Qt.AlignCenter)
+        layout.addWidget(self.pbar)
+        self.setLayout(layout)
+
+
+    def setMinimum(self, minimum: int) -> None:
+        '''
+        Set minimum progress bar value.
+
+        Parameters
+        ----------
+        minimum : int
+            Minimum value.
+
+        '''
+        self.pbar.setMinimum(minimum)
+
+
+    def setMaximum(self, maximum: int) -> None:
+        '''
+        Set maximum progress bar value.
+
+        Parameters
+        ----------
+        maximum : int
+            Maximum value.
+
+        '''
+        self.pbar.setMaximum(maximum)
+
+
+    def setRange(self, minimum: int, maximum: int) -> None:
+        '''
+        Set progress bar range.
+
+        Parameters
+        ----------
+        minimum : int
+            Minimum value.
+        maximum : int
+            Maximum value
+
+        '''
+        self.pbar.setRange(minimum, maximum)
+
+
+    def setUndetermined(self) -> None:
+        '''
+        Set the prograss bar in an undetermined state.
+
+        '''
+        self.pbar.setRange(0, 0)
+
+
+    def undetermined(self) -> bool:
+        '''
+        Check if the progress bar is in an undetermined state.
+
+        Returns
+        -------
+        undet : bool
+            Progress bar has undetermined state.
+
+        '''
+        undet = self.pbar.minimum() == self.pbar.maximum() == 0
+        return undet
+
+
+    def step(self, step_description: str) -> None:
+        '''
+        Increase progress bar by one step and set a new step description. If 
+        progress bar is in an undetermined state, just set the description.
+
+        Parameters
+        ----------
+        step_description : str
+            New step description.
+
+        '''
+        self.desc.setText(step_description)
+        if not self.undetermined():
+            self.pbar.setValue(self.pbar.value() + 1)
+
+
+    def reset(self) -> None:
+        '''
+        Reset the progress bar.
+
+        '''
+        self.desc.clear()
+        self.pbar.reset()
+
+
+
 class PopUpProgBar(QW.QProgressDialog):
 
-    def __init__(self, parent: QW.QWidget|None, n_iter: int, label='', 
-                 autoDelete=True):
+    def __init__(
+        self,
+        parent: QW.QWidget | None,
+        n_iter: int,
+        label: str = '',
+        auto_delete: bool = True
+    ) -> None:
         '''
         A customized modal progress bar dialog, that automatically shows and 
         hides itself. Ideal for quick, non-threaded operations. 
@@ -2749,14 +3005,14 @@ class PopUpProgBar(QW.QProgressDialog):
         Parameters
         ----------
         parent : QWidget or None
-            The GUI parent of this object. If not None, the dialog will popup
+            The GUI parent of this widget. If not None, the dialog will popup
             centered with it.
         n_iter : int
             Total number of operations to be performed. It is set as the upper
             range value of the progress bar.
         label : str, optional
             The text label to show in the dialog. The default is ''.
-        autoDelete : bool, optional
+        auto_delete : bool, optional
             Whether the dialog should be deleted after it has been hidden. The
             default is True.
 
@@ -2766,7 +3022,7 @@ class PopUpProgBar(QW.QProgressDialog):
         super().__init__(label, None, 0, n_iter, parent, flags=flags)
 
     # Set attributes
-        self.autoDelete=autoDelete
+        self.auto_delete = auto_delete
     
     # Set widget properties
         self.setMinimumDuration(0)
@@ -2775,17 +3031,17 @@ class PopUpProgBar(QW.QProgressDialog):
         self.setWindowTitle('Please wait...')
 
 
-    def increase(self):
+    def increase(self) -> None:
         '''
-        Convenient function to increase the value of the progress bar by one.
+        Convenient method to increase the value of the progress bar by one.
 
         '''
         self.setValue(self.value() + 1)
 
 
-    def hideEvent(self, event: QG.QHideEvent):
+    def hideEvent(self, event: QG.QHideEvent) -> None:
         '''
-        Reimplementation of the default 'hideEvent' method. If 'autoDelete' is
+        Reimplementation of the default 'hideEvent' method. If 'auto_delete' is
         True, this requests the destruction of the progress dialog immediately 
         after it is hidden.
 
@@ -2796,22 +3052,23 @@ class PopUpProgBar(QW.QProgressDialog):
 
         '''
         event.accept()
-        if self.autoDelete:
+        if self.auto_delete:
             self.deleteLater()
 
 
-    def reject(self):
+    def reject(self) -> None:
         '''
         We do not support the PopUpProgBar dialog being rejected via default 
         triggers such as pressing the ESC key or clicking the 'X' button. Thus,
         we reimplement the default 'reject' method so that it returns nothing.
+
         '''
         return
 
 
 class PulsePopUpProgBar(PopUpProgBar):
 
-    def __init__(self, parent:QW.QWidget|None, **kwargs):
+    def __init__(self, parent: QW.QWidget | None, **kwargs) -> None:
         '''
         Special variant of the PopUpProgBar class, that shows a progress dialog
         with undetermined state (a.k.a. pulse progress bar). Ideal when dealing
@@ -2820,7 +3077,7 @@ class PulsePopUpProgBar(PopUpProgBar):
         Parameters
         ----------
         parent : QWidget or None
-            The GUI parent of this object. If not None, the dialog will popup
+            The GUI parent of this widget. If not None, the dialog will popup
             centered with it.
         
         **kwargs
@@ -2831,7 +3088,7 @@ class PulsePopUpProgBar(PopUpProgBar):
         self.setAutoReset(False)
 
 
-    def startPulse(self):
+    def startPulse(self) -> None:
         '''
         Start pulsing the progress bar.
 
@@ -2840,7 +3097,7 @@ class PulsePopUpProgBar(PopUpProgBar):
         self.setRange(0, 0)
 
 
-    def stopPulse(self):
+    def stopPulse(self) -> None:
         '''
         Stop pulsing and reset the progress bar.
 
@@ -2850,283 +3107,66 @@ class PulsePopUpProgBar(PopUpProgBar):
 
 
 class DecimalPointSelector(StyledComboBox):
-    '''
-    Convenient reimplementation of a styled combo box that allows the selection
-    of the decimal point selector based on the local system settings.
-    '''
 
-    def __init__(self):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        Convenient reimplementation of a Styled Combo Box, that allows the
+        selection of the decimal point character.
+
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(DecimalPointSelector, self).__init__()
-        local_decimal_point = QC.QLocale().decimalPoint()
+        super().__init__(parent=parent)
         self.addItems(['.', ','])
-        self.setCurrentText(local_decimal_point)
+        self.setCurrentText(QC.QLocale().decimalPoint())
 
 
 
 class SeparatorSymbolSelector(StyledComboBox):
-    '''
-    Convenient reimplementation of a styled combo box that allows the selection
-    of the separator symbol based on the local system settings.
-    '''
 
-    def __init__(self):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        Convenient reimplementation of a Styled Combo Box, that allows the
+        selection of the CSV separator character.
+
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(SeparatorSymbolSelector, self).__init__()
+        super().__init__(parent=parent)
         local_separator = ',' if QC.QLocale().decimalPoint() == '.' else ';'
         self.addItems([',', ';'])
         self.setCurrentText(local_separator)
 
 
 
-# class CsvChunkReader(): # deprecated. Moved to dataset_tools
-#     '''
-#     Ready to use class for reading large CSV files in chunks for better
-#     performance.
-#     '''
-#     def __init__(self, dec: str, sep: str|None=None, chunksize=2**20//8, 
-#                  pBar=False):
-#         '''
-#         Constructor.
-
-#         Parameters
-#         ----------
-#         dec : str
-#             Decimal point symbol.
-#         sep : str | None, optional
-#             Separator symbol. If None it is inferred. The default is None.
-#         chunksize : int, optional
-#             Dimension of the reading batch. The default is 2**20//8.
-#         pBar : bool, optional
-#             Whether a popup progress bar should be displayed during the reading
-#             operation. The default is False.
-
-#         '''
-#     # Set main attributes
-#         self.dec = dec
-#         self.sep = sep
-#         self.chunksize = chunksize
-#         self.pBar = pBar
-
-
-#     def read(self, filepath: str):
-#         '''
-#         Read the CSV file and return a pandas dataframe.
-
-#         Parameters
-#         ----------
-#         filepath : str 
-#             The CSV filepath.
-
-#         Returns
-#         -------
-#         dataframe : Dataframe
-#             Pandas Dataframe.
-#         '''
-#     # Set the popup progress bar if required
-#         if self.pBar:
-#             with open(filepath) as temp:
-#                 nChunks = sum(1 for _ in temp) // self.chunksize
-#             progBar = PopUpProgBar(None, nChunks + 1, 'Loading Dataset', 
-#                                    cancel=False)
-
-#     # Read the CSV
-#         chunkList = []
-#         with pd.read_csv(filepath, decimal=self.dec, sep=self.sep, 
-#                          engine='python', chunksize=self.chunksize) as reader:
-#             for n, chunk in enumerate(reader):
-#                 chunkList.append(chunk)
-#                 if self.pBar: progBar.setValue(n)
-
-#     # Compile and return the pandas Dataframe
-#         dataframe = pd.concat(chunkList)
-#         if self.pBar: 
-#             progBar.setValue(nChunks + 1)
-#         return dataframe
-
-
-# class KernelSelector(QW.QWidget): # deprecated. Now included within the Phase Refiner tool
-
-#     structureChanged = QC.pyqtSignal()
-
-#     def __init__(self, rank=2, parent=None):
-#         super(KernelSelector, self).__init__()
-#         self.rank=rank
-
-#         # Shapes -> Square: 0, Circle: 1, Rhombus: 2
-#         self.shape = 0
-#         # self.sq_connect = True
-#         self.iter = 1
-
-#         self.structure = None
-#         self.build_defaultStructure()
-
-#         self.init_ui()
-
-#     def init_ui(self):
-#     # Kernel structure representation
-#         self.grid = QW.QGridLayout()
-#         self.build_grid()
-#         grid_box = GroupArea(self.grid)
-#         grid_box.setStyleSheet('''border: 2 solid black;
-#                                   padding-top: 0px;''')
-
-#     # # Square connectivity checkbox
-#     #     self.connect_cbox = QW.QCheckBox('Square Connectivity')
-#     #     self.connect_cbox.setChecked(self.sq_connect)
-#     #     self.connect_cbox.stateChanged.connect(self.set_connectivity)
-
-#     # Default kernel shapes radio buttons group
-#         self.kernelShapes_btns = RadioBtnLayout(('Square', 'Circle', 'Rhombus'),
-#                                                 orient='horizontal')
-#         self.kernelShapes_btns.selectionChanged.connect(self.set_shape)
-
-#     # Kernel size slider selector
-#         self.kernelSize_slider = QW.QSlider(QC.Qt.Horizontal)
-#         self.kernelSize_slider.setMinimum(1)
-#         self.kernelSize_slider.setMaximum(5)
-#         self.kernelSize_slider.setSingleStep(1)
-#         self.kernelSize_slider.setSliderPosition(self.iter)
-#         self.kernelSize_slider.valueChanged.connect(self.set_iterations)
-#         kernelSize_form = QW.QFormLayout()
-#         kernelSize_form.addRow('Kernel size', self.kernelSize_slider)
-
-#     # Adjust main layout
-#         mainLayout = QW.QVBoxLayout()
-#         mainLayout.addWidget(grid_box, alignment=QC.Qt.AlignCenter)
-#         # mainLayout.addWidget(self.connect_cbox)
-#         mainLayout.addLayout(self.kernelShapes_btns)
-#         mainLayout.addLayout(kernelSize_form)
-#         self.setLayout(mainLayout)
-
-#     def get_structure(self):
-#         return self.structure
-
-#     def updateKernel(self):
-#         self.build_defaultStructure()
-#         self.build_grid()
-#         self.structureChanged.emit()
-
-#     def build_defaultStructure(self):
-#         # Connectivity (conn) allows to build only rhombic (1) or squared (2) structures
-#         conn = 1 if self.shape == 2 else 2
-#         struct = scipy.ndimage.generate_binary_structure(self.rank, conn)
-#         struct = scipy.ndimage.iterate_structure(struct, self.iter)
-#         # If a circle (self.shape=1) was required, transform the squared structure into circular
-#         if self.shape == 1:
-#             struct = self._drawCircleStructure(struct)
-#         self.structure = struct
-
-#     def _drawCircleStructure(self, baseStructure):
-#         # J is the number of rows/cols of base (square) structure
-#         J = baseStructure.shape[0]
-#         # Compute the Euclidean distance from center (x=J//2; y=J//2)
-#         Y, X = np.ogrid[:J, :J]
-#         dist = np.sqrt((X - J//2)**2 + (Y - J//2)**2)
-#         # Return the circle mask
-#         return dist <= J/2 # J/2 = radius (in float type)
-
-#     def set_shape(self, idx):
-#         self.shape = idx
-#         self.updateKernel()
-
-#     # def set_connectivity(self, isSquared):
-#     #     self.sq_connect = isSquared
-#     #     self.updateKernel()
-
-#     def set_iterations(self, value):
-#         self.iter = value
-#         self.updateKernel()
-
-#     def _clear_grid(self, grid):
-#         for i in reversed(range(grid.count())):
-#             grid.itemAt(i).widget().setParent(None)
-
-#     def draw_node(self, active):
-#         img = QG.QImage(8, 8, QG.QImage.Format_RGB32)
-#         rgb = (255,0,0) if active else (0,0,0)
-#         img.fill(QG.QColor(*rgb))
-#         node = QG.QPixmap.fromImage(img)
-#         return node
-
-#     def build_grid(self):
-#         self._clear_grid(self.grid)
-#         radius = self.structure.shape[0]
-#         for row in range(radius):
-#             for col in range(radius):
-#                 wid = QW.QLabel()
-#                 wid.setPixmap(self.draw_node(self.structure[row, col]))
-#                 self.grid.addWidget(wid, row, col)
-
-#     # def build_grid(self):
-#     #     self._clear_grid(self.grid)
-#     #     radius = self.structure.shape[0]
-#     #     for row in range(radius):
-#     #         for col in range(radius):
-#     #             node = QW.QPushButton()
-#     #             node.setMaximumSize(12,12)
-#     #             node.setCheckable(True)
-#     #             node.setStyleSheet('''QPushButton {background-color : black;}'''
-#     #                                '''QPushButton::checked {background-color : red;}''')
-#     #             node.setChecked(self.structure[row, col])
-#     #             node.toggled.connect(lambda tgl, r=row, c=col: self.activate_node(tgl, r, c))
-#     #             self.grid.addWidget(node, row, col)
-
-#     # def activate_node(self, active, row, col):
-#     #     # Avoid Erosion + recontruction freezing bug, by limiting the number of active nodes to 5
-#     #     if np.count_nonzero(self.structure) <= 5 and not active:
-#     #         self.sender().setChecked(True)
-#     #         return
-#     #     self.structure[row, col] = active
-#     #     self.structureChanged.emit()
-#     #     print('FUNCTION Finished')
-
-
-class RichMsgBox(QW.QMessageBox): # deprecated and will be removed. Use MsgBox instead. 
-    def __init__(self, parent, icon=QW.QMessageBox.NoIcon, title='', text='',
-                 btns=QW.QMessageBox.Ok, default_btn=QW.QMessageBox.NoButton,
-                 detailedText='', cbox=None):
-
-        super(RichMsgBox, self).__init__(parent)
-        self.setIcon(icon)
-        self.setWindowTitle(title)
-        self.setText(text)
-        self.setStandardButtons(btns)
-        self.setDefaultButton(default_btn)
-        self.setDetailedText(detailedText)
-        self.setCheckBox(cbox)
-
-        self.exec()
-
-
-    
 class MsgBox(QW.QMessageBox):
-    '''
-    Convenient class to quickly construct a message box dialog with default 
-    icon and buttons depending on selected 'type_'. All property can also be
-    fully customized through parameters. It also includes methods to easily get
-    user interaction with 'Yes' and 'No' buttons and optional checkbox.
-    '''
 
-    def __init__(self, parent, type_: str, text: str='', dtext: str='',
-                 title: str|None=None, icon: QW.QMessageBox.Icon|None=None, 
-                 btns: QW.QMessageBox.StandardButtons|None=None, 
-                 def_btn: QW.QMessageBox.StandardButton|None=None,
-                 cbox: QW.QCheckBox|None=None):
+    def __init__(
+        self,
+        parent: QW.QWidget | None,
+        kind: str,
+        text: str = '',
+        dtext: str = '',
+        title: str | None = None,
+        icon: QW.QMessageBox.Icon | None = None,
+        btns: QW.QMessageBox.StandardButtons | None = None,
+        def_btn: QW.QMessageBox.StandardButton | None = None,
+        cbox: QW.QCheckBox | None = None
+    ) -> None:
         '''
-        Constructor.
+        Convenient class to quickly construct a message box dialog with default 
+        icon and buttons depending on selected 'kind'. All of its properties
+        can be fully customized through parameters. It also includes methods to
+        easily get user interactions with 'Yes'/'No' buttons and checkboxes.
 
         Parameters
         ----------
-        parent : QObject
-            The GUI parent of the message box.
-        type_ : str
+        parent : QWidget or None
+            The GUI parent of this widget. If not None, the dialog will popup
+            centered with it.
+        kind : str
             Message box type. It controls the default icon and buttons if not
             specified. It must be one of 'Info' (or 'I'), 'Quest (or 'Q'),
             'Warn' (or 'W'), 'QuestWarn' (or 'QW') or 'Crit' (or 'C').
@@ -3139,13 +3179,13 @@ class MsgBox(QW.QMessageBox):
             Message box title. If None, it will be the 'parent' window title or
             'X-Min Learn' if it is invalid. The default is None.
         icon : QMessageBox.Icon or None, optional
-            Message box icon. If None, it is set according to 'type_'. The
+            Message box icon. If None, it is set according to 'kind'. The
             default is None.
         btns : QMessageBox.StandardButtons or None, optional
-            Message box buttons. If None, they are set according to 'type_'. 
+            Message box buttons. If None, they are set according to 'kind'. 
             The default is None.
         def_btn : QMessageBox.StandardButton or None, optional
-            Default selected button. If None, it is set according to 'type_'.
+            Default selected button. If None, it is set according to 'kind'.
             The default is None.
         cbox : QCheckBox or None, optional
             If set, adds a checkbox to the message box. The default is None.
@@ -3153,29 +3193,31 @@ class MsgBox(QW.QMessageBox):
         Raises
         ------
         ValueError
-            Raised if an invalid 'type_' value is set.
+            Raised if an invalid 'kind' value is set.
 
         '''
     # Set default icon, buttons and default button according to message type
-        if type_ in ('Info', 'I'):
-            icon = QW.QMessageBox.Information if icon is None else icon
-            btns = QW.QMessageBox.Ok if btns is None else btns
-        elif type_ in ('Quest', 'Q'):
-            icon = QW.QMessageBox.Question if icon is None else icon
-            btns = QW.QMessageBox.Yes | QW.QMessageBox.No if btns is None else btns
-            def_btn = QW.QMessageBox.No if def_btn is None else def_btn
-        elif type_ in ('Warn', 'W'):
-            icon = QW.QMessageBox.Warning if icon is None else icon
-            btns = QW.QMessageBox.Ok if btns is None else btns
-        elif type_ in ('QuestWarn', 'QW'):
-            icon = QW.QMessageBox.Warning if icon is None else icon
-            btns = QW.QMessageBox.Yes | QW.QMessageBox.No if btns is None else btns
-            def_btn = QW.QMessageBox.No if def_btn is None else def_btn
-        elif type_ in ('Crit', 'C'):
-            icon = QW.QMessageBox.Critical if icon is None else icon
-            btns = QW.QMessageBox.Ok if btns is None else btns
-        else:
-            raise ValueError('f{type_} is an invalid message box type.')
+        question_buttons = QW.QMessageBox.Yes | QW.QMessageBox.No
+        match kind:
+            case 'Info' | 'I':
+                icon = QW.QMessageBox.Information if icon is None else icon
+                btns = QW.QMessageBox.Ok if btns is None else btns
+            case 'Quest' | 'Q':
+                icon = QW.QMessageBox.Question if icon is None else icon
+                btns = question_buttons if btns is None else btns
+                def_btn = QW.QMessageBox.No if def_btn is None else def_btn
+            case 'Warn' | 'W':
+                icon = QW.QMessageBox.Warning if icon is None else icon
+                btns = QW.QMessageBox.Ok if btns is None else btns
+            case 'QuestWarn' | 'QW':
+                icon = QW.QMessageBox.Warning if icon is None else icon
+                btns = question_buttons if btns is None else btns
+                def_btn = QW.QMessageBox.No if def_btn is None else def_btn
+            case 'Crit' | 'C':
+                icon = QW.QMessageBox.Critical if icon is None else icon
+                btns = QW.QMessageBox.Ok if btns is None else btns
+            case _:
+                raise ValueError('f{kind} is an invalid message box kind.')
         
     # Auto-set title if not specified
         if title is None:
@@ -3187,7 +3229,7 @@ class MsgBox(QW.QMessageBox):
                 title = 'X-Min Learn'
 
     # Set dialog attributes
-        super(MsgBox, self).__init__(icon, title, text, btns, parent)
+        super().__init__(icon, title, text, btns, parent)
         self.setDefaultButton(def_btn)
         self.setDetailedText(dtext)
         self.setCheckBox(cbox)
@@ -3196,7 +3238,7 @@ class MsgBox(QW.QMessageBox):
         self.exec()
 
 
-    def yes(self):
+    def yes(self) -> bool:
         '''
         Check if user clicked on 'Yes' button.
 
@@ -3209,7 +3251,7 @@ class MsgBox(QW.QMessageBox):
         return self.clickedButton().text() == '&Yes'
     
 
-    def no(self):
+    def no(self) -> bool:
         '''
         Check if user clicked on 'No' button.
 
@@ -3222,9 +3264,9 @@ class MsgBox(QW.QMessageBox):
         return self.clickedButton().text() == '&No'
     
 
-    def cboxChecked(self):
+    def cboxChecked(self) -> bool:
         '''
-        Check the state of the checkbox. If no checkbox was set, this function
+        Check the state of the checkbox. If no checkbox was set, this method
         returns False.
 
         Returns
@@ -3242,112 +3284,114 @@ class MsgBox(QW.QMessageBox):
                 
 
 class LineSeparator(QW.QFrame):
-    '''
-    Simple horizontal or vertical line separator.
-    '''
-    def __init__(self, orient='horizontal', lw=3, parent=None):
+
+    def __init__(
+        self,
+        orient: str = 'horizontal',
+        lw: int = 2,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        Simple horizontal or vertical line separator.
 
         Parameters
         ----------
         orient : str, optional
-            Line orientation. The default is 'horizontal'.
+            Line orientation. Must be 'horizontal' ('h') or 'vertical' ('v').
+            The default is 'horizontal'.
         lw : int, optional
-            Line width. Must be in range (1, 3). The default is 3.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+            Line width. Can be set to 1, 2 or 3. The default is 2.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         Raises
         ------
         ValueError
-            Orient must be either 'horizontal' or 'vertical'.
+            Orient must be either 'horizontal' ('h') or 'vertical' ('v').
 
         '''
-        super(LineSeparator, self).__init__(parent)
+        super().__init__(parent)
 
-        if orient == 'horizontal':
-            self.setFrameShape(QW.QFrame.HLine)
-        elif orient == 'vertical':
-            self.setFrameShape(QW.QFrame.VLine)
-        else:
-            raise ValueError(f'{orient} is not a valid orientation.')
+        match orient:
+            case 'horizontal' | 'h':
+                self.setFrameShape(QW.QFrame.HLine)
+            case 'vertical' | 'v':
+                self.setFrameShape(QW.QFrame.VLine)
+            case _:
+                raise ValueError(f'{orient} is not a valid orientation.')
         
         self.setFrameShadow(QW.QFrame.Plain)
         self.setLineWidth(lw)
       
 
 
-class PixelFinder(QW.QFrame):
-    '''
-    Custom widget that allows to zoom to a specific pixel on a canvas given its
-    X and Y (or column and row) coordinates.
-    '''
-    def __init__(self, canvas, parent=None):
+class CoordinatesFinder(QW.QFrame):
+
+    coordinatesRequested = QC.pyqtSignal(int, int) # x coord, y coord
+
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        Convenient widget that allows to find specific X, Y (or column, row) 
+        coordinates. Expecially useful to find a specific pixel in an image.
 
         Parameters
         ----------
-        canvas : ImageCanvas, optional
-            The canvas to zoom in.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(PixelFinder, self).__init__(parent)
-        self.canvas = canvas
-        self.setStyleSheet('''QFrame {border: 1 solid black;}''')
+        super().__init__(parent)
+        self.setStyleSheet('QFrame {border: 1 solid black;}')
 
-    # X and Y coords input (with integer validator)
+    # X and Y coords input (Line Edit with Integer Validator)
         validator = QG.QIntValidator(0, 10**8)
 
-        self.X_input = QW.QLineEdit()
-        self.X_input.setStyleSheet(style.SS_MENU)
-        self.X_input.setAlignment(QC.Qt.AlignHCenter)
-        self.X_input.setPlaceholderText('X (C)')
-        self.X_input.setValidator(validator)
-        self.X_input.setToolTip('X or Column value')
-        self.X_input.setMaximumWidth(50)
+        self.x_input = QW.QLineEdit()
+        self.x_input.setStyleSheet(style.SS_MENU)
+        self.x_input.setAlignment(QC.Qt.AlignHCenter)
+        self.x_input.setPlaceholderText('X (C)')
+        self.x_input.setValidator(validator)
+        self.x_input.setToolTip('X or Column value')
+        self.x_input.setMaximumWidth(50)
 
-        self.Y_input = QW.QLineEdit()
-        self.Y_input.setStyleSheet(style.SS_MENU)
-        self.Y_input.setAlignment(QC.Qt.AlignHCenter)
-        self.Y_input.setPlaceholderText('Y (R)')
-        self.Y_input.setValidator(validator)
-        self.Y_input.setToolTip('Y or Row value')
-        self.Y_input.setMaximumWidth(50)
+        self.y_input = QW.QLineEdit()
+        self.y_input.setStyleSheet(style.SS_MENU)
+        self.y_input.setAlignment(QC.Qt.AlignHCenter)
+        self.y_input.setPlaceholderText('Y (R)')
+        self.y_input.setValidator(validator)
+        self.y_input.setToolTip('Y or Row value')
+        self.y_input.setMaximumWidth(50)
 
-    # Go to pixel button
-        self.go_btn = IconButton('Icons/bullseye.png')
+    # Go to pixel button (Styled Button)
+        self.go_btn = StyledButton(r'Icons/bullseye.png')
         self.go_btn.setFlat(True)
-        self.go_btn.setToolTip('Zoom to pixel')
-        self.go_btn.clicked.connect(self.zoomToPixel)
+        self.go_btn.clicked.connect(self.onButtonClicked)
 
     # Adjust widget layout
         mainLayout = QW.QHBoxLayout()
         mainLayout.setContentsMargins(5, 2, 5, 2) # l, t, r, b
         mainLayout.addWidget(self.go_btn, alignment=QC.Qt.AlignHCenter)
-        mainLayout.addWidget(self.X_input, alignment=QC.Qt.AlignHCenter)
-        mainLayout.addWidget(self.Y_input, alignment=QC.Qt.AlignHCenter)
+        mainLayout.addWidget(self.x_input, alignment=QC.Qt.AlignHCenter)
+        mainLayout.addWidget(self.y_input, alignment=QC.Qt.AlignHCenter)
         self.setLayout(mainLayout)
 
 
-    def zoomToPixel(self):
+    def onButtonClicked(self) -> None:
         '''
-        Zoom to pixel if its coordinates are valid.
+        Request coordinates if they are valid.
+
         '''
         x, y = None, None
-        if self.X_input.hasAcceptableInput():
-            x = int(self.X_input.text())
-        if self.Y_input.hasAcceptableInput():
-            y = int(self.Y_input.text())
+        if self.x_input.hasAcceptableInput():
+            x = int(self.x_input.text())
+        if self.y_input.hasAcceptableInput():
+            y = int(self.y_input.text())
 
         if x is not None and y is not None:
-            self.canvas.zoom_to(x, y)
+            self.coordinatesRequested.emit(x, y)
 
 
-    def setInputCellsMaxWidth(self, width: int):
+    def setInputCellsMaxWidth(self, width: int) -> None:
         '''
         Set the maximum width of the coordinates input cells.
 
@@ -3357,61 +3401,60 @@ class PixelFinder(QW.QFrame):
             Maximum width.
 
         '''
-        self.X_input.setMaximumWidth(width)
-        self.Y_input.setMaximumWidth(width)
+        self.x_input.setMaximumWidth(width)
+        self.y_input.setMaximumWidth(width)
 
 
 
 class DocumentBrowser(QW.QWidget):
-    '''
-    Custom widget to load, display and browse a text document. It includes
-    convenient search, edit and zoom functionalities.
-    '''
-    def __init__(self, read_only=False, parent=None):
+
+    def __init__(self, readonly: bool = False, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        Custom widget to load, display and browse a text document. It includes
+        convenient search, edit and zoom functionalities.
 
         Parameters
         ----------
-        read_only : bool, optional
+        readonly : bool, optional
             Whether document is read only or editable. The default is False.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(DocumentBrowser, self).__init__(parent)
+        super().__init__(parent)
 
     # Set main attributes
-        self.read_only = read_only
+        self.readonly = readonly
         self._font = QG.QFont()
         self.placeholder_text = ''
 
-    # Set GUI and connect signals to slots
+    # Initialize GUI and connect its signals to slots
         self._init_ui()
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
-    # Text browser space
+    # Text browser space (Text Edit)
         self.browser = QW.QTextEdit(self.placeholder_text)
         self.browser.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical)) 
         self.browser.setStyleSheet(style.SS_MENU)
-        self.browser.setReadOnly(self.read_only)
+        self.browser.setReadOnly(self.readonly)
 
-    # Browser toolbar
-        self.tbar = StyledToolbar('Browser toolbar')
+    # Browser toolbar (Toolbar)
+        self.tbar = QW.QToolBar('Browser toolbar')
+        self.tbar.setStyleSheet(style.SS_TOOLBAR)
 
-    # Edit document checkbox
+    # Edit document (Check Box)
         self.edit_cbox = QW.QCheckBox('Editing')
-        self.edit_cbox.setChecked(not self.read_only)
-        self.edit_cbox.setVisible(not self.read_only)
+        self.edit_cbox.setChecked(not self.readonly)
+        self.edit_cbox.setVisible(not self.readonly)
         self.tbar.addWidget(self.edit_cbox)
 
-    # Search box
+    # Search box (Line Edit)
         self.search_box = QW.QLineEdit()
         self.search_box.setStyleSheet(style.SS_MENU)
         self.search_box.setPlaceholderText('Search')
@@ -3419,23 +3462,23 @@ class DocumentBrowser(QW.QWidget):
         self.search_box.setMaximumWidth(100)
         self.tbar.addWidget(self.search_box)
 
-    # Search Up Action
+    # Search Up (Action) [-> Browser Toolbar]
         self.search_up_action = self.tbar.addAction(
             QG.QIcon(r'Icons/up.png'), 'Search up')
 
-    # Search Down Action
+    # Search Down (Action) [-> Browser Toolbar]
         self.search_down_action = self.tbar.addAction(
             QG.QIcon(r'Icons/down.png'), 'Search down')
 
-    # Zoom in Action
+    # Zoom in (Action) [-> Browser Toolbar]
         self.zoom_in_action = self.tbar.addAction(
             QG.QIcon(r'Icons/zoom_in.png'), 'Zoom in')
 
-    # Zoom out Action
+    # Zoom out (Action) [-> Browser Toolbar]
         self.zoom_out_action = self.tbar.addAction(
             QG.QIcon(r'Icons/zoom_out.png'), 'Zoom out')
 
-    # Insert toolbar separator
+    # Insert toolbar separator [-> Browser Toolbar]
         self.tbar.insertSeparator(self.zoom_in_action)
 
     # Adjust Main Layout
@@ -3447,7 +3490,7 @@ class DocumentBrowser(QW.QWidget):
         self.setLayout(layout)
 
 
-    def _connect_slots(self): 
+    def _connect_slots(self) -> None: 
         '''
         Connect signals to slots.
 
@@ -3466,7 +3509,7 @@ class DocumentBrowser(QW.QWidget):
         self.zoom_out_action.triggered.connect(lambda: self._alterZoom(-1))
 
 
-    def setDoc(self, doc_path: str):
+    def setDoc(self, doc_path: str) -> None:
         '''
         Load a new document and display it in the browser.
 
@@ -3484,7 +3527,7 @@ class DocumentBrowser(QW.QWidget):
             self.clear()
 
 
-    def setText(self, text: str):
+    def setText(self, text: str) -> None:
         '''
         Set a custom text to the browser.
 
@@ -3497,7 +3540,7 @@ class DocumentBrowser(QW.QWidget):
         self.browser.setText(text)
 
 
-    def clear(self):
+    def clear(self) -> None:
         '''
         Clear the browser and set the placeholder text.
 
@@ -3506,7 +3549,7 @@ class DocumentBrowser(QW.QWidget):
         self.browser.setPlaceholderText(self.placeholder_text)
 
 
-    def setDefaultPlaceHolderText(self, text: str):
+    def setDefaultPlaceHolderText(self, text: str) -> None:
         '''
         Set the default placeholder text of the browser. This text is displayed
         when no document is loaded.
@@ -3520,7 +3563,7 @@ class DocumentBrowser(QW.QWidget):
         self.placeholder_text = text
 
 
-    def _alterZoom(self, value: int):
+    def _alterZoom(self, value: int) -> None:
         '''
         Change the font size of the displayed document text.
 
@@ -3538,7 +3581,7 @@ class DocumentBrowser(QW.QWidget):
             self.browser.document().setDefaultFont(self._font)
 
 
-    def _findTextUp(self):
+    def _findTextUp(self) -> None:
         '''
         Search text up.
 
@@ -3548,7 +3591,7 @@ class DocumentBrowser(QW.QWidget):
         self.browser.find(self.search_box.text(), find_flag)
 
 
-    def _findTextDown(self):
+    def _findTextDown(self) -> None:
         '''
         Search text down.
 
@@ -3558,356 +3601,52 @@ class DocumentBrowser(QW.QWidget):
 
 
 
-class SampleMapsSelector(QW.QWidget):
-    '''
-    Ready to use widget that allows loading maps from a sample and show them
-    in a QTreeWidget, optionally allowing their selection through dedicated 
-    checkboxes. This widget sends signals to request the maps data. This
-    signals must be catched by the widget that holds such information, namely
-    the DataManager.
-    '''
-    sampleUpdateRequested = QC.pyqtSignal()
-    mapsUpdateRequested = QC.pyqtSignal(int) # index of sample
-    mapsDataChanged = QC.pyqtSignal()
-    mapClicked = QC.pyqtSignal(DataObject)
-
-
-    def __init__(self, maps_type: str, checkable=True, parent=None):
-        '''
-        Constructor.
-
-        Parameters
-        ----------
-        maps_type : str
-            Must be 'inmaps' to list input maps or 'minmaps' to list mineral 
-            maps.
-        checkable : bool, optional
-            Whether the individual maps in the list
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
-
-        Raise
-        -----
-        ValueError
-            maps_type must be 'inmaps' or 'minmaps'
-
-        '''
-        super(SampleMapsSelector, self).__init__(parent)
-
-    # Set main attributes
-        self.maps_type = maps_type
-        if self.maps_type not in ('inmaps', 'minmaps'):
-            raise ValueError("maps_type must be 'inmaps' or 'minmaps'")
-        self.checkable = checkable
-
-        self._init_ui()
-        self._connect_slots()
-
-
-    def _init_ui(self):
-        '''
-        GUI constructor.
-
-        '''
-    # Sample combobox (Auto Update Combo Box)
-        self.sample_combox = AutoUpdateComboBox()
-
-    # Maps list (Tree widget)
-        self.maps_list = QW.QTreeWidget()
-        self.maps_list.setHeaderHidden(True)
-        self.maps_list.setStyleSheet(style.SS_MENU)
-
-    # Set layout
-        main_layout = QW.QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(QW.QLabel('Select sample'))
-        main_layout.addWidget(self.sample_combox)
-        main_layout.addSpacing(10)
-        main_layout.addWidget(self.maps_list)
-        self.setLayout(main_layout)
-
-
-    def _connect_slots(self): 
-        '''
-        Signals-slots connector.
-
-        '''
-    # Send combobox signals as custom signals
-        self.sample_combox.clicked.connect(self.sampleUpdateRequested.emit)
-        self.sample_combox.activated.connect(
-            lambda idx: self.mapsUpdateRequested.emit(idx))
-        
-    # Send tree widget signals as custom signals
-        self.maps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
-
-
-    def updateCombox(self, samples: list):
-        '''
-        Populate the samples combobox with the samples currently loaded in the
-        Data Manager. This function is called by the main window when the 
-        combobox is clicked.
-
-        Parameters
-        ----------
-        samples : list
-            List of DataGroup objects.
-
-        '''
-        samples_names = [s.text(0) for s in samples]
-        self.sample_combox.updateItems(samples_names)
-
-    
-    def updateList(self, sample: DataGroup):
-        '''
-        Updates the list of currently loaded maps owned by the sample currently
-        selected in the samples combobox. This function is called by the main 
-        window when a new item is selected in the sample combobox.
-
-        Parameters
-        ----------
-        sample : DataGroup
-            The currently selected sample as a DataGroup.
-
-        '''
-    # Clear the input maps lists
-        self.maps_list.clear()
-
-    # Exit function if the subgroup is empty
-        subgr = sample.inmaps if self.maps_type == 'inmaps' else sample.minmaps
-        if subgr.isEmpty():
-            return
-
-    # Get every input map object and re-assemble them into the inmaps list
-        for c in subgr.getChildren():
-            item = DataObject(c.get('data'))
-            if self.checkable:
-                item.setChecked(True)
-            self.maps_list.addTopLevelItem(item)
-
-    # Send a signal to inform that maps data changed
-        self.mapsDataChanged.emit()
-
-
-    def getChecked(self):
-        '''
-        Get the currently checked maps data objects.
-
-        Returns
-        -------
-        checked : list
-            List of checked maps data objects.
-
-        '''
-        if self.checkable:
-            n_maps = self.maps_list.topLevelItemCount()
-            items = [self.maps_list.topLevelItem(i) for i in range(n_maps)]
-            checked = [i for i in items if i.checkState(0)]
-            return checked
-    
-
-    def itemCount(self):
-        '''
-        Return the amount of maps loaded in the maps list.
-
-        Returns
-        -------
-        int
-            Number of maps.
-
-        '''
-        return self.maps_list.topLevelItemCount()
-    
-
-    def currentItem(self):
-        '''
-        Return the currently selected map.
-
-        Returns
-        -------
-        DataObject
-            Currently selected map object.
-
-        '''
-        return self.maps_list.currentItem()
-    
-
-    def clear(self):
-        '''
-        Clear out the entire widget.
-
-        '''
-        self.sample_combox.clear()
-        self.maps_list.clear()
-
-
-
-class DescriptiveProgressBar(QW.QWidget):
-    '''
-    A progress bar that shows a description of the current process.
-    '''
-    def __init__(self, parent=None):
-        '''
-        Constructor.
-
-        Parameters
-        ----------
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
-
-        '''
-        super(DescriptiveProgressBar, self).__init__(parent)
-
-    # Description label
-        self.desc = QW.QLabel()
-        self.desc.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
-
-    # Progress bar
-        self.pbar = QW.QProgressBar()
-    
-    # Adjust main layout
-        layout = QW.QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.desc, alignment=QC.Qt.AlignCenter)
-        layout.addWidget(self.pbar)
-        self.setLayout(layout)
-
-
-    def setMinimum(self, minimum: int):
-        '''
-        Set minimum progress bar value.
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum value.
-
-        '''
-        self.pbar.setMinimum(minimum)
-
-
-    def setMaximum(self, maximum: int):
-        '''
-        Set maximum progress bar value.
-
-        Parameters
-        ----------
-        maximum : int
-            Maximum value.
-
-        '''
-        self.pbar.setMaximum(maximum)
-
-
-    def setRange(self, minimum: int, maximum: int):
-        '''
-        Set progress bar range.
-
-        Parameters
-        ----------
-        minimum : int
-            Minimum value.
-        maximum : int
-            Maximum value
-
-        '''
-        self.pbar.setRange(minimum, maximum)
-
-
-    def setUndetermined(self):
-        '''
-        Set the prograss bar in an undetermined state.
-
-        '''
-        self.pbar.setRange(0, 0)
-
-
-    def undetermined(self):
-        '''
-        Check if the progress bar is in an undetermined state.
-
-        Returns
-        -------
-        undet : bool
-            Progress bar has undetermined state.
-
-        '''
-        undet = self.pbar.minimum() == self.pbar.maximum() == 0
-        return undet
-
-
-    def step(self, step_description: str):
-        '''
-        Increase progress bar by one step and set a new step description. If 
-        progress bar is in an undetermined state, just set the description.
-
-        Parameters
-        ----------
-        step_description : str
-            New step description.
-
-        '''
-        self.desc.setText(step_description)
-        if not self.undetermined():
-            self.pbar.setValue(self.pbar.value() + 1)
-
-
-    def reset(self):
-        '''
-        Reset the progress bar.
-
-        '''
-        self.desc.clear()
-        self.pbar.reset()
-        
-
-
 class RandomSeedGenerator(QW.QWidget):
-    '''
-    Ready to use widget to set, manage and display a random seed.
-    '''
+
     seedChanged = QC.pyqtSignal(int, int) # old seed, new seed
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        Convenient widget to set, manage and display random seeds.
 
         Parameters
         ----------
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(RandomSeedGenerator, self).__init__(parent)
+        super().__init__(parent)
 
     # Set main attributes
         self._old_seed = None
         self.seed = None
 
-    # Set GUI and connect signals to slots
+    # Initialize GUI and connect its signals to slots
         self._init_ui()
         self._connect_slots()
 
     # Set a random seed
-        self.randomize_seed()
+        self.randomizeSeed()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
     # Random seed line edit
         self.seed_input = QW.QLineEdit()
+        self.seed_input.setStyleSheet(style.SS_MENU)
 
     # Custom validator that accepts numbers between 1 and 999999999 and 
-    # empty strings. This is required to control the behaviour of the lineedit
+    # empty strings. This is required to control the behaviour of the Line Edit
     # when user leaves the field empty.
         regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8})?$")
         validator = QG.QRegularExpressionValidator(regex)
         self.seed_input.setValidator(validator)
 
-    # Randomize seed button
-        self.rand_btn = StyledButton(QG.QIcon(r'Icons/dice.png'))
+    # Randomize seed button (Styled Button)
+        self.rand_btn = StyledButton(r'Icons/dice.png')
 
     # Adjust layout
         layout = QW.QHBoxLayout()
@@ -3918,20 +3657,20 @@ class RandomSeedGenerator(QW.QWidget):
         self.setLayout(layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
         '''
     # Make sure that the seed is never left empty
-        self.seed_input.editingFinished.connect(self.fill_empty_seed)
+        self.seed_input.editingFinished.connect(self.fillEmptySeed)
 
     # Change seed either manually or through randomization
-        self.seed_input.textChanged.connect(self.on_seed_changed)
-        self.rand_btn.clicked.connect(self.randomize_seed)
+        self.seed_input.textChanged.connect(self.onSeedChanged)
+        self.rand_btn.clicked.connect(self.randomizeSeed)
 
 
-    def randomize_seed(self):
+    def randomizeSeed(self) -> None:
         '''
         Randomize seed.
 
@@ -3940,7 +3679,7 @@ class RandomSeedGenerator(QW.QWidget):
         self.seed_input.setText(str(seed))
 
 
-    def on_seed_changed(self, new_seed: str):
+    def onSeedChanged(self, new_seed: str) -> None:
         '''
         Set a new seed.
 
@@ -3956,29 +3695,32 @@ class RandomSeedGenerator(QW.QWidget):
             self.seedChanged.emit(self._old_seed, self.seed)
 
 
-    def fill_empty_seed(self):
+    def fillEmptySeed(self) -> None:
         '''
         Fill empty seed with a new random seed.
 
         '''
         if not self.seed_input.text():
-            self.randomize_seed()
+            self.randomizeSeed()
 
 
 
 class PercentLineEdit(QW.QFrame):
-    '''
-    Advanced object that allows altering an integer either through a percentage 
-    value with a spinbox or directly by typing a new number in a validated line
-    edit. A custom set of icons visually indicate if the new integer is bigger, 
-    smaller or equal to the original one.
 
-    '''
     valueEdited = QC.pyqtSignal(int)
 
-    def __init__(self, base_value: int, min_perc=1, max_perc=100, parent=None):
+    def __init__(
+        self,
+        base_value: int,
+        min_perc: int = 1,
+        max_perc: int = 100,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        Advanced widget that allows altering an integer using either a percent
+        value with a spinbox, or by typing the new number in a validated Line
+        Edit. A custom set of icons visually indicate if the new integer is 
+        bigger, smaller or equal to the original one.
 
         Parameters
         ----------
@@ -3988,13 +3730,13 @@ class PercentLineEdit(QW.QFrame):
             Minimum allowed percentage value. It cannot be smaller than 1. The
             default is 1.
         max_perc : int, optional
-            Maximum allowed percentage value. It cannot be smaller than 100. 
+            Maximum allowed percentage value. It cannot be bigger than 100. 
             The default is 100.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(PercentLineEdit, self).__init__(parent)
+        super().__init__(parent)
 
     # Main attributes
         self._base = base_value
@@ -4006,35 +3748,36 @@ class PercentLineEdit(QW.QFrame):
         self.setFrameStyle(QW.QFrame.StyledPanel | QW.QFrame.Plain)
         self.setLineWidth(2)
 
+    # Initialize GUI and connect its signals to slots
         self._init_ui()
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
-    # QLineEdit for direct integer input. Equipped with a regex validator that
+    # Line Edit for direct integer input, equipped with a regex validator that
     # accepts numbers between 1 and 10**9 as well as empty strings. This allows
-    # a fine control over the behaviour of the line edit.
+    # a finer control over the behaviour of the line edit.
         regex = QC.QRegularExpression(r"^(?:[1-9]\d{0,8}|1000000000)?$")
         validator = QG.QRegularExpressionValidator(regex)
         self.linedit = QW.QLineEdit(str(self._value))
         self.linedit.setValidator(validator)
 
-    # Spinbox for percentage input (Styled Spinbox)
+    # Percentage input (Styled Spin Box)
         self.spinbox = StyledSpinBox(self._min_perc, self._max_perc)
         #self.spinbox.setFixedWidth(100)
         self.spinbox.setSuffix(' %')
         self.spinbox.setValue(100)
 
-    # Visual increase/decrese icon indicator (QLabel)
+    # Visual increase/decrese icon indicator (Label)
         self.iconlbl = QW.QLabel()
         self.setIcon()
 
     # Reset button (Styled Button)
-        self.reset_btn = StyledButton(QG.QIcon(r'Icons/refresh.png'))
+        self.reset_btn = StyledButton(r'Icons/refresh.png')
         self.reset_btn.setFlat(True)
 
     # Adjust layout
@@ -4047,7 +3790,7 @@ class PercentLineEdit(QW.QFrame):
         self.setLayout(layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -4058,7 +3801,7 @@ class PercentLineEdit(QW.QFrame):
         self.reset_btn.clicked.connect(self.resetValue)
 
 
-    def setIcon(self):
+    def setIcon(self) -> None:
         '''
         Change visual increase/decrease icon indicator based on the difference
         between base value and new input value.
@@ -4076,7 +3819,7 @@ class PercentLineEdit(QW.QFrame):
         self.iconlbl.setPixmap(pixmap)
 
 
-    def onLineditEditingFinished(self):
+    def onLineditEditingFinished(self) -> None:
         '''
         Replace empty strings with original base value. Send valueEdited signal
         otherwise.
@@ -4089,7 +3832,7 @@ class PercentLineEdit(QW.QFrame):
             self.valueEdited.emit(int(text))
 
 
-    def onLineditChanged(self, value: str):
+    def onLineditChanged(self, value: str)  -> None:
         '''
         Store new input value and auto adjust spinbox accordingly.
 
@@ -4107,14 +3850,14 @@ class PercentLineEdit(QW.QFrame):
         self.setIcon()
         
     # Prevent spinbox from sending signals when auto adjusted. Prenvent 
-    # overflow errors as well when perc is bigger than upper spinbox limit. 
+    # overflow errors as well when "perc" is bigger than upper spinbox limit. 
         perc = self._max_perc if perc > self._max_perc else round(perc)
         self.spinbox.blockSignals(True)
         self.spinbox.setValue(round(perc))
         self.spinbox.blockSignals(False)
 
 
-    def onSpinboxChanged(self, perc: int):
+    def onSpinboxChanged(self, perc: int) -> None:
         '''
         Compute new input value and auto adjust line edit accordingly.
 
@@ -4139,13 +3882,13 @@ class PercentLineEdit(QW.QFrame):
         self.valueEdited.emit(self._value)
 
 
-    def adjustSpinboxPrefix(self, perc: int|float):
+    def adjustSpinboxPrefix(self, perc: int | float) -> None:
         '''
         Set a prefix to spinbox if percentage is not within its value range. 
 
         Parameters
         ----------
-        perc : int | float
+        perc : int or float
             Percentage value.
 
         '''
@@ -4157,9 +3900,9 @@ class PercentLineEdit(QW.QFrame):
             self.spinbox.setPrefix('')
 
     
-    def value(self):
+    def value(self) -> int:
         '''
-        Getter function for value attribute.
+        Getter method for value attribute.
 
         Returns
         -------
@@ -4170,9 +3913,9 @@ class PercentLineEdit(QW.QFrame):
         return self._value
     
 
-    def setValue(self, value: int):
+    def setValue(self, value: int) -> None:
         '''
-        Setter function for value attribute.
+        Setter method for value attribute.
 
         Parameters
         ----------
@@ -4183,7 +3926,7 @@ class PercentLineEdit(QW.QFrame):
         self.linedit.setText(str(value))
 
 
-    def resetValue(self):
+    def resetValue(self) -> None:
         '''
         Reset original value.
 
@@ -4191,7 +3934,7 @@ class PercentLineEdit(QW.QFrame):
         self.setValue(self._base)
 
 
-    def percent(self):
+    def percent(self) -> int:
         '''
         Get current percent value. Prefixes are not honored. Use ratio() for 
         exact ratio.
@@ -4205,7 +3948,7 @@ class PercentLineEdit(QW.QFrame):
         return self.spinbox.value()
 
 
-    def setPercent(self, perc: int):
+    def setPercent(self, perc: int) -> None:
         '''
         Set current percent value.
 
@@ -4218,13 +3961,13 @@ class PercentLineEdit(QW.QFrame):
         self.spinbox.setValue(perc)
     
 
-    def ratio(self, round_decimals: int|None = None):
+    def ratio(self, round_decimals: int | None = None) -> float | int:
         '''
-        Get current value / base value ratio.
+        Get current [value / base value] ratio.
 
         Parameters
         ----------
-        round_decimals : int | None, optional
+        round_decimals : int or None, optional
             Round ratio to this number of decimals. If None, no rounding is 
             performed. The default is None.
 
@@ -4240,24 +3983,21 @@ class PercentLineEdit(QW.QFrame):
         return r
 
 
+
 class DatasetDesigner(StyledTable):
-    '''
-    A special styled TableWidget used in the DatasetBuilder tool to allow user-
-    friendly creation of ground truth datasets. 
-
-    '''
-
-    def __init__(self, parent=None):
+    
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A specialized Styled Table Widget used in the DatasetBuilder tool to
+        allow user-friendly creation of ground truth datasets.
 
         Parameters
         ----------
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(DatasetDesigner, self).__init__(0, 4, parent=parent)
+        super().__init__(0, 4, parent=parent)
 
     # Set selection behaviour
         self.setSelectionBehavior(QW.QAbstractItemView.SelectRows)
@@ -4268,7 +4008,7 @@ class DatasetDesigner(StyledTable):
         self.resizeHorizontalHeader()
 
 
-    def resizeHorizontalHeader(self):
+    def resizeHorizontalHeader(self) -> None:
         '''
         Resize column headers to fill all the available space. Fill-row column,
         separator column and mineral map column will instead resize to their 
@@ -4283,7 +4023,7 @@ class DatasetDesigner(StyledTable):
         header.setSectionResizeMode(self.columnCount() - 1, 3) # Mineral Map
 
 
-    def setFillRowButton(self, row: int):
+    def setFillRowButton(self, row: int) -> None:
         '''
         Initialize the first column of given 'row' to include the "fill row" 
         button, which allows user to import an entire row of feature data.
@@ -4294,13 +4034,13 @@ class DatasetDesigner(StyledTable):
             Index of row.
 
         '''
-        btn = StyledButton(QG.QIcon(r'Icons/generic_add_blue.png'))
+        btn = StyledButton(r'Icons/generic_add_blue.png')
         btn.setToolTip('Load multiple features at once')
         btn.clicked.connect(self.fillRow)
         self.setCellWidget(row, 0, btn)
 
 
-    def setRowWidgets(self, row: int):
+    def setRowWidgets(self, row: int) -> None:
         '''
         Initialize the cell widgets of given 'row' as StatusFileLoader widgets
         (see StatusFileLoader class for more details).
@@ -4327,7 +4067,7 @@ class DatasetDesigner(StyledTable):
         self.verticalHeader().setSectionResizeMode(row, 3)
 
 
-    def refresh(self, features: list[str]):
+    def refresh(self, features: list[str]) -> None:
         '''
         Reset and re-initialize the table with new features names.
 
@@ -4350,7 +4090,7 @@ class DatasetDesigner(StyledTable):
             self.setRowWidgets(row)
 
 
-    def addRow(self):
+    def addRow(self) -> None:
         '''
         Add a row to the table.
 
@@ -4361,7 +4101,7 @@ class DatasetDesigner(StyledTable):
         self.setRowWidgets(row)
 
 
-    def delRow(self, row: int):
+    def delRow(self, row: int) -> None:
         '''
         Remove 'row' from the table.
 
@@ -4375,7 +4115,7 @@ class DatasetDesigner(StyledTable):
             self.removeRow(row)
 
 
-    def delLastRow(self):
+    def delLastRow(self) -> None:
         '''
         Remove last row from the table
 
@@ -4383,7 +4123,7 @@ class DatasetDesigner(StyledTable):
         self.delRow(self.rowCount() - 1)
 
 
-    def fillRow(self): # Should we instead skip name fitting and have free imports?
+    def fillRow(self) -> None: # Should we instead skip name fitting and have free imports?
         '''
         Try to fill an entire row of Input Maps by automatically import and 
         identify multiple files based on their name fitting with column names.
@@ -4405,7 +4145,7 @@ class DatasetDesigner(StyledTable):
             try:
                 matching_col = cf.guessMap(cf.path2filename(p), required_maps) # !!! find a more elegant solution
             # If a filename matches with a column, then add it
-                if matching_col:
+                if matching_col is not None:
                     row = self.indexAt(self.sender().pos()).row()
                     col = self.columns.index(matching_col)
                     self.cellWidget(row, col).addFile(p)
@@ -4421,7 +4161,7 @@ class DatasetDesigner(StyledTable):
             MsgBox(self, 'Crit', text, '\n'.join(bad_files))
 
 
-    def getRowData(self, row: int):
+    def getRowData(self, row: int) -> tuple[list[InputMap], MineralMap | None]:
         '''
         Extract map data from the given row.
 
@@ -4434,7 +4174,6 @@ class DatasetDesigner(StyledTable):
         -------
         input_maps : list[InputMap]
             List of valid input maps.
-
         mineral_map : MineralMap or None
             Mineral map or None if invalid.
 
@@ -4467,51 +4206,48 @@ class DatasetDesigner(StyledTable):
 
 
 class StatusFileLoader(QW.QWidget):
-    '''
-    Interactive widget useful to load filepaths and provide visual feedback on
-    their status (valid, invalid or with warnings).
-    '''
 
-    def __init__(self, filext='', parent=None):
+    def __init__(self, filext: str = '', parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        Interactive widget useful to load filepaths and provide visual feedback
+        on their status (valid, invalid or with warnings).
 
         Parameters
         ----------
         filext : str
             File extension filter. An empty string means all files. The default
             is ''.
-        parent : QObject | None, optional
-            The GUI parent of this object. The default is None.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(StatusFileLoader, self).__init__(parent)
+        super().__init__(parent)
 
     # Define main attributes
         self.filter = filext
         self.filepath = None
         self.status = 'Invalid'
 
-    # Initialize GUI and connect signals to slots
+    # Initialize GUI and connect its signals to slots
         self._init_ui()
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
-    # Add file (StyledButton)
-        self.add_btn = StyledButton(QG.QIcon(r'Icons/smooth_add.png'))
+    # Add file (Styled Button)
+        self.add_btn = StyledButton(r'Icons/smooth_add.png')
         self.add_btn.setFlat(True)
 
-    # Remove file (StyledButton)
-        self.del_btn = StyledButton(QG.QIcon(r'Icons/smooth_del.png'))
+    # Remove file (Styled Button)
+        self.del_btn = StyledButton(r'Icons/smooth_del.png')
         self.del_btn.setFlat(True)
         self.del_btn.setEnabled(False)
 
-    # Status file path (PathLabel)
+    # Status file path (Path Label)
         self.status_path = PathLabel(full_display=False)
         self.status_path.setFrameWidth(2)
         self.status_path.setFrameColor(style.BAD_RED)
@@ -4525,7 +4261,7 @@ class StatusFileLoader(QW.QWidget):
         self.setLayout(layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -4534,7 +4270,7 @@ class StatusFileLoader(QW.QWidget):
         self.del_btn.clicked.connect(self.removeFile)
 
 
-    def loadFile(self):
+    def loadFile(self) -> None:
         '''
         Load file from an open file dialog.
 
@@ -4546,9 +4282,9 @@ class StatusFileLoader(QW.QWidget):
             self.addFile(path)
 
 
-    def addFile(self, path: str):
+    def addFile(self, path: str) -> None:
         '''
-        Add filepath 'path'. This function can be used to add a path directly 
+        Add filepath 'path'. This method can be used to add a path directly 
         without showing an open file dialog.
 
         Parameters
@@ -4568,7 +4304,7 @@ class StatusFileLoader(QW.QWidget):
         self.del_btn.setEnabled(True)
 
 
-    def removeFile(self):
+    def removeFile(self) -> None:
         '''
         Remove loaded filepath.
 
@@ -4580,7 +4316,7 @@ class StatusFileLoader(QW.QWidget):
         self.del_btn.setEnabled(False)
 
 
-    def getStatus(self):
+    def getStatus(self) -> str:
         '''
         Get the current file status.
 
@@ -4593,7 +4329,7 @@ class StatusFileLoader(QW.QWidget):
         return self.status
 
 
-    def setStatus(self, status: str):
+    def setStatus(self, status: str) -> None:
         '''
         Set current status of file to 'status'. This visually changes the color
         of the label frame to green (Valid), red (Invalid) or yellow (Warning).
@@ -4601,7 +4337,7 @@ class StatusFileLoader(QW.QWidget):
         Parameters
         ----------
         status : str
-            Required status. It must be one of ('Valid', 'Invalid', 'Warning').
+            Required status. It must be 'Valid', 'Invalid' or 'Warning'.
 
         Raises
         ------
@@ -4609,13 +4345,14 @@ class StatusFileLoader(QW.QWidget):
             Raised if status is an invalid string.
 
         '''
-        if status == 'Valid':
-            self.status_path.setFrameColor(style.OK_GREEN)
-        elif status == 'Invalid':
-            self.status_path.setFrameColor(style.BAD_RED)
-        elif status == 'Warning':
-            self.status_path.setFrameColor(style.WARN_YELLOW)
-        else:
-            raise ValueError(f'Invalid status: {status}.')
+        match status:
+            case 'Valid':
+                self.status_path.setFrameColor(style.OK_GREEN)
+            case 'Invalid':
+                self.status_path.setFrameColor(style.BAD_RED)
+            case 'Warning':
+                self.status_path.setFrameColor(style.WARN_YELLOW)
+            case _:
+                raise ValueError(f'Invalid status: {status}.')
         
         self.status = status

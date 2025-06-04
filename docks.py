@@ -7,13 +7,13 @@ Created on Tue Mar  26 11:25:14 2024
 
 import os
 
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, QPoint, Qt
 from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
 from PyQt5 import QtWidgets as QW
 
 import numpy as np
 
-from _base import InputMap, Mask, MineralMap, RoiMap
+from _base import *
 import convenient_functions as cf
 import custom_widgets as CW
 import image_analysis_tools as iatools
@@ -22,17 +22,20 @@ import plots
 import preferences as pref
 import style
 
+DataManagerWidgetItem = CW.DataGroup | CW.DataSubGroup | CW.DataObject
 
 
 class Pane(QW.QDockWidget):
-    '''
-    The main class for every pane of X-Min Learn. It is a customized version
-    of a QDockWidget.
-    '''
 
-    def __init__(self, widget: QW.QWidget, title='', icon=None, scroll=True):
+    def __init__(
+        self,
+        widget: QW.QWidget,
+        title: str = '',
+        icon: QIcon | None = None,
+        scroll: bool = True
+    ) -> None:
         '''
-        Constructor.
+        The base class for every pane of X-Min Learn.
 
         Parameters
         ----------
@@ -44,10 +47,10 @@ class Pane(QW.QDockWidget):
             The icon of the pane, that is displayed in the panes toolbar. The
             default is None.
         scroll : bool, optional
-            Wether or not the pane should be scrollable. The default is True.
+            Whether or not the pane should be scrollable. The default is True.
 
         '''
-        super(Pane, self).__init__()
+        super().__init__()
     
     # Set widget properties
         self.setWindowTitle(title)
@@ -75,11 +78,11 @@ class Pane(QW.QDockWidget):
         self.setStyleSheet(style.SS_PANE)
 
 
-    def trueWidget(self):
+    def trueWidget(self) -> QW.QWidget:
         '''
-        Convenient function to return the actual pane widget and not just its
-        container widget, which is returned when invoking the default widget()
-        function.
+        Convenient method to return the actual pane widget and not just its
+        container widget, which is returned when invoking the default 'widget'
+        method.
 
         Returns
         -------
@@ -95,36 +98,28 @@ class Pane(QW.QDockWidget):
 
 
 class DataManager(QW.QTreeWidget):
-    '''
-    A widget for loading, accessing and managing input and output data.
-
-    '''
 
     updateSceneRequested = pyqtSignal(object)
     clearSceneRequested = pyqtSignal()
     rgbaChannelSet = pyqtSignal(str)
 
-
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A widget for loading, accessing and managing input and output data.
         
-        parent : QtWidget or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
         '''
-
-        super(DataManager, self).__init__(parent)
+        super().__init__(parent)
 
     # Set some properties of the manager and its headers
         self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
         self.setColumnCount(2)
-        # self.header().setStretchLastSection(False)
         self.header().setSectionResizeMode(QW.QHeaderView.ResizeToContents)
-        # self.setHeaderLabels([''] * self.columnCount())
         self.setHeaderHidden(True)
 
-    # Disable default editing.Item editing is forced via onEdit() function
+    # Disable default editing; item editing is forced via 'onEdit' method
         self.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
 
     # Enable custom context menu
@@ -134,28 +129,27 @@ class DataManager(QW.QTreeWidget):
         self.setHorizontalScrollBar(CW.StyledScrollBar(Qt.Horizontal))
         self.setVerticalScrollBar(CW.StyledScrollBar(Qt.Vertical))
 
-    # Set the style-sheet (custom icons for expanded and collapsed branches and
-    # right-click menu when editing items name)
+    # Set the style-sheet 
         self.setStyleSheet(style.SS_DATAMANAGER)
 
     # Connect signals to custom slots
         self._connect_slots()
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
         '''
-    # User's interactions signals
+    # User's mouse interactions signals
         self.itemClicked.connect(self.viewData)
         # self.itemChanged.connect(self.viewData) # too much triggers
-        # self.itemActivated.connect(self.viewData) # never triggers
+        # self.itemActivated.connect(self.viewData) # does not trigger enough
         self.itemDoubleClicked.connect(self.onEdit)
         self.customContextMenuRequested.connect(self.showContextMenu)
 
 
-    def onEdit(self, item, column=0):
+    def onEdit(self, item: DataManagerWidgetItem, col: int = 0) -> None:
         '''
         Force item editing in first column. DataSubGroup objects are excluded
         from editing.
@@ -164,7 +158,7 @@ class DataManager(QW.QTreeWidget):
         ----------
         item : DataGroup, DataSubGroup or DataObject
             The item that requests editing.
-        column : int, optional
+        col : int, optional
             The column where edits are requested. If different than 0, editing
             will be forced to be on first column anyway. The default is 0.
 
@@ -173,7 +167,7 @@ class DataManager(QW.QTreeWidget):
             self.editItem(item, 0)
 
 
-    def showContextMenu(self, point):
+    def showContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu with custom actions.
 
@@ -183,14 +177,15 @@ class DataManager(QW.QTreeWidget):
             The position of the context menu event that the widget receives.
 
         '''
-    # Define a menu (Styled Menu)
-        menu = CW.StyledMenu()
+    # Define a menu (Menu)
+        menu = QW.QMenu()
+        menu.setStyleSheet(style.SS_MENU)
 
-    # Get the item that is clicked at <point> and the group it belongs to
+    # Get the item that is clicked at 'point' and the group it belongs to
         item = self.itemAt(point)
         group = self.getItemParentGroup(item)
 
-    # CONTEXT MENU ON VOID (<point> is not on an item)
+    # CONTEXT MENU ON VOID ('point' is not on an item)
         if item is None:
 
         # Add new group
@@ -272,7 +267,8 @@ class DataManager(QW.QTreeWidget):
                            lambda: self.onEdit(item))
 
         # Delete item
-            menu.addAction(QIcon(r'Icons/remove.png'), 'Remove', self.delData)
+            menu.addAction(QIcon(r'Icons/remove.png'), 'Remove',
+                           self.delData)
 
         # Separator
             menu.addSeparator()
@@ -297,8 +293,7 @@ class DataManager(QW.QTreeWidget):
             menu.addSeparator()
 
         # Correct data source
-            fix_source_action = QW.QAction(QIcon(r'Icons/fix.png'), 
-                                           'Correct data source')
+            fix_source_action = QW.QAction(QIcon(r'Icons/fix.png'), 'Fix data source')
             fix_source_action.setEnabled(item.get('not_found'))
             fix_source_action.triggered.connect(lambda: self.fixDataSource(item))
             menu.addAction(fix_source_action)
@@ -347,7 +342,7 @@ class DataManager(QW.QTreeWidget):
 
             # Merge masks sub-menu
                 mergemask_submenu = menu.addMenu('Merge masks')
-                mergemask_submenu.addAction('Union', 
+                mergemask_submenu.addAction('Union',
                                             lambda: self.mergeMasks(group,'U'))
                 mergemask_submenu.addAction('Intersection',
                                             lambda: self.mergeMasks(group,'I'))
@@ -355,7 +350,7 @@ class DataManager(QW.QTreeWidget):
         # add specific actions when item holds point data
 
 
-    # Deal with anything else, just for safety reasons
+    # Do nothing if item is invalid (safety)
         else: 
             return
 
@@ -370,7 +365,7 @@ class DataManager(QW.QTreeWidget):
         Returns
         -------
         groups : list[DataGroup]
-            List of DataGroup objects.
+            List of groups.
 
         '''
         count = self.topLevelItemCount()
@@ -378,14 +373,13 @@ class DataManager(QW.QTreeWidget):
         return groups
 
 
-    def getItemParentGroup(self, item: CW.DataGroup|CW.DataSubGroup|
-                           CW.DataObject) -> CW.DataGroup|None:
+    def getItemParentGroup(self, item: DataManagerWidgetItem) -> CW.DataGroup | None:
         '''
         Get the item's group.
 
         Parameters
         ----------
-        item : DataObject or DataSubGroup or DataGroup
+        item : DataObject, DataSubGroup or DataGroup
             The item whose group needs to be retrieved.
 
         Returns
@@ -476,7 +470,7 @@ class DataManager(QW.QTreeWidget):
         return objects
 
 
-    def addGroup(self, name: str|None=None) -> CW.DataGroup:
+    def addGroup(self, name: str | None = None) -> CW.DataGroup:
         '''
         Add a new group to the manager and return it.
 
@@ -504,7 +498,7 @@ class DataManager(QW.QTreeWidget):
         return new_group
         
 
-    def delSelectedGroups(self):
+    def delSelectedGroups(self) -> None:
         '''
         Remove selected groups.
 
@@ -522,7 +516,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def clearSelectedGroups(self):
+    def clearSelectedGroups(self) -> None:
         '''
         Clear data from selected groups.
 
@@ -537,7 +531,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
     
-    def moveItemTo(self, item: CW.DataObject, dst_group: CW.DataGroup):
+    def moveItemTo(self, item: CW.DataObject, dst_group: CW.DataGroup) -> None:
         '''
         Move 'item' from its original group to another existent group 
         'dst_group'.
@@ -573,7 +567,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def moveItemUp(self, item: CW.DataObject):
+    def moveItemUp(self, item: CW.DataObject) -> None:
         '''
         Move 'item' up by one position within its subgroup.
 
@@ -596,7 +590,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def moveItemDown(self, item: CW.DataObject):
+    def moveItemDown(self, item: CW.DataObject) -> None:
         '''
         Move 'item' down by one position within its subgroup.
 
@@ -619,7 +613,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
         
 
-    def clearSelectedSubgroups(self):
+    def clearSelectedSubgroups(self) -> None:
         '''
         Clear data from selected subgroups.
 
@@ -642,7 +636,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def delData(self):
+    def delData(self) -> None:
         '''
         Delete the selected data objects.
 
@@ -665,11 +659,14 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def loadData(self, subgroup: CW.DataSubGroup, paths: list[str]|None=None):
+    def loadData(
+        self,
+        subgroup: CW.DataSubGroup,
+        paths: list[str] | None = None
+    ) -> None:
         '''
-        Load data objects to a subgroup. This is a wrapper loading function 
-        that checks the subgroup type and then calls the specialized loading 
-        function.
+        Load data objects to a subgroup. This is a wrapper loading method that 
+        checks the subgroup type and then calls the specialized loading method.
 
         Parameters
         ----------
@@ -702,7 +699,7 @@ class DataManager(QW.QTreeWidget):
         group.setShapeWarnings()
 
 
-    def saveData(self, item: CW.DataObject, overwrite=True):
+    def saveData(self, item: CW.DataObject, overwrite: bool = True) -> None:
         '''
         Save the item data to file.
 
@@ -731,9 +728,8 @@ class DataManager(QW.QTreeWidget):
             else: 
                 return # safety
 
-            path, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
-                                                     pref.get_dir('out'),
-                                                     filext)
+            path, _ = QW.QFileDialog.getSaveFileName(
+                self, 'Save map', pref.get_dir('out'), filext)
             if path:
                 pref.set_dir('out', os.path.dirname(path))
             else:
@@ -773,9 +769,13 @@ class DataManager(QW.QTreeWidget):
         return any((obj.get('is_edited') for obj in self.getAllDataObjects()))
 
 
-    def loadInputMaps(self, group: CW.DataGroup, paths: list[str]|None=None):
+    def loadInputMaps(
+        self,
+        group: CW.DataGroup,
+        paths: list[str] | None = None
+    ) -> None:
         '''
-        Specialized loading function to load input maps to a group.
+        Specialized loading method to load input maps to a group.
 
         Parameters
         ----------
@@ -823,9 +823,13 @@ class DataManager(QW.QTreeWidget):
         self.expandRecursively(self.indexFromItem(group))
 
 
-    def loadMineralMaps(self, group: CW.DataGroup, paths: list[str]|None=None):
+    def loadMineralMaps(
+        self,
+        group: CW.DataGroup,
+        paths: list[str] | None = None
+    ) -> None:
         '''
-        Specialized loading function to load mineral maps to a group.
+        Specialized loading method to load mineral maps to a group.
 
         Parameters
         ----------
@@ -876,9 +880,13 @@ class DataManager(QW.QTreeWidget):
         self.expandRecursively(self.indexFromItem(group))
 
 
-    def loadMasks(self, group: CW.DataGroup, paths: list[str]|None=None):
+    def loadMasks(
+        self,
+        group: CW.DataGroup,
+        paths: list[str] | None = None
+    ) -> None:
         '''
-        Specialized loading function to load masks to a group.
+        Specialized loading method to load masks to a group.
 
         Parameters
         ----------
@@ -926,7 +934,7 @@ class DataManager(QW.QTreeWidget):
         self.expandRecursively(self.indexFromItem(group))
 
 
-    def invertInputMap(self):
+    def invertInputMap(self) -> None:
         '''
         Invert the selected input maps.
 
@@ -935,18 +943,16 @@ class DataManager(QW.QTreeWidget):
         items = [i for i in self.getSelectedDataObjects() if i.holdsInputMap()]
 
     # Invert the input map arrays held in each item
-        progBar = CW.PopUpProgBar(self, len(items), 'Inverting data')
+        pbar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
             i.get('data').invert()
-        # Set edited state to True for item
             i.setEdited(True)
-
-            progBar.setValue(n)
+            pbar.setValue(n)
 
         self.refreshView()
 
 
-    def invertMask(self):
+    def invertMask(self) -> None:
         '''
         Invert the selected masks.
 
@@ -955,44 +961,44 @@ class DataManager(QW.QTreeWidget):
         items = [i for i in self.getSelectedDataObjects() if i.holdsMask()]
 
     # Invert the mask arrays held in each item
-        progBar = CW.PopUpProgBar(self, len(items), 'Inverting data')
+        pbar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
             i.get('data').invert()
-        # Set edited state to True for item
             i.setEdited(True)
-
-            progBar.setValue(n)
+            pbar.setValue(n)
 
         self.refreshView()
 
 
-    def mergeMasks(self, group, mode):
+    def mergeMasks(self, group: CW.DataGroup, mode: str) -> None:
         '''
         Merge the selected masks into a new Mask object and add it to the
         group.
 
         Parameters
         ----------
-        group : DataGroup object
+        group : DataGroup
             The group that holds the mask data.
         mode : str
-            How to merge the masks. See DataManager.getCompositeMask() for more
+            How to merge the masks. See 'getCompositeMask' method for more 
             details.
 
         '''
-    # (Safety) Exit function if group is invalid
-        if group is None: return
-    # Create a new Mask object
+    # Exit function if group is invalid (safety)
+        if group is None: 
+            return
+    
+    # Exit function if composite mask is invalid
         merged_mask = group.getCompositeMask(mode=mode, ignore_single_mask=True)
-    # Exit function if mask is invalid
-        if merged_mask is None: return
-    # Append the mask to the group
+        if merged_mask is None: 
+            return
+        
+    # Append the mask to the group and set it as edited
         group.masks.addData(merged_mask)
-    # Set the new item as edited
         group.masks.getChildren()[-1].setEdited(True)
 
 
-    def checkMasks(self, checked: bool, group: CW.DataGroup):
+    def checkMasks(self, checked: bool, group: CW.DataGroup) -> None:
         '''
         Check or uncheck all masks loaded in a group.
 
@@ -1009,7 +1015,7 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
 
-    def exportMineralMap(self, item: CW.DataObject):
+    def exportMineralMap(self, item: CW.DataObject) -> None:
         '''
         Export the encoded mineral map (i.e,. with mineral classes expressed
         as numerical IDs) to ASCII format. If users requests it, the encoder
@@ -1021,16 +1027,16 @@ class DataManager(QW.QTreeWidget):
             The data object holding the mineral map data.
 
         '''
-
-    # Safety: exit function if item does not held mineral map data
+    # Exit function if item does not held mineral map data (safety)
         if not item.holdsMineralMap(): 
             return
 
-    # Do nothing if user choice is NO
+    # Ask for user confirm
         text =  'Export map as a numeric array?'
-        det_text = 'The translation dictionary is a text file that holds a '\
-                   'reference to the mineral classes linked with the IDs of '\
-                   'the exported mineral map.'
+        det_text = (
+            'The translation dictionary is a text file holding a reference to '
+            'the mineral classes linked with IDs of the exported mineral map.'
+        )
         msg_cbox = QW.QCheckBox('Include translation dictionary')
         msg_cbox.setChecked(True)
         choice = CW.MsgBox(self, 'Quest', text, det_text, cbox=msg_cbox)
@@ -1044,9 +1050,8 @@ class DataManager(QW.QTreeWidget):
         if not outpath:
             return
         
-        pref.set_dir('out', os.path.dirname(outpath))
-
     # Save the mineral map to disk
+        pref.set_dir('out', os.path.dirname(outpath))
         mmap = item.get('data')
         np.savetxt(outpath, mmap.minmap_encoded, fmt='%d')
 
@@ -1061,12 +1066,12 @@ class DataManager(QW.QTreeWidget):
                 ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
 
 
-    def fixDataSource(self, item: CW.DataObject):
+    def fixDataSource(self, item: CW.DataObject) -> None:
         '''
         Repair the data source of 'item' by selecting a valid filepath. This 
-        function attempts to automatically fix all the invalid items in the 
-        same group of 'item' using the parent folder of the selected filepath 
-        as a reference. 
+        method attempts to automatically fix all the invalid items in the same
+        group of 'item' using the parent folder of the selected filepath as a
+        reference. 
 
         Parameters
         ----------
@@ -1112,15 +1117,15 @@ class DataManager(QW.QTreeWidget):
         except Exception as e:
             return CW.MsgBox(self, 'Crit', f'Unexpected file: {path}', str(e))
 
-    # Try applying fix to data objects in the same group that are also not found
-    # by checking all the files in the same root folder of the loaded file
+    # Try fixing data objects in the same group that are also "not found" by 
+    # checking all the files in the same root folder of the loaded file
         available_files = os.listdir(root_fld)
         group = self.getItemParentGroup(item)
         for obj in group.getAllDataObjects():
         # Skip object if has not the 'not_found' status
             if not obj.get('not_found'): 
                 continue
-        # Get object info. If object is 'not_found', its path shouldn't be None
+        # Get object info; if object is "not_found", its path shouldn't be None
             obj_data, obj_path = obj.get('data', 'filepath')
             obj_fname = cf.path2filename(obj_path)
             obj_type = obj.subgroup().datatype
@@ -1148,15 +1153,14 @@ class DataManager(QW.QTreeWidget):
                 except:
                     continue
 
-    # Check for maps shapes warnings within the group
+    # Check for maps shapes warnings within the group and refresh view
         group.setShapeWarnings()
-                        
         self.refreshView()
 
                     
-    def refreshDataSource(self):
+    def refreshDataSource(self) -> None:
         '''
-        Re-load the selected data from its original source.
+        Reload the selected data from its original source.
 
         '''
         items = self.getSelectedDataObjects()
@@ -1182,10 +1186,9 @@ class DataManager(QW.QTreeWidget):
             finally:
                 pbar.setValue(n)
 
-    # Check for unfitting maps shapes within the samples
+    # Check for unfitting maps shapes within the samples and refresh view
         for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
             self.topLevelItem(idx).setShapeWarnings()
-
         self.refreshView()
 
     # Send detailed error message if any file failed to be refreshed
@@ -1195,47 +1198,53 @@ class DataManager(QW.QTreeWidget):
             CW.MsgBox(self, 'Crit', text, dtext)
 
 
-    def viewData(self, item):
+    def viewData(self, item: DataManagerWidgetItem) -> None:
         '''
-        Send signals for displaying the item's data.
+        Send signal for displaying the item's data.
 
         Parameters
         ----------
-        item : DataObject or DataSubGroup (or DataGroup)
-            The data object to be displayed. If an instance of DataGroup is
-            provided, exits the function.
+        item : DataObject, DataSubGroup or DataGroup
+            The data object to be displayed.
 
         '''
-    # # Exit the function if item is a group
-    #     if isinstance(item, DataGroup):
-    #         return
-
-    # Update the scene if item is a data group, data subgroup or data object
-        objects = (CW.DataObject, CW.DataSubGroup, CW.DataGroup)
-        if isinstance(item, objects):
+    # Update the scene if item is a valid object
+        if isinstance(item, (CW.DataObject, CW.DataSubGroup, CW.DataGroup)):
             self.updateSceneRequested.emit(item)
 
-    # Clear the entire scene if the item is not valid (= None)
+    # Clear the entire scene if the item is not valid
         else:
             self.clearView()
 
 
-    def refreshView(self):
+    def refreshView(self) -> None:
+        '''
+        Request a re-rendering of the currently displayed item.
+
+        '''
         self.viewData(self.currentItem())
 
 
-    def clearView(self):
+    def clearView(self) -> None:
+        '''
+        Send singal for clearing the view.
+
+        '''
         self.clearSceneRequested.emit()
 
 
-    def clearAll(self):
+    def clearAll(self) -> None:
+        '''
+        Remove all groups.
+
+        '''
         choice = CW.MsgBox(self, 'Quest', 'Remove all samples?')
         if choice.yes():
             self.clear()
             self.clearView()
 
     
-    def resetConfig(self):
+    def resetConfig(self) -> None:
         '''
         Reset the Data Manager to its default state and configuration.
 
@@ -1270,7 +1279,7 @@ class DataManager(QW.QTreeWidget):
         return config
 
 
-    def loadConfig(self, config: dict):
+    def loadConfig(self, config: dict) -> None:
         '''
         Set the state and configuration of the Data Manager to those provided
         in 'config'.
@@ -1313,52 +1322,45 @@ class DataManager(QW.QTreeWidget):
 
 
 class HistogramViewer(QW.QWidget):
-    '''
-    A widget to visualize and interact with histograms of input maps data.
-    '''
 
     scalerRangeChanged = pyqtSignal()
 
-    def __init__(self, maps_canvas: plots.ImageCanvas, parent=None):
+    def __init__(
+        self,
+        maps_canvas: plots.ImageCanvas,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        HistogramViewer class constructor.
+        A widget to visualize and interact with histograms of input maps data.
 
         Parameters
         ----------
         maps_canvas : ImageCanvas
             The canvas displaying input maps data.
-        parent : QtWidget or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
-        Returns
-        -------
-        None.
-
         '''
-        super(HistogramViewer, self).__init__(parent)
+        super().__init__(parent)
 
     # Define main attributes
         self.maps_canvas = maps_canvas
 
-    # Initialize GUI
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-
-    # Connect signals to slots
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
     # Histogram Canvas
-        self.canvas = plots.HistogramCanvas(logscale=True, size=(3, 1.5),
-                                            wheel_zoom=False, wheel_pan=False)
+        self.canvas = plots.HistogramCanvas(
+            logscale=True, size=(3, 1.5), wheel_zoom=False, wheel_pan=False)
         self.canvas.ax.get_yaxis().set_visible(False)
         self.canvas.setMinimumSize(300, 200)
-        # self.canvas.setFixedSize(300, 200) # for better performance
-        # self.canvas.setSizePolicy(QW.QSizePolicy.Minimum, QW.QSizePolicy.Minimum)
 
     # HeatMap Scaler widget
         self.scaler = plots.HeatmapScaler(self.canvas.ax, self.onSpanSelect)
@@ -1367,7 +1369,8 @@ class HistogramViewer(QW.QWidget):
         self.navtbar = plots.NavTbar.histCanvasDefault(self.canvas, self)
 
     # HeatMap scaler toolbar
-        self.scaler_tbar = CW.StyledToolbar('Histogram scaler toolbar')
+        self.scaler_tbar = QW.QToolBar('Histogram scaler toolbar')
+        self.scaler_tbar.setStyleSheet(style.SS_TOOLBAR)
 
     # Toggle scaler action [-> Heatmap scaler toolbar]
         self.scaler_action = self.scaler_tbar.addAction(
@@ -1425,7 +1428,7 @@ class HistogramViewer(QW.QWidget):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -1447,7 +1450,7 @@ class HistogramViewer(QW.QWidget):
         self.bin_slider.valueChanged.connect(self.setHistBins)
 
 
-    def showContextMenu(self, point):
+    def showContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu with custom actions.
 
@@ -1455,10 +1458,6 @@ class HistogramViewer(QW.QWidget):
         ----------
         point : QPoint
             The position of the context menu event that the widget receives.
-
-        Returns
-        -------
-        None.
 
         '''
     # Get context menu from NavTbar actions
@@ -1468,7 +1467,7 @@ class HistogramViewer(QW.QWidget):
         menu.exec(QCursor.pos())
 
 
-    def onScalerToggled(self, toggled: bool):
+    def onScalerToggled(self, toggled: bool) -> None:
         '''
         Slot triggered when scaler is toggled on/off from the scaler toolbar.
 
@@ -1497,7 +1496,7 @@ class HistogramViewer(QW.QWidget):
             self.canvas.draw()
 
 
-    def onScalerRangeChanged(self):
+    def onScalerRangeChanged(self) -> None:
         '''
         Slot triggered when the upper or the lower bound of the scaler are 
         modified from the respective widgets in the scaler toolbar.
@@ -1507,7 +1506,7 @@ class HistogramViewer(QW.QWidget):
         self.scalerRangeChanged.emit()
 
 
-    def onSpanSelect(self, vmin: float, vmax: float):
+    def onSpanSelect(self, vmin: float, vmax: float) -> None:
         '''
         Slot triggered after interacting with the span selector. Highlights
         in the data viewer the pixels that fall within the selected area in the
@@ -1525,13 +1524,13 @@ class HistogramViewer(QW.QWidget):
         if self.canvas.is_empty():
             return
 
-    # Adjust values to integers. Empty ranges are converted to (0, 0).
+    # Adjust values to integers; empty ranges are converted to (0, 0)
         vmin, vmax = round(vmin), round(vmax)
         if vmin == vmax:
             vmin, vmax = 0, 0
 
-    # Update vmin and vmax values in the scaler toolbar. We temporarily block 
-    # their signals to avoid unwanted loop with 'onScalerRangeChanged' function
+    # Update vmin and vmax values in the scaler toolbar while blocking their 
+    # signals temporarily to avoid loops with 'onScalerRangeChanged' method
         self.scaler_vmin.blockSignals(True)
         self.scaler_vmax.blockSignals(True)
         self.scaler_vmin.setValue(vmin)
@@ -1544,15 +1543,15 @@ class HistogramViewer(QW.QWidget):
         self.scalerRangeChanged.emit()
 
 
-    def applyScaling(self, vmin: int|None, vmax: int|None):
+    def applyScaling(self, vmin: int | None, vmax: int | None) -> None:
         '''
         Set the maps canvas clims to 'vmin' and 'vmax'.
 
         Parameters
         ----------
-        vmin : int | None
+        vmin : int or None
             Lower range value. If None, the clims are reset.
-        vmax : int | None
+        vmax : int or None
             Upper range value. If None, the clims are reset.
 
         '''
@@ -1567,25 +1566,26 @@ class HistogramViewer(QW.QWidget):
         self.maps_canvas.draw()
 
 
-    def updateScalerExtents(self, update_span=True):
+    def updateScalerExtents(self, update_span: bool = True) -> None:
         '''
         Select a range in the histogram using the vmin and vmax line edits in
-        the Navigation Toolbar. If 'update_span' is True, this function also
-        updates the span selector.
+        the Navigation Toolbar.
 
         Parameters
         ----------
         update_span : bool, optional
-            Whether the span selector should be updated as well. The default is
-            True.
+            Whether to update the span selector as well. The default is True.
 
         '''
+    # Do nothing if the histogram canvas is empty
         if self.canvas.is_empty():
             return
-        
+    
+    # Retrieve upper and lower range values from the line edits
         vmin = self.scaler_vmin.value()
         vmax = self.scaler_vmax.value()
 
+    # Deal with invalid range values
         if vmax > vmin:
             self.applyScaling(vmin, vmax)
             self.warn_icon.setVisible(False)
@@ -1594,6 +1594,7 @@ class HistogramViewer(QW.QWidget):
             if vmax < vmin:
                 self.warn_icon.setVisible(True)
 
+    # Also update the span selector widget if requested
         if update_span:
             if vmax > vmin:
                 self.scaler.extents = (vmin, vmax)
@@ -1604,16 +1605,16 @@ class HistogramViewer(QW.QWidget):
             self.canvas.draw()
 
 
-    def hideScaler(self):
+    def hideScaler(self) -> None:
         '''
-        Hides the spanner view from the histogram canvas. Since this function
-        has no canvas draw() call, it must be triggered before update_canvas().
+        Hides the spanner view from the histogram canvas. Warning: this method
+        does not redraw the canvas.
 
         '''
         self.scaler.set_visible(False)
 
 
-    def setHistBins(self, value: int):
+    def setHistBins(self, value: int) -> None:
         '''
         Set the number of bins of the histogram.
 
@@ -1627,7 +1628,7 @@ class HistogramViewer(QW.QWidget):
         self.canvas.set_nbins(value)
 
 
-    def extractMaskFromScaler(self):
+    def extractMaskFromScaler(self) -> None:
         '''
         Extract a mask from the range selected in the histogram scaler and save
         it to file.
@@ -1652,9 +1653,8 @@ class HistogramViewer(QW.QWidget):
         mask = Mask(mask_array)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dir('out'),
-                                                    '''Mask file (*.msk)''')
+        outpath, _ = QW.QFileDialog.getSaveFileName(
+            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
         if outpath:
             pref.set_dir('out', os.path.dirname(outpath))
             try:
@@ -1663,7 +1663,7 @@ class HistogramViewer(QW.QWidget):
                 return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
             
 
-    def resetConfig(self):
+    def resetConfig(self) -> None:
         '''
         Reset the Histogram Viewer to its default state and configuration.
 
@@ -1712,7 +1712,7 @@ class HistogramViewer(QW.QWidget):
         return config
     
 
-    def loadConfig(self, config: dict):
+    def loadConfig(self, config: dict) -> None:
         '''
         Set the state and configuration of the Histogram Viewer to those 
         provided in 'config'.
@@ -1744,42 +1744,20 @@ class HistogramViewer(QW.QWidget):
         self.setHistBins(nbins)
         
 
-# !!! EXPERIMENTAL
-    # def resizeEvent(self, e):
-    #     '''
-    #     Reimplementation of resizeEvent default function. It just temporarily
-    #     suppress the udpates of the histogram canvas object, that is very slow
-    #     to repaint during the resize events.
-
-    #     Parameters
-    #     ----------
-    #     e : resizeEvent
-    #         The resize event.
-
-    #     Returns
-    #     -------
-    #     None.
-
-    #     '''
-    #     self.canvas.setUpdatesEnabled(False)
-    #     e.accept()
-    #     self.canvas.setUpdatesEnabled(True)
-
-
 
 class ModeViewer(CW.StyledTabWidget):
-    '''
-    A widget to visualize the modal amounts of the mineral classes occurring in
-    the mineral map that is currently displayed in the Data Viewer. It includes
-    an interactive legend.
-    
-    '''
 
     updateSceneRequested = pyqtSignal(CW.DataObject) # current data object
 
-    def __init__(self, map_canvas, parent=None):
+    def __init__(
+        self,
+        map_canvas: plots.ImageCanvas,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A widget to visualize the modal amounts of the mineral classes that 
+        occurr in the mineral map currently displayed in the Data Viewer. It
+        includes an interactive legend.
 
         Parameters
         ----------
@@ -1789,20 +1767,18 @@ class ModeViewer(CW.StyledTabWidget):
             The GUI parent of this widget. The default is None.
 
         '''
-        super(ModeViewer, self).__init__(parent)
+        super().__init__(parent)
 
     # Set principal attributes
         self._current_data_object = None
         self.map_canvas = map_canvas
 
-    # Initialize GUI
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-
-    # Connect signals to slots
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
         
@@ -1811,16 +1787,16 @@ class ModeViewer(CW.StyledTabWidget):
         self.legend = CW.Legend(context_menu=True)
 
     # Canvas
-        self.canvas = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
-                                      wheel_zoom=False, wheel_pan=False)
+        self.canvas = plots.BarCanvas(
+            orientation='h', size=(3.6, 6.4), wheel_zoom=False, wheel_pan=False)
         self.canvas.setMinimumSize(200, 350)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar.barCanvasDefault(self.canvas, self)
+        self.navtbar = plots.NavTbar.barCanvasDefault(self.canvas, self)
     
     # Wrap canvas and navigation toolbar in a vertical box layout
         plot_vbox = QW.QVBoxLayout()
-        plot_vbox.addWidget(self.navTbar)
+        plot_vbox.addWidget(self.navtbar)
         plot_vbox.addWidget(self.canvas)
 
     # Add tabs to the Mode Viewer
@@ -1830,7 +1806,7 @@ class ModeViewer(CW.StyledTabWidget):
         self.setTabToolTip(1, 'Bar plot')
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
         
@@ -1848,7 +1824,7 @@ class ModeViewer(CW.StyledTabWidget):
         self.legend.maskExtractionRequested.connect(self.onMaskExtracted)
 
 
-    def showContextMenu(self, point):
+    def showContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu with custom actions.
 
@@ -1859,12 +1835,12 @@ class ModeViewer(CW.StyledTabWidget):
 
         '''
     # Get context menu from NavTbar actions
-        menu = self.canvas.get_navigation_context_menu(self.navTbar)
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
 
-    def _update_mode_canvas(self, minmap, title=''):
+    def _update_mode_canvas(self, minmap: MineralMap, title: str = '') -> None:
         '''
         Update the bar canvas that displays the mode data.
 
@@ -1882,7 +1858,7 @@ class ModeViewer(CW.StyledTabWidget):
         self.canvas.update_canvas(mode, mode_lbl, title, mode_col)
 
 
-    def update(self, data_object, title=''):
+    def update(self, data_object: CW.DataObject, title: str = '') -> None:
         '''
         Update all components of the ModeViewer.
 
@@ -1906,7 +1882,7 @@ class ModeViewer(CW.StyledTabWidget):
         self.legend.update(minmap)
 
 
-    def clearAll(self):
+    def clearAll(self) -> None:
         '''
         Reset all components of the ModeViewer.
 
@@ -1916,19 +1892,23 @@ class ModeViewer(CW.StyledTabWidget):
         self.legend.clear()
 
 
-    def onColorChanged(self, legend_item:QW.QTreeWidgetItem, color:tuple):
+    def onColorChanged(
+        self,
+        item: QW.QTreeWidgetItem,
+        color: tuple[int, int, int]
+    ) -> None:
         '''
-        Alter the displayed color of a class. This function propagates the
+        Alter the displayed color of a class. This method propagates the
         changes to the mineral map, the map canvas, the mode bar plot and the
-        legend. It also sets the linked data object as edited. The arguments of
-        this function are specifically compatible with the colorChangeRequested
-        signal emitted by the legend (see Legend object for more details).
+        legend. The arguments of this method are specifically compatible with
+        'colorChangeRequested' signal emitted by the legend (see 'Legend' class
+        for more details).
 
         Parameters
         ----------
-        legend_item : QTreeWidgetItem
+        item : QTreeWidgetItem
             The legend item that requested the color change.
-        color : tuple
+        color : tuple[int, int, int]
             RGB triplet. If empty, a random color is generated.
 
         '''
@@ -1937,27 +1917,23 @@ class ModeViewer(CW.StyledTabWidget):
 
     # Apply the color change to mineral map (if color is empty, randomize it)
         if not len(color): color = minmap.rand_colorlist(1)[0]
-        phase_name = legend_item.text(1)
+        phase_name = item.text(1)
         minmap.set_phase_color(phase_name, color)
 
-    # Update the map canvas colormap
+    # Update the map canvas colormap, the mode canvas and the legend
         self.map_canvas.alter_cmap(minmap.palette.values())
-
-    # Update the mode canvas
         self._update_mode_canvas(minmap)
-
-    # Update the legend
-        self.legend.changeItemColor(legend_item, color)
+        self.legend.changeItemColor(item, color)
 
     # Set the current data object as edited
         self._current_data_object.setEdited(True)
 
 
-    def onPaletteRandomized(self):
+    def onPaletteRandomized(self) -> None:
         '''
-        Randomize the palette of the mineral map. This function propagates the
+        Randomize the palette of the mineral map. This method propagates the
         changes to the mineral map, the map canvas, the mode bar plot and the
-        legend. It also sets the linked data object as edited.
+        legend.
 
         '''
     # Extract mineral map data
@@ -1967,30 +1943,25 @@ class ModeViewer(CW.StyledTabWidget):
         rand_palette = minmap.rand_colorlist()
         minmap.set_palette(rand_palette)
 
-    # Update the image canvas colormap
+    # Update the image canvas colormap, the mode canvas and the legend
         self.map_canvas.alter_cmap(rand_palette)
-
-    # Update the mode canvas
         self._update_mode_canvas(minmap)
-
-    # Update the legend
         self.legend.update(minmap)
 
     # Set the current data object as edited
         self._current_data_object.setEdited(True)
 
 
-    def onClassRenamed(self, legend_item: QW.QTreeWidgetItem, new_name: str):
+    def onClassRenamed(self, item: QW.QTreeWidgetItem, new_name: str) -> None:
         '''
-        Rename a class. This function propagates the changes to the mineral
-        map, the map canvas, the mode bar plot and the legend. It also sets the
-        linked data object as edited. The arguments of this function are
-        specifically compatible with the itemRenameRequested signal emitted by
-        the legend (see Legend object for more details).
+        Rename a class. This method propagates the changes to the mineral
+        map, the map canvas, the mode bar plot and the legend. The arguments of 
+        this method are specifically compatible with 'itemRenameRequested' 
+        signal emitted by the legend (see 'Legend' class for more details).
 
         Parameters
         ----------
-        legend_item : QTreeWidgetItem
+        item : QTreeWidgetItem
             The legend item that requested to be renamed.
         new_name : str
             New class name.
@@ -1998,7 +1969,7 @@ class ModeViewer(CW.StyledTabWidget):
         '''
     # Rename the phase in the mineral map
         minmap = self._current_data_object.get('data')
-        old_name = legend_item.text(1)
+        old_name = item.text(1)
         minmap.rename_phase(old_name, new_name)
             
     # Request update scene
@@ -2008,17 +1979,17 @@ class ModeViewer(CW.StyledTabWidget):
         self._current_data_object.setEdited(True)
 
 
-    def onClassMerged(self, classes:list, new_name:str):
+    def onClassMerged(self, classes: list[str], new_name: str) -> None:
         '''
-        Merge two or more classes into a new one. This function propagates the 
+        Merge two or more classes into a new one. This method propagates the 
         changes to the mineral map, the map canvas, the mode bar plot and the 
-        legend. It also sets the linked data object as edited. The arguments of 
-        this function are specifically compatible with the itemsMergeRequested 
-        signal emitted by the legend (see Legend object for more details).
+        legend. The arguments of this method are specifically compatible with
+        'itemsMergeRequested' signal emitted by the legend (see 'Legend' class
+        for more details).
 
         Parameters
         ----------
-        classes : list
+        classes : list[str]
             List of class names.
         new_name : str
             New name for the merged class.
@@ -2035,24 +2006,24 @@ class ModeViewer(CW.StyledTabWidget):
         self._current_data_object.setEdited(True)
 
 
-    def onItemHighlighted(self, toggled:bool, legend_item:QW.QTreeWidgetItem):
+    def onItemHighlighted(self, toggled: bool, item: QW.QTreeWidgetItem) -> None:
         '''
-        Highlight on/off the selected mineral class in the map canvas. The 
-        arguments of this function are specifically compatible with the 
-        itemHighlightRequested signal emitted by the legend (see Legend object 
-        for more details).
+        Highlight on or off the selected mineral class in the map canvas. The 
+        arguments of this method are specifically compatible with 
+        'itemHighlightRequested' signal emitted by the legend (see 'Legend' 
+        class for more details).
 
         Parameters
         ----------
         toggled : bool
-            Highlight on/off
-        legend_item : QW.QTreeWidgetItem
+            Highlight state of the class.
+        item : QW.QTreeWidgetItem
             The legend item that requested to be highlighted.
 
         '''
         if toggled:
             minmap = self._current_data_object.get('data')
-            phase_id = minmap.as_id(legend_item.text(1))
+            phase_id = minmap.as_id(item.text(1))
             vmin, vmax = phase_id - 0.5, phase_id + 0.5
         else:
             vmin, vmax = None, None
@@ -2061,13 +2032,13 @@ class ModeViewer(CW.StyledTabWidget):
         self.map_canvas.draw()
 
 
-    def onMaskExtracted(self, classes: list):
+    def onMaskExtracted(self, classes: list[str]) -> None:
         '''
         Extract a mask from a selection of mineral classes and save it to file.
 
         Parameters
         ----------
-        classes : list
+        classes : list[str]
             Selected mineral classes.
 
         '''
@@ -2085,9 +2056,8 @@ class ModeViewer(CW.StyledTabWidget):
         mask = Mask(mask)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dir('out'),
-                                                    '''Mask file (*.msk)''')
+        outpath, _ = QW.QFileDialog.getSaveFileName(
+            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
         if outpath:
             pref.set_dir('out', os.path.dirname(outpath))
             try:
@@ -2096,14 +2066,14 @@ class ModeViewer(CW.StyledTabWidget):
                 return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
             
 
-    def resetConfig(self):
+    def resetConfig(self) -> None:
         '''
         Reset the Mode Viewer to its default state and configuration.
 
         '''
-        self.navTbar.showToolbarAction().setChecked(True)
-        self.navTbar.setVisible(True)
-        self.navTbar.lbl_action.setChecked(False)
+        self.navtbar.showToolbarAction().setChecked(True)
+        self.navtbar.setVisible(True)
+        self.navtbar.lbl_action.setChecked(False)
 
 
     def getConfig(self) -> dict:
@@ -2118,12 +2088,12 @@ class ModeViewer(CW.StyledTabWidget):
 
         '''
         config = {'NavTbar': {}}
-        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
-        config['NavTbar']['Labelize'] = self.navTbar.lbl_action.isChecked()
+        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
+        config['NavTbar']['Labelize'] = self.navtbar.lbl_action.isChecked()
         return config
     
 
-    def loadConfig(self, config: dict):
+    def loadConfig(self, config: dict) -> None:
         '''
         Set the state and configuration of the Mode Viewer to those provided in
         'config'.
@@ -2135,33 +2105,33 @@ class ModeViewer(CW.StyledTabWidget):
 
         '''
         show_ntbar, labelize = config['NavTbar'].values()
-        self.navTbar.showToolbarAction().setChecked(show_ntbar)
-        self.navTbar.setVisible(show_ntbar)
-        self.navTbar.lbl_action.setChecked(labelize)
+        self.navtbar.showToolbarAction().setChecked(show_ntbar)
+        self.navtbar.setVisible(show_ntbar)
+        self.navtbar.lbl_action.setChecked(labelize)
 
 
 
 class RoiEditor(QW.QWidget):
-    '''
-    A widget to build, load, edit and save RoiMap objects interactively.
-
-    '''
 
     rectangleSelectorUpdated = pyqtSignal()
 
-    def __init__(self, maps_canvas: plots.ImageCanvas, parent=None):
+    def __init__(
+        self,
+        maps_canvas: plots.ImageCanvas,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A widget to build, load, edit and save RoiMap objects interactively.
 
         Parameters
         ----------
         maps_canvas : ImageCanvas
             The canvas where ROIs should be drawn and displayed.
-        parent : QtWidget or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
         '''
-        super(RoiEditor, self).__init__(parent)
+        super().__init__(parent)
 
     # Define main attributes
         self.canvas = maps_canvas
@@ -2179,20 +2149,19 @@ class RoiEditor(QW.QWidget):
         self.roi_color = iatools.hex2rgb(hex_roi_color)
         self.roi_selcolor = iatools.hex2rgb(hex_roi_selcolor)
 
-    # Initialize GUI
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-
-    # Connect signals to slots
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
     # Toolbar
-        self.toolbar = CW.StyledToolbar('ROI toolbar')
+        self.toolbar = QW.QToolBar('ROI toolbar')
+        self.toolbar.setStyleSheet(style.SS_TOOLBAR)
 
     # Load ROI map [-> Toolbar Action]
         self.load_action = self.toolbar.addAction(
@@ -2229,7 +2198,8 @@ class RoiEditor(QW.QWidget):
         self.extr_mask_action.setEnabled(False)
 
     # ROI visual preferences [-> Toolbar Menu-Action]
-        pref_menu = CW.StyledMenu()
+        pref_menu = QW.QMenu()
+        pref_menu.setStyleSheet(style.SS_MENU)
     # - Set ROI outline color action
         self.roicolor_action = pref_menu.addAction('Color...')
     # - Set ROI outline selection color action 
@@ -2250,16 +2220,16 @@ class RoiEditor(QW.QWidget):
         self.mappath = CW.PathLabel(full_display=False)
 
     # Hide ROI map (Checkable Styled Button)
-        self.hideroi_btn = CW.StyledButton(QIcon(r'Icons/not_visible.png'))
+        self.hideroi_btn = CW.StyledButton(r'Icons/not_visible.png')
         self.hideroi_btn.setCheckable(True)
         self.hideroi_btn.setToolTip('Hide ROI map')
 
     # Remove (unload) ROI map (Styled Button)
-        self.unload_btn = CW.StyledButton(QIcon(r'Icons/clear.png')) 
+        self.unload_btn = CW.StyledButton(r'Icons/clear.png')
         self.unload_btn.setToolTip('Clear ROI map')
 
     # Remove ROI button [-> Corner table widget]
-        self.delroi_btn = CW.StyledButton(QIcon(r'Icons/remove.png'))
+        self.delroi_btn = CW.StyledButton(r'Icons/remove.png')
         self.delroi_btn.setFlat(True)
 
     # Roi table
@@ -2279,11 +2249,11 @@ class RoiEditor(QW.QWidget):
         self.barCanvas.setMinimumSize(300, 300)
 
     # Bar plot Navigation toolbar
-        self.navTbar = plots.NavTbar.barCanvasDefault(self.barCanvas, self)
+        self.navtbar = plots.NavTbar.barCanvasDefault(self.barCanvas, self)
         
     # Wrap bar plot and its navigation toolbar in a vbox layout
         barplot_vbox = QW.QVBoxLayout()
-        barplot_vbox.addWidget(self.navTbar)
+        barplot_vbox.addWidget(self.navtbar)
         barplot_vbox.addWidget(self.barCanvas)
 
     # ROI visualizer (Styled Tab Widget -> [ROI table | bar plot])
@@ -2304,7 +2274,7 @@ class RoiEditor(QW.QWidget):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -2349,25 +2319,23 @@ class RoiEditor(QW.QWidget):
 
     # Connect table signals (ROI selected & ROI name edited)
         self.table.itemSelectionChanged.connect(self.updatePatchSelection)
-        self.table.itemChanged.connect(self.editRoiName)
+        self.table.itemChanged.connect(self.onRoiNameEdited)
 
     # Show custom context menu when right-clicking on the table
-        self.table.customContextMenuRequested.connect(
-            self.showTableContextMenu)
+        self.table.customContextMenuRequested.connect(self.showTableContextMenu)
 
     # Show custom context menu when right-clicking on the bar canvas
-        self.barCanvas.customContextMenuRequested.connect(
-            self.showCanvasContextMenu)
+        self.barCanvas.customContextMenuRequested.connect(self.showCanvasContextMenu)
 
 
     @property
-    def selectedTableIndices(self):
+    def selectedTableIndices(self) -> list[int]:
         '''
         Get a list of the indices of the selected ROIs in the ROIs table.
 
         Returns
         -------
-        selectedIndices : list
+        selectedIndices : list[int]
             Selected indices.
 
         '''
@@ -2377,7 +2345,7 @@ class RoiEditor(QW.QWidget):
         return selectedIndices
 
 
-    def _redraw(self):
+    def _redraw(self) -> None:
         '''
         Redraw the canvas and update the cursor of the rectangle selector.
 
@@ -2386,7 +2354,7 @@ class RoiEditor(QW.QWidget):
         self.rect_sel.updateCursor()
 
 
-    def updateBarPlot(self):
+    def updateBarPlot(self) -> None:
         '''
         Update the bar canvas that displays the cumulative pixel count for each
         drawn ROI.
@@ -2401,7 +2369,7 @@ class RoiEditor(QW.QWidget):
             self.barCanvas.update_canvas(counts, names, 'ROIs Counter')
 
 
-    def showTableContextMenu(self, point):
+    def showTableContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu when right-clicking on the ROI table.
 
@@ -2411,7 +2379,6 @@ class RoiEditor(QW.QWidget):
             The position of the context menu event that the widget receives.
 
         '''
-
     # Exit function when clicking outside any item
         if self.table.itemAt(point) is None: 
             return
@@ -2433,7 +2400,7 @@ class RoiEditor(QW.QWidget):
         menu.exec(QCursor.pos())
 
 
-    def showCanvasContextMenu(self, point):
+    def showCanvasContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu when right-clicking on the bar plot.
 
@@ -2444,12 +2411,16 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Get context menu from NavTbar actions
-        menu = self.barCanvas.get_navigation_context_menu(self.navTbar)
+        menu = self.barCanvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
 
-    def onRectSelect(self, eclick, erelease):
+    def onRectSelect(
+        self, 
+        eclick: plots.mpl_backend_bases.MouseEvent,
+        erelease: plots.mpl_backend_bases.MouseEvent
+    ) -> None:
         '''
         Callback function for the rectangle selector. It is triggered when
         selection is performed by the user (left mouse button click-release).
@@ -2473,14 +2444,14 @@ class RoiEditor(QW.QWidget):
             self.rectangleSelectorUpdated.emit()
 
 
-    def selectRoi(self, event):
+    def selectRoi(self, event: plots.mpl_backend_bases.PickEvent) -> None:
         '''
         Callback function for picking events that can be triggered when the
         rectangle selector is active.
 
         Parameters
         ----------
-        event : Matplotlib Pick event
+        event : Matplotlib PickEvent
             The picking event triggered by left-clicking on a ROI patch.
 
         '''
@@ -2495,18 +2466,18 @@ class RoiEditor(QW.QWidget):
                 self.table.selectRow(idx)
 
 
-    def toggleRectSelect(self, toggled):
+    def toggleRectSelect(self, toggled: bool) -> None:
         '''
         Toggle on/off the rectangle selector.
 
         Parameters
         ----------
         toggled : bool
-            Whether the rectangle selector should be toggled.
+            Toggle state.
 
         '''
     # Create a mpl picking event connection if the rectangle is toggled on,
-    # otherwise delete it.
+    # otherwise delete it
         if toggled:
             self.pcid = self.canvas.mpl_connect('pick_event', self.selectRoi)
         else:
@@ -2521,17 +2492,16 @@ class RoiEditor(QW.QWidget):
         self.addroi_action.setEnabled(toggled)
         self.extr_mask_action.setEnabled(toggled)
 
-    # When the rectangle is activated, the last selection is displayed. So we
+    # When the rectangle is activated, the last selection is displayed; so we
     # need to send the signal to inform that the selector has been updated
         self.rectangleSelectorUpdated.emit()
 
 
-    def updatePatchSelection(self):
+    def updatePatchSelection(self) -> None:
         '''
         Redraw ROI patches on canvas with a different color based on their
-        selection state. This function is called whenever a new ROI selection
-        is performed or when a new ROI color or selection color is set. This
-        function also redraws the canvas.
+        selection state. This must be called whenever a new ROI selection is
+        performed or when a new ROI color or selection color is set.
 
         '''
         selected = self.selectedTableIndices
@@ -2541,19 +2511,15 @@ class RoiEditor(QW.QWidget):
         self._redraw()
 
 
-    def editRoiName(self, item):
+    def onRoiNameEdited(self, item: QW.QTableWidgetItem) -> None:
         '''
-        Rename ROI. This function is triggered by an itemChanged signal from
-        the ROIs table.
+        Edit the name of the ROI patch when its linked 'item' in the ROI table
+        is renamed.
 
         Parameters
         ----------
         item : QTableWidgetItem
             The table item that was edited.
-
-        Returns
-        -------
-        None.
 
         '''
         idx = item.row()
@@ -2570,10 +2536,10 @@ class RoiEditor(QW.QWidget):
         self._redraw()
 
 
-    def addPatchToCanvas(self, name, bbox):
+    def addPatchToCanvas(self, name: str, bbox: tuple | list) -> None:
         '''
-        Add a new ROI to canvas as a new patch (Rectangle) and its linked
-        annotation. It does not redraw the canvas.
+        Add a new ROI to canvas as a new patch and its linked annotation. 
+        Warning: this method does not redraw the canvas.
 
         Parameters
         ----------
@@ -2603,14 +2569,14 @@ class RoiEditor(QW.QWidget):
         self.patches.append((text, patch))
 
 
-    def editPatchAnnotation(self, index, text):
+    def editPatchAnnotation(self, index: int, text: str) -> None:
         '''
         Change text of a ROI patch annotation.
 
         Parameters
         ----------
         index : int
-            The patch index in self.patches.
+            The patch index in 'self.patches'.
         text : str
             The new annotation text.
 
@@ -2619,7 +2585,7 @@ class RoiEditor(QW.QWidget):
         annotation.set_text(text)
 
 
-    def removePatchFromCanvas(self, index):
+    def removePatchFromCanvas(self, index: int) -> None:
         '''
         Remove ROI patch from canvas and its linked annotation. It does not
         redraw the canvas.
@@ -2636,18 +2602,21 @@ class RoiEditor(QW.QWidget):
             patch.remove()
 
 
-    def getColorFromDialog(self, old_color):
+    def getColorFromDialog(
+        self,
+        old_color: tuple[int, int, int]
+    ) -> tuple[int, int, int]:
         '''
         Show a dialog to interactively select a color.
 
         Parameters
         ----------
-        old_color : tuple
+        old_color : tuple[int, int, int]
             The dialog defaults to this color. Must be provided as RGB triplet.
 
         Returns
         -------
-        rgb : tuple
+        rgb : tuple[int, int, int]
             Selected color as RGB triplet.
 
         '''
@@ -2658,13 +2627,9 @@ class RoiEditor(QW.QWidget):
         return rgb
 
 
-    def setRoiColor(self):
+    def setRoiColor(self) -> None:
         '''
         Set the color of the ROIs borders when they are not selected.
-
-        Returns
-        -------
-        None.
 
         '''
         rgb = self.getColorFromDialog(self.roi_color)
@@ -2674,13 +2639,9 @@ class RoiEditor(QW.QWidget):
             self.updatePatchSelection()
 
 
-    def setRoiSelectionColor(self):
+    def setRoiSelectionColor(self) -> None:
         '''
         Set the color of the ROIs borders when they are selected.
-
-        Returns
-        -------
-        None.
 
         '''
         rgb = self.getColorFromDialog(self.roi_selcolor)
@@ -2690,7 +2651,7 @@ class RoiEditor(QW.QWidget):
             self.updatePatchSelection()
 
 
-    def setRoiFilled(self, filled):
+    def setRoiFilled(self, filled: bool) -> None:
         '''
         Set if the ROIs should be filled or unfilled. The filling color is the
         same as the ROIs border color (selected or unselected).
@@ -2700,10 +2661,6 @@ class RoiEditor(QW.QWidget):
         filled : bool
             Whether the ROIs should be filled.
 
-        Returns
-        -------
-        None.
-
         '''
         self.roi_filled = filled
         pref.edit_setting('plots/roi_filled', filled)
@@ -2712,8 +2669,18 @@ class RoiEditor(QW.QWidget):
         self._redraw()
 
 
-    def addAutoRoi(self, auto_roimap):
-    
+    def addAutoRoi(self, auto_roimap: RoiMap) -> None:
+        '''
+        Populate the current ROI map with the auto-traced ROIs that are stored
+        in 'auto_roimap'. This should only be called when the "ROI detector"
+        dialog is closed.
+
+        Parameters
+        ----------
+        auto_roimap : RoiMap
+            ROI map whose ROIs have been traced automatically.
+
+        '''
     # Create a new ROI map if there was no existent ROI map
         if self.current_roimap is None:
             self.mappath.setPath('*Unsaved ROI map')
@@ -2736,25 +2703,23 @@ class RoiEditor(QW.QWidget):
         self._redraw()
         
 
-    def addRoi(self):
+    def addRoi(self) -> None:
         '''
-        Wrapper function to easily add a new ROI with the extents of the
-        currently selected rectangle. The function also redraws the canvas.
-
-        Returns
-        -------
-        None.
+        Wrapper method to easily add a new ROI with the extents of the 
+        currently selected rectangle. This method also redraws the canvas.
 
         '''
     # Exit function if canvas is empty
         image = self.canvas.image
-        if image is None: return
+        if image is None: 
+            return
 
-    # Get ROI bbox. If bbox is invalid (=None) exit function.
+    # Get ROI bbox. Exit function if bbox is invalid (= None)
         map_array = image.get_array()
         map_shape = map_array.shape
         bbox = self.rect_sel.fixed_rect_bbox(map_shape)
-        if bbox is None: return
+        if bbox is None: 
+            return
 
     # If no ROI map is loaded, then create a new one.
         if self.current_roimap is None:
@@ -2764,9 +2729,10 @@ class RoiEditor(QW.QWidget):
     # Send a warning if a ROI map is loaded and has different shape of the map
     # currently displayed in the canvas.
         elif self.current_roimap.shape != map_shape:
-            warn_text = 'Warning: different map shapes detected. Drawing '\
-                        'ROIs on top of different sized maps leads to '\
-                        'unpredictable behaviours. Proceed anyway?'
+            warn_text = (
+                'Warning: different map shapes detected. Drawing ROIs will '
+                'lead to unpredictable results. Proceed anyway?'
+            )
             choice = CW.MsgBox(self, 'QuestWarn', warn_text)
 
         # Exit function if user does not want to procede
@@ -2795,7 +2761,7 @@ class RoiEditor(QW.QWidget):
             self._redraw()
 
 
-    def addRoiToTable(self, name, pixel_count):
+    def addRoiToTable(self, name: str, pixel_count: int) -> None:
         '''
         Append ROI to the ROIs table as a new row.
 
@@ -2824,9 +2790,9 @@ class RoiEditor(QW.QWidget):
         self.table.blockSignals(False)
 
 
-    def setRoiMapHidden(self, hidden):
+    def setRoiMapHidden(self, hidden: bool) -> None:
         '''
-        Show/hide all ROIs displayed in the canvas. The function also redraws
+        Show/hide all ROIs displayed in the canvas. This method also redraws
         the canvas.
 
         Parameters
@@ -2841,7 +2807,7 @@ class RoiEditor(QW.QWidget):
         self._redraw()
 
 
-    def extractMaskFromSelection(self):
+    def extractMaskFromSelection(self) -> None:
         '''
         Extract and save a mask from current selection.
 
@@ -2869,9 +2835,8 @@ class RoiEditor(QW.QWidget):
             mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dir('out'),
-                                                    '''Mask file (*.msk)''')
+        outpath, _ = QW.QFileDialog.getSaveFileName(
+            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
         if outpath:
             pref.set_dir('out', os.path.dirname(outpath))
             try:
@@ -2880,14 +2845,15 @@ class RoiEditor(QW.QWidget):
                 return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
-    def extractMaskFromRois(self):
+    def extractMaskFromRois(self) -> None:
         '''
         Extract and save a mask from selected ROIs.
 
         '''
-    # Get the indices of the selected ROIs. Exit function if no ROI is selected
+    # Do nothing if no ROI is selected
         selected = self.selectedTableIndices
-        if not len(selected): return
+        if not len(selected): 
+            return
 
     # Initialize a new Mask of 1's with the shape of the current ROI map
         shape = self.current_roimap.shape
@@ -2908,9 +2874,8 @@ class RoiEditor(QW.QWidget):
                 mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dir('out'),
-                                                    '''Mask file (*.msk)''')
+        outpath, _ = QW.QFileDialog.getSaveFileName(
+            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
         if outpath:
             pref.set_dir('out', os.path.dirname(outpath))
             try:
@@ -2919,20 +2884,20 @@ class RoiEditor(QW.QWidget):
                 return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
-    def removeRoi(self):
+    def removeRoi(self) -> None:
         '''
-        Wrapper function to easily remove selected ROIs. This function requires
-        a confirm from the user. The function also redraws the canvas.
+        Wrapper method to easily remove selected ROIs. This method requires a
+        a user confirm. This method also redraws the canvas.
 
         '''
-    # Get the indices of the selected ROIs. Exit function if no ROI is selected
+    # Exit function if no ROI is selected
         selected = self.selectedTableIndices
-        if not len(selected): return
+        if not len(selected): 
+            return
 
-    # Ask for confirmation
+    # Ask for user confirmation
         choice = CW.MsgBox(self, 'Quest', 'Remove selected ROI?')
         if choice.yes():
-
             for row in sorted(selected, reverse=True):
             # Remove from roimap
                 self.current_roimap.del_roi(row)
@@ -2945,10 +2910,10 @@ class RoiEditor(QW.QWidget):
             self._redraw()
 
 
-    def removeCurrentRoiMap(self):
+    def removeCurrentRoiMap(self) -> None:
         '''
         Remove the current ROI map, reset the ROIs table and all the patches
-        from the canvas. The function does not redraw the canvas.
+        from the canvas. Warning: this method does not redraw the canvas.
 
         '''
         self.current_roimap = None
@@ -2960,11 +2925,11 @@ class RoiEditor(QW.QWidget):
             self.removePatchFromCanvas(idx)
 
 
-    def loadRoiMap(self, path: str|None=None):
+    def loadRoiMap(self, path: str | None = None) -> None:
         '''
-        Wrapper function to easily load a new ROI map. If a previous ROI map
-        exists, this function removes it, after user confirm. The function also
-        redraws the canvas.
+        Wrapper method to easily load a new ROI map. If a previous ROI map
+        exists, it will be removed after user confirm. This method also redraws
+        the canvas.
 
         Parameters
         ----------
@@ -2975,8 +2940,10 @@ class RoiEditor(QW.QWidget):
         '''
     # Show a warning if a ROI map was already loaded
         if self.current_roimap is not None:
-            warn_text = 'Loading a new ROI map will discard any unsaved '\
-                        'changes made to the current ROI map. Proceed anyway?'
+            warn_text = (
+                'Loading a new ROI map will discard any unsaved changes made '
+                'to the current ROI map. Proceed anyway?'
+            )
             choice = CW.MsgBox(self, 'QuestWarn', warn_text)
 
         # Exit function if user does not want to procede
@@ -2985,26 +2952,25 @@ class RoiEditor(QW.QWidget):
 
         # Do nothing if filepath is invalid or the file dialog is canceled
         if path is None:
-            path, _ = QW.QFileDialog.getOpenFileName(self, 'Load ROI map',
-                                                     pref.get_dir('in'),
-                                                     'ROI maps (*.rmp)')
+            path, _ = QW.QFileDialog.getOpenFileName(
+                self, 'Load ROI map', pref.get_dir('in'), 'ROI maps (*.rmp)')
         if not path:
             return
         
         pref.set_dir('in', os.path.dirname(path))
-        progbar = CW.PopUpProgBar(self, 4, 'Loading data')
+        pbar = CW.PopUpProgBar(self, 4, 'Loading data')
 
     # Remove old (current) ROI map
         self.removeCurrentRoiMap()
-        progbar.increase()
+        pbar.increase()
 
     # Load new ROI map
         try:
             self.current_roimap = RoiMap.load(path)
             self.mappath.setPath(path)
-            progbar.increase()
+            pbar.increase()
         except Exception as e:
-            progbar.reset()
+            pbar.reset()
             return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', str(e))
 
     # Populate the canvas and the ROIs table with the loaded ROIs
@@ -3012,39 +2978,43 @@ class RoiEditor(QW.QWidget):
             area = self.current_roimap.bbox_area(bbox)
             self.addRoiToTable(name, area)
             self.addPatchToCanvas(name, bbox)
-        progbar.increase()
+        pbar.increase()
 
     # Refresh view
         self.updateBarPlot()
         self._redraw()
-        progbar.increase()
+        pbar.increase()
 
 
-    def unloadRoiMap(self):
+    def unloadRoiMap(self) -> None:
         '''
-        Wrapper function to easily remove from memory the currently loaded ROI
-        map, if it exists. This function requires a confirm from the user. The
-        function also redraws the canvas.
+        Wrapper method to easily remove from memory the currently loaded ROI
+        map, if it exists. This method requires a user confirm . This method
+        also redraws the canvas.
 
         '''
-        if self.current_roimap is not None:
-            warn_text = 'Remove current ROI map? Unsaved changes will be lost.'
-            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
-            if choice.yes():
-                self.removeCurrentRoiMap()
-                self.updateBarPlot()
-                self._redraw()
+    # Do nothing if no ROI map is loaded
+        if self.current_roimap is None:
+            return
+    
+    # Ask for user confirmation
+        warn_text = 'Remove current ROI map? Unsaved changes will be lost.'
+        choice = CW.MsgBox(self, 'QuestWarn', warn_text)
+        if choice.yes():
+            self.removeCurrentRoiMap()
+            self.updateBarPlot()
+            self._redraw()
 
 
-    def saveRoiMap(self, saveAs=False):
+    def saveRoiMap(self, save_as: bool = False) -> None:
         '''
         Save the current ROI map to file. If the file already exists, it will
-        be overwritten. ROI map can still be saved as a new file if <saveAs> is
-        True.
+        be overwritten. ROI map can still be saved as a new file if 'save_as'
+        is True.
 
         Parameters
         ----------
-        saveAs : bool, optional
+        save_as : bool, optional
             Whether the ROI map should be saved to a new file. The default is
             False.
 
@@ -3053,15 +3023,14 @@ class RoiEditor(QW.QWidget):
         if self.current_roimap is None: 
             return
 
-    # Save the ROI map to a new file if it was requested (saveAs = True) and/or
+    # Save ROI map to a new file if it was requested (save_as = True) and/or
     # if it was never saved before (= it has not a valid filepath). Otherwise,
     # save it to its current filepath (overwrite).
-        if not saveAs and (path := self.current_roimap.filepath) is not None:
+        if not save_as and (path := self.current_roimap.filepath) is not None:
             outpath = path
         else:
-            outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save ROI map',
-                                                        pref.get_dir('out'),
-                                                        'ROI map file (*.rmp)')
+            outpath, _ = QW.QFileDialog.getSaveFileName(
+                self, 'Save ROI map', pref.get_dir('out'), 'ROI maps (*.rmp)')
         if outpath:
             pref.set_dir('out', os.path.dirname(outpath))
             try:
@@ -3071,7 +3040,7 @@ class RoiEditor(QW.QWidget):
                 CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
 
 
-    def resetConfig(self):
+    def resetConfig(self) -> None:
         '''
         Reset the ROI Editor to its default state and configuration.
 
@@ -3090,9 +3059,9 @@ class RoiEditor(QW.QWidget):
 
     # Reset bar plot and its navigation toolbar
         self.barCanvas.clear_canvas()
-        self.navTbar.showToolbarAction().setChecked(True)
-        self.navTbar.setVisible(True)
-        self.navTbar.lbl_action.setChecked(False)
+        self.navtbar.showToolbarAction().setChecked(True)
+        self.navtbar.setVisible(True)
+        self.navtbar.lbl_action.setChecked(False)
 
 
     def getConfig(self) -> dict:
@@ -3115,13 +3084,13 @@ class RoiEditor(QW.QWidget):
         config['RoiMap']['Path'] = self.mappath.fullpath
         config['RoiMap']['Visible'] = not self.hideroi_btn.isChecked()
 
-        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
-        config['NavTbar']['Labelize'] = self.navTbar.lbl_action.isChecked()
+        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
+        config['NavTbar']['Labelize'] = self.navtbar.lbl_action.isChecked()
 
         return config
 
 
-    def loadConfig(self, config: dict):
+    def loadConfig(self, config: dict) -> None:
         '''
         Set the state and configuration of the ROI Editor to those provided in
         'config'.
@@ -3152,41 +3121,45 @@ class RoiEditor(QW.QWidget):
 
     # Update bar plot navigation toolbar
         show_ntbar, labelize = config['NavTbar'].values()
-        self.navTbar.showToolbarAction().setChecked(show_ntbar)
-        self.navTbar.setVisible(show_ntbar)
-        self.navTbar.lbl_action.setChecked(labelize)
+        self.navtbar.showToolbarAction().setChecked(show_ntbar)
+        self.navtbar.setVisible(show_ntbar)
+        self.navtbar.lbl_action.setChecked(labelize)
 
 
 
 class ProbabilityMapViewer(QW.QWidget):
-    '''
-    A widget to visualize the probability map linked with the mineral map that
-    is currently displayed in the data viewer.
-
-    '''
 
     probabilityRangeChanged = pyqtSignal()
 
-    def __init__(self, maps_canvas: plots.ImageCanvas):
+    def __init__(
+        self,
+        maps_canvas: plots.ImageCanvas,
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
-        Constructor.
+        A widget to visualize the probability map linked with the mineral map 
+        that is currently displayed in the data viewer..
 
         Parameters
         ----------
         maps_canvas : ImageCanvas
             The canvas that displays the mineral map which is linked to the
             probability map displayed in this widget.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(ProbabilityMapViewer, self).__init__()
+        super().__init__(parent)
 
+    # Define main attribute
         self.maps_canvas = maps_canvas
 
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
         self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor
 
@@ -3196,10 +3169,11 @@ class ProbabilityMapViewer(QW.QWidget):
         self.canvas.setMinimumSize(300, 300)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
+        self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # View Range toolbar
-        self.rangeTbar = CW.StyledToolbar('Probability range toolbar')
+        self.rangeTbar = QW.QToolBar('Probability range toolbar')
+        self.rangeTbar.setStyleSheet(style.SS_TOOLBAR)
 
     # Toggle range selection [-> View Range Toolbar]
         self.toggle_range_action = self.rangeTbar.addAction(
@@ -3229,8 +3203,7 @@ class ProbabilityMapViewer(QW.QWidget):
         warn_lbl = QW.QLabel()
         warn_lbl.setPixmap(warn_pixmap.scaled(20, 20, Qt.KeepAspectRatio))
         warn_lbl.setSizePolicy(QW.QSizePolicy.Maximum, QW.QSizePolicy.Maximum)
-        warn_lbl.setToolTip('Lower limit cannot be greater or equal than '\
-                            'upper limit.')
+        warn_lbl.setToolTip('Lower limit cannot be >= than upper limit.')
 
     # Add widgets to View Range Toolbar
         self.rangeTbar.addWidget(self.min_input)
@@ -3240,13 +3213,13 @@ class ProbabilityMapViewer(QW.QWidget):
 
     # Adjust layout
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(self.navTbar)
+        main_layout.addWidget(self.navtbar)
         main_layout.addWidget(self.rangeTbar)
         main_layout.addWidget(self.canvas)
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector
         
@@ -3265,7 +3238,7 @@ class ProbabilityMapViewer(QW.QWidget):
         self.mask_action.triggered.connect(self.extractMaskFromRange)
 
 
-    def showContextMenu(self, point):
+    def showContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu with custom actions.
 
@@ -3276,13 +3249,13 @@ class ProbabilityMapViewer(QW.QWidget):
 
         '''
     # Get context menu from NavTbar actions
-        menu = self.canvas.get_navigation_context_menu(self.navTbar)
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(QCursor.pos())
 
 
-    def onViewRangeToggled(self, toggled: bool):
+    def onViewRangeToggled(self, toggled: bool) -> None:
         '''
         Slot triggered when the view range is toggled on/off in the probability
         range toolbar.
@@ -3306,7 +3279,7 @@ class ProbabilityMapViewer(QW.QWidget):
             self.canvas.draw()
 
 
-    def onViewRangeChanged(self):
+    def onViewRangeChanged(self) -> None:
         '''
         Slot triggered when the upper or the lower bound of the probability
         view range are modified from the respective widgets in the probability
@@ -3317,7 +3290,7 @@ class ProbabilityMapViewer(QW.QWidget):
         self.probabilityRangeChanged.emit()
     
 
-    def updateViewRange(self):
+    def updateViewRange(self) -> None:
         '''
         Change the view range (clims) of the probability map.
 
@@ -3336,7 +3309,7 @@ class ProbabilityMapViewer(QW.QWidget):
             self.warn_icon.setVisible(True)
 
 
-    def extractMaskFromRange(self):
+    def extractMaskFromRange(self) -> None:
         '''
         Extract mask from current view range.
 
@@ -3362,9 +3335,8 @@ class ProbabilityMapViewer(QW.QWidget):
         mask = Mask(mask_array)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save mask',
-                                                    pref.get_dir('out'),
-                                                    '''Mask file (*.msk)''')
+        outpath, _ = QW.QFileDialog.getSaveFileName(
+            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
         if outpath:
             pref.set_dir('out', os.path.dirname(outpath))
             try:
@@ -3373,16 +3345,16 @@ class ProbabilityMapViewer(QW.QWidget):
                 CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
-    def resetConfig(self):
+    def resetConfig(self) -> None:
         '''
         Reset the Probability Map Viewer to its default state and configuration.
 
         '''
     # Reset navigation toolbar actions
-        self.navTbar.showToolbarAction().setChecked(True)
-        self.navTbar.setVisible(True)
-        self.navTbar.mode = self.navTbar.mode.NONE 
-        self.navTbar._update_buttons_checked()
+        self.navtbar.showToolbarAction().setChecked(True)
+        self.navtbar.setVisible(True)
+        self.navtbar.mode = self.navtbar.mode.NONE 
+        self.navtbar._update_buttons_checked()
 
     # Reset view range toolbar actions
         self.toggle_range_action.setChecked(False)
@@ -3403,8 +3375,8 @@ class ProbabilityMapViewer(QW.QWidget):
         '''
         config = {key: {} for key in ('NavTbar', 'ViewRange')}
 
-        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
-        config['NavTbar']['ActiveMode'] = self.navTbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
+        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
+        config['NavTbar']['ActiveMode'] = self.navtbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
 
         config['ViewRange']['Enabled'] = self.toggle_range_action.isChecked()
         config['ViewRange']['Range'] = [self.min_input.value(), self.max_input.value()]
@@ -3412,7 +3384,7 @@ class ProbabilityMapViewer(QW.QWidget):
         return config
     
 
-    def loadConfig(self, config: dict):
+    def loadConfig(self, config: dict) -> None:
         '''
         Set the state and configuration of the Probability Map Viewer to those
         provided in 'config'.
@@ -3425,10 +3397,10 @@ class ProbabilityMapViewer(QW.QWidget):
         '''
     # Update navigation toolbar actions
         show_ntbar, ntbar_mode = config['NavTbar'].values()
-        self.navTbar.showToolbarAction().setChecked(show_ntbar)
-        self.navTbar.setVisible(show_ntbar)
-        self.navTbar.mode = type(self.navTbar.mode)(ntbar_mode)
-        self.navTbar._update_buttons_checked()
+        self.navtbar.showToolbarAction().setChecked(show_ntbar)
+        self.navtbar.setVisible(show_ntbar)
+        self.navtbar.mode = type(self.navtbar.mode)(ntbar_mode)
+        self.navtbar._update_buttons_checked()
 
     # Update view range toolbar actions
         view_range_enabled, (vmin, vmax) = config['ViewRange'].values()
@@ -3439,29 +3411,39 @@ class ProbabilityMapViewer(QW.QWidget):
 
 
 class RgbaCompositeMapViewer(QW.QWidget):
-    '''
-    A widget to visualize an RGB(A) composite map extracted from the
-    combination of input maps.
-
-    '''
 
     channels = ('R', 'G', 'B', 'A')
     rgbaModified = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A widget to visualize an RGB(A) composite map extracted from the
+        combination of input maps.
+
+        Parameters
+        ----------
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
 
         '''
-        super(RgbaCompositeMapViewer, self).__init__()
+        super().__init__(parent)
 
+    # Initialize GUI and connect its signals with slots
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self) -> None:
+        '''
+        GUI constructor.
+
+        '''
     # Canvas
         self.canvas = plots.ImageCanvas(cbar=False)
-        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
         self.canvas.setMinimumSize(300, 300)
 
     # Navigation Toolbar
-        self.navTbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
+        self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # R-G-B-A Path Labels
         self.rgba_lbls = [CW.PathLabel(full_display=False) for _ in range(4)]
@@ -3475,13 +3457,22 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Adjust layout
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(self.navTbar)
+        main_layout.addWidget(self.navtbar)
         main_layout.addWidget(self.canvas, stretch=1)
         main_layout.addLayout(channels_layout)
         self.setLayout(main_layout)
 
 
-    def showContextMenu(self, point):
+    def _connect_slots(self) -> None:
+        '''
+        Signals-slots connector
+        
+        '''
+    # Context menu on canvas
+        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
+
+
+    def showContextMenu(self, point: QPoint) -> None:
         '''
         Shows a context menu with custom actions.
 
@@ -3492,7 +3483,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
         '''
     # Get context menu from NavTbar actions
-        menu = self.canvas.get_navigation_context_menu(self.navTbar)
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
         menu.addSeparator()
 
     # Clear channel sub-menu
@@ -3510,7 +3501,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         menu.exec(QCursor.pos())
 
 
-    def clearChannel(self, channel: str):
+    def clearChannel(self, channel: str) -> None:
         '''
         Clear provided RGBA channel.
 
@@ -3540,7 +3531,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.rgbaModified.emit()
 
 
-    def clearAllChannels(self):
+    def clearAllChannels(self) -> None:
         '''
         Clear all RGBA channels.
 
@@ -3558,7 +3549,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.rgbaModified.emit()
 
 
-    def setChannel(self, channel: str, inmap: InputMap):
+    def setChannel(self, channel: str, inmap: InputMap) -> None:
         '''
         Set one channel's data.
 
@@ -3570,10 +3561,9 @@ class RgbaCompositeMapViewer(QW.QWidget):
             Input map to be set as channel 'channel'.
 
         '''
-        assert channel in self.channels
-
-    # Get the data and the filepath from the Input Map
-        data, filepath = inmap.map, inmap.filepath
+    # Do nothing if 'channel' is not a valid channel (safety)
+        if channel not in self.channels:
+            return
 
     # Get the current rgba map or build a new one
         if self.canvas.is_empty():
@@ -3589,27 +3579,27 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Update the channel with the new data and update the plot
         idx = self.channels.index(channel)
+        data = inmap.map
         rgba_map[:, :, idx] = np.round(data/data.max(), 2)
         self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
 
     # Update the channel path label
-        self.rgba_lbls[idx].setPath(filepath)
+        self.rgba_lbls[idx].setPath(inmap.filepath)
 
     # Send signal
         self.rgbaModified.emit()
 
 
-    def resetConfig(self):
+    def resetConfig(self) -> None:
         '''
-        Reset the RGBA Composite Map Viewer to its default state and 
-        configuration.
+        Reset RGBA Composite Map Viewer to its default state and configuration.
 
         '''
     # Reset navigation toolbar actions
-        self.navTbar.showToolbarAction().setChecked(True)
-        self.navTbar.setVisible(True)
-        self.navTbar.mode = self.navTbar.mode.NONE 
-        self.navTbar._update_buttons_checked()
+        self.navtbar.showToolbarAction().setChecked(True)
+        self.navtbar.setVisible(True)
+        self.navtbar.mode = self.navtbar.mode.NONE 
+        self.navtbar._update_buttons_checked()
 
     # Clear all channels
         self.clearAllChannels()
@@ -3628,8 +3618,8 @@ class RgbaCompositeMapViewer(QW.QWidget):
         '''
         config = {key: {} for key in ('NavTbar', 'Channels')}
 
-        config['NavTbar']['Visible'] = self.navTbar.showToolbarAction().isChecked()
-        config['NavTbar']['ActiveMode'] = self.navTbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
+        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
+        config['NavTbar']['ActiveMode'] = self.navtbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
 
         for ch, lbl in zip(self.channels, self.rgba_lbls):
             config['Channels'][ch] = lbl.fullpath
@@ -3637,7 +3627,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         return config
     
 
-    def loadConfig(self, config: dict):
+    def loadConfig(self, config: dict) -> None:
         '''
         Set the state and configuration of the RGBA Composite Map Viewer to 
         those provided in 'config'.
@@ -3650,10 +3640,10 @@ class RgbaCompositeMapViewer(QW.QWidget):
         '''
     # Update navigation toolbar actions
         show_ntbar, ntbar_mode = config['NavTbar'].values()
-        self.navTbar.showToolbarAction().setChecked(show_ntbar)
-        self.navTbar.setVisible(show_ntbar)
-        self.navTbar.mode = type(self.navTbar.mode)(ntbar_mode)
-        self.navTbar._update_buttons_checked()
+        self.navtbar.showToolbarAction().setChecked(show_ntbar)
+        self.navtbar.setVisible(show_ntbar)
+        self.navtbar.mode = type(self.navtbar.mode)(ntbar_mode)
+        self.navtbar._update_buttons_checked()
 
     # Update R, G, B, A channels
         self.clearAllChannels()

@@ -6,13 +6,13 @@ Created on Tue May  14 15:03:45 2024
 """
 import os
 
-from PyQt5.QtCore import pyqtSignal, QSize, Qt
+from PyQt5.QtCore import pyqtSignal, QLocale, QSize, Qt
 from PyQt5.QtGui import QColor, QIcon, QPixmap
 import PyQt5.QtWidgets as QW
 
 import numpy as np
 
-from _base import InputMap, InputMapStack, MineralMap, RoiMap
+from _base import *
 import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools
@@ -26,25 +26,25 @@ import threads
 
 
 class AutoRoiDetector(QW.QDialog):
-    '''
-    A dialog for the RoiEditor pane that allows the automatic identification
-    of ROIs on the input maps of a given sample. The identification is based
-    on the analysis of a cumulative Neighborhood Pixel Variance map, extracted
-    from input data.
-    '''
+
     requestRoiMap = pyqtSignal()
     drawingRequested = pyqtSignal(RoiMap)
+    npv_encoder = {'Pure': np.sum, 'Simple': np.median, 'Smooth': np.mean}
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        AutoRoiDetector class constructor.
+        A dialog designed for the ROI Editor pane, that enables automatic ROI
+        identification from input maps of a given sample. The identification is
+        based on the analysis of a cumulative Neighborhood Pixel Variance map,
+        calculated on input data.
 
         Parameters
         ----------
-        parent : qObject | None, optional
+        parent : QWidget or None, optional
             The GUI parent of this dialog. The default is None.
+
         '''
-        super(AutoRoiDetector, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('ROI detector')
@@ -58,16 +58,14 @@ class AutoRoiDetector(QW.QDialog):
         self._active_thread = None
         self.npv_thread = threads.NpvThread()
         self.roi_detect_thread = threads.RoiDetectionThread()
-        self.npv_encoder = {'Pure': np.sum, 
-                            'Simple': np.median, 
-                            'Smooth': np.mean}
 
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
         
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
@@ -91,9 +89,11 @@ class AutoRoiDetector(QW.QDialog):
 
     # NPV function types (QButtonLayout)
         self.npv_btns = CW.RadioBtnLayout(('Pure', 'Simple', 'Smooth'))
-        tooltips = ('Use sum function to penalize all noisy pixels',
-                    'Use median function to ignore outliers',
-                    'Use mean function to smoothen noise')
+        tooltips = (
+            'Use sum function to penalize all noisy pixels',
+            'Use median function to ignore outliers',
+            'Use mean function to smoothen noise'
+        )
         for n, t in enumerate(tooltips):
             self.npv_btns.button(n).setToolTip(t)
 
@@ -104,8 +104,7 @@ class AutoRoiDetector(QW.QDialog):
         self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # Search ROIs button
-        self.search_btn = CW.StyledButton(QIcon(r'Icons/roi_detection.png'),
-                                            'Search ROI')
+        self.search_btn = CW.StyledButton(r'Icons/roi_detection.png', 'Search ROI')
         self.search_btn.setEnabled(False)
 
     # Descriptive Progress bar 
@@ -146,7 +145,7 @@ class AutoRoiDetector(QW.QDialog):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Connect signals to slots.
 
@@ -175,23 +174,24 @@ class AutoRoiDetector(QW.QDialog):
         self.cancel_btn.clicked.connect(self.reject)
 
 
-    def fix_even_size(self, size):
+    def fix_even_size(self, size: int) -> None:
         '''
         Adjust kernel size so that it is always an odd number.
 
         Parameters
         ----------
-        size : _type_
-            _description_
+        size : int
+            Kernel size to check.
+
         '''
         if not size % 2:
             self.size_spbox.setValue(size - 1)
 
 
-    def set_current_roimap(self, roimap: RoiMap):
+    def set_current_roimap(self, roimap: RoiMap) -> None:
         '''
-        Set the current roimap. This function is especially useful when called
-        by the parent widget (i.e., the ROI Editor pane).
+        Set the current roimap. This method is especially useful when called by
+        the parent widget (i.e., the ROI Editor pane).
 
         Parameters
         ----------
@@ -202,9 +202,9 @@ class AutoRoiDetector(QW.QDialog):
         self._current_roimap = roimap
 
 
-    def _clear_roi_patches(self):
+    def _clear_roi_patches(self) -> None:
         '''
-        Remove any previous ROI patch displayed in canvas.
+        Remove any previous ROI patch displayed in the canvas.
 
         '''
         for idx in reversed(range(len(self._patches))):
@@ -212,7 +212,7 @@ class AutoRoiDetector(QW.QDialog):
             patch.remove()
 
 
-    def update_params_range(self):
+    def update_params_range(self) -> None:
         '''
         Change maximum selectable ROI size and ROI distance based on the shape
         of the input maps.
@@ -229,7 +229,7 @@ class AutoRoiDetector(QW.QDialog):
         self.size_spbox.setMaximum(max_size)
 
 
-    def launch_npv_computation(self):
+    def launch_npv_computation(self) -> None:
         '''
         Launch the thread that computes the cumulative Neighborhood Pixel 
         Variance (NPV) map.
@@ -272,10 +272,10 @@ class AutoRoiDetector(QW.QDialog):
         self.npv_thread.start()
 
 
-    def _parse_npv(self, thread_result: tuple, success: bool): 
+    def _parse_npv(self, thread_result: tuple, success: bool) -> None: 
         '''
         Parse the result of the NPV computation thread. If the computation was
-        successful, this function automatically launches the ROI identification
+        successful, this method automatically launches the ROI identification
         thread.
 
         Parameters
@@ -303,16 +303,16 @@ class AutoRoiDetector(QW.QDialog):
             self._end_threaded_session()
 
     
-    def launch_roi_detection(self, npv_map: np.ndarray):
+    def launch_roi_detection(self, npv_map: np.ndarray) -> None:
         '''
         Launch the thread that automatically identifies the best ROIs. This
-        function is meant to be called automatically after the NPV computation
-        thread successfully returned a cumulative NPV map (see _parse_npv 
-        function for details).
+        method is meant to be called automatically after the NPV computation
+        thread successfully returned a cumulative NPV map (see '_parse_npv'
+        method for details).
 
         Parameters
         ----------
-        npv_map : ndarray
+        npv_map : np.ndarray
             The cumulative Neighborhood Pixel Variance map.
 
         '''
@@ -330,10 +330,10 @@ class AutoRoiDetector(QW.QDialog):
         self.roi_detect_thread.start()
 
 
-    def _parse_roi_detection(self, thread_result:tuple, success:bool):
+    def _parse_roi_detection(self, thread_result: tuple, success: bool) -> None:
         '''
         Parse the result of the ROI detection thread. If the identification was
-        successfull, this function displays the identified ROIs in canvas and
+        successfull, this method displays the identified ROIs in canvas and
         saves the new (automatic) ROI map.
 
         Parameters
@@ -363,8 +363,7 @@ class AutoRoiDetector(QW.QDialog):
         # Show legend and render canvas
             hand, lbls = self.canvas.ax.get_legend_handles_labels()
             entries = dict(zip(lbls, hand))
-            self.canvas.figure.legend(entries.values(), entries.keys(),
-                                      loc='lower left')
+            self.canvas.figure.legend(entries.values(), entries.keys(), loc='lower left')
             self.canvas.draw()
 
         # Save the auto detected roimap
@@ -378,7 +377,7 @@ class AutoRoiDetector(QW.QDialog):
         self._end_threaded_session()    
 
 
-    def interrupt_thread(self):
+    def interrupt_thread(self) -> bool:
         '''
         Stop an external thread.
 
@@ -397,7 +396,7 @@ class AutoRoiDetector(QW.QDialog):
             return False
 
 
-    def _end_threaded_session(self):
+    def _end_threaded_session(self) -> None:
         '''
         Internally and visually exit from an external thread session.
 
@@ -407,32 +406,31 @@ class AutoRoiDetector(QW.QDialog):
         self.ok_btn.setEnabled(True)
 
 
-    def accept(self):
+    def accept(self) -> None:
         '''
-        Reimplementation of the dialog's accept function. A custom signal is 
+        Reimplementation of the dialog's 'accept' method. A custom signal is 
         emitted to draw the newly identified ROIs on the input maps.
 
         '''
         if self._auto_roimap is not None:
             self.drawingRequested.emit(self._auto_roimap)
-        super(AutoRoiDetector, self).accept()
+        super().accept()
 
-    def reject(self):
-        '''
-        Reimplementation of the dialog's reject function. It just add a way to
-        send an exit confirmation message when an external thread is currently
-        active.
 
+    def reject(self) -> None:
         '''
-        if self._active_thread is not None and self.interrupt_thread():
-            super(AutoRoiDetector, self).reject()
-        else:
-            super(AutoRoiDetector, self).reject()
+        Reimplementation of the dialog's 'reject' method. If thread is active,
+        it requests user to confirm its interruption.
+
+        '''           
+        if self._active_thread is not None and not self.interrupt_thread():
+            return
+        super().reject()
         
 
-    def show(self):
+    def show(self) -> None:
         '''
-        Reimplementation of the dialog's show function. It reset's the dialog
+        Reimplementation of the dialog's 'show' method. It resets the dialog's
         GUI if it was hidden (closed).
 
         '''
@@ -444,29 +442,26 @@ class AutoRoiDetector(QW.QDialog):
             self.canvas.clear_canvas()
             self._clear_roi_patches()
             self.canvas.figure.legends.clear()
-            super(AutoRoiDetector, self).show()
+            super().show()
         else:
             self.activateWindow()
 
 
 
 class MergeDatasets(QW.QDialog):
-    '''
-    A dialog to create and save a merged copy of two or more existent ground 
-    truth datasets.
-    '''
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A dialog to create a merged copy of two or more existing ground truth
+        datasets.
 
         Parameters
         ----------
-        parent : qObject or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this dialog. The default is None.
 
         '''
-        super(MergeDatasets, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('Merge Datasets')
@@ -477,12 +472,13 @@ class MergeDatasets(QW.QDialog):
     # Set main attribute
         self.merged_dataset = None
 
+    # Initialize GUI and connect its signals with slots 
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
@@ -491,10 +487,10 @@ class MergeDatasets(QW.QDialog):
         self.in_csv_decimal = CW.DecimalPointSelector()
 
     # Import datasets (Styled Button)
-        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 'Import')
+        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import')
 
     # Remove datasets (Styled Button)
-        self.remove_btn = CW.StyledButton(QIcon(r'Icons/remove.png'), 'Remove')
+        self.remove_btn = CW.StyledButton(r'Icons/remove.png', 'Remove')
 
     # Input datasets paths list (Styled List Widget)
         self.in_path_list = CW.StyledListWidget()
@@ -506,22 +502,22 @@ class MergeDatasets(QW.QDialog):
         self.out_csv_separator = CW.SeparatorSymbolSelector()
 
     # Save merged dataset (Styled Button)
-        self.save_btn = CW.StyledButton(QIcon('Icons/save.png'), 'Save')
+        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
         self.save_btn.setEnabled(False)
 
     # Input datasets preview area (Document Browser)
-        self.input_info = CW.DocumentBrowser(read_only=True)
+        self.input_info = CW.DocumentBrowser(readonly=True)
 
-    # Number of dataset preview rows (StyledSpinbox)
+    # Number of dataset preview rows (Styled Spinbox)
         self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
 
     # Merge datasets (Styled Button)
-        self.merge_btn = CW.StyledButton(text='Merge', bg_color=style.OK_GREEN)
+        self.merge_btn = CW.StyledButton(text='Merge', bg=style.OK_GREEN)
 
     # Merged dataset preview area (Document Browser)
-        self.merged_info = CW.DocumentBrowser(read_only=True)
+        self.merged_info = CW.DocumentBrowser(readonly=True)
 
-    # Progress bar (ProgressBar)
+    # Progress bar (Progress Bar)
         self.progbar = QW.QProgressBar()
 
     # Adjust Layout
@@ -560,7 +556,7 @@ class MergeDatasets(QW.QDialog):
         self.setLayout(main_layout)
 
     
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -572,18 +568,17 @@ class MergeDatasets(QW.QDialog):
         self.save_btn.clicked.connect(self.save)
 
 
-    def importDatasets(self):
+    def importDatasets(self) -> None:
         '''
         Import ground truth datasets from files. In order to be more memory
-        friendly, this function just saves the datasets paths without actually
+        friendly, this method just saves the datasets paths without actually
         loading the entire dataframe.
          
         '''
     # Do nothing if paths are invalid or the file dialog is canceled
-        ftype =  'Comma Separated Value (*.csv)'
+        ftype = 'Comma Separated Value (*.csv)'
         paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Import Datasets',
-                                                   pref.get_dir('in'),
-                                                   ftype)
+                                                   pref.get_dir('in'), ftype)
         if not paths:
             return
         
@@ -597,7 +592,7 @@ class MergeDatasets(QW.QDialog):
                 self.in_path_list.addItem(p)
 
 
-    def removeDatasets(self):
+    def removeDatasets(self) -> None:
         '''
         Remove selected datasets.
 
@@ -607,7 +602,7 @@ class MergeDatasets(QW.QDialog):
             self.input_info.clear()
 
 
-    def showInputDatasetPreview(self, item: QW.QListWidgetItem):
+    def showInputDatasetPreview(self, item: QW.QListWidgetItem) -> None:
         '''
         Quickly read the input dataset held by 'item' and show a preview of its 
         first rows. This is useful to check all the dataset's columns names.
@@ -634,7 +629,7 @@ class MergeDatasets(QW.QDialog):
         self.input_info.setText(text)
 
 
-    def showOutputDatasetPreview(self):
+    def showOutputDatasetPreview(self) -> None:
         '''
         Show a preview of the output merged dataset.
 
@@ -644,17 +639,17 @@ class MergeDatasets(QW.QDialog):
         self.merged_info.setText(text)
         
 
-    def mergeDatasets(self):
+    def mergeDatasets(self) -> None:
         '''
-        Merge the loaded datasets. This function sends an error message if any 
-        of the datasets has different unique columns.
+        Merge the loaded datasets. This method sends an error message if any of
+        the datasets has different unique columns.
 
         '''
     # Check for at least two imported datasets
         if self.in_path_list.count() < 2:
             return CW.MsgBox(self, 'Crit', 'Import at least two datasets.')
         
-    # Check that all paths still exist
+    # Check that all paths do still exist
         paths = [item.text() for item in self.in_path_list.getItems()]
         if not all([os.path.exists(p) for p in paths]):
             err_msg = 'Some datasets have been deleted, moved or renamed.'
@@ -682,7 +677,7 @@ class MergeDatasets(QW.QDialog):
         self.showOutputDatasetPreview()
 
         
-    def save(self):
+    def save(self) -> None:
         '''
         Save merged datasets to file.
 
@@ -690,8 +685,7 @@ class MergeDatasets(QW.QDialog):
     # Exit function if outpath is invalid or file dialog is canceled
         ftype = 'Comma Separated Values (*.csv)'
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Dataset',
-                                                    pref.get_dir('out'),
-                                                    ftype)
+                                                    pref.get_dir('out'), ftype)
 
         if not outpath:
             return
@@ -710,14 +704,11 @@ class MergeDatasets(QW.QDialog):
 
 
 class SubSampleDataset(QW.QDialog):
-    '''
-    A dialog to create and save a sub-sampled copy of an existent ground truth 
-    dataset, by selecting which mineral classes to include.
-    '''
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A dialog to create a sub-sampled copy of an existent ground truth
+        dataset, allowing the selection of mineral classes to include.
 
         Parameters
         ----------
@@ -725,7 +716,7 @@ class SubSampleDataset(QW.QDialog):
             The GUI parent of this dialog. The default is None.
 
         '''
-        super(SubSampleDataset, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('Sub-sample Dataset')
@@ -734,32 +725,29 @@ class SubSampleDataset(QW.QDialog):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
     # Define main attributes
-        self.reader = None
+        self.reader = dtools.CsvChunkReader(QLocale().decimalPoint())
         self._dataset = None
 
+    # Initialize GUI and connect its signals with slots 
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
     # Import Dataset (Styled Button)
-        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 
-                                            'Import dataset')
+        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import dataset')
 
-    # Imported dataset path
+    # Imported dataset path (Path Label)
         self.in_dataset_path = CW.PathLabel(full_display=False, 
-                                              placeholder='No dataset loaded')
+                                            placeholder='No dataset loaded')
 
     # Decimal point character selector for imported dataset
         self.in_csv_decimal = CW.DecimalPointSelector()
-
-    # Input dataset CSV chunk reader (CsvChunkReader)
-        self.reader = dtools.CsvChunkReader(self.in_csv_decimal.currentText())
 
     # Decimal point character selector for sub-sampled dataset
         self.out_csv_decimal = CW.DecimalPointSelector()
@@ -768,7 +756,7 @@ class SubSampleDataset(QW.QDialog):
         self.out_csv_separator = CW.SeparatorSymbolSelector()
 
     # Input dataset preview area (Document Browser)
-        self.dataset_info = CW.DocumentBrowser(read_only=True)
+        self.dataset_info = CW.DocumentBrowser(readonly=True)
 
     # Class selector (Twin List Widgets)
         self.original_classes = CW.StyledListWidget()
@@ -782,7 +770,7 @@ class SubSampleDataset(QW.QDialog):
         self.counter_lbl = QW.QLabel()
 
     # Save (Styled Button)
-        self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
+        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
         self.save_btn.setEnabled(False)
 
     # Progress bar (ProgressBar)
@@ -826,7 +814,7 @@ class SubSampleDataset(QW.QDialog):
         self.setLayout(main_layout)
 
     
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -845,7 +833,7 @@ class SubSampleDataset(QW.QDialog):
         self.save_btn.clicked.connect(self.save)
 
 
-    def resetDialog(self):
+    def resetDialog(self) -> None:
         '''
         Reset some GUI widgets to their initial state.
 
@@ -857,9 +845,9 @@ class SubSampleDataset(QW.QDialog):
         self.save_btn.setEnabled(False)
 
 
-    def importDataset(self):
+    def importDataset(self) -> None:
         '''
-        Import an existent ground truth dataset. This function launches the CSV
+        Import an existent ground truth dataset. This method launches the CSV
         chunk reader thread.
 
         '''
@@ -880,7 +868,7 @@ class SubSampleDataset(QW.QDialog):
         self.reader.read_threaded(path)
 
 
-    def _parseReaderResult(self, result: tuple, success: bool):
+    def _parseReaderResult(self, result: tuple, success: bool) -> None:
         '''
         Parse the result of the chunk reader thread.
 
@@ -897,14 +885,17 @@ class SubSampleDataset(QW.QDialog):
 
         if success:
             self.progbar.setRange(0, 3)
+
         # Compile dataset
             dataframe = self.reader.combine_chunks(result)
             self._dataset = dtools.GroundTruthDataset(dataframe)
             self.progbar.setValue(1)
+
         # Update GUI
             self.resetDialog()
             self.updateDatasetInfo()
             self.progbar.setValue(2)
+
         # Split dataset features from targets and update widgets
             try:
                 self._dataset.split_features_targets(split_idx=-1)
@@ -923,7 +914,7 @@ class SubSampleDataset(QW.QDialog):
             CW.MsgBox(self, 'Crit', 'Dataset loading failed.', str(result[0]))
             
 
-    def updateDatasetInfo(self):
+    def updateDatasetInfo(self) -> None:
         '''
         Populate the dataset info widget with a preview of the imported ground
         truth dataset.
@@ -933,7 +924,7 @@ class SubSampleDataset(QW.QDialog):
         self.dataset_info.setText(text)
 
 
-    def countClass(self, item: QW.QListWidgetItem):
+    def countClass(self, item: QW.QListWidgetItem) -> None:
         '''
         Show the amount of instances of the selected class in the dataset.
 
@@ -950,7 +941,7 @@ class SubSampleDataset(QW.QDialog):
         self.counter_lbl.setText(f'{class_name} = {count}')
 
 
-    def save(self):
+    def save(self) -> None:
         '''
         Save sub-sampled version of the loaded ground truth dataset.
 
@@ -975,7 +966,7 @@ class SubSampleDataset(QW.QDialog):
         self.progbar.setValue(1)
 
     # Sub sample dataset
-        subsampled = self._dataset.sub_sample(labels, idx=-1)
+        subsampled = self._dataset.sub_sample(-1, labels)
         self.progbar.setValue(2)
 
     # Save dataset
@@ -999,17 +990,18 @@ class ImageToInputMap(QW.QDialog):
     can be optionally split into 1-channel images and converted as well.
     '''
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A dialog to convert images to InputMaps. Multi-channel images can be
+        optionally split into 1-channel images and converted as well.
 
         Parameters
         ----------
-        parent : qObject or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this dialog. The default is None.
 
         '''
-        super(ImageToInputMap, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('Image To Input Map')
@@ -1020,38 +1012,39 @@ class ImageToInputMap(QW.QDialog):
     # Set main attribute
         self.preview_size = QSize(64, 64)
 
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
     # Import images (Styled Button)
-        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 'Import')
+        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import')
         
     # Remove images (Styled Button)
-        self.remove_btn = CW.StyledButton(QIcon(r'Icons/remove.png'), 'Remove')
+        self.remove_btn = CW.StyledButton(r'Icons/remove.png', 'Remove')
         
-    # Images list (Styled ListWidget)
+    # Images list (Styled List Widget)
         self.img_list = CW.StyledListWidget()
         self.img_list.setIconSize(self.preview_size)
 
-    # Split multichannel images (CheckBox)
+    # Split multichannel images (Check Box)
         self.split_cbox = QW.QCheckBox('Split multi-channel images')
         self.split_cbox.setChecked(True)
 
-    # Output map extension (Styled ComboBox)
+    # Output map extension (Styled Combo Box)
         self.map_ext_combox = CW.StyledComboBox()
         self.map_ext_combox.addItems(['.gz', '.txt'])
 
     # Convert (Styled Button)
-        self.convert_btn = CW.StyledButton(text='Convert', bg_color=style.OK_GREEN)
+        self.convert_btn = CW.StyledButton(text='Convert', bg=style.OK_GREEN)
         
-    # Progress bar (ProgressBar)
+    # Progress bar (Progress Bar)
         self.progbar = QW.QProgressBar()
 
     # Adjust layout
@@ -1075,7 +1068,7 @@ class ImageToInputMap(QW.QDialog):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -1085,7 +1078,7 @@ class ImageToInputMap(QW.QDialog):
         self.convert_btn.clicked.connect(self.convertImages)
 
 
-    def importImages(self):
+    def importImages(self) -> None:
         '''
         Import images and show their paths as well as a small preview.
 
@@ -1097,7 +1090,6 @@ class ImageToInputMap(QW.QDialog):
                     JPEG (*.jpg; *.jpeg)'''
         paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Import images',
                                                    pref.get_dir('in'), ftypes)
-
         if not paths:
             return
         
@@ -1110,20 +1102,19 @@ class ImageToInputMap(QW.QDialog):
             self.progbar.setValue(n)
             if len(self.img_list.findItems(p, Qt.MatchExactly)): 
                 continue
-            else:
-                try:
-                    # TIFF file previews may spam warnings on the console (BUG)
-                    transforms = (Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    pixmap = QPixmap(p).scaled(self.preview_size, *transforms)
-                    self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
-                except Exception as e:
-                    self.progbar.reset()
-                    return CW.MsgBox(self, 'C', 'File import failed.', str(e))
+            try:
+                # TIFF file previews may spam warnings on the console (BUG)
+                transforms = (Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = QPixmap(p).scaled(self.preview_size, *transforms)
+                self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
+            except Exception as e:
+                self.progbar.reset()
+                return CW.MsgBox(self, 'C', 'File import failed.', str(e))
 
         self.progbar.reset()
 
 
-    def convertImages(self):
+    def convertImages(self) -> None:
         '''
         Convert images to InputMaps and save them.
 
@@ -1182,21 +1173,18 @@ class ImageToInputMap(QW.QDialog):
 
 
 class ImageToMineralMap(QW.QDialog):
-    '''
-    A dialog to convert images to MineralMaps and save them.
-    '''
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None):
         '''
-        Constructor.
+        A dialog to convert images to Mineral Maps.
 
         Parameters
         ----------
-        parent : qObject or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this dialog. The default is None.
 
         '''
-        super(ImageToMineralMap, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('Image To Mineral Map')
@@ -1208,44 +1196,45 @@ class ImageToMineralMap(QW.QDialog):
         self.image_array = None
         self.minmap = None
 
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
     # Import image (Styled Button)
-        self.import_btn = CW.StyledButton(QIcon(r'Icons/import.png'), 'Import')
+        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import')
 
     # Image path (Path Label)
         self.path_lbl = CW.PathLabel(full_display=False)
 
-    # Pixel color delta (Styled SpinBox)
+    # Pixel color delta (Styled Spin Box)
         self.delta_spbox = CW.StyledSpinBox(1, 255)
         self.delta_spbox.setToolTip('Minimum color variance to split classes')
 
     # Convert (Styled Button)
-        self.convert_btn = CW.StyledButton(text='Convert', bg_color=style.OK_GREEN)
+        self.convert_btn = CW.StyledButton(text='Convert', bg=style.OK_GREEN)
 
     # Legend (Legend)
         self.legend = CW.Legend()
 
     # Save (Styled Button)
-        self.save_btn = CW.StyledButton(QIcon(r'Icons\save.png'), 'Save')
+        self.save_btn = CW.StyledButton(r'Icons\save.png', 'Save')
         self.save_btn.setEnabled(False)
 
-    # Canvas (ImageCanvas)
+    # Canvas (Image Canvas)
         self.canvas = plots.ImageCanvas(size=(5, 3.75))
         self.canvas.setMinimumSize(300, 300)
 
-    # Navigation Toolbar (NavTbar)
+    # Navigation Toolbar (Navigation Toolbar)
         self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
-    # Progress bar (ProgressBar)
+    # Progress bar (Progress Bar)
         self.progbar = QW.QProgressBar()
 
     # Adjust layout
@@ -1275,7 +1264,7 @@ class ImageToMineralMap(QW.QDialog):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -1283,13 +1272,14 @@ class ImageToMineralMap(QW.QDialog):
         self.import_btn.clicked.connect(self.importImage)
         self.convert_btn.clicked.connect(self.convertImage)
         self.save_btn.clicked.connect(self.saveMineralMap)
+
     # Legend signals
         self.legend.colorChangeRequested.connect(self.changeColor)
         self.legend.itemRenameRequested.connect(self.renameClass)
         self.legend.itemHighlightRequested.connect(self.highlightClass)
 
 
-    def importImage(self):
+    def importImage(self) -> None:
         '''
         Import image from file and store it as a NumPy array.
 
@@ -1314,7 +1304,7 @@ class ImageToMineralMap(QW.QDialog):
             CW.MsgBox(self, 'Crit', 'Failed to import image.', str(e))
 
 
-    def convertImage(self):
+    def convertImage(self) -> None:
         '''
         Convert imported image into a mineral map.
 
@@ -1382,9 +1372,10 @@ class ImageToMineralMap(QW.QDialog):
         self.progbar.reset()
 
 
-    def saveMineralMap(self):
+    def saveMineralMap(self) -> None:
         '''
         Save mineral map to file.
+
         '''
     # Do nothing if output path is invalid or file dialog is canceled
         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
@@ -1400,18 +1391,22 @@ class ImageToMineralMap(QW.QDialog):
         CW.MsgBox(self, 'Info', 'Map successfully saved.')
         
 
-    def changeColor(self, legend_item: QW.QTreeWidgetItem, color: tuple[int]):
+    def changeColor(
+        self,
+        legend_item: QW.QTreeWidgetItem,
+        color: tuple[int, int, int]
+    ) -> None:
         '''
-        Alter the displayed color of a mineral class. This function propagates 
+        Alter the displayed color of a mineral class. This method propagates 
         the changes to mineral map, canvas and legend. The arguments of this 
-        function are specifically compatible with the colorChangeRequested 
-        signal emitted by the legend (see Legend object for more details). 
+        method are specifically compatible with the 'colorChangeRequested'
+        signal emitted by the legend (see 'Legend' class for more details). 
 
         Parameters
         ----------
-        legend_item : QW.QTreeWidgetItem
+        legend_item : QTreeWidgetItem
             The legend item that requested the color change.
-        color : tuple[int]
+        color : tuple[int, int, int]
             RGB triplet.
 
         '''
@@ -1427,12 +1422,16 @@ class ImageToMineralMap(QW.QDialog):
         self.legend.changeItemColor(legend_item, color)
 
 
-    def renameClass(self, legend_item: QW.QTreeWidgetItem, new_name: str):
+    def renameClass(
+        self,
+        legend_item: QW.QTreeWidgetItem,
+        new_name: str
+    ) -> None:
         '''
-        Rename a mineral class. This function propagates the changes to mineral
-        map, canvas and legend. The arguments of this function are specifically
-        compatible with the itemRenameRequested signal emitted by the legend 
-        (see Legend object for more details).
+        Rename a mineral class. This method propagates the changes to mineral
+        map, canvas and legend. The arguments of this method are specifically
+        compatible with the 'itemRenameRequested' signal emitted by the legend 
+        (see 'Legend' class for more details).
 
         Parameters
         ----------
@@ -1455,12 +1454,16 @@ class ImageToMineralMap(QW.QDialog):
         self.legend.renameClass(legend_item, new_name)
 
 
-    def highlightClass(self, toggled: bool, legend_item: QW.QTreeWidgetItem):
+    def highlightClass(
+        self,
+        toggled: bool,
+        legend_item: QW.QTreeWidgetItem
+    ) -> None:
         '''
         Highlight on/off the selected mineral class in the map canvas. The 
-        arguments of this function are specifically compatible with the 
-        itemHighlightRequested signal emitted by the legend (see Legend object 
-        for more details).
+        arguments of this method are specifically compatible with the 
+        'itemHighlightRequested' signal emitted by the legend (see 'Legend'
+        class for more details).
 
         Parameters
         ----------
@@ -1485,22 +1488,19 @@ class ImageToMineralMap(QW.QDialog):
 
 
 class DummyMapsBuilder(QW.QDialog):
-    '''
-    A dialog to generate dummy input maps, useful as a placeholder for missing
-    maps when using model-based classifiers.
-    '''
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A dialog to generate dummy maps, useful as a placeholder for missing
+        input maps when using model-based classifiers.
 
         Parameters
         ----------
-        parent : qObject or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this dialog. The default is None.
 
         '''
-        super(DummyMapsBuilder, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('Dummy Maps Builder')
@@ -1511,52 +1511,55 @@ class DummyMapsBuilder(QW.QDialog):
     # Set main attribute
         self.dummy_map = None
 
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
 
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
         '''
-    # Tool info (FramedLabel)
-        info = 'Build artificial noisy maps with near-zero values, randomized '\
-               'through a Gamma distribution function. These maps can be used '\
-               'as a placeholder for missing maps in a pre-trained model.'
+    # Tool info (Framed Label)
+        info = (
+            'Build artificial noisy maps with near-zero values, randomized '
+            'through a Gamma distribution function. These maps can be used '
+            'as a placeholder for missing maps in a pre-trained model.'
+        )
         self.info_lbl = CW.FramedLabel(info)
         self.info_lbl.setWordWrap(True)
 
-    # Map width (Styled SpinBox)
+    # Map width (Styled Spin Box)
         self.width_spbox = CW.StyledSpinBox(1, 10**5)
         self.width_spbox.setValue(100)
 
-    # Map height (Styled SpinBox)
+    # Map height (Styled Spin Box)
         self.height_spbox = CW.StyledSpinBox(1, 10**5)
         self.height_spbox.setValue(100)
 
-    # Shape of gamma distribution function (Styled DoubleSpinBox)
+    # Shape of gamma distribution function (Styled Double Spin Box)
         self.shape_spbox = CW.StyledDoubleSpinBox(0.1, 100., 0.1)
         self.shape_spbox.setValue(1.5)
         self.shape_spbox.setToolTip('Shape of Gamma distribution function')
 
-    # Scale of gamma distribution function (Styled DoubleSpinBox)
+    # Scale of gamma distribution function (Styled Double Spin Box)
         self.scale_spbox = CW.StyledDoubleSpinBox(0.1, 100., 0.1)
         self.scale_spbox.setValue(1.)
         self.scale_spbox.setToolTip('Scale of Gamma distribution function')
 
     # Generate random map (Styled Button)
-        self.rand_btn = CW.StyledButton(text='Randomize', bg_color=style.OK_GREEN)
+        self.rand_btn = CW.StyledButton(text='Randomize', bg=style.OK_GREEN)
 
     # Save map (Styled Button)
-        self.save_btn = CW.StyledButton(QIcon(r'Icons/save.png'), 'Save')
+        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
 
-    # Preview histogram (HistogramCanvas) 
+    # Preview histogram (Histogram Canvas) 
         self.canvas = plots.HistogramCanvas(wheel_pan=False, wheel_zoom=False)
         self.canvas.setMinimumSize(300, 300)
     
-    # Navigation Toolbar for preview histogram
+    # Navigation Toolbar for preview histogram (Navigation Toolbar)
         self.navtbar = plots.NavTbar.histCanvasDefault(self.canvas, self)
 
     # Adjust layout
@@ -1586,7 +1589,7 @@ class DummyMapsBuilder(QW.QDialog):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -1595,7 +1598,7 @@ class DummyMapsBuilder(QW.QDialog):
         self.save_btn.clicked.connect(self.saveMap)
 
 
-    def generateMap(self):
+    def generateMap(self) -> None:
         '''
         Generate and render dummy map.
 
@@ -1613,7 +1616,7 @@ class DummyMapsBuilder(QW.QDialog):
         self.canvas.update_canvas(self.dummy_map, title='Dummy map histogram')
 
 
-    def saveMap(self):
+    def saveMap(self) -> None:
         '''
         Save dummy map to file.
 
@@ -1623,8 +1626,7 @@ class DummyMapsBuilder(QW.QDialog):
             CW.MsgBox(self, 'Crit', 'No map generated.')
         
     # Do nothing if output path is invalid or file dialog is canceled
-        ftypes = '''Compressed ASCII file (*.gz)
-                    ASCII file (*.txt)'''
+        ftypes = 'Compressed ASCII file (*.gz);;ASCII file (*.txt)'
         path, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
                                                  pref.get_dir('out'), ftypes)
         if not path:
@@ -1642,21 +1644,18 @@ class DummyMapsBuilder(QW.QDialog):
 
 
 class Preferences(QW.QDialog):
-    '''
-    A dialog to access application preferences.
-    '''
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
-        Constructor.
+        A dialog to access application preferences.
 
         Parameters
         ----------
-        parent : qObject or None, optional
+        parent : QWidget or None, optional
             The GUI parent of this dialog. The default is None.
 
         '''
-        super(Preferences, self).__init__(parent)
+        super().__init__(parent)
 
     # Set dialog widget attributes
         self.setWindowTitle('Preferences')
@@ -1665,12 +1664,14 @@ class Preferences(QW.QDialog):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         self.readSettings()
+
+    # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self._connect_slots()
         self.adjustSize()
+        self._connect_slots()
         
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         '''
         GUI constructor.
 
@@ -1678,16 +1679,16 @@ class Preferences(QW.QDialog):
 #  -------------------------------------------------------------------------  #
 #                           INTERFACE SETTINGS
 #  -------------------------------------------------------------------------  #
-    # Application font-size (Styled Spinbox)
+    # Application font-size (Styled Spin Box)
         self.fontsize_spbox = CW.StyledSpinBox(8, 16)
         self.fontsize_spbox.setValue(self._fontsize)
 
-    # Smooth GUI (CheckBox)
+    # Smooth GUI (Check Box)
         self.smooth_cbox = QW.QCheckBox()
         self.smooth_cbox.setToolTip('Smooth feedback when resizing widgets')
         self.smooth_cbox.setChecked(self._smooth_gui)
 
-    # Interface tab (GroupScrollArea)
+    # Interface tab (Group Scroll Area)
         gui_form = QW.QFormLayout()
         gui_form.setVerticalSpacing(15)
         gui_form.addRow('Font size', self.fontsize_spbox)
@@ -1703,11 +1704,11 @@ class Preferences(QW.QDialog):
     # ROI selection color (Styled Button)
         self.roi_selcol_btn = CW.StyledButton(CW.ColorIcon(self._roi_selcol))
 
-    # ROI filled (CheckBox)
+    # ROI filled (Check Box)
         self.roi_filled_cbox = QW.QCheckBox('Filled')
         self.roi_filled_cbox.setChecked(self._roi_filled)
 
-    # Mask merging rule (RadioButtons Layout)
+    # Mask merging rule (Radio Buttons Layout)
         btns = ('Intersection', 'Union')
         selected_btn = btns.index(self._mask_merge_type.capitalize())
         tip1 = 'Preserve pixels only if visible in all masks'
@@ -1717,7 +1718,7 @@ class Preferences(QW.QDialog):
         self.mask_merge_btns.button(0).setToolTip(tip1)
         self.mask_merge_btns.button(1).setToolTip(tip2)
 
-    # ROI group (GroupArea)
+    # ROI group (Group Area)
         roi_form = QW.QFormLayout()
         roi_form.setVerticalSpacing(15)
         roi_form.addRow('Color', self.roi_col_btn)
@@ -1725,13 +1726,13 @@ class Preferences(QW.QDialog):
         roi_form.addRow(self.roi_filled_cbox)
         roi_group = CW.GroupArea(roi_form, 'ROI')
 
-    # Mask group (GroupArea)
+    # Mask group (Group Area)
         mask_form = QW.QFormLayout()
         mask_form.setVerticalSpacing(15)
         mask_form.addRow('Default merging', self.mask_merge_btns)
         mask_group = CW.GroupArea(mask_form, 'Mask')
 
-    # Plots tab (GroupScrollArea)
+    # Plots tab (Group Scroll Area)
         plots_vbox = QW.QVBoxLayout()
         plots_vbox.setSpacing(10)
         plots_vbox.addWidget(roi_group)
@@ -1741,17 +1742,17 @@ class Preferences(QW.QDialog):
 #  -------------------------------------------------------------------------  #
 #                              DATA SETTINGS
 #  -------------------------------------------------------------------------  #
-    # Decimal precision (Styled SpinBox)
+    # Decimal precision (Styled Spin Box)
         self.decimal_spbox = CW.StyledSpinBox(0, 6)
         self.decimal_spbox.setToolTip('Number of displayed decimal places')
         self.decimal_spbox.setValue(self._decimal_prec)
 
-    # Extended log (CheckBox)
+    # Extended log (Check Box)
         self.extlog_cbox = QW.QCheckBox('Extended model log')
         self.extlog_cbox.setToolTip('Save advanced info in custom model logs')
         self.extlog_cbox.setChecked(self._extended_log)
 
-    # Data tab (GroupScrollArea)
+    # Data tab (Group Scroll Area)
         data_form = QW.QFormLayout()
         data_form.setSpacing(15)
         data_form.addRow('Decimals', self.decimal_spbox)
@@ -1776,7 +1777,7 @@ class Preferences(QW.QDialog):
 #  -------------------------------------------------------------------------  #
 #                              MAIN LAYOUT
 #  -------------------------------------------------------------------------  #
-    # Main widget (Styled TabWidget)
+    # Main widget (Styled Tab Widget)
         tabwid = CW.StyledTabWidget()
         tabwid.tabBar().setExpanding(True)
         tabwid.tabBar().setDocumentMode(True)
@@ -1798,7 +1799,7 @@ class Preferences(QW.QDialog):
         self.setLayout(main_layout)
 
 
-    def _connect_slots(self):
+    def _connect_slots(self) -> None:
         '''
         Signals-slots connector.
 
@@ -1831,7 +1832,7 @@ class Preferences(QW.QDialog):
         self.default_btn.clicked.connect(self.resetToDefault)
 
 
-    def readSettings(self):
+    def readSettings(self) -> None:
         '''
         Read settings from settings.ini file.
 
@@ -1846,7 +1847,7 @@ class Preferences(QW.QDialog):
         self._extended_log = pref.get_setting('data/extended_model_log')
 
 
-    def writeSettings(self):
+    def writeSettings(self) -> None:
         '''
         Write settings to settings.ini file.
 
@@ -1861,7 +1862,7 @@ class Preferences(QW.QDialog):
         pref.edit_setting('data/extended_model_log', self._extended_log)
 
 
-    def changeRoiIconColor(self):
+    def changeRoiIconColor(self) -> None:
         '''
         Set a new ROI (selection) color.
 
@@ -1878,7 +1879,7 @@ class Preferences(QW.QDialog):
             btn.setIcon(CW.ColorIcon(hex))
 
 
-    def changeMaskMergeRule(self, selected_id: int):
+    def changeMaskMergeRule(self, selected_id: int) -> None:
         '''
         Change default mask merging mode based on the selected radio button.
 
@@ -1892,7 +1893,7 @@ class Preferences(QW.QDialog):
         self._mask_merge_type = rule
 
 
-    def setAppFontSize(self):
+    def setAppFontSize(self) -> None:
         '''
         Change app font size. Warning: some widgets needs to be repainted to
         apply the new fontsize.
@@ -1905,20 +1906,22 @@ class Preferences(QW.QDialog):
         app.setFont(font)
 
 
-    def resetToDefault(self):
+    def resetToDefault(self) -> None:
         '''
         Reset all settings to default values.
 
         '''
-        text = 'Reset preferences to default? Some changes may take effect '\
-               'after restarting the app.'
+        text = (
+            'Reset preferences to default? Some changes may take effect after '
+            'restarting the app.'
+        )
         choice = CW.MsgBox(self, 'Quest', text)
         if choice.yes():
             pref.clear_settings()
             self.close()
 
 
-    def saveEdits(self, exit=False):
+    def saveEdits(self, exit: bool = False) -> None:
         '''
         Save applied changes to settings and exit the dialog if required.
 

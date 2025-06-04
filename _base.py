@@ -4,41 +4,40 @@ Created on Fri Dec 16 17:52:30 2022
 
 @author: albdag
 """
+from collections.abc import Iterable
 import os
 
 import numpy as np
 
 
 class InputMap():
-    '''
-    Base class for generating, editing, loading and saving an input 2d map. The
-    object consists of an input map array (e.g., X-Ray map).
-    '''
+
     _DTYPE = 'int32'
     _FILEXT = ('.gz', '.txt')
 
-    def __init__(self, map_array: np.ndarray, filepath: str|None=None):
+    def __init__(self, map_array: np.ndarray, filepath: str | None = None) -> None:
         '''
-        Input Map class constructor.
+        Base class for generating, editing, loading and saving an input 2d map.
+        The object consists of an input map array (e.g., X-Ray map).
 
         Parameters
         ----------
-        map_array : NumPy ndarray
-            A 2D numpy array storing the mineral map data.
+        map_array : numpy ndarray
+            A 2D array storing input map data.
         filepath : str or None, optional
-            Filepath to the stored input map file. See load and save functions
-            for more details. The default is None.
+            Path to the stored input map file. For more details, see 'load' and
+            'save' methods. The default is None.
 
         '''
 
-    # Define the principal attributes
+    # Set main attributes
         self.map = map_array.astype(self._DTYPE)
         self.shape = self.map.shape
         self.filepath = filepath
 
 
     @classmethod
-    def load(cls, filepath: str):
+    def load(cls, filepath: str) -> 'InputMap':
         '''
         Instantiate a new input map object by loading it from a file.
 
@@ -47,15 +46,15 @@ class InputMap():
         filepath : str
             A valid filepath to the mineral map.
 
+        Returns
+        -------
+        InputMap
+            A new instance of Input Map.
+
         Raises
         ------
         ValueError
-            The file type is not supported (not one of .gz and .txt).
-
-        Returns
-        -------
-        Input Map object
-            A new instance of Input Map.
+            Raised if the file type is not supported (not one of .gz and .txt).
 
         '''
         _, filext = os.path.splitext(filepath)
@@ -69,7 +68,7 @@ class InputMap():
         raise ValueError('This file is not supported.')
     
 
-    def copy(self):
+    def copy(self) -> 'InputMap':
         '''
         Return a copy of this input map.
 
@@ -82,9 +81,9 @@ class InputMap():
         return InputMap(self.map.copy())
 
 
-    def get_masked(self, mask: np.ndarray):
+    def get_masked(self, mask: np.ndarray) -> np.ma.MaskedArray | np.ndarray:
         '''
-        Returns a masked version of the input map.
+        Returns a masked version of the map array.
 
         Parameters
         ----------
@@ -93,8 +92,8 @@ class InputMap():
 
         Returns
         -------
-        map_array_ma : numpy masked ndarray
-            The masked input map.
+        map_array_ma : numpy MaskedArray or numpy ndarray
+            Masked input map or the original one if 'mask' is invalid. 
 
         '''
     # Safety: return un-masked version of the map if mask shape is wrong
@@ -105,7 +104,7 @@ class InputMap():
         return map_array_ma
 
 
-    def invert(self):
+    def invert(self) -> None:
         '''
         Set the higher pixel values as the lower and viceversa.
 
@@ -113,7 +112,7 @@ class InputMap():
         self.map = self.map.max() + self.map.min() - self.map
 
 
-    def save(self, outpath: str):
+    def save(self, outpath: str) -> None:
         '''
         Save the input map object to disk.
 
@@ -126,7 +125,7 @@ class InputMap():
         Raises
         ------
         ValueError
-            The outpath extension is not one of ('.gz', '.txt').
+            Raised if the outpath extension is not one of ('.gz', '.txt').
 
         '''
         if (ext := os.path.splitext(outpath)[1]) not in self._FILEXT:
@@ -137,42 +136,41 @@ class InputMap():
 
 
 class MineralMap():
-    '''
-    Base class for generating, editing, loading and saving a Mineral Map. The
-    object consists of a mineral map array, a linked probability map array and
-    a palette dictionary.
-    '''
 
     _DTYPE_STR = 'U8'
     _DTYPE_INT = 'uint8'
     _FILEXT = ('.mmp', '.gz', '.txt')
 
 
-    def __init__(self, minmap_array: np.ndarray, 
-                 probmap_array: np.ndarray|None=None, 
-                 palette_dict: dict|None=None, filepath: str|None=None):
+    def __init__(
+        self,
+        minmap_array: np.ndarray, 
+        probmap_array: np.ndarray | None = None, 
+        palette_dict: dict[int, tuple[int, int, int]] | None = None,
+        filepath: str | None = None):
         '''
-        Mineral Map class constructor.
+        Base class for generating, editing, loading and saving a Mineral Map.
+        The object consists of a mineral map array, a linked probability map
+        array and a palette dictionary.
 
         Parameters
         ----------
-        minmap_array : NumPy ndarray
-            A 2D numpy array storing the mineral map data.
-        probmap_array : NumPy ndarray or None, optional
-            A 2D numpy array storing the probability map data. If None, it is
-            initialized as a zeros array of the same shape as <minmap_array>.
-            The default is None.
-        palette_dict : dict or None, optional
+        minmap_array : numpy ndarray
+            A 2D array storing mineral map data.
+        probmap_array : numpy ndarray or None, optional
+            A 2D array storing probability map data. If None, it is initialized
+            as a 0's array with shape of 'minmap_array'. The default is None.
+        palette_dict : dict[int, tuple[int, int, int]] or None, optional
             A dictionary storing the unique mineral IDs (keys) paired with
             their corresponding color (values) for visualization purposes. The
-            colors must be RGB tuples. If None, the palette will be generated
+            colors must be RGB triplets. If None, the palette will be generated
             randomly. The default is None.
         filepath : str or None, optional
-            Filepath to the stored mineral map file. See load and save
-            functions for more details. The default is None.
+            Path to the stored mineral map file. For more details, see 'load'
+            and 'save' methods. The default is None.
 
         '''
-    # Define the principal attributes
+    # Define main attributes
         self.minmap = minmap_array.astype(self._DTYPE_STR)
         self.shape = self.minmap.shape
         self.probmap = np.zeros(self.shape) if probmap_array is None else probmap_array
@@ -187,7 +185,7 @@ class MineralMap():
     # Update derived attributes
         self.update_derived_attributes()
 
-    # Optional attributes set only by (unsupervised) classifiers
+    # Optional attributes accessed only by unsupervised classifiers
         self._silhouette_avg = None
         self._silhouette_by_cluster = None
         self._chi_score = None
@@ -198,7 +196,7 @@ class MineralMap():
             self.set_palette(self.rand_colorlist())
 
 
-    def __eq__(self, value: object):
+    def __eq__(self, value: object) -> bool:
         '''
         Reimplementation of equality method.
 
@@ -214,15 +212,17 @@ class MineralMap():
 
         '''
         if isinstance(value, MineralMap):
-            return (np.array_equal(value.minmap, self.minmap) and 
-                    np.array_equal(value.probmap, self.probmap) and
-                    value.palette == self.palette)
+            return (
+                np.array_equal(value.minmap, self.minmap)
+                and np.array_equal(value.probmap, self.probmap)
+                and value.palette == self.palette
+            )
         else:
             return False
         
   
     @classmethod
-    def load(cls, filepath: str):
+    def load(cls, filepath: str) -> 'MineralMap':
         '''
         Instantiate a new mineral map object by loading it from a file.
 
@@ -231,50 +231,49 @@ class MineralMap():
         filepath : str
             A valid filepath to the mineral map.
 
+        Returns
+        -------
+        MineralMap
+            A new instance of Mineral Map.
+
         Raises
         ------
         ValueError
-            The file type is not supported (not one of .mmp, .gz and .txt).
-
-        Returns
-        -------
-        Mineral Map object
-            A new instance of Mineral Map.
+            Raised if the file type is not one of .mmp, .gz and .txt.
 
         '''
         root, filext = os.path.splitext(filepath)
 
     # Proper file extension (.mmp).
     # From this we can retrieve all the attributes of the Mineral Map object.
-        if filext == '.mmp':
-            file = np.load(filepath, allow_pickle=True)
-            minmap = file['minmap']
-            probmap = file['probmap']
-            palette = file['palette'].item()
+        match filext:
+            case '.mmp':
+                file = np.load(filepath, allow_pickle=True)
+                minmap = file['minmap']
+                probmap = file['probmap']
+                palette = file['palette'].item()
 
     # Legacy file extensions (.gz, .txt).
     # From these we can retrieve only the mineral map data. Useful to load
     # old (legacy) mineral maps and data from different software.
-        elif filext in ('.gz', '.txt'):
-            minmap = np.loadtxt(filepath, dtype=cls._DTYPE_STR)
-
+            case '.gz' | '.txt':
+                minmap = np.loadtxt(filepath, dtype=cls._DTYPE_STR)
         # If a legacy-style probability map is present in the same folder, it
-        # is loaded as well.
-            probmap = None
-            if os.path.exists(probmap_path := root + '_probMap' + filext):
-                probmap = np.loadtxt(probmap_path)
+        # is loaded as well. The palette is left empty
+                probmap = None
+                if os.path.exists(probmap_path := root + '_probMap' + filext):
+                    probmap = np.loadtxt(probmap_path)
+                palette = None
 
-        # The palette is left empty.
-            palette = None
-
-    # Any other file extension is discarded and exits the function.
-        else: raise ValueError('This file is not supported.')
+    # Any other file extension is discarded and raises an exception
+            case _:
+                raise ValueError(f'The file {filepath} is not supported.')
 
     # Instantiate a new Mineral Map object
         return cls(minmap, probmap, palette, filepath)
     
 
-    def copy(self):
+    def copy(self) -> 'MineralMap':
         '''
         Return a copy of this mineral map.
 
@@ -284,65 +283,71 @@ class MineralMap():
             A copy of this mineral map.
 
         '''
-        return MineralMap(self.minmap.copy(), self.probmap.copy(), 
-                          self.palette.copy())
+        return MineralMap(self.minmap.copy(), self.probmap.copy(), self.palette.copy())
 
 
-    def _compile_encoder(self, unique: np.ndarray|list):
+    def _compile_encoder(
+        self,
+        unique: np.ndarray[np.str_] | list[str]
+    ) -> dict[int, str]:
         '''
         Generate an encoder for the mineral map.
 
         Parameters
         ----------
-        unique : ndarray or list
+        unique : numpy ndarray[numpy str] or list[str]
             List of unique phases (as labels).
 
         Returns
         -------
-        encoder : dict
+        encoder : dict[int, str]
             Encoder dictionary.
 
         '''
         return dict(zip(range(len(unique)), unique))
 
 
-    def _compute_mode(self, unique: np.ndarray, counts: np.ndarray):
+    def _compute_mode(
+        self,
+        unique: np.ndarray[np.str_],
+        counts: np.ndarray
+    ) -> dict[int, float]:
         '''
-        A function to compute the modal amounts of phases.
+        Compute the modal amounts of phases.
 
         Parameters
         ----------
-        unique : NumPy ndarray
+        unique : numpy ndarray[numpy str]
             Unique phases names (as labels).
-        counts : NumPy ndarray
+        counts : numpy ndarray
             Number of pixels by phase.
 
         Returns
         -------
-        dict
+        dict[int, float]
             Mode dictionary -> {ID : mode}, ordered by modal abundancy.
 
         '''
         freq_sort = np.argsort(-counts)
         percent = 100*counts/counts.sum()
         unique, percent = unique[freq_sort], percent[freq_sort]
-        uniqueID = (self.as_id(u) for u in unique)
-        return dict(zip(uniqueID, percent))
+        unique_id = (self.as_id(u) for u in unique)
+        return dict(zip(unique_id, percent))
 
 
-    def _encode(self, encoder: dict):
+    def _encode(self, encoder: dict[int, str]) -> np.ndarray:
         '''
-        Encode the mineral map to an ID map, especially useful for the
-        interaction with matplotlib.
+        Encode the mineral map to an ID map, especially useful for interacting
+        with Matplotlib.
 
         Parameters
         ----------
-        encoder : dict
+        encoder : dict[int, str]
             The encoder dictionary -> {ID : label}.
 
         Returns
         -------
-        NumPy ndarray
+        numpy ndarray
             The encoded mineral map.
 
         '''
@@ -352,10 +357,10 @@ class MineralMap():
         return encoded_map.astype(self._DTYPE_INT)
     
 
-    def _with_nodata(self, prob_thresh: float):
+    def _with_nodata(self, prob_thresh: float) -> np.ndarray:
         '''
-        Get a version of the mineral map with NoData pixels based on a 
-        confidence (a.k.a. probability) threshold. This function is meant to be
+        Get a version of the mineral map array with NoData pixels (i.e., with
+        default class '_ND_') based on a threshold. This method is meant to be
         internally called before saving the mineral map to file. 
 
         Parameters
@@ -363,13 +368,18 @@ class MineralMap():
         prob_thresh : float
             The probability threshold.
 
+        Returns
+        -------
+        minmap_nd : numpy ndarray
+            Mineral map array with '_ND_' pixels.
+
         '''
         minmap_nd = self.minmap.copy()
         minmap_nd[self.probmap < prob_thresh] = '_ND_'
         return minmap_nd
 
 
-    def as_id(self, phase: str):
+    def as_id(self, phase: str) -> int:
         '''
         Convert phase name (label) to phase ID.
 
@@ -386,7 +396,7 @@ class MineralMap():
         Raises
         ------
         ValueError
-            'phase' is not a valid phase.
+            Raised if 'phase' is not a valid phase.
 
         '''
         if not self.has_phase(phase):
@@ -397,7 +407,7 @@ class MineralMap():
         return ids[idx]
             
 
-    def as_phase(self, id_: int):
+    def as_phase(self, id_: int) -> str:
         '''
         Convert phase ID to phase name (label).
 
@@ -414,7 +424,7 @@ class MineralMap():
         Raises
         ------
         ValueError
-            'id_'is not a valid ID.
+            Raised if 'id_' is not a valid ID.
 
         '''
         if not self.has_id(id_):
@@ -423,39 +433,62 @@ class MineralMap():
         return self.encoder[id_]
     
 
-    def get_clustering_scores(self):
+    def get_clustering_scores(self) -> (
+        tuple[
+            float | None,
+            dict[int, np.ndarray] | None,
+            float | None,
+            float | None
+        ]
+    ):
         '''
         Return clustering scores that are computed after an unsupervised
-        mineral classification routine. This function is currently only 
-        accessed by the Mineral Classifier tool.
+        mineral classification routine. This method is currently only accessed
+        by the Mineral Classifier tool.
 
         Returns
         -------
-        tuple
-            Clustering scores (= average silhouette score, silhouette score by
-            cluster, Calinski-Harabasz Index, Davies-Bouldin Index).
+        float or None
+            Average Silhouette score.
+        dict[int, numpy ndarray] or None
+            Silhouette score by cluster.
+        float or None
+            Calinski-Harabasz Index.
+        float or None
+            Davies-Bouldin Index.
+
         '''
-        return (self._silhouette_avg, self._silhouette_by_cluster, 
-                self._chi_score, self._dbi_score)
+        return (
+            self._silhouette_avg,
+            self._silhouette_by_cluster, 
+            self._chi_score,
+            self._dbi_score
+        )
     
 
-    def set_clustering_scores(self, sil_avg: float, sil_clust: dict, 
-                              chi: float, dbi: float):
+    def set_clustering_scores(
+        self,
+        sil_avg: float,
+        sil_clust: dict[int, np.ndarray],
+        chi: float,
+        dbi: float
+    ) -> None:
         '''
         Set clustering scores that are computed after an unsupervised mineral
-        classification routine. This function is currently only accessed by the 
+        classification routine. This method is currently only accessed by the 
         Mineral Classifier tool.
 
         Parameters
         ----------
         sil_avg : float
             Average silhouette score.
-        sil_clust : dict
-            Silhouette score by cluster.
+        sil_clust : dict[int, numpy ndarray]
+            Silhouette scores by cluster.
         chi : float
             Calinski-Harabasz Index.
         dbi : float
             Davies-Bouldin Index.
+
         '''
         self._silhouette_avg = sil_avg
         self._silhouette_by_cluster = sil_clust
@@ -463,14 +496,14 @@ class MineralMap():
         self._dbi_score = dbi
 
 
-    def get_labeled_mode(self):
+    def get_labeled_mode(self) -> dict[str, float]:
         '''
-        Convenient function to get the mode dictionary with keys expressed as
+        Convenient method to get the mode dictionary with keys expressed as
         labels rather than IDs.
 
         Returns
         -------
-        dict
+        dict[str, float]
             The labeled mode dictionary.
 
         '''
@@ -479,14 +512,14 @@ class MineralMap():
         return dict(zip(labels, mode))
     
 
-    def get_labeled_palette(self):
+    def get_labeled_palette(self) -> dict[str, tuple[int, int, int]]:
         '''
-        Convenient function to get the palette dictionary with keys expressed 
-        as labels rather than IDs.
+        Convenient method to get the palette dictionary with keys expressed as
+        labels rather than IDs.
 
         Returns
         -------
-        dict
+        dict[str, tuple[int, int, int]]
             The labeled palette dictionary.
 
         '''
@@ -495,8 +528,12 @@ class MineralMap():
         return dict(zip(labels, colors))
 
 
-    def edit_minmap(self, new_minmap: np.ndarray, alter_probmap=False,
-                    prob_score: float=np.nan):
+    def edit_minmap(
+        self,
+        edited: np.ndarray,
+        alter_probmap: bool = False,
+        prob_score: float = np.nan
+    ) -> None:
         '''
         Apply user's edits to the mineral map. The probability map, the
         encoded mineral map and the palette get automatically updated
@@ -504,8 +541,8 @@ class MineralMap():
 
         Parameters
         ----------
-        new_minmap : NumPy ndarray
-            The new edited mineral map.
+        edited : numpy ndarray
+            The edited version of the mineral map.
         alter_probmap : bool, optional
             If True, the probability score of edited pixels will be set to 
             'prob_score'. The default is False.
@@ -515,17 +552,17 @@ class MineralMap():
 
         '''
     # Ensure new minmap has the correct data type
-        new_minmap = new_minmap.astype(self._DTYPE_STR)
+        edited = edited.astype(self._DTYPE_STR)
 
     # Alter probability score of edited pixels, if requested 
         if alter_probmap:
-            self.probmap[self.minmap != new_minmap] = prob_score
+            self.probmap[self.minmap != edited] = prob_score
 
     # Get the original map phases, BEFORE the editing operation
         phases_old = self.get_phases()
 
     # Apply edits to the mineral map and update the derived attributes
-        self.minmap = new_minmap
+        self.minmap = edited
         self.update_derived_attributes()
 
     # Get the new map phases, AFTER the editing operation, and then update the
@@ -534,7 +571,7 @@ class MineralMap():
         self.update_palette(phases_old, phases_new)
 
 
-    def get_phase_amount(self, phase: str):
+    def get_phase_amount(self, phase: str) -> float:
         '''
         Get the amount of a specific phase.
 
@@ -553,7 +590,7 @@ class MineralMap():
         return self.mode[id_]
 
 
-    def get_phase_color(self, phase: str):
+    def get_phase_color(self, phase: str) -> tuple[int, int, int]:
         '''
         Get the color of a specific phase.
 
@@ -564,7 +601,7 @@ class MineralMap():
 
         Returns
         -------
-        tuple of int
+        tuple[int, int, int]
             RGB triplet.
 
         '''
@@ -572,70 +609,82 @@ class MineralMap():
         return self.palette[id_]
 
 
-    def get_phases(self):
+    def get_phases(self) -> list[str]:
         '''
         Get a list of the mineral phases (as labels).
 
         Returns
         -------
-        list of str
+        list[str]
             List of phases.
 
         '''
         return list(self.encoder.values())
 
 
-    def get_phases_ids(self):
+    def get_phases_ids(self) -> list[int]:
         '''
         Get a list of the mineral phases IDs.
 
         Returns
         -------
-        list of int
+        list[str]
             List of phases IDs.
 
         '''
         return list(self.encoder.keys())
 
 
-    def get_plot_data(self):
+    def get_plot_data(self) -> (
+        tuple[
+            np.ndarray,
+            dict[int, str],
+            Iterable[tuple[int, int, int]]
+        ]
+    ):
         '''
-        Convenient function to get the data required by ImageCanvas object to
-        plot the map. See plots.ImageCanvas.draw_discretemap() for further
+        Convenient method to get the data required by 'ImageCanvas' class to
+        plot the map. See 'draw_discretemap' method of 'ImageCanvas' class for
         details.
 
         Returns
         -------
-        minmap_encoded : NumPy ndarray
+        minmap_encoded : numpy ndarray
             The encoded mineral map.
-        encoder : dict
+        encoder : dict[int, str]
             The encoder dictionary -> {ID : label}.
-        palette.values() : dict values
-            The colors from the palette, as an iterable of RGB tuples.
+        Iterable[tuple[int, int, int]]
+            Colors from the palette dictionary, as an iterable of RGB triplets.
 
         '''
 
         return (self.minmap_encoded, self.encoder, self.palette.values())
 
 
-    def get_masked(self, mask: np.ndarray):
+    def get_masked(self, mask: np.ndarray) -> (
+        tuple[
+            np.ma.MaskedArray | np.ndarray,
+            np.ma.MaskedArray | np.ndarray,
+            np.ma.MaskedArray | np.ndarray
+        ]
+    ):
         '''
         Returns a masked version of mineral map, encoded mineral map and
-        probabilty map.
+        probabilty map arrays.
 
         Parameters
         ----------
-        mask : NumPy ndarray
+        mask : numpy ndarray
             A boolean array representing the mask (condition).
 
         Returns
         -------
-        minmap_ma : Masked NumPy ndarray
-            The masked mineral map.
-        minmap_encoded_ma : Masked NumPy ndarray
-            The masked encoded mineral map.
-        probmap_ma : Masked NumPy ndarray
-            The masked probability map.
+        minmap_ma : numpy MaskedArray or numpy ndarray
+            Masked mineral map or the original one if 'mask' is invalid.
+        minmap_encoded_ma : numpy MaskedArray or numpy ndarray
+            Masked encoded mineral map or the original one if 'mask' is invalid.
+        probmap_ma : numpy MaskedArray or numpy ndarray
+            Masked probability map or the original one if 'mask' is invalid.
 
         Example
         -------
@@ -648,6 +697,7 @@ class MineralMap():
         if mask.shape != self.shape:
             print(f'Wrong mask shape: {mask.shape}! Mask not applied')
             return (self.minmap, self.minmap_encoded, self.probmap)
+        
     # Return a masked version of mineral map, encoded mineral map and probmap
         minmap_ma = np.ma.masked_where(mask, self.minmap)
         minmap_encoded_ma = np.ma.masked_where(mask, self.minmap_encoded)
@@ -655,7 +705,7 @@ class MineralMap():
         return (minmap_ma, minmap_encoded_ma, probmap_ma)
     
 
-    def has_id(self, id_: int):
+    def has_id(self, id_: int) -> bool:
         '''
         Check if the given ID is present in the mineral map.
 
@@ -673,7 +723,7 @@ class MineralMap():
         return id_ in self.get_phases_ids()
     
 
-    def has_phase(self, phase: str):
+    def has_phase(self, phase: str) -> bool:
         '''
         Check if the given phase is present in the mineral map.
 
@@ -691,7 +741,7 @@ class MineralMap():
         return phase in self.get_phases()
 
 
-    def is_obsolete(self):
+    def is_obsolete(self) -> bool | None:
         '''
         Check if the mineral map file was generated with an obsolete version
         of X-Min Learn.
@@ -708,7 +758,7 @@ class MineralMap():
             return filext != '.mmp'
 
 
-    def is_stored(self):
+    def is_stored(self) -> bool:
         '''
         Check if the mineral map object is saved on the disk.
 
@@ -721,13 +771,13 @@ class MineralMap():
         return self.filepath is not None
 
 
-    def merge_phases(self, in_list: list[str], out_merged: str):
+    def merge_phases(self, in_list: list[str], out_merged: str) -> None:
         '''
-        A function to merge a list of phases to one merged phase.
+        Merge a list of phases to one merged phase.
 
         Parameters
         ----------
-        in_list : list of str
+        in_list : list[str]
             List of phases to be merged (as labels).
         out_merged : str
             Merged phase (as label).
@@ -747,7 +797,7 @@ class MineralMap():
         self.update_palette(phases_old, phases_new)
 
 
-    def phase_count(self):
+    def phase_count(self) -> int:
         '''
         Get the number of unique mineral classes.
 
@@ -760,44 +810,50 @@ class MineralMap():
         return len(self.encoder)
 
 
-    def rand_colorlist(self, n_colors: int|None=None, tol: int|None=None):
+    def rand_colorlist(
+        self,
+        n_colors: int | None = None,
+        tol: int | None = None
+    ) -> list[tuple[int, int, int]]:
         '''
-        A function to generate random color lists of desired length.
+        Generate random color lists of desired length.
 
         Parameters
         ----------
         n_colors : int or None
-            Number of random colors in the list (a.k.a. list length). If None
-            it is the current number of unique phases. The default is None.
+            Number of colors in the list. If None, the current number of unique
+            phases is used. The default is None.
         tol : int, optional
             RNG tolerance parameter. Controls how similar the colors can be.
             Bigger tolerance values means more different colors. If None, it
-            is automatically computed as 256 / n_colors. The default is None.
+            is automatically computed as 256 / 'n_colors'. The default is None.
 
         Returns
         -------
-        list of tuples
+        list[tuple[int, int, int]]
             A list of random RGB triplets.
 
         '''
-        if n_colors is None: n_colors = self.phase_count()
+        if n_colors is None: 
+            n_colors = self.phase_count()
 
-        if tol is None: tol = 256//n_colors
+        if tol is None:
+            tol = 256//n_colors
 
         _rgb = np.random.default_rng().integers(256, size=3)
         RGB_arr = _rgb.reshape(1,3)
 
-        for x in range(n_colors-1):
+        for _ in range(n_colors - 1):
             while np.any(np.all(abs(_rgb - RGB_arr) <= tol, axis=1)):
                 _rgb = np.random.default_rng().integers(256, size=3)
-            RGB_arr = np.r_[RGB_arr, _rgb.reshape(1,3)]
+            RGB_arr = np.r_[RGB_arr, _rgb.reshape(1, 3)]
 
         return list(map(tuple, RGB_arr))
 
 
-    def rename_phase(self, old: str, new: str):
+    def rename_phase(self, old: str, new: str) -> None:
         '''
-        Rename a mineral phase from <old> to <new>.
+        Rename a mineral phase from 'old' to 'new'.
 
         Parameters
         ----------
@@ -815,7 +871,7 @@ class MineralMap():
         self.encoder[id_] = new
 
 
-    def save(self, outpath: str):
+    def save(self, outpath: str) -> None:
         '''
         Save the mineral map object to disk.
 
@@ -828,27 +884,31 @@ class MineralMap():
         Raises
         ------
         ValueError
-            The outpath has not the '.mmp' extension.
+            Raised if the outpath has not the '.mmp' extension.
 
         '''
         with open(outpath, 'wb') as op:
             if (ext := os.path.splitext(outpath)[1]) != '.mmp':
                 raise ValueError(f'Unsupported file extension: {ext}.')
             
-            np.savez(op, minmap=self.minmap, probmap=self.probmap,
-                     palette=self.palette) #!!! add metadata as a dictionary. Should also be done in InputMaps
+            np.savez(
+                file = op,
+                minmap = self.minmap,
+                probmap = self.probmap,
+                palette=self.palette
+            ) #!!! add metadata as a dictionary. Should also be done in InputMaps
 
         self.filepath = outpath
 
 
-    def set_palette(self, colorlist: list[tuple]):
+    def set_palette(self, colorlist: list[tuple[int, int, int]]) -> None:
         '''
         Set a palette based on a color list. The length of the list must match
         the number of phases.
 
         Parameters
         ----------
-        colorlist : list of tuples
+        colorlist : list[tuple[int, int, int]]
             A list of RGB triplets (e.g. [(0,0,0), (255, 0, 0), ...].
 
         '''
@@ -856,7 +916,7 @@ class MineralMap():
         self.palette = dict(zip(IDs, colorlist))
 
 
-    def set_phase_color(self, phase: str, color: tuple[int]):
+    def set_phase_color(self, phase: str, color: tuple[int, int, int]) -> None:
         '''
         Change the color of a specific phase.
 
@@ -864,7 +924,7 @@ class MineralMap():
         ----------
         phase : str
             A valid mineral class.
-        color : tuple of int
+        color : tuple[int, int, int]
             A valid RGB triplet.
 
         '''
@@ -873,11 +933,10 @@ class MineralMap():
             self.palette[id_] = color
 
 
-    def update_derived_attributes(self):
+    def update_derived_attributes(self) -> None:
         '''
-        A function to refresh all the derived attributes of the mineral map
-        object. It is meant to be internally called whenever the pixel values
-        get altered.
+        Refresh all the derived attributes of the mineral map object. It is 
+        meant to be internally called whenever the pixel values get altered.
 
         '''
         unq, cnt = np.unique(self.minmap, return_counts=True)
@@ -886,10 +945,10 @@ class MineralMap():
         self.mode = self._compute_mode(unq, cnt)
 
 
-    def update_palette(self, old_phases: list[str], new_phases: list[str]):
+    def update_palette(self, old_phases: list[str], new_phases: list[str]) -> None:
         '''
-        A function to update the palette after mineral map editings. It
-        preserves the colors of the unaltered phases.
+        Update the palette after mineral map editings, preserving the colors of
+        the unaltered phases.
 
         Parameters
         ----------
@@ -918,18 +977,18 @@ class MineralMap():
             for num, a in enumerate(added_phases):
                 by_phase[a] = new_colors[num]
 
-    # Update the definitive palette <{ID:color}>, correctly sorted by ID
+    # Update the definitive palette {ID: color}, correctly sorted by ID
         palette = {self.as_id(k): by_phase[k] for k in by_phase}
         self.palette = {id_: palette[id_] for id_ in sorted(palette)}
 
 
-    def validate_rgb(self, rgb: tuple[int]):
+    def validate_rgb(self, rgb: tuple[int, int, int]) -> bool:
         '''
-        A function to validate an RGB triplet.
+        Validate an RGB triplet.
 
         Parameters
         ----------
-        RGB : tuple of int
+        RGB : tuple[int, int, int]
             The RGB triplet.
 
         Returns
@@ -938,14 +997,17 @@ class MineralMap():
             True if the RGB triplet is valid, False otherwise.
 
         '''
-    # If <RGB> is not a triplet, it is invalid
+    # If 'rgb' is not a triplet, it is invalid
         if len(rgb) != 3: return False
-    # If any of <RGB> values is not in range 0-255, <RGB> is invalid
+
+    # If any of 'rgb' values is not in range 0-255, 'rgb' is invalid
         for channel in rgb:
             if not channel in range(0, 256):
                 return False
-    # Else, <RGB> is valid
+            
+    # Otherwise, 'RGB' is valid
         return True
+
 
 
 # class PointAnalysis():
@@ -954,37 +1016,37 @@ class MineralMap():
 
 
 
-
 class RoiMap():
-    '''
-    Base class for generating, editing, loading and saving a ROI Map. The
-    object consists of a 2D array with labeled pixels at ROIs locations and a
-    list that stores the label and the bounding box of each ROI.
-    '''
 
     _DTYPE = 'U8'
     _ND = ''
     _FILEXT = ('.rmp')
 
-    def __init__(self, map_array: np.ndarray, roilist: list[list[str, tuple]], 
-                 filepath:str|None=None):
+    def __init__(
+        self,
+        map_array: np.ndarray,
+        roilist: list[list[str, tuple[float, float, int, int]]], 
+        filepath: str | None = None
+    ) -> None:
         '''
-        RoiMap class constructor.
+        Base class for generating, editing, loading and saving a ROI Map. The
+        object consists of a 2D array with labeled pixels at ROIs locations and
+        a list that stores labels and bounding boxes of each ROI.
 
         Parameters
         ----------
-        map_array : ndarray
+        map_array : numpy ndarray
             The ROI map array.
-        roilist : list of list[str, tuple]
+        roilist : list[list[str, tuple[float, float, int, int]]]
             List of ROIs. A ROI is a list -> [ROI_label, ROI_bbox]. ROI_label
             is a text and ROI_bbox is a tuple -> (x0, y0, width, height), where
             x0, y0 are the coordinates of the top-left corner of the ROI.
         filepath : str or None, optional
-            Filepath to the stored ROI map file. See load and save functions
-            for more details. The default is None.
+            Path to the stored ROI map file. For more details see 'load' and
+            'save' methods. The default is None.
 
         '''
-    # Define the principal attributes
+    # Define main attributes
         self.map = map_array.astype(self._DTYPE)
         self.shape = map_array.shape
         self.roilist = roilist
@@ -998,7 +1060,7 @@ class RoiMap():
 
 
     @classmethod
-    def load(cls, filepath: str):
+    def load(cls, filepath: str) -> 'RoiMap':
         '''
         Instantiate a new ROI map object by loading it from a file.
 
@@ -1007,15 +1069,15 @@ class RoiMap():
         filepath : str
             A valid filepath to the ROI map.
 
-        Raises
-        ------
-        ValueError
-            The file extension is not supported (not '.rmp').
-
         Returns
         -------
         RoiMap
             A new instance of ROI map.
+
+        Raises
+        ------
+        ValueError
+            Raised if the file extension is not supported (not '.rmp').
 
         '''
 
@@ -1028,20 +1090,21 @@ class RoiMap():
             roilist = file['roilist'].tolist()
 
     # Any other file extension is discarded and exits the function.
-        else: raise ValueError('This file is not supported.')
+        else:
+            raise ValueError('This file is not supported.')
 
     # Instantiate a new Roi Map object
         return cls(map_array, roilist, filepath)
 
 
     @classmethod
-    def from_shape(cls, shape: tuple):
+    def from_shape(cls, shape: tuple[int, int]) -> 'RoiMap':
         '''
         Instantiate a new empty ROI map of a given shape.
 
         Parameters
         ----------
-        shape : tuple
+        shape : tuple[int, int]
             The shape of the ROI map (rows, cols).
 
         Returns
@@ -1054,7 +1117,7 @@ class RoiMap():
         return cls(map_array, [])
     
 
-    def copy(self):
+    def copy(self) -> 'RoiMap':
         '''
         Return a copy of this ROI map.
 
@@ -1067,21 +1130,21 @@ class RoiMap():
         return RoiMap(self.map.copy(), self.roilist.copy())
     
 
-    def overwrite_roimap(self, other, safe=True):
+    def overwrite_roimap(self, other: 'RoiMap', safe: bool = True) -> None:
         '''
         Merge this ROI map with a second one.
 
         Parameters
         ----------
         other : RoiMap
-            The second ROI map.
+            A second ROI map.
         safe : bool, optional
             Check every new ROI to exclude overlaps. The default is True.
 
         Raises
         ------
         ValueError
-            The second ROI map has a wrong shape.
+           Raised if 'other' ROI map has a wrong shape.
             
         '''
         if other.shape != self.shape:
@@ -1100,7 +1163,7 @@ class RoiMap():
             self.update_class_counter()
 
 
-    def add_roi(self, name: str, bbox: tuple):
+    def add_roi(self, name: str, bbox: tuple[float, float, int, int]) -> None:
         '''
         Add a new ROI to the ROI map.
 
@@ -1108,19 +1171,21 @@ class RoiMap():
         ----------
         name : str
             ROI label.
-        bbox : tuple
+        bbox : tuple[float, float, int, int]
             ROI bounding box (x0, y0, width, height).
 
         '''
         roi = [name, bbox]
         self.roilist.append(roi)
+
     # Update the map
         self.update_map(roi)
+
     # Update the counter
         self.update_class_counter()
 
 
-    def del_roi(self, idx: int):
+    def del_roi(self, idx: int) -> None:
         '''
         Remove a ROI from the ROI map.
 
@@ -1131,13 +1196,15 @@ class RoiMap():
 
         '''
         bbox = self.roilist.pop(idx)[1]
+
     # Update the map
         self.update_map([self._ND, bbox])
+
     # Update the counter
         self.update_class_counter()
 
 
-    def rename_roi(self, idx: int, new_name: str):
+    def rename_roi(self, idx: int, new_name: str) -> None:
         '''
         Rename ROI at index <idx>.
 
@@ -1151,30 +1218,33 @@ class RoiMap():
         Raises
         ------
         ValueError
-            Name contains non-ASCII characters.
+            Raised if 'new_name' contains non-ASCII characters.
 
         '''
         if not new_name.isascii():
             raise ValueError(f'{new_name} contains non-ASCII characters.')
+        
     # Rename the roi
         try:
             self.roilist[idx][0] = new_name
         except IndexError:
             print(f'{idx} is out of range for ROIs list')
             return
+        
     # Update the map
         self.update_map((self.roilist[idx]))
+
     # Update the counter
         self.update_class_counter()
 
 
-    def bbox_overlaps(self, bbox: tuple):
+    def bbox_overlaps(self, bbox: tuple[float, float, int, int]) -> bool:
         '''
         Check if a given bounding box overlaps with any existent ROI.
 
         Parameters
         ----------
-        bbox : tuple
+        bbox : tuple[float, float, int, int]
             Bounding box.
 
         Returns
@@ -1188,13 +1258,13 @@ class RoiMap():
         return overlaps
     
 
-    def extents_overlaps(self, extents: tuple):
+    def extents_overlaps(self, extents: tuple[int, int, int, int]) -> bool:
         '''
-        Check if the given extents (x0,x1, y0,y1) overlap with existent ROIs.
+        Check if the given extents (x0, x1, y0, y1) overlap with existent ROIs.
 
         Parameters
         ----------
-        extents : tuple
+        extents : tuple[int, int, int, int]
             Extents.
 
         Returns
@@ -1208,18 +1278,20 @@ class RoiMap():
         return overlaps
 
 
-    def bbox_to_extents(self, bbox: tuple):
+    def bbox_to_extents(self, bbox: tuple[float, float, int, int]) -> (
+            tuple[int, int, int, int]
+        ):
         '''
-        Convert bounding box (x0, y0, width, height) to extents (x0,x1, y0,y1).
+        Convert bbox (x0, y0, width, height) to extents (x0, x1, y0, y1).
 
         Parameters
         ----------
-        bbox : tuple
+        bbox : tuple[float, float, int, int]
             Bounding box.
 
         Returns
         -------
-        extents : tuple
+        extents : tuple[int, int, int, int]
             Converted extents.
 
         '''
@@ -1232,18 +1304,20 @@ class RoiMap():
         return extents
 
 
-    def extents_to_bbox(self, extents: tuple):
+    def extents_to_bbox(self, extents: tuple[int, int, int, int]) -> (
+            tuple[float, float, int, int]
+        ):
         '''
-        Convert extents (x0,x1, y0,y1) to bounding box (x0, y0, width, height).
+        Convert extents (x0, x1, y0, y1) to bbox (x0, y0, width, height).
 
         Parameters
         ----------
-        extents : tuple
+        extents : tuple[int, int, int, int]
             Extents.
 
         Returns
         -------
-        bbox : tuple
+        bbox : tuple[float, float, int, int]
             Bounding box.
 
         '''
@@ -1256,13 +1330,13 @@ class RoiMap():
         return bbox
 
 
-    def bbox_area(self, bbox: tuple):
+    def bbox_area(self, bbox: tuple[float, float, int, int]) -> int:
         '''
         Calculate area of a bounding box.
 
         Parameters
         ----------
-        bbox : tuple
+        bbox : tuple[float, float, int, int]
             Bounding box.
 
         Returns
@@ -1276,14 +1350,14 @@ class RoiMap():
         return area
 
 
-    def update_map(self, roi: list[str, tuple]):
+    def update_map(self, roi: list[str, tuple[float, float, int, int]]) -> None:
         '''
-        Update the ROI map array. This function is called after a ROI is added
-        or removed.
+        Update the ROI map array. This method is internally called after a ROI
+        is added or removed.
 
         Parameters
         ----------
-        roi : list[str, tuple]
+        roi : list[str, tuple[float, float, int, int]]
             The edited ROI (added or removed).
 
         '''
@@ -1294,20 +1368,21 @@ class RoiMap():
         self.map[y0:y1, x0:x1] = name
 
 
-    def update_class_counter(self):
+    def update_class_counter(self) -> None:
         '''
         Update the class counter, a dictionary that counts the pixels assigned
-        to each unique label. This function is called after the ROI map array
-        has been updated (e.g. after update_map).
+        to each unique label. This method is called after the ROI map array has
+        been updated (e.g., after 'update_map' method).
 
         '''
         unq, cnt = np.unique(self.map, return_counts=True)
         self.class_count = dict(zip(unq, cnt))
+
     # Exclude nodata from being counted
         self.class_count.pop(self._ND, None)
 
 
-    def save(self, outpath: str):
+    def save(self, outpath: str) -> None:
         '''
         Save the ROI map object to disk.
 
@@ -1320,7 +1395,7 @@ class RoiMap():
         Raises
         ------
         ValueError
-            The outpath extension is not '.rmp'.
+            Raised if the outpath extension is not '.rmp'.
 
         '''
         with open (outpath, 'wb') as op:
@@ -1335,35 +1410,33 @@ class RoiMap():
 
 
 class Mask():
-    '''
-    Base class for generating, editing, loading and saving a mask. The object
-    consists of a boolean 2D array where 1's represent masked (hidden) pixels.
-    '''
 
     _DTYPE = 'bool'
     _FILEXT = ('.msk', '.txt')
 
-    def __init__(self, mask_array: np.ndarray, filepath: str|None=None):
+    def __init__(self, mask_array: np.ndarray, filepath: str | None = None) -> None:
         '''
-        Mask class constructor.
+        Base class for generating, editing, loading and saving a mask. The 
+        object consists of a boolean 2D array where 1's represent masked (or 
+        hidden) pixels.
 
         Parameters
         ----------
-        mask_array : ndarray
+        mask_array : numpy ndarray
             The boolean mask array.
         filepath : str or None, optional
-            Filepath to the stored mask file. See load and save functions for
-            more details. The default is None.
+            Filepath to the stored mask file. For more details see 'load' and
+            'save' methods. The default is None.
 
         '''
-    # Define the principal attributes
+    # Define main attributes
         self.mask = mask_array.astype(self._DTYPE)
         self.shape = mask_array.shape
         self.filepath = filepath
 
 
     @classmethod
-    def load(cls, filepath: str):
+    def load(cls, filepath: str) -> 'Mask':
         '''
         Instantiate a new Mask object by loading it from a file.
 
@@ -1372,18 +1445,17 @@ class Mask():
         filepath : str
             A valid filepath to the mask.
 
-        Raises
-        ------
-        ValueError
-            The file type is not supported (not .msk or .txt).
-
         Returns
         -------
         Mask
             A new instance of Mask.
 
-        '''
+        Raises
+        ------
+        ValueError
+            Raised if the file type is not supported (not .msk or .txt).
 
+        '''
         _, filext = os.path.splitext(filepath)
 
     # Proper file extension (.msk)
@@ -1396,24 +1468,26 @@ class Mask():
             mask_array = np.loadtxt(filepath) # hic sunt leones
 
     # Any other file extension is discarded and exits the function.
-        else: raise ValueError('This file is not supported.')
+        else:
+            raise ValueError('This file is not supported.')
 
     # Instantiate a new Mask object
         return cls(mask_array.astype(cls._DTYPE), filepath)
 
 
     @classmethod
-    def from_shape(cls, shape: tuple, fillwith=0):
+    def from_shape(cls, shape: tuple[int, int], fillwith: int = 0) -> 'Mask':
         '''
         Instantiate a new Mask of a given shape.
 
         Parameters
         ----------
-        shape : tuple
+        shape : tuple[int, int]
             The shape of the mask (rows, cols).
-        fillwith : bool
-            Whether the mask should be empty (0's) or full (1's). The default
-            is 0.
+        fillwith : int
+            Boolean values to fill the mask with. If 0, the mask will be empty
+            (i.e., filled with 0's); if any other number, the mask will be full
+            (i.e., filled with 1's). The default is 0.
 
         Returns
         -------
@@ -1429,7 +1503,7 @@ class Mask():
         return cls(mask_array)
 
 
-    def invert(self):
+    def invert(self) -> None:
         '''
         Invert the mask.
 
@@ -1437,13 +1511,13 @@ class Mask():
         self.mask = ~self.mask
 
 
-    def invert_region(self, extents: tuple):
+    def invert_region(self, extents: tuple[int, int, int, int]) -> None:
         '''
-        Invert just a portion of the mask.
+        Invert a region of the mask.
 
         Parameters
         ----------
-        extents : tuple
+        extents : tuple[int, int, int, int]
             Coordinates of the region to invert -> (x0, x1, y0, y1).
 
         '''
@@ -1451,20 +1525,20 @@ class Mask():
         self.mask[y0:y1, x0:x1] = ~self.mask[y0:y1, x0:x1]
 
 
-    def save(self, outpath: str):
+    def save(self, outpath: str) -> None:
         '''
         Save the Mask object to disk.
 
         Parameters
         ----------
-        outpath : path-like or str
+        outpath : str
             The Mask object is saved to this path. It must have the .msk
             extension.
 
         Raises
         ------
         ValueError
-            The outpath extension is not '.msk'.
+            Raised if the outpath extension is not '.msk'.
 
         '''
         with open (outpath, 'wb') as op:
@@ -1475,21 +1549,19 @@ class Mask():
         self.filepath = outpath
 
 
-class InputMapStack():
-    '''
-    Base class for layering 2d Input Maps of same shape together into a single
-    3D stack. A mask, if provided, is applied to the entire stack. This class
-    also includes several convenient methods for the stack classification and 
-    management.
-    '''
 
-    def __init__(self, input_maps: list[InputMap], mask: Mask|None=None):
+class InputMapStack():
+
+    def __init__(self, input_maps: list[InputMap], mask: Mask | None = None) -> None:
         '''
-        InputMapStack class constructor.
+        Base class for layering 2d Input Maps of same shape together into a
+        single 3D stack. A mask, if provided, is applied to the entire stack.
+        This class also includes several convenient methods for the stack
+        classification and management.
 
         Parameters
         ----------
-        input_maps : list of InputMap
+        input_maps : list[InputMap]
             List of Input Maps. They must be stackable (same shape).
         mask : Mask or None, optional
             Mask to apply to the entire stack. The default is None.
@@ -1497,14 +1569,14 @@ class InputMapStack():
         Raises
         ------
         ValueError
-            Input maps list must contain only InputMap objects. 
+            Raised if 'input_maps' does not contain InputMap objects. 
 
         '''
     # Make sure that input maps are in a list (no other iterable is allowed)
         if not isinstance(input_maps, list):
             input_maps = list(input_maps)
 
-    # Make sure that input maps list contains ONLY InputMap objects
+    # Make sure that input maps list contains only InputMap objects
         if not all(isinstance(i, InputMap) for i in input_maps):
             raise ValueError('"input_maps" must contain only InputMaps.')
 
@@ -1517,22 +1589,22 @@ class InputMapStack():
             self._set_mask()
 
 
-    def __len__(self):
+    def __len__(self) -> int:
         '''
         Return the length of the stack.
 
         Returns
         -------
-        Stack length
+        int
             Number of maps included in the stack.
 
         '''
         return len(self.arrays)
     
 
-    def _set_mask(self):
+    def _set_mask(self) -> None:
         '''
-        Internal function that applies a mask to the entire stack.
+        Internal method that applies a mask to the entire stack.
 
         '''
         if self.maps_fit() and self.mask_fit():
@@ -1541,14 +1613,14 @@ class InputMapStack():
     
 
     @property
-    def maps_shape(self):
+    def maps_shape(self) -> tuple[int, int] | None:
         '''
         Return the shape of one slice of the stack (2D map shape).
 
         Returns
         -------
-        tuple
-            Maps 2D shape.
+        tuple or None
+            2D slice shape or None if maps in the stack have different shapes.
 
         '''
         if self.maps_fit():
@@ -1558,14 +1630,15 @@ class InputMapStack():
         
 
     @property
-    def stack_shape(self):
+    def stack_shape(self) -> tuple[int, int, int] | None:
         '''
         Return the shape of the entire stack (3D shape).
 
         Returns
         -------
-        tuple
-            Stack 3D shape.
+        tuple[int, int, int] or None
+            3D stack shape or None if maps in the stack have different shapes 
+            or mask does not fit the stack.
 
         '''
         if self.maps_fit() and self.mask_fit():
@@ -1575,19 +1648,19 @@ class InputMapStack():
 
         
     @property
-    def stack(self):
+    def stack(self) -> np.ndarray:
         '''
         Return the stack.
 
         Returns
         -------
-        ndarray
+        numpy ndarray
             The 3D maps stack.
 
         Raises
         ------
         ValueError
-            Input maps and/or mask have wrong shapes.
+            Raised if any input map and/or mask have incompatible shapes.
 
         '''
         if self._stack is None:
@@ -1599,19 +1672,19 @@ class InputMapStack():
         return self._stack
 
 
-    def add_maps(self, maps:list[InputMap]):
+    def add_maps(self, maps: list[InputMap]):
         '''
         Add new maps to the stack.
 
         Parameters
         ----------
-        maps : list
+        maps : list[InputMap]
             List of InputMaps
 
         Raises
         ------
         ValueError
-            Input maps list must contain only InputMap objects. 
+            Raised if 'maps' does not contain InputMap objects. 
 
         '''
     # Make sure that the list contains only InputMaps
@@ -1622,7 +1695,7 @@ class InputMapStack():
             raise ValueError('"maps" must contain only InputMaps.')
 
 
-    def maps_fit(self):
+    def maps_fit(self) -> bool:
         '''
         Check if all maps have same shape.
 
@@ -1636,7 +1709,7 @@ class InputMapStack():
         return fit
     
     
-    def mask_fit(self):
+    def mask_fit(self) -> bool:
         '''
         Check if the provided maks has the same shape of the input maps.
 
@@ -1653,25 +1726,26 @@ class InputMapStack():
         return fit
     
 
-    def get_feature_array(self):
+    def get_feature_array(self) -> np.ndarray:
         '''
         Return a flatten/compressed and transposed version of the stack, which
         is required by classification algorithms.
 
         Returns
         -------
-        feat_array : ndarray
+        feat_array : numpy ndarray
             The feature array.
 
         Raises
         ------
         ValueError
-            Input maps and/or mask have differet shapes.
+            Raised if any input maps and/or mask have incompatible shapes.
 
         '''
     # Raise error if maps do not share the same shape
         if not self.maps_fit() or not self.mask_fit():
-            raise ValueError('Inputs do not share the same size.')
+            raise ValueError('Inputs do not share the same shape.')
+        
     # If maps are masked, make them 1D with compressed() otherwise use flatten()
         if self.mask is None:
             feat_array = np.vstack([a.flatten() for a in self.arrays]).T
@@ -1681,13 +1755,13 @@ class InputMapStack():
         return feat_array
     
 
-    def reorder(self, index_list:list[int]):
+    def reorder(self, index_list: list[int]) -> None:
         '''
         Sort the stack using a list of indices.
 
         Parameters
         ----------
-        index_list : list
+        index_list : list[int]
             List of indices.
 
         '''

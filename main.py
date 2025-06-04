@@ -33,20 +33,23 @@ if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
 if __name__ == "__main__":
 
     app = QApplication(sys.argv)
-    app.setApplicationName('X-Min Learn')
-    app.setApplicationDisplayName('X-Min Learn')
-    app.setApplicationVersion('beta.1.0.0')
 
+# Show splash screen
     loader_bg = QPixmap('Icons/XML_logo.png').scaledToWidth(400)
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     loader = QSplashScreen(loader_bg, flags=flags)
     loader.show()
     loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(style.IVORY))
 
+# Set application properties
+    app.setApplicationName('X-Min Learn')
+    app.setApplicationDisplayName('X-Min Learn')
+    app.setApplicationVersion('beta.1.0.0')
     app.setStyle('fusion')
     app.setPalette(style.getPalette('default'))
     app.setFont(style.getFont('Arial'))
 
+# Show main window
     from main_window import MainWindow
     main_win = MainWindow()
     main_win.show()
