@@ -3283,6 +3283,113 @@ class MsgBox(QW.QMessageBox):
         
                 
 
+class FileDialog(QW.QFileDialog):
+
+    def __init__(self,
+        parent: QW.QWidget | None,
+        action: str,
+        caption: str = '',
+        filters: str = '',
+        multifile: bool = False,
+        set_default_folder: bool = True
+    ) -> None:
+        '''
+        Convenient class for executing open/save file dialogs. It automatically
+        sets its home directory to the application's current default input or
+        output directory.
+
+        Parameters
+        ----------
+        parent : QW.QWidget or None
+            The GUI parent of this widget. If not None, the dialog will popup
+            centered with it.
+        action : str
+            If 'open' (or 'O'), executes an open file dialog; if 'save' (or 
+            'S'), executes a save file dialog.
+        caption : str, optional
+            The dialog's caption (title). The default is ''.
+        filters : str, optional
+            Accepted file types. If '', all types are valid. This parameter is
+            ignored if 'action' is 'save' (or 'S') and 'multifile' is True. The
+            default is ''.
+        multifile : bool, optional
+            Whether multiple files should be opened or saved. When 'action' is
+            'save' (or 'S') an this parameter is True, an open existent folder
+            dialog will be executed. The default is False.
+        set_default_folder : bool, optional
+            Whether the application's current default input or output folder 
+            should be updated. The default is True.
+
+        Raises
+        ------
+        ValueError
+            Raised if 'action' is not one of ('open', 'O', 'save' or 'S').
+
+        '''
+    # Set dialog attributes depending on required action
+        match action:
+            case 'open' | 'O':
+                dir_type = 'in'
+                accept_mode = QW.QFileDialog.AcceptOpen
+                if multifile:
+                    file_mode = QW.QFileDialog.ExistingFiles
+                else:
+                    file_mode = QW.QFileDialog.ExistingFile
+ 
+            case 'save' | 'S':
+                dir_type = 'out'
+                if multifile:
+                    accept_mode = QW.QFileDialog.AcceptOpen
+                    file_mode = QW.QFileDialog.Directory
+                    filters = None
+                else:
+                    accept_mode = QW.QFileDialog.AcceptSave
+                    file_mode = QW.QFileDialog.AnyFile
+            
+            case _:
+                raise ValueError(f'Invalid "action" argument: {action}')
+
+    # Fix home directory if non existent 
+        home_dir = pref.get_dir(dir_type)
+        if not os.path.exists(home_dir):
+            home_dir = '.\\'
+
+    # Construct dialog
+        super().__init__(parent, caption, home_dir, filters)
+        if file_mode == QW.QFileDialog.Directory:
+            self.setOption(QW.QFileDialog.ShowDirsOnly, True)
+            self.setOption(QW.QFileDialog.DontResolveSymlinks, True)
+
+        self.setFileMode(file_mode)
+        self.setAcceptMode(accept_mode)
+        self.setViewMode(QW.QFileDialog.Detail)
+
+    # Execute dialog. If required, and the dialog is accepted, update the app's 
+    # default input or output folder.
+        if self.exec() and set_default_folder:
+            path = self.selectedFiles()[0]
+            folder = path if file_mode == 2 else os.path.dirname(path)
+            pref.set_dir(dir_type, folder)
+
+
+    def get(self) -> list[str] | str | None:
+        '''
+        Get the filepath(s) returned by the dialog.
+
+        Returns
+        -------
+        list[str] or str or None
+            A list of user-selected filepaths, or a single filepath if only one
+            file was selected. If the dialog was canceled, None is returned.
+
+        '''
+        if self.result(): # returns 0 if dialog was canceled, 1 if accepted
+            paths = self.selectedFiles()
+            return paths[0] if len(paths) == 1 else paths
+        return None
+
+
+
 class LineSeparator(QW.QFrame):
 
     def __init__(
@@ -4130,14 +4237,12 @@ class DatasetDesigner(StyledTable):
 
         '''
     # Do nothing if path is invalid or file dialog is canceled
-        paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Load input maps',
-                                                    pref.get_dir('in'),
-                                                    'ASCII maps (*.txt *.gz)')
+        ftype = 'ASCII maps (*.txt *.gz)'
+        paths = FileDialog(self, 'O', 'Load Maps', ftype, multifile=True).get()
         if not paths:
             return
         
-        pref.set_dir('in', os.path.dirname(paths[0]))
-
+    # Try matching maps with loaded file names
         required_maps = self.columns[1:-2]
         pbar = PopUpProgBar(self, len(paths), 'Loading maps')
         bad_files = []
@@ -4155,7 +4260,7 @@ class DatasetDesigner(StyledTable):
             finally:
                 pbar.setValue(n)
     
-    # Send error if one or more files cannot be read
+    # Send error if one or more files could not be read
         if len(bad_files):
             text = 'One or more files have been deleted, removed or renamed.'
             MsgBox(self, 'Crit', text, '\n'.join(bad_files))
@@ -4275,10 +4380,8 @@ class StatusFileLoader(QW.QWidget):
         Load file from an open file dialog.
 
         '''
-        path, _ = QW.QFileDialog.getOpenFileName(
-            self, f'Load file', pref.get_dir('in'), self.filter)
+        path = FileDialog(self, 'open', 'Load File', self.filter).get()
         if path:
-            pref.set_dir('in', os.path.dirname(path))
             self.addFile(path)
 
 

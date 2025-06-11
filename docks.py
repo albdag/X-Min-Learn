@@ -728,11 +728,8 @@ class DataManager(QW.QTreeWidget):
             else: 
                 return # safety
 
-            path, _ = QW.QFileDialog.getSaveFileName(
-                self, 'Save map', pref.get_dir('out'), filext)
-            if path:
-                pref.set_dir('out', os.path.dirname(path))
-            else:
+            path = CW.FileDialog(self, 'save', 'Save Map', filext).get()
+            if not path:
                 return
     
     # Otherwise, double check if user really wants to overwrite the file 
@@ -789,12 +786,10 @@ class DataManager(QW.QTreeWidget):
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             ftypes = 'ASCII maps (*.txt *.gz)'
-            paths, _ = QW.QFileDialog.getOpenFileNames(
-                self, 'Load input maps', pref.get_dir('in'), ftypes)
-        if not paths:
-            return
-        
-        pref.set_dir('in', os.path.dirname(paths[0]))
+            paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get()
+            if not paths:
+                return
+
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
@@ -843,12 +838,10 @@ class DataManager(QW.QTreeWidget):
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             ftypes = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
-            paths, _ = QW.QFileDialog.getOpenFileNames(
-                self, 'Load mineral maps', pref.get_dir('in'), ftypes)
-        if not paths:
-            return
+            paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get()
+            if not paths:
+                return
         
-        pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
@@ -899,13 +892,11 @@ class DataManager(QW.QTreeWidget):
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
-            ftypes = 'Masks (*.msk);;Text file (*.txt)'
-            paths, _ = QW.QFileDialog.getOpenFileNames(
-                self, 'Load masks', pref.get_dir('in'), ftypes)
-        if not paths:
-            return
+            ft = 'Masks (*.msk);;Text file (*.txt)'
+            paths = CW.FileDialog(self, 'open', 'Load Masks', ft, True).get()
+            if not paths:
+                return
         
-        pref.set_dir('in', os.path.dirname(paths[0]))
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
@@ -1044,14 +1035,12 @@ class DataManager(QW.QTreeWidget):
             return
         
     # Do nothing if the outpath is invalid or the file dialog is canceled
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Export Map',
-                                                    pref.get_dir('out'),
-                                                    '''ASCII file (*.txt)''')
+        ftype = 'ASCII file (*.txt)'
+        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get()
         if not outpath:
             return
         
     # Save the mineral map to disk
-        pref.set_dir('out', os.path.dirname(outpath))
         mmap = item.get('data')
         np.savetxt(outpath, mmap.minmap_encoded, fmt='%d')
 
@@ -1093,13 +1082,9 @@ class DataManager(QW.QTreeWidget):
             return
     
     # Do nothing if path is invalid or file dialog is canceled
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Correct data source',
-                                                 pref.get_dir('in'), ftype)
+        path = CW.FileDialog(self, 'open', 'Fix Source', ftype).get()
         if not path:
             return
-        
-        root_fld = os.path.dirname(path)
-        pref.set_dir('in', root_fld)
     
     # Fix item file source and data
         try:
@@ -1119,6 +1104,7 @@ class DataManager(QW.QTreeWidget):
 
     # Try fixing data objects in the same group that are also "not found" by 
     # checking all the files in the same root folder of the loaded file
+        root_fld = os.path.dirname(path)
         available_files = os.listdir(root_fld)
         group = self.getItemParentGroup(item)
         for obj in group.getAllDataObjects():
@@ -1653,14 +1639,14 @@ class HistogramViewer(QW.QWidget):
         mask = Mask(mask_array)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(
-            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
-        if outpath:
-            pref.set_dir('out', os.path.dirname(outpath))
-            try:
-                mask.save(outpath)
-            except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        ftype = 'Mask (*.msk)'
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        if not outpath:
+            return
+        try:
+            mask.save(outpath)
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
             
 
     def resetConfig(self) -> None:
@@ -2056,14 +2042,14 @@ class ModeViewer(CW.StyledTabWidget):
         mask = Mask(mask)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(
-            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
-        if outpath:
-            pref.set_dir('out', os.path.dirname(outpath))
-            try:
-                mask.save(outpath)
-            except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        ftype = 'Mask (*.msk)'
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        if not outpath:
+            return
+        try:
+            mask.save(outpath)
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
             
 
     def resetConfig(self) -> None:
@@ -2835,14 +2821,14 @@ class RoiEditor(QW.QWidget):
             mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(
-            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
-        if outpath:
-            pref.set_dir('out', os.path.dirname(outpath))
-            try:
-                mask.save(outpath)
-            except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        ftype = 'Mask (*.msk)'
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        if not outpath:
+            return
+        try:
+            mask.save(outpath)
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def extractMaskFromRois(self) -> None:
@@ -2874,14 +2860,14 @@ class RoiEditor(QW.QWidget):
                 mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(
-            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
-        if outpath:
-            pref.set_dir('out', os.path.dirname(outpath))
-            try:
-                mask.save(outpath)
-            except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        ftype = 'Mask (*.msk)'
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        if not outpath:
+            return
+        try:
+            mask.save(outpath)
+        except Exception as e:
+            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def removeRoi(self) -> None:
@@ -2952,15 +2938,13 @@ class RoiEditor(QW.QWidget):
 
         # Do nothing if filepath is invalid or the file dialog is canceled
         if path is None:
-            path, _ = QW.QFileDialog.getOpenFileName(
-                self, 'Load ROI map', pref.get_dir('in'), 'ROI maps (*.rmp)')
-        if not path:
-            return
+            ftype = 'ROI maps (*.rmp)'
+            path = CW.FileDialog(self, 'open', 'Load ROI', ftype).get()
+            if not path:
+                return
         
-        pref.set_dir('in', os.path.dirname(path))
-        pbar = CW.PopUpProgBar(self, 4, 'Loading data')
-
     # Remove old (current) ROI map
+        pbar = CW.PopUpProgBar(self, 4, 'Loading data')
         self.removeCurrentRoiMap()
         pbar.increase()
 
@@ -3029,15 +3013,16 @@ class RoiEditor(QW.QWidget):
         if not save_as and (path := self.current_roimap.filepath) is not None:
             outpath = path
         else:
-            outpath, _ = QW.QFileDialog.getSaveFileName(
-                self, 'Save ROI map', pref.get_dir('out'), 'ROI maps (*.rmp)')
-        if outpath:
-            pref.set_dir('out', os.path.dirname(outpath))
-            try:
-                self.current_roimap.save(outpath)
-                self.mappath.setPath(outpath)
-            except Exception as e:
-                CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
+            ftype = 'ROI maps (*.rmp)'
+            outpath = CW.FileDialog(self, 'save', 'Save ROI', ftype).get()
+            if not outpath:
+                return
+ 
+        try:
+            self.current_roimap.save(outpath)
+            self.mappath.setPath(outpath)
+        except Exception as e:
+            CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
 
 
     def resetConfig(self) -> None:
@@ -3335,14 +3320,14 @@ class ProbabilityMapViewer(QW.QWidget):
         mask = Mask(mask_array)
 
     # Save mask file
-        outpath, _ = QW.QFileDialog.getSaveFileName(
-            self, 'Save mask', pref.get_dir('out'), 'Mask (*.msk)')
-        if outpath:
-            pref.set_dir('out', os.path.dirname(outpath))
-            try:
-                mask.save(outpath)
-            except Exception as e:
-                CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        ftype = 'Mask (*.msk)'
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        if not outpath:
+            return
+        try:
+            mask.save(outpath)
+        except Exception as e:
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def resetConfig(self) -> None:

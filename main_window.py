@@ -882,15 +882,6 @@ class MainWindow(QW.QMainWindow):
             Whether the project was saved or not.
 
         '''
-    # Do not save the project if the filepath is invalid
-        path = self.project_path
-        if not overwrite or path is None:
-            ftype = 'X-Min Learn project (*.xmj)'
-            path, _ = QW.QFileDialog.getSaveFileName(
-                self, 'Save project', pref.get_dir('out'), ftype)
-            if not path:
-                return False
-
     # Send warning and ask for user's choice if Data Manager has unsaved data
         if self.dataManager.hasUnsavedData():
             text = (
@@ -899,7 +890,15 @@ class MainWindow(QW.QMainWindow):
             )
             choice = CW.MsgBox(self, 'QuestWarn', text)  
             if choice.no():
-                return False      
+                return False    
+            
+    # Do not save the project if the filepath is invalid
+        path = self.project_path
+        if not overwrite or path is None:
+            ftype = 'X-Min Learn project (*.xmj)'
+            path = CW.FileDialog(self, 'save', 'Save Project', ftype).get()
+            if not path:
+                return False
 
     # Collect project data
         project_info = {
@@ -931,10 +930,6 @@ class MainWindow(QW.QMainWindow):
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save project.', str(e))
             return False
-
-    # Set the app default output directory to 'path' only after the project has 
-    # been successfully saved
-        pref.set_dir('out', os.path.dirname(path))
 
     # Update window attributes 
         self.project_path = path
@@ -1012,8 +1007,7 @@ class MainWindow(QW.QMainWindow):
             
     # Do nothing if project path is invalid (file dialog is canceled)
         ftype = 'X-Min Learn project (*.xmj)'
-        path, _ = QW.QFileDialog.getOpenFileName(
-            self, 'Open project', pref.get_dir('in'), ftype)
+        path = CW.FileDialog(self, 'open', 'Open Project', ftype).get()
         if not path:
             return
         
@@ -1061,11 +1055,6 @@ class MainWindow(QW.QMainWindow):
 
     # Close currently opened tools and load project's tools states 
     # TODO...
-
-    # Set the app defualt input directory to 'path' after project is loaded to 
-    # avoid it being replaced by the paths of data loaded within the individual
-    # panes and tools 
-        pref.set_dir('in', os.path.dirname(path))
 
     # Update window attributes and properties
         self.project_path = path

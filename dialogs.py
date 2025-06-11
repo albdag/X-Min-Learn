@@ -23,8 +23,6 @@ import style
 import threads
 
 
-
-
 class AutoRoiDetector(QW.QDialog):
 
     requestRoiMap = pyqtSignal()
@@ -576,13 +574,10 @@ class MergeDatasets(QW.QDialog):
          
         '''
     # Do nothing if paths are invalid or the file dialog is canceled
-        ftype = 'Comma Separated Value (*.csv)'
-        paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Import Datasets',
-                                                   pref.get_dir('in'), ftype)
+        ftype = 'CSV (*.csv)'
+        paths = CW.FileDialog(self, 'open', 'Load Datasets', ftype, True).get()
         if not paths:
             return
-        
-        pref.set_dir('in', os.path.dirname(paths[0]))
      
     # Add datasets paths to list but skip those that had already been added
         for p in paths:
@@ -683,14 +678,10 @@ class MergeDatasets(QW.QDialog):
 
         '''
     # Exit function if outpath is invalid or file dialog is canceled
-        ftype = 'Comma Separated Values (*.csv)'
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save Dataset',
-                                                    pref.get_dir('out'), ftype)
-
+        ftype = 'CSV (*.csv)'
+        outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get()
         if not outpath:
             return
-        
-        pref.set_dir('out', os.path.dirname(outpath))
 
     # Save dataset
         sep = self.out_csv_separator.currentText()
@@ -852,13 +843,10 @@ class SubSampleDataset(QW.QDialog):
 
         '''
     # Do nothing if path is invalid or file dialog is canceled
-        ftype = 'Comma Separated Value (*.csv)'
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Import dataset', 
-                                                 pref.get_dir('in'), ftype)
+        ftype = 'CSV (*.csv)'
+        path = CW.FileDialog(self, 'open', 'Load Dataset', ftype).get()
         if not path:
             return
-        
-        pref.set_dir('in', os.path.dirname(path))
 
     # Set current path
         self.in_dataset_path.setPath(path)
@@ -952,13 +940,10 @@ class SubSampleDataset(QW.QDialog):
             return CW.MsgBox(self, 'Crit', 'Include at least one class.')
         
     # Exit function if outpath is invalid or file dialog is canceled
-        ftype = 'Comma Separated Values (*.csv)'
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save dataset',
-                                                    pref.get_dir('out'), ftype)
+        ftype = 'CSV (*.csv)'
+        outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get()
         if not outpath:
             return
-        
-        pref.set_dir('out', os.path.dirname(outpath))
     
     # Get selected class labels
         self.progbar.setRange(0, 3)
@@ -1083,17 +1068,11 @@ class ImageToInputMap(QW.QDialog):
         Import images and show their paths as well as a small preview.
 
         '''
-    # Do nothing if paths are invalid or the file dialogs is canceled
-        ftypes = '''TIF (*.tif; *.tiff)
-                    BMP (*.bmp)
-                    PNG (*.png)
-                    JPEG (*.jpg; *.jpeg)'''
-        paths, _ = QW.QFileDialog.getOpenFileNames(self, 'Import images',
-                                                   pref.get_dir('in'), ftypes)
+    # Do nothing if paths are invalid or the file dialog is canceled
+        ft = 'TIF (*.tif *.tiff);;BMP (*.bmp);;PNG (*.png);;JPEG (*.jpg *.jpeg)'
+        paths = CW.FileDialog(self, 'open', 'Load Images', ft, True).get()
         if not paths:
             return
-        
-        pref.set_dir('in', os.path.dirname(paths[0]))
 
     # Add images paths and previews (as icon) to list but skip those that had 
     # already been added
@@ -1125,13 +1104,11 @@ class ImageToInputMap(QW.QDialog):
             return CW.MsgBox(self, 'Crit', 'No image loaded.')
 
     # Do nothing if directory is invalid or the direcotry dialog is canceled
-        outdir = QW.QFileDialog.getExistingDirectory(self, 'Output directory',
-                                                     pref.get_dir('out'))
+        outdir = CW.FileDialog(self, 'S', 'Output Folder', multifile=True).get()
         if not outdir:
             return
-        
-        pref.set_dir('out', outdir)
-        
+    
+    # Try converting images to Input Maps and saving them
         errors_log = []
         ext = str(self.map_ext_combox.currentText())
         self.progbar.setRange(0, img_count)
@@ -1285,16 +1262,10 @@ class ImageToMineralMap(QW.QDialog):
 
         '''
     # Do nothing if image path is invalid or file dialog is canceled 
-        ftypes = '''TIF (*.tif; *.tiff)
-                    BMP (*.bmp)
-                    PNG (*.png)
-                    JPEG (*.jpg; *.jpeg)'''
-        path, _ = QW.QFileDialog.getOpenFileName(self, 'Import image',
-                                                 pref.get_dir('in'), ftypes)
+        ft = 'TIF (*.tif *.tiff);;BMP (*.bmp);;PNG (*.png);;JPEG (*.jpg *.jpeg)'
+        path = CW.FileDialog(self, 'open', 'Load Image', ft).get()
         if not path:
             return
-        
-        pref.set_dir('in', os.path.dirname(path))
 
     # Store the image array
         try:
@@ -1378,13 +1349,10 @@ class ImageToMineralMap(QW.QDialog):
 
         '''
     # Do nothing if output path is invalid or file dialog is canceled
-        outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
-                                                    pref.get_dir('out'),
-                                                    'Mineral map (*.mmp)')
+        ftype = 'Mineral map (*.mmp)'
+        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get()
         if not outpath:
             return
-        
-        pref.set_dir('out', os.path.dirname(outpath))
     
     # Save mineral map
         self.minmap.save(outpath)
@@ -1627,12 +1595,9 @@ class DummyMapsBuilder(QW.QDialog):
         
     # Do nothing if output path is invalid or file dialog is canceled
         ftypes = 'Compressed ASCII file (*.gz);;ASCII file (*.txt)'
-        path, _ = QW.QFileDialog.getSaveFileName(self, 'Save map',
-                                                 pref.get_dir('out'), ftypes)
+        path = CW.FileDialog(self, 'save', 'Save Map', ftypes).get()
         if not path:
             return
-        
-        pref.set_dir('out', os.path.dirname(path))
     
     # Save map  
         try:
