@@ -495,7 +495,8 @@ class MainWindow(QW.QMainWindow):
         '''
         title = "About X-Min Learn"
         version = QW.qApp.applicationVersion()
-        author = "Dr. Alberto D'Agostino (Ph.D.) - University of Catania"
+        author = "Dr. Alberto D'Agostino (Ph.D.)"
+        affiliation = "University of Catania"
         email1 = "dagostino.alberto@hotmail.it"
         contact1 = f"href='mailto:{email1}' > {email1}"
         email2 = 'alberto.dagostino@unict.it'
@@ -506,8 +507,11 @@ class MainWindow(QW.QMainWindow):
         html = f'''
         <p><span style="font-size: 12pt; font-weight: bold;">{title}</span></p>
         <p>Currently used version: <span style="font-weight: bold;">{version}</span></p>
-        <p>Author: {author}<br>
-        Contacts: <a {contact1}</a> | <a {contact2}</a></p>
+        <p><span style="font-weight: bold;">Author</span>: {author}<br>
+        {affiliation}</p>
+        <p><span style="font-weight: bold;">Contacts</span>:<br>
+        <a {contact1}</a><br>
+        <a {contact2}</a></p>
         <p><br>X-Min Learn is an open-source project (<a href='{license}'>GPLv3</a>).
         Many of the app icons are provided by <a href='https://icons8.it/'>Icons8</a>.
         For more info check the <a href='{repo}'>project page</a>.</p>
