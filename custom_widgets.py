@@ -3233,6 +3233,9 @@ class MsgBox(QW.QMessageBox):
         self.setDetailedText(dtext)
         self.setCheckBox(cbox)
 
+    # Set righ-click menu stylesheet
+        self.setStyleSheet(style.SS_MENU)
+
     # Show dialog
         self.exec()
 
