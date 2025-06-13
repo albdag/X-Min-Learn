@@ -1278,7 +1278,8 @@ class RoiMap():
         return overlaps
 
 
-    def bbox_to_extents(self, bbox: tuple[float, float, int, int]) -> (
+    @staticmethod
+    def bbox_to_extents(bbox: tuple[float, float, int, int]) -> (
             tuple[int, int, int, int]
         ):
         '''
@@ -1304,7 +1305,8 @@ class RoiMap():
         return extents
 
 
-    def extents_to_bbox(self, extents: tuple[int, int, int, int]) -> (
+    @staticmethod
+    def extents_to_bbox(extents: tuple[int, int, int, int]) -> (
             tuple[float, float, int, int]
         ):
         '''
@@ -1330,7 +1332,8 @@ class RoiMap():
         return bbox
 
 
-    def bbox_area(self, bbox: tuple[float, float, int, int]) -> int:
+    @staticmethod
+    def bbox_area(bbox: tuple[float, float, int, int]) -> int:
         '''
         Calculate area of a bounding box.
 
