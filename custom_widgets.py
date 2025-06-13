@@ -3317,7 +3317,8 @@ class FileDialog(QW.QFileDialog):
         multifile : bool, optional
             Whether multiple files should be opened or saved. When 'action' is
             'save' (or 'S') an this parameter is True, an open existent folder
-            dialog will be executed. The default is False.
+            dialog will be executed, to select an output folder for multiple
+            files to be saved to. The default is False.
         set_default_folder : bool, optional
             Whether the application's current default input or output folder 
             should be updated. The default is True.
@@ -3381,13 +3382,15 @@ class FileDialog(QW.QFileDialog):
         Returns
         -------
         list[str] or str or None
-            A list of user-selected filepaths, or a single filepath if only one
-            file was selected. If the dialog was canceled, None is returned.
+            A list of user-selected filepaths, or a single filepath if dialog
+            accepts the selection of just one file. If the dialog was canceled,
+            None is returned.
 
         '''
         if self.result(): # returns 0 if dialog was canceled, 1 if accepted
             paths = self.selectedFiles()
-            return paths[0] if len(paths) == 1 else paths
+            multipaths = self.fileMode() == QW.QFileDialog.ExistingFiles
+            return paths if multipaths else paths[0]
         return None
 
 
