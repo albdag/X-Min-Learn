@@ -810,7 +810,7 @@ class SampleMapsSelector(QW.QWidget):
         self.maps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
 
 
-    def updateCombox(self, samples: list) -> None:
+    def updateCombox(self, samples: list[DataGroup]) -> None:
         '''
         Populate the samples combobox with the samples currently loaded in the
         Data Manager. This method is called by the main window when the combo
@@ -818,7 +818,7 @@ class SampleMapsSelector(QW.QWidget):
 
         Parameters
         ----------
-        samples : list
+        samples : list[DataGroup]
             List of DataGroup objects.
 
         '''
@@ -3560,19 +3560,16 @@ class DocumentBrowser(QW.QWidget):
         self.tbar = QW.QToolBar('Browser toolbar')
         self.tbar.setStyleSheet(style.SS_TOOLBAR)
 
-    # Edit document (Check Box)
-        self.edit_cbox = QW.QCheckBox('Editing')
-        self.edit_cbox.setChecked(not self.readonly)
-        self.edit_cbox.setVisible(not self.readonly)
-        self.tbar.addWidget(self.edit_cbox)
+    # Zoom in (Action) [-> Browser Toolbar]
+        self.zoom_in_action = self.tbar.addAction(
+            style.getIcon('ZOOM_IN'), 'Zoom in')
 
-    # Search box (Line Edit)
-        self.search_box = QW.QLineEdit()
-        self.search_box.setStyleSheet(style.SS_MENU)
-        self.search_box.setPlaceholderText('Search')
-        self.search_box.setClearButtonEnabled(True)
-        self.search_box.setMaximumWidth(100)
-        self.tbar.addWidget(self.search_box)
+    # Zoom out (Action) [-> Browser Toolbar]
+        self.zoom_out_action = self.tbar.addAction(
+            style.getIcon('ZOOM_OUT'), 'Zoom out')
+        
+    # Separator [-> Browser Toolbar]
+        self.tbar.addSeparator()
 
     # Search Up (Action) [-> Browser Toolbar]
         self.search_up_action = self.tbar.addAction(
@@ -3581,17 +3578,22 @@ class DocumentBrowser(QW.QWidget):
     # Search Down (Action) [-> Browser Toolbar]
         self.search_down_action = self.tbar.addAction(
             style.getIcon('CHEVRON_DOWN'), 'Search down')
+        
+    # Search box (Line Edit) [-> Browser Toolbar]
+        self.search_box = QW.QLineEdit()
+        self.search_box.setStyleSheet(style.SS_MENU)
+        self.search_box.setPlaceholderText('Search')
+        self.search_box.setClearButtonEnabled(True)
+        self.tbar.addWidget(self.search_box)
 
-    # Zoom in (Action) [-> Browser Toolbar]
-        self.zoom_in_action = self.tbar.addAction(
-            style.getIcon('ZOOM_IN'), 'Zoom in')
+    # Add optional separator if editing is enabled [-> Browser Toolbar]
+        self.tbar.addSeparator().setVisible(not self.readonly)
 
-    # Zoom out (Action) [-> Browser Toolbar]
-        self.zoom_out_action = self.tbar.addAction(
-            style.getIcon('ZOOM_OUT'), 'Zoom out')
-
-    # Insert toolbar separator [-> Browser Toolbar]
-        self.tbar.insertSeparator(self.zoom_in_action)
+    # Edit document (Check Box) [-> Browser Toolbar]
+        self.edit_cbox = QW.QCheckBox('Editing')
+        self.edit_cbox.setChecked(not self.readonly)
+        self.edit_cbox.setVisible(not self.readonly)
+        self.tbar.addWidget(self.edit_cbox)
 
     # Adjust Main Layout
         layout = QW.QVBoxLayout()
