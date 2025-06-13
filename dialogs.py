@@ -27,7 +27,7 @@ class AutoRoiDetector(QW.QDialog):
 
     requestRoiMap = pyqtSignal()
     drawingRequested = pyqtSignal(RoiMap)
-    npv_encoder = {'Pure': np.sum, 'Simple': np.median, 'Smooth': np.mean}
+    npv_encoder = {'Pure': np.max, 'Simple': np.median, 'Smooth': np.mean}
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -88,7 +88,7 @@ class AutoRoiDetector(QW.QDialog):
     # NPV function types (QButtonLayout)
         self.npv_btns = CW.RadioBtnLayout(('Pure', 'Simple', 'Smooth'))
         tooltips = (
-            'Use sum function to penalize all noisy pixels',
+            'Use max function to penalize noisy pixels',
             'Use median function to ignore outliers',
             'Use mean function to smoothen noise'
         )
