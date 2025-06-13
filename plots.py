@@ -8,7 +8,7 @@ Created on Mon Jan 23 09:14:45 2023
 from collections.abc import Callable, Iterable
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCursor, QIcon, QResizeEvent
+from PyQt5.QtGui import QCursor, QResizeEvent
 from PyQt5.QtWidgets import QAction, QMenu, QSizePolicy, QWidget, QWidgetAction
 
 import numpy as np
@@ -1496,7 +1496,8 @@ class ConfMatCanvas(_CanvasBase):
         ticks = np.arange(len(labels))
 
         if axis in ('x', 'both'):
-            self.ax.set_xticks(ticks, labels=labels, fontsize='small', rotation=-60)
+            self.ax.set_xticks(
+                ticks, labels=labels, fontsize='small', rotation=-60)
             self.ax.tick_params(labelbottom=True, labeltop=False)
         if axis in ('y', 'both'):
             self.ax.set_yticks(ticks, labels=labels, fontsize='small')
@@ -1526,7 +1527,8 @@ class ConfMatCanvas(_CanvasBase):
 
     # If the plot is empty, build the matrix and the colorbar (if required)
         if self.matplot is None:
-            self.matplot = self.ax.matshow(data, cmap='cividis', interpolation='none')
+            self.matplot = self.ax.matshow(
+                data, cmap='cividis', interpolation='none')
             if self.show_cbar:
                 if self.cbar is None: 
                     self.set_cbar()
@@ -1941,7 +1943,8 @@ class CurveCanvas(_CanvasBase):
         self.ax.autoscale_view()
 
     # Render the legend in the most suitable position
-        self.ax.legend(loc='best', frameon=True, facecolor=style.IVORY, framealpha=1)
+        self.ax.legend(
+            loc='best', frameon=True, facecolor=style.IVORY, framealpha=1)
     
     # Render the plot
         self.draw_idle()
@@ -2001,10 +2004,10 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
 
     # Set custom icons
         icons_dict = {
-            'Home': QIcon(r'Icons/zoom_home.png'),
-            'Pan' : QIcon(r'Icons/pan.png'),
-            'Zoom': QIcon(r'Icons/zoom.png'),
-            'Save': QIcon(r'Icons/save.png')
+            'Home': style.getIcon('ZOOM_DEFAULT'),
+            'Pan' : style.getIcon('PAN'),
+            'Zoom': style.getIcon('ZOOM'),
+            'Save': style.getIcon('SAVE')
         }
         for a in self.actions():
             if icon := icons_dict.get(a.text()):
@@ -2015,7 +2018,8 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
 
     # Avoid coords and data label to be cut off
         if coords:
-            self.locLabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+            self.locLabel.setSizePolicy(
+                QSizePolicy.Expanding, QSizePolicy.Minimum)
 
     # Set the toolbar style-sheet
         self.setStyleSheet(style.SS_TOOLBAR)
@@ -2146,7 +2150,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         if not isinstance(self.canvas, BarCanvas):
             return
         
-        self.lbl_action = QAction(QIcon(r'Icons/labelize.png'), 'Show amounts')
+        self.lbl_action = QAction(style.getIcon('PERCENT'), 'Show amounts')
         self.lbl_action.setCheckable(True)
         self.lbl_action.toggled.connect(self.canvas.show_amounts)
         self.insertAction(before_idx, self.lbl_action)
@@ -2167,7 +2171,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         if not isinstance(self.canvas, HistogramCanvas):
             return
         
-        self.log_action = QAction(QIcon(r'Icons/logscale.png'), 'Log scale')
+        self.log_action = QAction(style.getIcon('LOG'), 'Log scale')
         self.log_action.setCheckable(True)
         self.log_action.setChecked(self.canvas.log)
         self.log_action.toggled.connect(self.canvas.toggle_logscale)

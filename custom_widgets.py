@@ -50,11 +50,11 @@ class DataGroup(QW.QTreeWidgetItem):
 
     # Add the subgroups
         self.inmaps = DataSubGroup('Input Maps')
-        self.inmaps.setIcon(0, QG.QIcon(r'Icons/inmap.png'))
+        self.inmaps.setIcon(0, style.getIcon('INMAP'))
         self.minmaps = DataSubGroup('Mineral Maps')
-        self.minmaps.setIcon(0, QG.QIcon(r'Icons/minmap.png'))
+        self.minmaps.setIcon(0, style.getIcon('MINMAP'))
         self.masks = DataSubGroup('Masks')
-        self.masks.setIcon(0, QG.QIcon(r'Icons/mask.png'))
+        self.masks.setIcon(0, style.getIcon('MASK'))
         # add self.points = DataSubGroup('Point Analysis')
         self.subgroups = (self.inmaps, self.minmaps, self.masks)
         self.addChildren(self.subgroups)
@@ -143,9 +143,10 @@ class DataGroup(QW.QTreeWidgetItem):
         Raises
         ------
         TypeError
-            The "include" argument is not 'selected' or 'checked'.
+            Raised if "include" argument is not 'selected' or 'checked'.
         TypeError
-            The "mode" argument is not 'union' ('U') or 'intersection' ('I').
+            Raised if "mode" argument is not 'union' ('U') or 'intersection'
+            ('I').
 
         '''
         cld = self.masks.getChildren()
@@ -156,14 +157,15 @@ class DataGroup(QW.QTreeWidgetItem):
             case 'checked':
                 masks = [c.get('data') for c in cld if c.checkState(0)]
             case _:
-                raise TypeError('f{include} is not a valid argument for include.')
+                raise TypeError(f'Invalid "include" argument: {include}.')
 
         if len(masks) == 0:
             comp_mask = None
         elif len(masks) == 1:
             comp_mask = None if ignore_single_mask else masks[0]
         else:
-            comp_mask = Mask(iatools.binary_merge([m.mask for m in masks], mode))
+            comp_mask = Mask(
+                iatools.binary_merge([m.mask for m in masks], mode))
 
         return comp_mask
 
@@ -658,10 +660,10 @@ class DataObject(QW.QTreeWidgetItem):
             icon = QG.QIcon()
             tooltip = ''
         elif last == 101: # File edited status
-            icon = QG.QIcon(r'Icons/edit_white.png')
+            icon = style.getIcon('EDIT')
             tooltip = 'Edits not saved'
         elif last == 102: # File not found status
-            icon = QG.QIcon(r'Icons/file_error.png')
+            icon = style.getIcon('FILE_ERROR')
             tooltip = 'File was deleted, moved or renamed'
         else: # invalid status, should not be possible
             return
@@ -684,7 +686,7 @@ class DataObject(QW.QTreeWidgetItem):
     # Set the 'has_warning' attribute
         self.setData(1, 103, warning)
     # Show/hide the warning icon
-        icon = QG.QIcon(r'Icons/warnIcon.png') if warning else QG.QIcon()
+        icon = style.getIcon('WARNING') if warning else QG.QIcon()
         self.setData(1, 1, icon)
     # Show/hide the warning tooltip
         text = 'Unfitting shapes' if warning else ''
@@ -761,9 +763,9 @@ class SampleMapsSelector(QW.QWidget):
         super().__init__(parent)
 
     # Set main attributes
+        if maps_type not in ('inmaps', 'minmaps'):
+            raise ValueError(f'Invalid "maps_type" argument: {maps_type}.')
         self.maps_type = maps_type
-        if self.maps_type not in ('inmaps', 'minmaps'):
-            raise ValueError('Parameter "maps_type" must be "inmaps" or "minmaps".')
         self.checkable = checkable
 
     # Initialize GUI and connect its signals to slots
@@ -1002,12 +1004,12 @@ class Legend(QW.QTreeWidget):
         menu.setStyleSheet(style.SS_MENU)
 
     # Rename class
-        menu.addAction(QG.QIcon(r'Icons/rename.png'), 'Rename',
+        menu.addAction(style.getIcon('RENAME'), 'Rename',
                        lambda: self.requestClassRename(i))
 
     # Merge classes
-        merge = menu.addAction(QG.QIcon(r'Icons/merge.png'), 'Merge', 
-                               self.requestClassMerge)
+        merge = menu.addAction(
+            style.getIcon('MERGE'), 'Merge', self.requestClassMerge)
         merge.setEnabled(len(self.selectedItems()) > 1)
 
     # Separator
@@ -1017,29 +1019,29 @@ class Legend(QW.QTreeWidget):
         menu.addAction('Copy color', lambda: self.copyColorHexToClipboard(i))
 
     # Change color
-        menu.addAction(QG.QIcon(r'Icons/palette.png'), 'Set color',
+        menu.addAction(style.getIcon('PALETTE'), 'Set color',
                        lambda: self.requestColorChange(i))
 
     # Randomize color
-        menu.addAction(QG.QIcon(r'Icons/randomize_color.png'), 'Random color',
+        menu.addAction(style.getIcon('RANDOMIZE_COLOR'), 'Random color',
                        lambda: self.requestRandomColorChange(i))
 
     # Randomize palette
-        menu.addAction(QG.QIcon(r'Icons/randomize_color.png'), 'Randomize all',
+        menu.addAction(style.getIcon('RANDOMIZE_COLOR'), 'Randomize all',
                        self.randomPaletteRequested.emit)
         
     # Separator
         menu.addSeparator()
 
     # Higlight item
-        highlight = QW.QAction(QG.QIcon(r'Icons/highlight.png'), 'Highlight')
+        highlight = QW.QAction(style.getIcon('HIGHLIGHT'), 'Highlight')
         highlight.setCheckable(True)
         highlight.setChecked(i == self._highlighted_item)
         highlight.toggled.connect(lambda t: self.requestItemHighlight(t, i))
         menu.addAction(highlight)
 
     # Extract mask
-        menu.addAction(QG.QIcon(r'Icons/add_mask.png'), 'Extract mask', 
+        menu.addAction(style.getIcon('ADD_MASK'), 'Extract mask',
                        self.requestMaskFromClass)
 
     # Show the menu in the same spot where the user triggered the event
@@ -1409,7 +1411,7 @@ class StyledButton(QW.QPushButton):
 
     def __init__(
         self,
-        icon: QG.QIcon | str | None = None,
+        icon: QG.QIcon | None = None,
         text: str | None = None,
         bg : str | None = None,
         text_padding: int = 1,
@@ -1421,8 +1423,8 @@ class StyledButton(QW.QPushButton):
 
         Parameters
         ----------
-        icon : QIcon or str or None, optional
-            Button icon. If str, is the path to icon file. The default is None.
+        icon : QIcon or None, optional
+            Button icon. The default is None.
         text : str or None, optional
             Button text. The default is None.
         bg : str or None, optional
@@ -1439,7 +1441,6 @@ class StyledButton(QW.QPushButton):
 
     # Set icon
         if icon:
-            icon = QG.QIcon(icon) if isinstance(icon, str) else icon
             self.setIcon(icon)
             if text: # add spacing between icon and text
                 text = text.rjust(text_padding + len(text))
@@ -1450,7 +1451,7 @@ class StyledButton(QW.QPushButton):
     # Overwrite default background color if requested
         ss = style.SS_BUTTON
         if bg:
-            ss+= 'QPushButton {background-color: %s; font: bold;}' %(bg)
+            ss += 'QPushButton {background-color: %s; font: bold;}' %(bg)
         self.setStyleSheet(ss)
 
 
@@ -1636,9 +1637,7 @@ class StyledListWidget(QW.QListWidget):
 
 
 class StyledRadioButton(QW.QRadioButton):
-    '''
-    
-    '''
+
     def __init__(
         self,
         text: str = '',
@@ -2169,9 +2168,9 @@ class GroupArea(QW.QGroupBox):
                     align_css = 'top center'
                 case _:
                     valid = ("Qt.AlignLeft", "Qt.AlignRight", "Qt.AlignHCenter")
-                    raise ValueError(f'Invalid "align": {align}. Only use {valid}.')
+                    raise ValueError(f'Argument "align" can only be {valid}.')
 
-            title_ss = ('QGroupBox::title {subcontrol-position: %s;}' %(align_css))
+            title_ss = (f'QGroupBox::title {{subcontrol-position: {align_css};}}')
             self.setStyleSheet(style.SS_GROUPAREA_TITLE + title_ss)
         
         else:
@@ -2614,7 +2613,7 @@ class SplitterGroup(QW.QSplitter):
         TypeError
             Raised if an invalid object is passed in the "qobjects" argument.
         AssertionError
-            Objects and stretches must have the same size.
+            Raised if "qobjects" and "stretches" have different sizes.
 
         '''
     # Use super class to create the oriented splitter and set its stylesheet
@@ -2638,7 +2637,7 @@ class SplitterGroup(QW.QSplitter):
                 self.addWidget(obj)
             
             else: # raise error if object is invalid
-                raise TypeError(f'Invalid object type in "qobjects": {type(obj)}')
+                raise TypeError(f'Invalid type in "qobjects": {type(obj)}')
 
     # Add stretches to each object
         if stretches is not None:
@@ -3470,7 +3469,7 @@ class CoordinatesFinder(QW.QFrame):
         self.y_input.setMaximumWidth(50)
 
     # Go to pixel button (Styled Button)
-        self.go_btn = StyledButton(r'Icons/bullseye.png')
+        self.go_btn = StyledButton(style.getIcon('BULLSEYE'))
         self.go_btn.setFlat(True)
         self.go_btn.clicked.connect(self.onButtonClicked)
 
@@ -3571,19 +3570,19 @@ class DocumentBrowser(QW.QWidget):
 
     # Search Up (Action) [-> Browser Toolbar]
         self.search_up_action = self.tbar.addAction(
-            QG.QIcon(r'Icons/up.png'), 'Search up')
+            style.getIcon('CHEVRON_UP'), 'Search up')
 
     # Search Down (Action) [-> Browser Toolbar]
         self.search_down_action = self.tbar.addAction(
-            QG.QIcon(r'Icons/down.png'), 'Search down')
+            style.getIcon('CHEVRON_DOWN'), 'Search down')
 
     # Zoom in (Action) [-> Browser Toolbar]
         self.zoom_in_action = self.tbar.addAction(
-            QG.QIcon(r'Icons/zoom_in.png'), 'Zoom in')
+            style.getIcon('ZOOM_IN'), 'Zoom in')
 
     # Zoom out (Action) [-> Browser Toolbar]
         self.zoom_out_action = self.tbar.addAction(
-            QG.QIcon(r'Icons/zoom_out.png'), 'Zoom out')
+            style.getIcon('ZOOM_OUT'), 'Zoom out')
 
     # Insert toolbar separator [-> Browser Toolbar]
         self.tbar.insertSeparator(self.zoom_in_action)
@@ -3753,7 +3752,7 @@ class RandomSeedGenerator(QW.QWidget):
         self.seed_input.setValidator(validator)
 
     # Randomize seed button (Styled Button)
-        self.rand_btn = StyledButton(r'Icons/dice.png')
+        self.rand_btn = StyledButton(style.getIcon('DICE'))
 
     # Adjust layout
         layout = QW.QHBoxLayout()
@@ -3884,7 +3883,7 @@ class PercentLineEdit(QW.QFrame):
         self.setIcon()
 
     # Reset button (Styled Button)
-        self.reset_btn = StyledButton(r'Icons/refresh.png')
+        self.reset_btn = StyledButton(style.getIcon('REFRESH'))
         self.reset_btn.setFlat(True)
 
     # Adjust layout
@@ -3916,11 +3915,11 @@ class PercentLineEdit(QW.QFrame):
         delta = self._value - self._base
 
         if delta > 0:
-            icon = r'Icons/increase.png'
+            icon = str(style.ICONS.get('CARET_UP_GREEN'))
         elif delta < 0:
-            icon = r'Icons/decrease.png'
+            icon = str(style.ICONS.get('CARET_DOWN_RED'))
         else:
-            icon = r'Icons/stationary.png'
+            icon = str(style.ICONS.get('CARET_DOUBLE_YELLOW'))
 
         pixmap = QG.QPixmap(icon).scaled(20, 20, QC.Qt.KeepAspectRatio)
         self.iconlbl.setPixmap(pixmap)
@@ -4141,7 +4140,7 @@ class DatasetDesigner(StyledTable):
             Index of row.
 
         '''
-        btn = StyledButton(r'Icons/generic_add_blue.png')
+        btn = StyledButton(style.getIcon('CIRCLE_ADD'))
         btn.setToolTip('Load multiple features at once')
         btn.clicked.connect(self.fillRow)
         self.setCellWidget(row, 0, btn)
@@ -4344,11 +4343,11 @@ class StatusFileLoader(QW.QWidget):
 
         '''
     # Add file (Styled Button)
-        self.add_btn = StyledButton(r'Icons/smooth_add.png')
+        self.add_btn = StyledButton(style.getIcon('CIRCLE_ADD_GREEN'))
         self.add_btn.setFlat(True)
 
     # Remove file (Styled Button)
-        self.del_btn = StyledButton(r'Icons/smooth_del.png')
+        self.del_btn = StyledButton(style.getIcon('CIRCLE_DEL_RED'))
         self.del_btn.setFlat(True)
         self.del_btn.setEnabled(False)
 

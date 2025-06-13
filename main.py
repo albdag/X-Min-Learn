@@ -35,11 +35,11 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
 # Show splash screen
-    loader_bg = QPixmap('Icons/XML_logo.png').scaledToWidth(400)
+    loader_bg = QPixmap(str(style.ICONS.get('LOGO_512X512')))
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     loader = QSplashScreen(loader_bg, flags=flags)
     loader.show()
-    loader.showMessage('\nLoading app...', Qt.AlignHCenter, QColor(style.IVORY))
+    loader.showMessage('\n\nLoading app', Qt.AlignHCenter, QColor(style.IVORY))
 
 # Set application properties
     app.setApplicationName('X-Min Learn')

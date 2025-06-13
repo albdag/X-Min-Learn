@@ -145,7 +145,7 @@ class MineralClassifier(DraggableTool):
 
     # Set tool title and icon
         self.setWindowTitle('Mineral Classifier')
-        self.setWindowIcon(QG.QIcon(r'Icons/classify.png'))
+        self.setWindowIcon(style.getIcon('MINERAL_CLASSIFIER'))
 
     # Initialize main attributes
         self._mask = None
@@ -173,7 +173,7 @@ class MineralClassifier(DraggableTool):
         self.inmaps_selector = CW.SampleMapsSelector('inmaps')
 
     # Remove mask button (Styled Button)
-        self.del_mask_btn = CW.StyledButton(r'Icons/clear.png')
+        self.del_mask_btn = CW.StyledButton(style.getIcon('CLEAR'))
         self.del_mask_btn.setToolTip('Remove current mask')
 
     # Loaded mask (Path Label)
@@ -185,7 +185,7 @@ class MineralClassifier(DraggableTool):
         self.mask_radbtn_1.setChecked(True)
     
     # Load mask from file (Styled Button)
-        self.load_mask_btn = CW.StyledButton(r'Icons/import.png', 'Load')
+        self.load_mask_btn = CW.StyledButton(style.getIcon('IMPORT'), 'Load')
         
     # Get mask from class choice (Radio Button)
         self.mask_radbtn_2 = QW.QRadioButton('Get from output map')
@@ -207,11 +207,11 @@ class MineralClassifier(DraggableTool):
         self.minmaps_list.setMinimumHeight(150)
 
     # Save mineral map (Styled Button)
-        self.save_minmap_btn = CW.StyledButton(r'Icons/save_as.png')
+        self.save_minmap_btn = CW.StyledButton(style.getIcon('SAVE_AS'))
         self.save_minmap_btn.setToolTip('Save mineral map as...')
 
     # Delete mineral map (Styled Button)
-        self.del_minmap_btn = CW.StyledButton(r'Icons/remove.png')
+        self.del_minmap_btn = CW.StyledButton(style.getIcon('REMOVE'))
         self.del_minmap_btn.setToolTip('Remove mineral map')
 
     # Mineral maps legend (Legend)
@@ -219,19 +219,22 @@ class MineralClassifier(DraggableTool):
         self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
 
     # Mineral maps bar canvas (Bar Canvas)
-        self.barplot = plots.BarCanvas(orientation='h', size=(3.6, 6.4),
-                                       wheel_zoom=False, wheel_pan=False)
+        self.barplot = plots.BarCanvas(
+            orientation='h', size=(3.6, 6.4), wheel_zoom=False, wheel_pan=False)
         self.barplot.setMinimumSize(200, 350)
     
     # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
-        self.barplot_navtbar = plots.NavTbar.barCanvasDefault(self.barplot, self)
+        self.barplot_navtbar = plots.NavTbar.barCanvasDefault(
+            self.barplot, self)
 
     # Silhouette canvas (Silhouette Canvas)
-        self.silscore_canvas = plots.SilhouetteCanvas(wheel_zoom=False, wheel_pan=False)
+        self.silscore_canvas = plots.SilhouetteCanvas(
+            wheel_zoom=False, wheel_pan=False)
         self.silscore_canvas.setMinimumHeight(450)
 
     # Silhouette canvas navigation toolbar (Navigation Toolbar)
-        self.silscore_navtbar = plots.NavTbar(self.silscore_canvas, self, coords=False)
+        self.silscore_navtbar = plots.NavTbar(
+            self.silscore_canvas, self, coords=False)
         self.silscore_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Silhouette average score (Framed Label)
@@ -277,7 +280,8 @@ class MineralClassifier(DraggableTool):
         self.maps_viewer.setMinimumWidth(250)
 
     # Viewer Navigation Toolbar (Navigation Toolbar)
-        self.viewer_navtbar = plots.NavTbar.imageCanvasDefault(self.maps_viewer, self)
+        self.viewer_navtbar = plots.NavTbar.imageCanvasDefault(
+            self.maps_viewer, self)
 
     # Confidence value input (Spin Box)
         self.conf_spbox = QW.QSpinBox()
@@ -293,8 +297,8 @@ class MineralClassifier(DraggableTool):
 
     # Confidence slider (Slider)
         self.conf_slider = QW.QSlider(QC.Qt.Horizontal)
-        self.conf_slider.setSizePolicy(QW.QSizePolicy.MinimumExpanding,
-                                       QW.QSizePolicy.Fixed)
+        self.conf_slider.setSizePolicy(
+            QW.QSizePolicy.MinimumExpanding, QW.QSizePolicy.Fixed)
         self.conf_slider.setRange(0, 100)
         self.conf_slider.setSingleStep(5)
         self.conf_slider.setTracking(False)
@@ -312,7 +316,7 @@ class MineralClassifier(DraggableTool):
 
         # - Mask data
         mask_data_grid = QW.QGridLayout()
-        mask_data_grid.setAlignment(QC.Qt.Alignment(QC.Qt.AlignLeft | QC.Qt.AlignTop))
+        mask_data_grid.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignTop)
         mask_data_grid.setVerticalSpacing(15)
         mask_data_grid.addWidget(self.del_mask_btn, 0, 0)
         mask_data_grid.addWidget(self.mask_pathlbl, 0, 1)
@@ -344,9 +348,9 @@ class MineralClassifier(DraggableTool):
         scores_grid.addWidget(self.dbiscore_lbl, 5, 1)
 
         graph_tabwid = CW.StyledTabWidget()
-        graph_tabwid.addTab(self.legend, QG.QIcon(r'Icons/legend.png'), None)
-        graph_tabwid.addTab(barplot_vbox, QG.QIcon(r'Icons/plot.png'), None)
-        graph_tabwid.addTab(scores_grid, QG.QIcon(r'Icons/scores.png'), None)
+        graph_tabwid.addTab(self.legend, style.getIcon('LEGEND'), None)
+        graph_tabwid.addTab(barplot_vbox, style.getIcon('PLOT'), None)
+        graph_tabwid.addTab(scores_grid, style.getIcon('SCORES'), None)
         graph_tabwid.setTabToolTip(0, 'Legend')
         graph_tabwid.setTabToolTip(1, 'Bar plot')
         graph_tabwid.setTabToolTip(2, 'Clustering scores')
@@ -365,21 +369,13 @@ class MineralClassifier(DraggableTool):
         self.data_tabwid.tabBar().setExpanding(True)
         self.data_tabwid.tabBar().setDocumentMode(True)
         self.data_tabwid.addTab(
-            self.inmaps_selector,
-            QG.QIcon(r'Icons/inmap.png'), 
-            title='INPUT MAPS'
-        )
+            self.inmaps_selector, style.getIcon('INMAP'), title='INPUT MAPS')
         self.data_tabwid.addTab(
-            mask_data_grid,
-            QG.QIcon(r'Icons/mask.png'), 
-            title='MASK'
-        )
+            mask_data_grid, style.getIcon('MASK'), title='MASK')
         self.data_tabwid.addTab(
-            output_data_grid,
-            QG.QIcon(r'Icons/minmap.png'), 
-            title='OUTPUT MAPS'
-        )
-        data_group = CW.CollapsibleArea(self.data_tabwid, 'Data panel', collapsed=False)
+            output_data_grid, style.getIcon('MINMAP'), title='OUTPUT MAPS')
+        data_group = CW.CollapsibleArea(
+            self.data_tabwid, 'Data panel', collapsed=False)
 
     # Classifier panel layout
         class_grid = QW.QGridLayout()
@@ -418,8 +414,10 @@ class MineralClassifier(DraggableTool):
 
         '''
     # Reset canvas and enable/disable classify button if input data is updated
-        self.inmaps_selector.mapsDataChanged.connect(self.maps_viewer.clear_canvas)
-        self.inmaps_selector.mapsDataChanged.connect(self.updateClassifyButtonState)
+        self.inmaps_selector.mapsDataChanged.connect(
+            self.maps_viewer.clear_canvas)
+        self.inmaps_selector.mapsDataChanged.connect(
+            self.updateClassifyButtonState)
 
     # Actions to be performed when an input map is clicked
         self.inmaps_selector.mapClicked.connect(self.showInputMap)
@@ -737,7 +735,8 @@ class MineralClassifier(DraggableTool):
     # Update clustering scores using original (non-thresholded) mineral map
         sil_avg, sil_clust, chi, dbi = minmap.get_clustering_scores()
         if sil_avg and sil_clust:
-            self.silscore_canvas.update_canvas(sil_clust, sil_avg, title, minmap.palette)
+            self.silscore_canvas.update_canvas(
+                sil_clust, sil_avg, title, minmap.palette)
         else:
             self.silscore_canvas.clear_canvas()
 
@@ -1125,7 +1124,8 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Load Model (Styled Button)
-            self.load_btn = CW.StyledButton(r'Icons/import.png', 'Load model')
+            self.load_btn = CW.StyledButton(
+                style.getIcon('IMPORT'), 'Load model')
             self.load_btn.setToolTip('Load a pre-trained ML model')
 
         # Loaded model path (Path Label)
@@ -1261,11 +1261,12 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Load ROI map (Styled Button)
-            self.load_btn = CW.StyledButton(r'Icons/import.png', 'Load ROI map')
+            self.load_btn = CW.StyledButton(
+                style.getIcon('IMPORT'), 'Load ROI map')
             self.load_btn.setToolTip('Load training ROI data')
 
         # Remove (unload) ROI map (Styled Button)
-            self.unload_btn = CW.StyledButton(r'Icons/clear.png')
+            self.unload_btn = CW.StyledButton(style.getIcon('CLEAR'))
             self.unload_btn.setToolTip('Remove ROI map')
             
         # Loaded model path (Path Label)
@@ -1296,10 +1297,10 @@ class MineralClassifier(DraggableTool):
             self.knn_nneigh_spbox.setValue(5)
 
         # Weight of neighbors (Styled Combo Box)
-            knn_weight_tip = 'Should neighbors weighting be uniform or distance-based?'
+            knn_tip = 'Should neighbors weighting be uniform or distance-based?'
             self.knn_weight_combox = CW.StyledComboBox()
             self.knn_weight_combox.addItems(['Uniform', 'Distance'])
-            self.knn_weight_combox.setToolTip(knn_weight_tip)
+            self.knn_weight_combox.setToolTip(knn_tip)
 
         # Add KNN widgets to the Algorithm Panel
             knn_layout = QW.QFormLayout()
@@ -1436,7 +1437,7 @@ class MineralClassifier(DraggableTool):
 
         # Check if ROI map extension differs from input maps extensions
             if input_stack.maps_shape != roimap.shape:
-                text = 'ROI map and sample extensions are different. Proceed anyway?'
+                text = 'ROI map and sample extensions are different. Proceed?'
                 choice = CW.MsgBox(self, 'QuestWarn', text)
                 if choice.no():
                     return None
@@ -1568,7 +1569,8 @@ class MineralClassifier(DraggableTool):
 
             '''
         # Disable silhouette data ratio when silhouette score is unchecked
-            self.silscore_cbox.stateChanged.connect(self.silscore_ratio_spbox.setEnabled)
+            self.silscore_cbox.stateChanged.connect(
+                self.silscore_ratio_spbox.setEnabled)
             
         # Select a different clustering algorithm
             self.algm_combox.currentTextChanged.connect(self.switchAlgorithm)
@@ -1649,7 +1651,7 @@ class DatasetBuilder(DraggableTool):
 
     # Set tool title and icon
         self.setWindowTitle('Dataset Builder')
-        self.setWindowIcon(QG.QIcon(r'Icons/compile_dataset.png'))
+        self.setWindowIcon(style.getIcon('DATASET_BUILDER'))
 
     # Set main attributes
         self.dataset = None
@@ -1735,11 +1737,11 @@ class DatasetBuilder(DraggableTool):
         self.feature_list.setSortingEnabled(True)
 
     # Delete feature (Styled Button)
-        self.delfeat_btn = CW.StyledButton(r'Icons/remove.png')
+        self.delfeat_btn = CW.StyledButton(style.getIcon('REMOVE'))
         self.delfeat_btn.setToolTip('Remove selected features')
 
     # Refresh Dataset Designer (Styled Button)
-        self.refresh_btn = CW.StyledButton(r'Icons/validate.png')
+        self.refresh_btn = CW.StyledButton(style.getIcon('TICK'))
         self.refresh_btn.setToolTip('Refresh Dataset Designer')
 
     # Dataset designer (Dataset Designer)
@@ -1756,18 +1758,19 @@ class DatasetBuilder(DraggableTool):
 
     # Expand designer's rows (Action) [-> Designer Toolbar]
         self.expand_action = self.designer_tbar.addAction(
-            QG.QIcon(r'Icons/expand_rows.png'),'Expand rows')
+            style.getIcon('ROW_ADD'),'Expand rows')
 
     # Reduce designer's rows (Action) [-> Designer Toolbar]
         self.reduce_action = self.designer_tbar.addAction(
-            QG.QIcon(r'Icons/reduce_rows.png'), 'Reduce rows')
+            style.getIcon('ROW_DEL'), 'Reduce rows')
         
     # Remove selected rows (Action) [-> Designer Toolbar]
         self.delrows_action = self.designer_tbar.addAction(
-            QG.QIcon(r'Icons/remove.png'), 'Remove selected rows')
+            style.getIcon('REMOVE'), 'Remove selected rows')
         
     # Compile dataset (Widget Action) [-> Designer Toolbar]
-        self.compile_btn = CW.StyledButton(r'Icons/compile_dataset.png', 'COMPILE')
+        self.compile_btn = CW.StyledButton(
+            style.getIcon('DATASET_BUILDER'), 'COMPILE')
         self.designer_tbar.addSeparator()
         self.designer_tbar.addWidget(self.compile_btn)
 
@@ -1776,15 +1779,15 @@ class DatasetBuilder(DraggableTool):
         self.refine_list.setSortingEnabled(True)
 
     # Rename selected class (Styled Button)
-        self.rename_class_btn = CW.StyledButton(r'Icons/rename.png')
+        self.rename_class_btn = CW.StyledButton(style.getIcon('RENAME'))
         self.rename_class_btn.setToolTip('Rename')
         
     # Delete selected class (Styled Button)
-        self.delete_class_btn = CW.StyledButton(r'Icons/remove.png')
+        self.delete_class_btn = CW.StyledButton(style.getIcon('REMOVE'))
         self.delete_class_btn.setToolTip('Delete')
 
     # Merge selected classes (Styled Button)
-        self.merge_class_btn = CW.StyledButton(r'Icons/merge.png')
+        self.merge_class_btn = CW.StyledButton(style.getIcon('MERGE'))
         self.merge_class_btn.setToolTip('Merge')
         
     # Dataset preview area (Document Browser)
@@ -1807,7 +1810,7 @@ class DatasetBuilder(DraggableTool):
         self.split_cbox.setChecked(False)
 
     # Save dataset (Styled Button)
-        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
+        self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
 
     # Adjust layout
         # Input features group (Group Area)
@@ -2223,7 +2226,7 @@ class ModelLearner(DraggableTool):
 
     # Set widget attributes
         self.setWindowTitle('Model Learner')
-        self.setWindowIcon(QG.QIcon(r'Icons/model_learner.png'))
+        self.setWindowIcon(style.getIcon('MODEL_LEARNER'))
 
     # Set main attributes
         # Ground-truth dataset
@@ -2288,14 +2291,15 @@ class ModelLearner(DraggableTool):
 #                       GROUND TRUTH DATASET WIDGETS 
 #  -------------------------------------------------------------------------  #
     # Load dataset button (Styled Button)
-        self.load_dataset_btn = CW.StyledButton(r'Icons/import.png', 'Load dataset')
+        self.load_dataset_btn = CW.StyledButton(
+            style.getIcon('IMPORT'), 'Load dataset')
 
     # CSV decimal character selector
         self.csv_dec_selector = CW.DecimalPointSelector()
 
     # Loaded dataset path (Path Label)
-        self.dataset_path_lbl = CW.PathLabel(full_display=False,
-                                             placeholder='No dataset loaded')
+        self.dataset_path_lbl = CW.PathLabel(
+            full_display=False, placeholder='No dataset loaded')
 
     # Loaded dataset preview area (Document Browser)
         self.dataset_preview = CW.DocumentBrowser(readonly=True)
@@ -2309,23 +2313,24 @@ class ModelLearner(DraggableTool):
         dataset_grid.addWidget(self.csv_dec_selector, 0, 3)
         dataset_grid.addWidget(self.dataset_path_lbl, 1, 0, 1, -1)
         dataset_grid.addWidget(self.dataset_preview, 2, 0, 1, -1)
-        dataset_group = CW.CollapsibleArea(dataset_grid, collapsed=False,
-                                           title='Ground truth dataset')
+        dataset_group = CW.CollapsibleArea(
+            dataset_grid, collapsed=False, title='Ground truth dataset')
         
 #  -------------------------------------------------------------------------  #
 #                            PARENT MODEL WIDGETS 
 #  -------------------------------------------------------------------------  #
 
     # Load parent model button (Styled Button)
-        self.load_pmodel_btn = CW.StyledButton(r'Icons/import.png', 'Load model')
+        self.load_pmodel_btn = CW.StyledButton(
+            style.getIcon('IMPORT'), 'Load model')
         self.load_pmodel_btn.setEnabled(False)
 
     # Remove loaded parent model button (Styled Button)
-        self.unload_pmodel_btn = CW.StyledButton(r'Icons/clear.png')
+        self.unload_pmodel_btn = CW.StyledButton(style.getIcon('CLEAR'))
 
     # Parent model path (Path Label)
-        self.pmodel_path = CW.PathLabel(full_display=False,
-                                        placeholder='No model loaded')
+        self.pmodel_path = CW.PathLabel(
+            full_display=False, placeholder='No model loaded')
 
     # Parent model group (Collapsible Area)
         pmodel_grid = QW.QGridLayout()
@@ -2334,23 +2339,26 @@ class ModelLearner(DraggableTool):
         pmodel_grid.addWidget(self.unload_pmodel_btn, 1, 0)
         pmodel_grid.addWidget(self.pmodel_path, 1, 1)
         pmodel_grid.setColumnStretch(1, 2)
-        pmodel_group = CW.CollapsibleArea(pmodel_grid, title='Update existent model')
+        pmodel_group = CW.CollapsibleArea(
+            pmodel_grid, title='Update existent model')
 
 #  -------------------------------------------------------------------------  #
 #                        HYPERPARAMETERS INPUT WIDGETS 
 #  -------------------------------------------------------------------------  #
 
     # Learning rate input (Styled Double Spin Box)
-        self.lr_spbox = CW.StyledDoubleSpinBox(min_value=0.00001, max_value=10,
-                                               step=0.01, decimals=5)
+        self.lr_spbox = CW.StyledDoubleSpinBox(
+            min_value=0.00001, max_value=10, step=0.01, decimals=5)
         self.lr_spbox.setValue(0.01)
 
     # Weight decay input (Styled Double Spin Box)
-        self.wd_spbox = CW.StyledDoubleSpinBox(max_value=10, step=0.01, decimals=5)
+        self.wd_spbox = CW.StyledDoubleSpinBox(
+            max_value=10, step=0.01, decimals=5)
         self.wd_spbox.setValue(0)
 
     # Momentum input (Styled Double Spin Box)
-        self.mtm_spbox = CW.StyledDoubleSpinBox(max_value=10, step=0.01, decimals=5)
+        self.mtm_spbox = CW.StyledDoubleSpinBox(
+            max_value=10, step=0.01, decimals=5)
         self.mtm_spbox.setValue(0)
 
     # Epochs input (Styled Spin Box)
@@ -2445,11 +2453,13 @@ class ModelLearner(DraggableTool):
         self.stop_learn_btn.setEnabled(False)
 
     # Test model button (Styled Button)
-        self.test_model_btn = CW.StyledButton(r'Icons/test.png', 'TEST MODEL')
+        self.test_model_btn = CW.StyledButton(
+            style.getIcon('TEST'), 'TEST MODEL')
         self.test_model_btn.setEnabled(False)
 
     # Save model button (Styled Button)
-        self.save_model_btn = CW.StyledButton(r'Icons/save.png', 'SAVE MODEL')
+        self.save_model_btn = CW.StyledButton(
+            style.getIcon('SAVE'), 'SAVE MODEL')
         self.save_model_btn.setEnabled(False)
 
     # Progress bar (Progress Bar)
@@ -2476,18 +2486,20 @@ class ModelLearner(DraggableTool):
 
     # Split ground truth dataset button (Styled Button)
         split_tip = 'Split dataset into train, validation and test sets'
-        self.split_dataset_btn = CW.StyledButton(text='SPLIT', bg=style.OK_GREEN)
+        self.split_dataset_btn = CW.StyledButton(
+            text='SPLIT', bg=style.OK_GREEN)
         self.split_dataset_btn.setToolTip(split_tip)
         self.split_dataset_btn.setEnabled(False)
 
     # Train, Validation and Test sets PieChart (Pie Canvas)
         self.subsets_pie = plots.PieCanvas(wheel_pan=False, wheel_zoom=False)
-        self.subsets_pie.fig.patch.set(facecolor=style.CASPER_LIGHT, 
-                                       edgecolor=style.BLACK_PEARL, lw=2)
+        self.subsets_pie.fig.patch.set(
+            facecolor=style.CASPER_LIGHT, edgecolor=style.BLACK_PEARL, lw=2)
         self.subsets_pie.setMinimumSize(200, 200)
 
     # Train, Validation & Test sets barchart (Bar Canvas)
-        self.subsets_barplot = plots.BarCanvas(wheel_pan=False, wheel_zoom=False)
+        self.subsets_barplot = plots.BarCanvas(
+            wheel_pan=False, wheel_zoom=False)
         self.subsets_barplot.setMinimumSize(200, 300)
 
     # Train set class visualizer (Styled List Widget)
@@ -2554,13 +2566,13 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Balancing help button (Styled Button)
-        self.balancing_help_btn = CW.StyledButton(r'Icons/info.png')
+        self.balancing_help_btn = CW.StyledButton(style.getIcon('INFO'))
         self.balancing_help_btn.setMaximumSize(30, 30)
         self.balancing_help_btn.setFlat(True)
         self.balancing_help_btn.setToolTip('More info about dataset balancing')
 
     # Oversampling strategy warning icon (Label)
-        os_warn = QG.QPixmap(r'Icons/warnIcon.png')
+        os_warn = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.os_warn_icon = QW.QLabel()
         self.os_warn_icon.setPixmap(os_warn.scaled(16, 16, QC.Qt.KeepAspectRatio))
         self.os_warn_icon.setToolTip('Sample count may differ from requested')
@@ -2583,7 +2595,7 @@ class ModelLearner(DraggableTool):
         self.m_neigh_spbox.setToolTip(mn_tip)
         
     # Undersampling strategy warning icon (Label)
-        us_warn = QG.QPixmap(r'Icons/warnIcon.png')
+        us_warn = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.us_warn_icon = QW.QLabel()
         self.us_warn_icon.setPixmap(us_warn.scaled(16, 16, QC.Qt.KeepAspectRatio))
         self.us_warn_icon.setToolTip('Sample count may differ from requested')
@@ -2631,15 +2643,18 @@ class ModelLearner(DraggableTool):
         self.balancing_table.setHorizontalHeaderLabels(headers)
 
     # Start balancing button (Styled Button)
-        self.start_balancing_btn = CW.StyledButton(text='Start', bg=style.OK_GREEN)
+        self.start_balancing_btn = CW.StyledButton(
+            text='Start', bg=style.OK_GREEN)
         self.start_balancing_btn.setToolTip('Start balancing session')
 
     # Stop balancing button (Styled Button)
-        self.stop_balancing_btn = CW.StyledButton(text='Stop', bg=style.BAD_RED)
+        self.stop_balancing_btn = CW.StyledButton(
+            text='Stop', bg=style.BAD_RED)
         self.stop_balancing_btn.setToolTip('Stop balancing session')
 
     # Cancel balancing button (Styled Button)
-        self.canc_balancing_btn = CW.StyledButton(r'Icons/clear.png', 'Cancel')
+        self.canc_balancing_btn = CW.StyledButton(
+            style.getIcon('CLEAR'), 'Cancel')
         self.canc_balancing_btn.setToolTip('Cancel balancing results')
 
     # Balancing operations progress bar (Descriptive Progress Bar)
@@ -2705,9 +2720,14 @@ class ModelLearner(DraggableTool):
         self.valid_loss_lbl = CW.FramedLabel('')
 
     # Accuracy curves canvas (Curve Canvas)
-        self.accuracy_plot = plots.CurveCanvas('Accuracy plot', 'Epochs',
-                                               'Accuracy', layout='tight',
-                                               wheel_pan=False, wheel_zoom=False)
+        self.accuracy_plot = plots.CurveCanvas(
+            'Accuracy plot',
+            'Epochs',
+            'Accuracy',
+            layout='tight',
+            wheel_pan=False,
+            wheel_zoom=False
+        )
         self.accuracy_plot.setMinimumSize(500, 400)
 
     # Accuracy curves Navigation Toolbar (Navigation Toolbar)
@@ -2745,10 +2765,10 @@ class ModelLearner(DraggableTool):
         learn_plot_tabwid = CW.StyledTabWidget()
         learn_plot_tabwid.tabBar().setDocumentMode(True)
         learn_plot_tabwid.tabBar().setExpanding(True)
-        learn_plot_tabwid.addTab(loss_grid, QG.QIcon(r'Icons/loss.png'),
-                                 'LOSS PLOT')
-        learn_plot_tabwid.addTab(accuracy_grid, QG.QIcon(r'Icons/accuracy.png'),
-                                 'ACCURACY PLOT')
+        learn_plot_tabwid.addTab(
+            loss_grid, style.getIcon('LOSS'), 'LOSS PLOT')
+        learn_plot_tabwid.addTab(
+            accuracy_grid, style.getIcon('ACCURACY'), 'ACCURACY PLOT')
         learn_group = CW.GroupArea(learn_plot_tabwid, 'Learning progression')
 
 #  -------------------------------------------------------------------------  #
@@ -2756,17 +2776,18 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Train Confusion Matrix canvas (Confusion Matrix Canvas)
-        self.train_confmat = plots.ConfMatCanvas('Train set', layout='tight',
-                                                 wheel_pan=False, wheel_zoom=False)
+        self.train_confmat = plots.ConfMatCanvas(
+            'Train set', layout='tight', wheel_pan=False, wheel_zoom=False)
         self.train_confmat.setMinimumSize(600, 600)
 
     # Train Confusion Matrix Navigation Toolbar (Navigation Toolbar)
-        self.train_cm_navtbar = plots.NavTbar(self.train_confmat, self, coords=False)
+        self.train_cm_navtbar = plots.NavTbar(
+            self.train_confmat, self, coords=False)
         self.train_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Annotation as percentage action [--> Train CM Navigation ToolBar]
         self.train_cm_perc_action = QW.QAction(
-            QG.QIcon(r'Icons/labelize.png'), 'Annotations as percentage')
+            style.getIcon('PERCENT'), 'Annotations as percentage')
         self.train_cm_perc_action.setCheckable(True)
         self.train_cm_perc_action.setChecked(True)
         self.train_cm_navtbar.insertAction(2, self.train_cm_perc_action)
@@ -2777,17 +2798,18 @@ class ModelLearner(DraggableTool):
         self.train_f1_weight_lbl = CW.FramedLabel('')
 
     # Validation Confusion Matrix area (Confusion Matrix Canvas)
-        self.valid_confmat = plots.ConfMatCanvas('Validation set', layout='tight',
-                                                 wheel_pan=False, wheel_zoom=False)
+        self.valid_confmat = plots.ConfMatCanvas(
+            'Validation set', layout='tight', wheel_pan=False, wheel_zoom=False)
         self.valid_confmat.setMinimumSize(600, 600)
 
     # Validation Confusion Matrix Navigation Toolbar (Navigation Toolbar)
-        self.valid_cm_navtbar = plots.NavTbar(self.valid_confmat, self, coords=False)
+        self.valid_cm_navtbar = plots.NavTbar(
+            self.valid_confmat, self, coords=False)
         self.valid_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Annotation as percentage action [--> Validation CM Navigation Toolbar]
         self.valid_cm_perc_action = QW.QAction(
-            QG.QIcon(r'Icons/labelize.png'), 'Annotations as percentage')
+            style.getIcon('PERCENT'), 'Annotations as percentage')
         self.valid_cm_perc_action.setCheckable(True)
         self.valid_cm_perc_action.setChecked(True)
         self.valid_cm_navtbar.insertAction(2, self.valid_cm_perc_action)
@@ -2798,17 +2820,18 @@ class ModelLearner(DraggableTool):
         self.valid_f1_weight_lbl = CW.FramedLabel('')
 
     # Test Confusion Matrix (Confusion Matrix Canvas)
-        self.test_confmat = plots.ConfMatCanvas('Test set', layout='tight',
-                                                wheel_pan=False, wheel_zoom=False)
+        self.test_confmat = plots.ConfMatCanvas(
+            'Test set', layout='tight', wheel_pan=False, wheel_zoom=False)
         self.test_confmat.setMinimumSize(600, 600)
 
     # Test Confusion Matrix Navigation Toolbar (Navigation Toolbar)
-        self.test_cm_navtbar = plots.NavTbar(self.test_confmat, self, coords=False)
+        self.test_cm_navtbar = plots.NavTbar(
+            self.test_confmat, self, coords=False)
         self.test_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
 
     # Annotation as percentage action [--> Test CM Navigation Toolbar]
         self.test_cm_perc_action = QW.QAction(
-            QG.QIcon(r'Icons/labelize.png'), 'Annotations as percentage')
+            style.getIcon('PERCENT'), 'Annotations as percentage')
         self.test_cm_perc_action.setCheckable(True)
         self.test_cm_perc_action.setChecked(True)
         self.test_cm_navtbar.insertAction(2, self.test_cm_perc_action)
@@ -2859,12 +2882,12 @@ class ModelLearner(DraggableTool):
         confmat_tabwid = CW.StyledTabWidget()
         confmat_tabwid.tabBar().setDocumentMode(True)
         confmat_tabwid.tabBar().setExpanding(True)
-        confmat_tabwid.addTab(tr_cm_grid, QG.QIcon(r'Icons/train_set.png'), 
-                         'TRAIN SET')
-        confmat_tabwid.addTab(vd_cm_grid, QG.QIcon(r'Icons/valid_set.png'), 
-                         'VALIDATION SET')
-        confmat_tabwid.addTab(ts_cm_grid, QG.QIcon(r'Icons/test_set.png'), 
-                         'TEST SET')
+        confmat_tabwid.addTab(
+            tr_cm_grid, style.getIcon('TRAIN_SET'), 'TRAIN SET')
+        confmat_tabwid.addTab(
+            vd_cm_grid, style.getIcon('VALIDATION_SET'), 'VALIDATION SET')
+        confmat_tabwid.addTab(
+            ts_cm_grid, style.getIcon('TEST_SET'), 'TEST SET')
         confmat_group = CW.GroupArea(confmat_tabwid, 'Model evaluation')
 
 #  -------------------------------------------------------------------------  #
@@ -2925,7 +2948,8 @@ class ModelLearner(DraggableTool):
         self.seed_generator.seedChanged.connect(self.onSeedChanged)
 
     # Ground truth dataset signals
-        self.csv_dec_selector.currentTextChanged.connect(self.dataset_reader.set_decimal)
+        self.csv_dec_selector.currentTextChanged.connect(
+            self.dataset_reader.set_decimal)
         self.load_dataset_btn.clicked.connect(self.loadGroundTruthDataset)
 
     # Load / unload existent model
@@ -3145,7 +3169,8 @@ class ModelLearner(DraggableTool):
     # Connect dataset reader thread signals with popup progress bar
         self.dataset_reader.thread.iterCompleted.connect(pbar.setValue)
         self.dataset_reader.thread.taskFinished.connect(pbar.reset)
-        self.dataset_reader.thread.taskFinished.connect(self._parseDatasetReaderResult)
+        self.dataset_reader.thread.taskFinished.connect(
+            self._parseDatasetReaderResult)
     
     # Update current dataset path 
         self.dataset_path_lbl.setPath(path)
@@ -4150,7 +4175,7 @@ class ModelLearner(DraggableTool):
         Raises
         ------
         ValueError
-            Raised when plot is not 'loss' or 'accuracy'.
+            Raised if plot is not 'loss' or 'accuracy'.
 
         '''
         match plot:
@@ -4159,7 +4184,7 @@ class ModelLearner(DraggableTool):
             case 'accuracy':
                 canvas = self.accuracy_plot
             case _:
-                raise ValueError(f'Plot can only be "loss" or "accuracy", not {plot}.')
+                raise ValueError(f'Invalid "plot" argument: {plot}.')
         
         x_data = range(len(y_train))
         curves = [(x_data, y_train), (x_data, y_valid)]  
@@ -4347,7 +4372,7 @@ class PhaseRefiner(DraggableTool):
 
     # Set widget attributes
         self.setWindowTitle('Phase Refiner')
-        self.setWindowIcon(QG.QIcon(r'Icons/refine.png'))
+        self.setWindowIcon(style.getIcon('PHASE_REFINER'))
 
     # Set main attributes
         self._refiner_mode = 0 # Basic: 0, Advanced: 1'
@@ -4392,7 +4417,8 @@ class PhaseRefiner(DraggableTool):
         sample_vbox = QW.QVBoxLayout()
         sample_vbox.addWidget(self.minmap_selector)
         sample_vbox.addWidget(self.select_map_btn)
-        sample_group = CW.CollapsibleArea(sample_vbox, 'Map selection', collapsed=False)
+        sample_group = CW.CollapsibleArea(
+            sample_vbox, 'Map selection', collapsed=False)
 
 #  -------------------------------------------------------------------------  #
 #                             LEGEND WIDGETS
@@ -4410,7 +4436,8 @@ class PhaseRefiner(DraggableTool):
         legend_form = QW.QFormLayout()
         legend_form.addRow('Current map', self.selected_map_lbl)
         legend_form.addRow(self.legend)
-        legend_group = CW.CollapsibleArea(legend_form, 'Legend', collapsed=False)
+        legend_group = CW.CollapsibleArea(
+            legend_form, 'Legend', collapsed=False)
 
 #  -------------------------------------------------------------------------  #
 #                              KERNEL WIDGETS
@@ -4418,7 +4445,7 @@ class PhaseRefiner(DraggableTool):
 
     # Kernel shape selector (Radio Buttons Group)
         shapes = ('square', 'circle', 'diamond')
-        shp_icons = [QG.QIcon(rf'Icons/{s}.png') for s in shapes]
+        shp_icons = [style.getIcon(s.upper()) for s in shapes]
         self.kern_shape_btns = CW.RadioBtnLayout(['']*3, shp_icons, orient='h')
         for shp, btn in zip(shapes, self.kern_shape_btns.buttons()):
             btn.setObjectName(shp)
@@ -4450,7 +4477,7 @@ class PhaseRefiner(DraggableTool):
         self.nd_combox.setPlaceholderText('No selection') # Not working in Qt 5.15.2 due to a Qt BUG
 
     # NoData phase clear button (Styled Button) [-> Basic Refiner]
-        self.nd_clear_btn = CW.StyledButton(r'Icons/clear.png')
+        self.nd_clear_btn = CW.StyledButton(style.getIcon('CLEAR'))
 
     # NoData threshold (Styled Double Spin Box) [-> Basic Refiner]
         thresh_tip = 'Output NoData class only if its pixels exceed this ratio'
@@ -4471,7 +4498,7 @@ class PhaseRefiner(DraggableTool):
         ))
 
     # Algorithm warning icon (Label) [-> Advanced Refiner]
-        warn_icon = QG.QPixmap(r'Icons/warnIcon.png')
+        warn_icon = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.algm_warn = QW.QLabel()
         self.algm_warn.setPixmap(warn_icon.scaled(16, 16, QC.Qt.KeepAspectRatio))
         self.algm_warn.setToolTip('The selected algorithm ignore ROIs')
@@ -4532,7 +4559,7 @@ class PhaseRefiner(DraggableTool):
         self.cancel_btn.setToolTip('Revert all edits')
 
     # Save refinements (Styled Button)
-        self.save_btn = CW.StyledButton(r'Icons/save.png', 'SAVE')
+        self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'SAVE')
         self.save_btn.setToolTip('Save refined mineral map')
 
     # Control widgets layout
@@ -4609,7 +4636,7 @@ class PhaseRefiner(DraggableTool):
 
     # Reset current phase (Action) [-> Navigation toolbar of current map]
         self.reset_phase_action = QW.QAction(
-            QG.QIcon(r'Icons/refresh.png'), 'Reset current phase')
+            style.getIcon('REFRESH'), 'Reset current phase')
         self.curr_navtbar_advan.insertSeparator(10)
         self.curr_navtbar_advan.insertAction(10, self.reset_phase_action)
         
@@ -4624,13 +4651,14 @@ class PhaseRefiner(DraggableTool):
             self.prev_canvas_advan, self)
         
     # Draw ROI (Action) [-> Navigation Toolbar of preview map]
-        self.draw_roi_action = QW.QAction(QG.QIcon(r'Icons/roi.png'), 'Draw ROI')
+        self.draw_roi_action = QW.QAction(style.getIcon('ROI'), 'Draw ROI')
         self.draw_roi_action.setCheckable(True)
         self.prev_navtbar_advan.insertSeparator(10)
         self.prev_navtbar_advan.insertAction(10, self.draw_roi_action)
 
     # ROI selector widget (Rectangle Selector)
-        self.roi_sel = plots.RectSel(self.prev_canvas_advan.ax, self.onRoiDrawn)
+        self.roi_sel = plots.RectSel(
+            self.prev_canvas_advan.ax, self.onRoiDrawn)
 
     # Original phase info (Group Area)
         orig_info_name = QW.QLabel()
@@ -4722,10 +4750,10 @@ class PhaseRefiner(DraggableTool):
 
     # Right panel layout
         self.mode_tabwid = CW.StyledTabWidget()
-        self.mode_tabwid.addTab(basic_refiner_grid, QG.QIcon(r'Icons/cube.png'),
-                                'BASIC MODE')
-        self.mode_tabwid.addTab(advan_refiner_grid, QG.QIcon(r'Icons/gear.png'), 
-                                'ADVANCED MODE')
+        self.mode_tabwid.addTab(
+            basic_refiner_grid, style.getIcon('CUBE'), 'BASIC MODE')
+        self.mode_tabwid.addTab(
+            advan_refiner_grid, style.getIcon('GEAR'), 'ADVANCED MODE')
         basic_tip = 'Quick and simple refinement with mode filter'
         advan_tip = 'Class-wise advanced refinement with multiple binary filters'
         self.mode_tabwid.tabBar().setTabToolTip(0, basic_tip)
@@ -4762,7 +4790,8 @@ class PhaseRefiner(DraggableTool):
         self.nd_combox.clicked.connect(self.updateNoDataComboBox)
         self.nd_combox.currentIndexChanged.connect(
             lambda i: self.nd_thresh_spbox.setEnabled(i != -1))
-        self.nd_clear_btn.clicked.connect(lambda: self.nd_combox.setCurrentIndex(-1))
+        self.nd_clear_btn.clicked.connect(
+            lambda: self.nd_combox.setCurrentIndex(-1))
         
     # Algorithm and advanced settings [Advanced Refiner]
         self.algm_combox.currentTextChanged.connect(self.onAlgorithmChanged)
@@ -5121,7 +5150,8 @@ class PhaseRefiner(DraggableTool):
                                                 self._variance_colors, '')
 
     # Compute original phase info
-        orig_pixels = np.count_nonzero((self._minmap_backup.minmap == self._phase))
+        orig_pixels = np.count_nonzero((
+            self._minmap_backup.minmap == self._phase))
         if orig_pixels == 0:
             orig_amount = 0.0
         else:
@@ -5139,11 +5169,11 @@ class PhaseRefiner(DraggableTool):
         prev_amount = 100 * prev_pixels / refined_map.size
 
         if curr_pixels > prev_pixels:
-            icon = r'Icons/decrease.png'
+            icon = str(style.ICONS.get('CARET_DOWN_RED'))
         elif curr_pixels < prev_pixels:
-            icon = r'Icons/increase.png'
+            icon = str(style.ICONS.get('CARET_UP_GREEN'))
         else:
-            icon = r'Icons/stationary.png'
+            icon = str(style.ICONS.get('CARET_DOUBLE_YELLOW'))
 
         prev_pixmap = QG.QPixmap(icon).scaled(48, 48, QC.Qt.KeepAspectRatio)
         prev_added = np.count_nonzero(variance_map == 2)
@@ -5366,8 +5396,8 @@ class PhaseRefiner(DraggableTool):
     # Phase mask inversion (if required) only affects morphology operation. The
     # result must then be inverted back. 
         if self.invert_mask_cbox.isChecked():
-            refined = np.invert(iatools.apply_binary_morph(np.invert(phasemap),
-                                                           algm, kernel, roi))
+            refined = np.invert(iatools.apply_binary_morph(
+                np.invert(phasemap), algm, kernel, roi))
         else:
             refined = iatools.apply_binary_morph(phasemap, algm, kernel, roi)
 
@@ -5572,7 +5602,7 @@ class DataViewer(QW.QWidget):
 
     # Set tool title and icon
         self.setWindowTitle('Data Viewer')
-        self.setWindowIcon(QG.QIcon(r'Icons/data_viewer.png'))
+        self.setWindowIcon(style.getIcon('DATA_VIEWER'))
 
     # Set main attributes
         self._displayed = None

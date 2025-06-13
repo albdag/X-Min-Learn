@@ -46,7 +46,7 @@ class AutoRoiDetector(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('ROI detector')
-        self.setWindowIcon(QIcon(r'Icons/roi_detection.png'))
+        self.setWindowIcon(style.getIcon('ROI_SEARCH'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
 
     # Set main attributes
@@ -102,7 +102,8 @@ class AutoRoiDetector(QW.QDialog):
         self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
 
     # Search ROIs button
-        self.search_btn = CW.StyledButton(r'Icons/roi_detection.png', 'Search ROI')
+        self.search_btn = CW.StyledButton(
+            style.getIcon('ROI_SEARCH'), 'Search ROI')
         self.search_btn.setEnabled(False)
 
     # Descriptive Progress bar 
@@ -361,7 +362,8 @@ class AutoRoiDetector(QW.QDialog):
         # Show legend and render canvas
             hand, lbls = self.canvas.ax.get_legend_handles_labels()
             entries = dict(zip(lbls, hand))
-            self.canvas.figure.legend(entries.values(), entries.keys(), loc='lower left')
+            self.canvas.figure.legend(
+                entries.values(), entries.keys(), loc='lower left')
             self.canvas.draw()
 
         # Save the auto detected roimap
@@ -463,7 +465,7 @@ class MergeDatasets(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('Merge Datasets')
-        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
@@ -485,10 +487,10 @@ class MergeDatasets(QW.QDialog):
         self.in_csv_decimal = CW.DecimalPointSelector()
 
     # Import datasets (Styled Button)
-        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import')
+        self.import_btn = CW.StyledButton(style.getIcon('IMPORT'), 'Import')
 
     # Remove datasets (Styled Button)
-        self.remove_btn = CW.StyledButton(r'Icons/remove.png', 'Remove')
+        self.remove_btn = CW.StyledButton(style.getIcon('REMOVE'), 'Remove')
 
     # Input datasets paths list (Styled List Widget)
         self.in_path_list = CW.StyledListWidget()
@@ -500,7 +502,7 @@ class MergeDatasets(QW.QDialog):
         self.out_csv_separator = CW.SeparatorSymbolSelector()
 
     # Save merged dataset (Styled Button)
-        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
+        self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
         self.save_btn.setEnabled(False)
 
     # Input datasets preview area (Document Browser)
@@ -711,7 +713,7 @@ class SubSampleDataset(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('Sub-sample Dataset')
-        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
@@ -731,11 +733,12 @@ class SubSampleDataset(QW.QDialog):
 
         '''
     # Import Dataset (Styled Button)
-        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import dataset')
+        self.import_btn = CW.StyledButton(
+            style.getIcon('IMPORT'), 'Import dataset')
 
     # Imported dataset path (Path Label)
-        self.in_dataset_path = CW.PathLabel(full_display=False, 
-                                            placeholder='No dataset loaded')
+        self.in_dataset_path = CW.PathLabel(
+            full_display=False, placeholder='No dataset loaded')
 
     # Decimal point character selector for imported dataset
         self.in_csv_decimal = CW.DecimalPointSelector()
@@ -761,7 +764,7 @@ class SubSampleDataset(QW.QDialog):
         self.counter_lbl = QW.QLabel()
 
     # Save (Styled Button)
-        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
+        self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
         self.save_btn.setEnabled(False)
 
     # Progress bar (ProgressBar)
@@ -990,7 +993,7 @@ class ImageToInputMap(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('Image To Input Map')
-        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
@@ -1009,10 +1012,10 @@ class ImageToInputMap(QW.QDialog):
 
         '''
     # Import images (Styled Button)
-        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import')
+        self.import_btn = CW.StyledButton(style.getIcon('IMPORT'), 'Import')
         
     # Remove images (Styled Button)
-        self.remove_btn = CW.StyledButton(r'Icons/remove.png', 'Remove')
+        self.remove_btn = CW.StyledButton(style.getIcon('REMOVE'), 'Remove')
         
     # Images list (Styled List Widget)
         self.img_list = CW.StyledListWidget()
@@ -1165,7 +1168,7 @@ class ImageToMineralMap(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('Image To Mineral Map')
-        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
@@ -1185,7 +1188,7 @@ class ImageToMineralMap(QW.QDialog):
 
         '''
     # Import image (Styled Button)
-        self.import_btn = CW.StyledButton(r'Icons/import.png', 'Import')
+        self.import_btn = CW.StyledButton(style.getIcon('IMPORT'), 'Import')
 
     # Image path (Path Label)
         self.path_lbl = CW.PathLabel(full_display=False)
@@ -1201,7 +1204,7 @@ class ImageToMineralMap(QW.QDialog):
         self.legend = CW.Legend()
 
     # Save (Styled Button)
-        self.save_btn = CW.StyledButton(r'Icons\save.png', 'Save')
+        self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
         self.save_btn.setEnabled(False)
 
     # Canvas (Image Canvas)
@@ -1324,7 +1327,7 @@ class ImageToMineralMap(QW.QDialog):
         for n, rgb in enumerate(unique):
             self.progbar.setValue(n + 1)
             mask = (array == rgb).all(axis=1)
-            minmap[mask] = f'{n:05d}' # Ensure correct order of classes in legend
+            minmap[mask] = f'{n:05d}' # Ensure correct classes order in legend
             palette[n] = tuple(rgb)
 
     # Construct mineral map object
@@ -1472,7 +1475,7 @@ class DummyMapsBuilder(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('Dummy Maps Builder')
-        self.setWindowIcon(QIcon(r'Icons/gear.png'))
+        self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
@@ -1521,7 +1524,7 @@ class DummyMapsBuilder(QW.QDialog):
         self.rand_btn = CW.StyledButton(text='Randomize', bg=style.OK_GREEN)
 
     # Save map (Styled Button)
-        self.save_btn = CW.StyledButton(r'Icons/save.png', 'Save')
+        self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
 
     # Preview histogram (Histogram Canvas) 
         self.canvas = plots.HistogramCanvas(wheel_pan=False, wheel_zoom=False)
@@ -1624,7 +1627,7 @@ class Preferences(QW.QDialog):
 
     # Set dialog widget attributes
         self.setWindowTitle('Preferences')
-        self.setWindowIcon(QIcon(r'Icons/wrench.png'))
+        self.setWindowIcon(style.getIcon('WRENCH'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 

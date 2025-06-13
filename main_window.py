@@ -6,7 +6,6 @@ Created on Sun Mar  5 19:31:39 2023
 """
 import gc
 import json
-import os
 import pickle
 import zipfile
 
@@ -35,7 +34,7 @@ class MainWindow(QW.QMainWindow):
     # Set main window properties
         self.resize(1600, 900)
         self.setWindowTitle('New project[*]') 
-        self.setWindowIcon(QG.QIcon(r'Icons/XML_logo.png'))
+        self.setWindowIcon(style.getIcon('LOGO_32X32'))
         self.setDockOptions(self.AllowTabbedDocks)
         self.setAnimated(pref.get_setting('GUI/smooth_animation'))
         self.statusBar()
@@ -113,33 +112,33 @@ class MainWindow(QW.QMainWindow):
         manager_pane = docks.Pane(
             self.dataManager,
             'Data Manager', 
-            QG.QIcon(r'Icons/data_manager.png'),
+            style.getIcon('DATA_MANAGER'),
             scroll=False
         )
         histogram_pane = docks.Pane(
             self.histViewer,
             'Histogram',
-            QG.QIcon(r'Icons/histogram.png')
+            style.getIcon('HISTOGRAM_VIEWER')
         )
         mode_pane = docks.Pane(
             self.modeViewer,
             'Mode',
-            QG.QIcon(r'Icons/mode.png')
+            style.getIcon('MODE_VIEWER')
         )
         roi_pane = docks.Pane(
             self.roiEditor,
             'ROI Editor',
-            QG.QIcon(r'Icons/roi.png')
+            style.getIcon('ROI_EDITOR')
         )
         probmap_pane = docks.Pane(
             self.pmapViewer,
             'Probability Map',
-            QG.QIcon(r'Icons/probmap.png')
+            style.getIcon('PROBABILITY_MAP_VIEWER')
         )
         rgba_pane = docks.Pane(
             self.rgbaViewer,
             'RGBA Map',
-            QG.QIcon(r'Icons/rgba.png')
+            style.getIcon('RGBA_MAP_VIEWER')
         )
         
         self.panes = (manager_pane, histogram_pane, mode_pane, roi_pane, 
@@ -179,22 +178,22 @@ class MainWindow(QW.QMainWindow):
         '''
     # New project
         self.new_project_action = QW.QAction(
-            QG.QIcon(r'Icons/empty.png'), '&New project')
+            style.getIcon('FILE_BLANK'), '&New project')
         self.new_project_action.setShortcut('Ctrl+N')
 
     # Open project
         self.open_project_action = QW.QAction(
-            QG.QIcon(r'Icons/open.png'), '&Open project')
+            style.getIcon('OPEN'), '&Open project')
         self.open_project_action.setShortcut('Ctrl+O')
 
     # Save project
         self.save_project_action = QW.QAction(
-            QG.QIcon(r'Icons/save.png'), '&Save project')
+            style.getIcon('SAVE'), '&Save project')
         self.save_project_action.setShortcut('Ctrl+S')
 
     # Save project as...
         self.save_project_as_action = QW.QAction(
-            QG.QIcon(r'Icons/save_as.png'), '&Save project as...')
+            style.getIcon('SAVE_AS'), '&Save project as...')
         self.save_project_as_action.setShortcut('Ctrl+Shift+S')
 
     # Quit app
@@ -202,22 +201,22 @@ class MainWindow(QW.QMainWindow):
 
     # Import Input Maps 
         self.load_inmaps_action = QW.QAction(
-            QG.QIcon(r'Icons/inmap.png'), '&Input Maps')
+            style.getIcon('INMAP'), '&Input Maps')
         self.load_inmaps_action.setShortcut('Ctrl+I')
 
     # Import Mineral Maps
         self.load_minmaps_action = QW.QAction(
-            QG.QIcon(r'Icons/minmap.png'), '&Mineral Maps')
+            style.getIcon('MINMAP'), '&Mineral Maps')
         self.load_minmaps_action.setShortcut('Ctrl+M')
 
     # Import Masks
         self.load_masks_action = QW.QAction(
-            QG.QIcon(r'Icons/mask.png'), 'Mas&ks')
+            style.getIcon('MASK'), 'Mas&ks')
         self.load_masks_action.setShortcut('Ctrl+K')
 
     # Launch Preferences
         self.pref_action = QW.QAction(
-            QG.QIcon(r'Icons/wrench.png'), 'Preferences')
+            style.getIcon('WRENCH'), 'Preferences')
 
     # Launch Convert Image to Input Map
         self.conv2inmap_action = QW.QAction('Image to Input Map')
@@ -241,25 +240,25 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Dataset Builder
         self.ds_builder_action = QW.QAction(
-            QG.QIcon(r'Icons/compile_dataset.png'), 'Dataset &Builder')
+            style.getIcon('DATASET_BUILDER'), 'Dataset &Builder')
         self.ds_builder_action.setShortcut('Ctrl+Alt+B')
         self.ds_builder_action.setStatusTip('Compile ground truth datasets')
 
     # Launch Model Learner
         self.model_learner_action = QW.QAction(
-            QG.QIcon(r'Icons/model_learner.png'), 'Model &Learner')
+            style.getIcon('MODEL_LEARNER'), 'Model &Learner')
         self.model_learner_action.setShortcut('Ctrl+Alt+L')
         self.model_learner_action.setStatusTip('Build machine learning models')
 
     # Launch Mineral Classifier
         self.classifier_action = QW.QAction(
-            QG.QIcon(r'Icons/classify.png'), 'Mineral &Classifier')
+            style.getIcon('MINERAL_CLASSIFIER'), 'Mineral &Classifier')
         self.classifier_action.setShortcut('Ctrl+Alt+C')
         self.classifier_action.setStatusTip('Predict mineral maps')
 
     # Launch Phase Refiner
         self.refiner_action = QW.QAction(
-            QG.QIcon(r'Icons/refine.png'), 'Phase &Refiner')
+            style.getIcon('PHASE_REFINER'), 'Phase &Refiner')
         self.refiner_action.setShortcut('Ctrl+Alt+R')
         self.refiner_action.setStatusTip('Refine mineral maps')
 
@@ -319,7 +318,7 @@ class MainWindow(QW.QMainWindow):
 
         file_menu.addSeparator()
 
-        import_submenu = file_menu.addMenu(QG.QIcon(r'Icons/import.png'), '&Import...')
+        import_submenu = file_menu.addMenu(style.getIcon('IMPORT'), '&Import...')
         import_submenu.addActions((
             self.load_inmaps_action,
             self.load_minmaps_action,
@@ -338,7 +337,8 @@ class MainWindow(QW.QMainWindow):
         
     # Classification Menu
         class_menu = menu_bar.addMenu('&Classification')
-        class_menu.addActions((self.classifier_action, self.model_learner_action))
+        class_menu.addActions((
+            self.classifier_action, self.model_learner_action))
 
     # Post-classification Menu
         postclass_menu = menu_bar.addMenu('&Post-classification')
@@ -347,7 +347,8 @@ class MainWindow(QW.QMainWindow):
     # Utility Menu
         utility_menu = menu_bar.addMenu('&Utility')
         convert_submenu = utility_menu.addMenu('&Convert')
-        convert_submenu.addActions((self.conv2inmap_action, self.conv2minmap_action))
+        convert_submenu.addActions((
+            self.conv2inmap_action, self.conv2minmap_action))
         utility_menu.addAction(self.dummymap_action)
 
     # View Menu
@@ -392,7 +393,8 @@ class MainWindow(QW.QMainWindow):
             lambda: self.setWindowModified(True))
         
     # Histogram Viewer signals
-        self.histViewer.scalerRangeChanged.connect(lambda: self.setWindowModified(True))
+        self.histViewer.scalerRangeChanged.connect(
+            lambda: self.setWindowModified(True))
 
     # Mode Viewer signal
         self.modeViewer.updateSceneRequested.connect(self.updateScene)
@@ -420,7 +422,8 @@ class MainWindow(QW.QMainWindow):
             lambda: self.setWindowModified(True))
         
     # RGBA Viewer signal
-        self.rgbaViewer.rgbaModified.connect(lambda: self.setWindowModified(True))
+        self.rgbaViewer.rgbaModified.connect(
+            lambda: self.setWindowModified(True))
         
     # Project-related operations (new, open, save) 
         self.new_project_action.triggered.connect(self.newProject)

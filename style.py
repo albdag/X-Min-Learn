@@ -4,9 +4,10 @@ Created on Tue Oct 29 10:41:40 2024
 
 @author: albdag
 """
+from pathlib import Path
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont, QPalette
+from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 
 import preferences as pref
 
@@ -34,6 +35,115 @@ WARN_YELLOW = '#FFCC00'         # (255, 204, 0)
 
 # Histogram mask color
 HIST_MASK = '#FFA500BF'         # (255, 165, 0, alpha=0.75)
+
+
+#  -------------------------------------------------------------------------  #
+#                                  ICONS 
+#  -------------------------------------------------------------------------  #
+
+ICONS = {
+    'ACCURACY': Path('Icons') / 'accuracy.png',
+    'ADD_MASK': Path('Icons') / 'add_mask.png',
+    'ADD_ROI': Path('Icons') / 'add_roi.png',
+    'ARROW_DOWN': Path('Icons') / 'arrow_down.png',
+    'ARROW_UP': Path('Icons') / 'arrow_up.png',
+    'BULLSEYE': Path('Icons') / 'bullseye.png',
+    'CARET_DOUBLE_YELLOW': Path('Icons') / 'caret_double_yellow.png',
+    'CARET_DOWN_RED': Path('Icons') / 'caret_down_red.png',
+    'CARET_UP_GREEN': Path('Icons') / 'caret_up_green.png',
+    'CHEVRON_DOWN': Path('Icons') / 'chevron_down.png',
+    'CHEVRON_UP': Path('Icons') / 'chevron_up.png',
+    'CIRCLE': Path('Icons') / 'circle.png',
+    'CIRCLE_ADD': Path('Icons') / 'circle_add.png',
+    'CIRCLE_ADD_GREEN': Path('Icons') / 'circle_add_green.png',
+    'CIRCLE_DEL_RED': Path('Icons') / 'circle_del_red.png',
+    'CLEAR': Path('Icons') / 'clear.png',
+    'CUBE': Path('Icons') / 'cube.png',
+    'DIAMOND': Path('Icons') / 'diamond.png',
+    'DICE': Path('Icons') / 'dice.png',
+    'EDIT': Path('Icons') / 'edit.png',
+    'EXPORT': Path('Icons') / 'export.png',
+    'FILE_BLANK': Path('Icons') / 'file_blank.png',
+    'FILE_ERROR': Path('Icons') / 'file_error.png',
+    'FIX': Path('Icons') / 'fix.png',
+    'GEAR': Path('Icons') / 'gear.png',
+    'HIDDEN': Path('Icons') / 'hidden.png',
+    'HIGHLIGHT': Path('Icons') / 'highlight.png',
+    'IMPORT': Path('Icons') / 'import.png',
+    'INFO': Path('Icons') / 'info.png',
+    'INMAP': Path('Icons') / 'inmap.png',
+    'INVERT': Path('Icons') / 'invert.png',
+    'LEGEND': Path('Icons') / 'legend.png',
+    'LOG': Path('Icons') / 'log.png',
+    'LOSS': Path('Icons') / 'loss.png',
+    'MASK': Path('Icons') / 'mask.png',
+    'MERGE': Path('Icons') / 'merge.png',
+    'MINMAP': Path('Icons') / 'minmap.png',
+    'OPEN': Path('Icons') / 'open.png',
+    'PALETTE': Path('Icons') / 'palette.png',
+    'PAN': Path('Icons') / 'pan.png',
+    'PERCENT': Path('Icons') / 'percent.png',
+    'PLOT': Path('Icons') / 'plot.png',
+    'PROBMAP': Path('Icons') / 'probmap.png',
+    'RANDOMIZE_COLOR': Path('Icons') / 'randomize_color.png',
+    'RANGE': Path('Icons') / 'range.png',
+    'REFRESH': Path('Icons') / 'refresh.png',
+    'REMOVE': Path('Icons') / 'remove.png',
+    'RENAME': Path('Icons') / 'rename.png',
+    'RGBA': Path('Icons') / 'rgba.png',
+    'ROI': Path('Icons') / 'roi.png',
+    'ROI_SEARCH': Path('Icons') / 'roi_search.png',
+    'ROIMAP': Path('Icons') / 'roimap.png',
+    'ROW_ADD': Path('Icons') / 'row_add.png',
+    'ROW_DEL': Path('Icons') / 'row_del.png',
+    'SAVE': Path('Icons') / 'save.png',
+    'SAVE_AS': Path('Icons') / 'save_as.png',
+    'SCORES': Path('Icons') / 'scores.png',
+    'SQUARE': Path('Icons') / 'square.png',
+    'TABLE': Path('Icons') / 'table.png',
+    'TEST': Path('Icons') / 'test.png',
+    'TEST_SET': Path('Icons') / 'test_set.png',
+    'TICK': Path('Icons') / 'tick.png',
+    'TRAIN_SET': Path('Icons') / 'train_set.png',
+    'VALIDATION_SET': Path('Icons') / 'validation_set.png',
+    'WARNING': Path('Icons') / 'warning.png',
+    'WRENCH': Path('Icons') / 'wrench.png',
+    'ZOOM': Path('Icons') / 'zoom.png',
+    'ZOOM_DEFAULT': Path('Icons') / 'zoom_default.png',
+    'ZOOM_IN': Path('Icons') / 'zoom_in.png',
+    'ZOOM_OUT': Path('Icons') / 'zoom_out.png',
+    
+# logo folder
+    'LOGO_32X32': Path('Icons') / 'logo' / 'logo_32x32.png',
+    'LOGO_512X512': Path('Icons') / 'logo' / 'logo_512x512.png',
+    'LOGO_HD': Path('Icons') / 'logo' / 'logo_hd.png',
+
+# panes folder
+    'DATA_MANAGER': Path('Icons') / 'panes' / 'data_manager.png',
+    'HISTOGRAM_VIEWER': Path('Icons') / 'panes' / 'histogram_viewer.png',
+    'MODE_VIEWER': Path('Icons') / 'panes' / 'mode_viewer.png',
+    'PROBABILITY_MAP_VIEWER': Path('Icons') / 'panes' / 'probability_map_viewer.png',
+    'RGBA_MAP_VIEWER': Path('Icons') / 'panes' / 'rgba_map_viewer.png',
+    'ROI_EDITOR': Path('Icons') / 'panes' / 'roi_editor.png',
+
+# qss folder
+    'CARET_DOWN': Path('Icons') / 'qss' / 'caret_down.png',
+    'CARET_DOWN_BLACK': Path('Icons') / 'qss' / 'caret_down_black.png',
+    'CARET_RIGHT': Path('Icons') / 'qss' / 'caret_right.png',
+    'CLOSE': Path('Icons') / 'qss' / 'close.png',
+    'RADIOBTN_CHECKED': Path('Icons') / 'qss' / 'radiobtn_checked.png',
+    'TICK_BLACK': Path('Icons') / 'qss' / 'tick_black.png',
+    'TOOLBAR_HANDLE_H': Path('Icons') / 'qss' / 'toolbar_handle_h.png',
+    'TOOLBAR_HANDLE_V': Path('Icons') / 'qss' / 'toolbar_handle_v.png',
+    'UNDOCK': Path('Icons') / 'qss' / 'undock.png',
+
+# tools folder
+    'DATA_VIEWER': Path('Icons') / 'tools' / 'data_viewer.png',
+    'DATASET_BUILDER': Path('Icons') / 'tools' / 'dataset_builder.png',
+    'MINERAL_CLASSIFIER': Path('Icons') / 'tools' / 'mineral_classifier.png',
+    'MODEL_LEARNER': Path('Icons') / 'tools' / 'model_learner.png',
+    'PHASE_REFINER': Path('Icons') / 'tools' / 'phase_refiner.png'
+}
 
 
 #  -------------------------------------------------------------------------  #
@@ -79,10 +189,10 @@ SS_BUTTON = (
 
 
 SS_RADIOBUTTON = (
-    '''
-    QRadioButton::indicator::checked {
-        image: url(Icons/radiobtn_checked.png);
-    }
+    f'''
+    QRadioButton::indicator::checked {{
+        image: url({ICONS.get('RADIOBTN_CHECKED').as_posix()});
+    }}
     '''
 )
 
@@ -154,11 +264,11 @@ SS_COMBOX = (
     }}
 
     QComboBox::down-arrow {{
-        image: url(Icons/arrowDown.png);
+        image: url({ICONS.get('CARET_DOWN').as_posix()});
     }}
 
     QComboBox::down-arrow:!enabled {{
-        image: url(Icons/arrowDown_dark.png);
+        image: url({ICONS.get('CARET_DOWN_BLACK').as_posix()});
     }}
 
     QComboBox QAbstractItemView {{
@@ -214,7 +324,7 @@ SS_MENU = (
     }}
 
     QMenu::indicator:checked {{
-        image: url(Icons/done.png);
+        image: url({ICONS.get('TICK_BLACK').as_posix()});
     }}
     '''
 )
@@ -438,13 +548,13 @@ SS_MAINTOOLBAR = (
 
     QToolBar::handle:top,
     QToolBar::handle:bottom {{
-        image: url(Icons/toolbar_handle_h.png);
+        image: url({ICONS.get('TOOLBAR_HANDLE_H').as_posix()});
         width: 10px;
     }}
 
     QToolBar::handle:left,
     QToolBar::handle:right {{
-        image: url(Icons/toolbar_handle_v.png);
+        image: url({ICONS.get('TOOLBAR_HANDLE_V').as_posix()});
         height: 10px;
     }}
 
@@ -527,7 +637,7 @@ SS_TABWIDGET = (
     }}
 
     QTabBar::close-button {{
-        image: url(Icons/close_pane.png);
+        image: url({ICONS.get('CLOSE').as_posix()});
         subcontrol-position: right;
     }}
 
@@ -702,8 +812,8 @@ SS_PANE = (
     f'''
     QDockWidget {{
         font-weight: bold;
-        titlebar-close-icon: url(Icons/close_pane.png);
-        titlebar-normal-icon: url(Icons/undock_pane.png);
+        titlebar-close-icon: url({ICONS.get('CLOSE').as_posix()});
+        titlebar-normal-icon: url({ICONS.get('UNDOCK').as_posix()});
     }}
 
     QDockWidget::title {{
@@ -760,25 +870,42 @@ SS_PANE = (
 
 SS_DATAMANAGER = (
     SS_MENU +
-    '''
+    f'''
     QTreeWidget::branch:has-children:!has-siblings:closed,
-    QTreeWidget::branch:closed:has-children:has-siblings {
+    QTreeWidget::branch:closed:has-children:has-siblings {{
         border-image: none;
-        image: url(Icons/arrowRight.png);
-    }
+        image: url({ICONS.get('CARET_RIGHT').as_posix()});
+    }}
 
     QTreeWidget::branch:open:has-children:!has-siblings,
-    QTreeWidget::branch:open:has-children:has-siblings {
+    QTreeWidget::branch:open:has-children:has-siblings {{
         border-image: none;
-        image: url(Icons/arrowDown.png);
-    }
+        image: url({ICONS.get('CARET_DOWN').as_posix()});
+    }}
     '''
 )
 
 
-#  -------------------------------------------------------------------------  #
-#                                  FONT 
-#  -------------------------------------------------------------------------  #
+
+def getIcon(name: str) -> QIcon:
+    '''
+    Construct and return the QIcon associated with key 'name' (see 'ICONS'
+    dictionary for valid keys). If key is invalid, return an empty QIcon.
+
+    Parameters
+    ----------
+    name : str
+        A valid icon key.
+
+    Returns
+    -------
+    QIcon
+        The icon associated with 'name', or an empty icon if 'name' is invalid.
+
+    '''
+    path = ICONS.get(name)
+    return QIcon(None) if path is None else QIcon(str(path))
+
 
 def getFont(family: str = 'default') -> QFont:
     '''
@@ -807,10 +934,6 @@ def getFont(family: str = 'default') -> QFont:
 
     return font
 
-
-#  -------------------------------------------------------------------------  #
-#                                PALETTE 
-#  -------------------------------------------------------------------------  #
 
 def getPalette(kind: str = 'default') -> QPalette:
     '''
