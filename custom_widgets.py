@@ -4173,8 +4173,7 @@ class DatasetDesigner(StyledTable):
             self.setCellWidget(row, col, wid)
 
     # Initialize mineral map column with MineralMap file filter
-        mmap_filter = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
-        wid = StatusFileLoader(mmap_filter)
+        wid = StatusFileLoader('Mineral maps (*.mmp);;ASCII maps (*.txt *.gz)')
         self.setCellWidget(row, n_columns - 1, wid)
 
     # Set resize mode of vertical header to ResizeToContent(3)

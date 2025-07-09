@@ -837,7 +837,7 @@ class DataManager(QW.QTreeWidget):
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
-            ftypes = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
+            ftypes = 'Mineral maps (*.mmp);;ASCII maps (*.txt *.gz)'
             paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get()
             if not paths:
                 return
@@ -847,8 +847,8 @@ class DataManager(QW.QTreeWidget):
         for n, p in enumerate(paths, start=1):
             try:
                 mmap = MineralMap.load(p)
-                # Convert legacy mineral maps to new file format (mmp)
-                if mmap.is_obsolete():
+                # Convert ASCII-style mineral maps to preferred file format
+                if mmap.is_ascii_style():
                     mmap.save(cf.extend_filename(p, '', '.mmp'))
                 group.minmaps.addData(mmap)
         
@@ -1070,16 +1070,16 @@ class DataManager(QW.QTreeWidget):
         '''
     # Identify correct item data type by looking at its subgroup, because item
     # can contain None data if they failed to be loaded
-        subgroup = item.parent()
-        subgroup_name = subgroup.name
-        if subgroup_name == 'Input Maps':
-            ftype = 'ASCII maps (*.txt *.gz)'
-        elif subgroup_name == 'Mineral Maps':
-            ftype = 'Mineral maps (*.mmp);;Legacy mineral maps (*.txt *.gz)'
-        elif subgroup_name == 'Masks':
-            ftype = 'Masks (*.msk);;Text file (*.txt)'
-        else:
-            return
+        subgroup = item.subgroup()
+        match subgroup.name:
+            case 'Input Maps':
+                ftype = 'ASCII maps (*.txt *.gz)'
+            case 'Mineral Maps':
+                ftype = 'Mineral maps (*.mmp);;ASCII maps (*.txt *.gz)'
+            case 'Masks':
+                ftype = 'Masks (*.msk);;Text file (*.txt)'
+            case _:
+                return
     
     # Do nothing if path is invalid or file dialog is canceled
         path = CW.FileDialog(self, 'open', 'Fix Source', ftype).get()
