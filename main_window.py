@@ -889,16 +889,54 @@ class MainWindow(QW.QMainWindow):
             Whether the project was saved or not.
 
         '''
-    # Send warning and ask for user's choice if Data Manager has unsaved data
-        if self.dataManager.hasUnsavedData():
+    # Prompt user to deal with unsaved Data Manager objects
+        n_obj = len(unsaved_data_objects := self.dataManager.unsavedData())
+        for n in range(n_obj):
+            data_obj = unsaved_data_objects.pop(0)
+            name = data_obj.get('name')
+            subgr = data_obj.subgroup().name
+            group = data_obj.subgroup().group().name
             text = (
-                'Unsaved edits displayed in the Data Manager will not be saved '
-                'automatically. Proceed anyway?'
+                f'Found unsaved data in Data Manager:\n{group} – {subgr} – '
+                f'{name}.\nSave it? ({n_obj - n - 1} more found)'
             )
-            choice = CW.MsgBox(self, 'QuestWarn', text)  
-            if choice.no():
-                return False    
-            
+            btns = (
+                QW.QMessageBox.Yes
+                | QW.QMessageBox.YesToAll
+                | QW.QMessageBox.No
+                | QW.QMessageBox.NoToAll
+                | QW.QMessageBox.Cancel
+            )
+            def_btn = QW.QMessageBox.Cancel
+            choice = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)    
+            match choice.clickedButton().text():
+                case '&Yes':
+                    self.dataManager.saveData(data_obj)
+                    continue
+                case 'Yes to &All':
+                    for obj in [data_obj] + unsaved_data_objects:
+                        self.dataManager.saveData(obj)
+                case '&No':
+                    continue
+                case 'N&o to All':
+                    pass
+                case 'Cancel': # also triggers if "X" or "Esc" are pressed
+                    return False
+            break
+
+    # Prompt user to deal with unsaved ROI map data
+        if self.roiEditor.isRoiMapUnsaved():
+            text = 'Found unsaved ROI data in the current ROI map. Save it?'
+            btns = QW.QMessageBox.Yes | QW.QMessageBox.No | QW.QMessageBox.Cancel
+            def_btn = QW.QMessageBox.Cancel
+            choice = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)
+            if choice.yes():
+                self.roiEditor.saveRoiMap()
+            elif choice.no():
+                pass
+            else: # dialog is canceled
+                return False
+
     # Do not save the project if the filepath is invalid
         path = self.project_path
         if not overwrite or path is None:

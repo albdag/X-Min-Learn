@@ -712,7 +712,6 @@ class DataManager(QW.QTreeWidget):
             choose a new path. The default is True.
 
         '''
-
         item_data, path = item.get('data', 'filepath')
 
     # Select filepath if overwrite is not requested (= saveAs), path is None or
@@ -734,8 +733,9 @@ class DataManager(QW.QTreeWidget):
     
     # Otherwise, double check if user really wants to overwrite the file 
         else:
-            choice = CW.MsgBox(self, 'Quest', 'Overwrite this file?')
-            if choice.no(): 
+            text = f'Source data ({path}) will be irreversibly altered. Proceed?'
+            choice = CW.MsgBox(self, 'QuestWarn', text)
+            if choice.no():
                 return
 
     # Save the data
@@ -751,19 +751,19 @@ class DataManager(QW.QTreeWidget):
         
         finally:
             self.refreshView()
+    
 
-
-    def hasUnsavedData(self) -> bool:
+    def unsavedData(self) -> list[CW.DataObject]:
         '''
-        Check if the manager contains unsaved data.
+        Get a list of all Data Objects that contain unsaved data.
 
         Returns
         -------
-        bool
-            Whether manager contains unsaved data.
+        list[CW.DataObject]
+            List of edited Data Objects.
 
         '''
-        return any((obj.get('is_edited') for obj in self.getAllDataObjects()))
+        return [o for o in self.getAllDataObjects() if o.get('is_edited')]
 
 
     def loadInputMaps(
@@ -1259,7 +1259,11 @@ class DataManager(QW.QTreeWidget):
                 else:
                     attributes = ('name', 'filepath')
 
-                data = [c.get(*attributes) for c in subgr.getChildren()]
+                data = []
+                for obj in subgr.getChildren():
+                    # Don't save data objects with null filepath
+                    if (components := obj.get(*attributes))[1] is not None:
+                        data.append(components)
                 config[group.name][subgr.name] = data
         
         return config
@@ -3115,8 +3119,8 @@ class RoiEditor(QW.QWidget):
         config['Selector']['Extents'] = self.rect_sel.extents
         config['Selector']['FixedExtents'] = self.current_selection
         config['Selector']['Active'] = self.rect_sel.active
-
-        config['RoiMap']['Path'] = self.mappath.fullpath
+        
+        config['RoiMap']['Path'] = self.currentRoiMapPath
         config['RoiMap']['Visible'] = not self.hideroi_btn.isChecked()
 
         config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
@@ -3148,7 +3152,7 @@ class RoiEditor(QW.QWidget):
         self.removeCurrentRoiMap()
         self.hideroi_btn.setChecked(not config['RoiMap']['Visible'])
 
-        if (roimap_path := config['RoiMap']['Path']) != '':
+        if (roimap_path := config['RoiMap']['Path']) is not None:
             self.loadRoiMap(roimap_path) # this also updates canvas and barplot
         else:
             self.barCanvas.clear_canvas()        
