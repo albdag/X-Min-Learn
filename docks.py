@@ -790,6 +790,7 @@ class DataManager(QW.QTreeWidget):
             if not paths:
                 return
 
+    # Data loading routine
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
@@ -797,7 +798,8 @@ class DataManager(QW.QTreeWidget):
                 xmap = InputMap.load(p)
                 group.inmaps.addData(xmap)
         
-            except FileNotFoundError: # add item with "not found" status
+            except FileNotFoundError:
+                # Add item with "not found" status
                 item = CW.DataObject(None)
                 item.setInvalidFilepath(p)
                 group.inmaps.addChild(item)
@@ -841,18 +843,29 @@ class DataManager(QW.QTreeWidget):
             paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get()
             if not paths:
                 return
-        
+    
+    # Data loading routine
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
             try:
                 mmap = MineralMap.load(p)
-                # Convert ASCII-style mineral maps to preferred file format
+                # Ask user confirm if a large number of classes is detected
+                count_warn = pref.get_setting('data/warn_phase_count')
+                if (cnt := mmap.phase_count()) > count_warn:
+                    txt = f'{cnt} mineral classes detected for {p}. Proceed?'
+                    dtxt = '\n'.join(mmap.get_phases())
+                    # Make pbar the parent of msgbox for it to be responsive
+                    choice = CW.MsgBox(pbar, 'QW', txt, dtxt, 'X-Min Learn')
+                    if choice.no():
+                        continue
+                # Convert ASCII-style maps to .mmp
                 if mmap.is_ascii_style():
                     mmap.save(cf.extend_filename(p, '', '.mmp'))
                 group.minmaps.addData(mmap)
         
-            except FileNotFoundError: # add item with "not found" status
+            except FileNotFoundError:
+                # Add item with "not found" status
                 item = CW.DataObject(None)
                 item.setInvalidFilepath(p)
                 group.minmaps.addChild(item)
@@ -896,7 +909,8 @@ class DataManager(QW.QTreeWidget):
             paths = CW.FileDialog(self, 'open', 'Load Masks', ft, True).get()
             if not paths:
                 return
-        
+    
+    # Data loading routine
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
         errors = []
         for n, p in enumerate(paths, start=1):
@@ -904,7 +918,8 @@ class DataManager(QW.QTreeWidget):
                 mask = Mask.load(p)
                 group.masks.addData(mask)
         
-            except FileNotFoundError: # add item with "not found" status
+            except FileNotFoundError:
+                # Add item with "not found" status
                 item = CW.DataObject(None)
                 item.setInvalidFilepath(p)
                 group.masks.addChild(item)

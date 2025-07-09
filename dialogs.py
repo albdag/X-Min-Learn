@@ -1715,6 +1715,12 @@ class Preferences(QW.QDialog):
         self.decimal_spbox.setToolTip('Number of displayed decimal places')
         self.decimal_spbox.setValue(self._decimal_prec)
 
+    # Phase count warning (Styled Spin Box)
+        self.phase_count_spbox = CW.StyledSpinBox(15, 100)
+        tip = 'On mineral map loading, warn user if phases exceed this amount'
+        self.phase_count_spbox.setToolTip(tip)
+        self.phase_count_spbox.setValue(self._warn_phase_count)
+
     # Extended log (Check Box)
         self.extlog_cbox = QW.QCheckBox('Extended model log')
         self.extlog_cbox.setToolTip('Save advanced info in custom model logs')
@@ -1724,6 +1730,7 @@ class Preferences(QW.QDialog):
         data_form = QW.QFormLayout()
         data_form.setSpacing(15)
         data_form.addRow('Decimals', self.decimal_spbox)
+        data_form.addRow('Phase count warning', self.phase_count_spbox)
         data_form.addRow(self.extlog_cbox)
         data_scroll = CW.GroupScrollArea(data_form, tight=True, frame=False)
 
@@ -1788,6 +1795,10 @@ class Preferences(QW.QDialog):
     # Decimal precision
         self.decimal_spbox.valueChanged.connect(
             lambda v: setattr(self, '_decimal_prec', v))
+    
+    # Phase count warning
+        self.phase_count_spbox.valueChanged.connect(
+            lambda v: setattr(self, '_warn_phase_count', v))
         
     # Extended model logs
         self.extlog_cbox.stateChanged.connect(
@@ -1813,6 +1824,7 @@ class Preferences(QW.QDialog):
         self._mask_merge_type = pref.get_setting('plots/mask_merging_rule')
         self._decimal_prec = pref.get_setting('data/decimal_precision')
         self._extended_log = pref.get_setting('data/extended_model_log')
+        self._warn_phase_count = pref.get_setting('data/warn_phase_count')
 
 
     def writeSettings(self) -> None:
@@ -1828,6 +1840,7 @@ class Preferences(QW.QDialog):
         pref.edit_setting('plots/mask_merging_rule', self._mask_merge_type)
         pref.edit_setting('data/decimal_precision', self._decimal_prec)
         pref.edit_setting('data/extended_model_log', self._extended_log)
+        pref.edit_setting('data/warn_phase_count', self._warn_phase_count)
 
 
     def changeRoiIconColor(self) -> None:

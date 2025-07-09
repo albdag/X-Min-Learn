@@ -3015,6 +3015,27 @@ class PopUpProgBar(QW.QProgressDialog):
             Whether the dialog should be deleted after it has been hidden. The
             default is True.
 
+        Example
+        -------
+        To display another dialog over this progress bar dialog while keeping 
+        it responsive, set this dialog as its parent:
+
+        # Construct the progress bar dialog
+        parent_widget = PyQt5.QtWidgets.QWidget()
+        n_iter = 5
+        pbar = PopUpProgBar(parent_widget, n_iter)
+
+        # Run a processing iteration
+        result = 0
+        for i in range(n_iter):
+            try:
+                result += 1/i
+            except ZeroDivisionError:
+                # Set 'pbar' as the message box's parent <<--[ RELEVANT CODE ]
+                MsgBox(pbar, 'Info', f'{i} caused an error. Skipped.')
+            finally:
+                pbar.increase()
+
         '''
     # Initialize custom progress dialog. Cancel button is forced to be None.
         flags = QC.Qt.Tool | QC.Qt.WindowTitleHint | QC.Qt.WindowStaysOnTopHint

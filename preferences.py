@@ -19,6 +19,7 @@ DEFAULT_SETTINGS = {
     'plots/mask_merging_rule': ('intersection', str),
     'data/extended_model_log': (False, bool),
     'data/decimal_precision': (3, int),
+    'data/warn_phase_count': (25, int),
     'system/in_path': ('.\\', str),
     'system/out_path': ('.\\', str),
 }
