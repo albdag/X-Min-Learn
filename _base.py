@@ -1020,7 +1020,7 @@ class RoiMap():
 
     _DTYPE = 'U8'
     _ND = ''
-    _FILEXT = ('.rmp')
+    _FILEXT = ('.rmp', )
 
     def __init__(
         self,
@@ -1083,8 +1083,8 @@ class RoiMap():
 
         _, filext = os.path.splitext(filepath)
 
-    # Proper file extension (.rmp)
-        if filext == cls._FILEXT:
+    # Proper file extensions (just .rmp)
+        if filext in cls._FILEXT: 
             file = np.load(filepath, allow_pickle=True)
             map_array = file['map_array']
             roilist = file['roilist'].tolist()
@@ -1402,7 +1402,7 @@ class RoiMap():
 
         '''
         with open (outpath, 'wb') as op:
-            if (ext := os.path.splitext(outpath)[1]) != self._FILEXT:
+            if (ext := os.path.splitext(outpath)[1]) not in self._FILEXT:
                 raise ValueError(f'Unsupported file extension: {ext}.')
             
             roilist = np.array(self.roilist, object)
