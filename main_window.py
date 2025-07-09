@@ -201,12 +201,12 @@ class MainWindow(QW.QMainWindow):
 
     # Import Input Maps 
         self.load_inmaps_action = QW.QAction(
-            style.getIcon('INMAP'), '&Input Maps')
+            style.getIcon('STACK'), '&Input Maps')
         self.load_inmaps_action.setShortcut('Ctrl+I')
 
     # Import Mineral Maps
         self.load_minmaps_action = QW.QAction(
-            style.getIcon('MINMAP'), '&Mineral Maps')
+            style.getIcon('MINERAL'), '&Mineral Maps')
         self.load_minmaps_action.setShortcut('Ctrl+M')
 
     # Import Masks

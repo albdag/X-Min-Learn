@@ -369,11 +369,11 @@ class MineralClassifier(DraggableTool):
         self.data_tabwid.tabBar().setExpanding(True)
         self.data_tabwid.tabBar().setDocumentMode(True)
         self.data_tabwid.addTab(
-            self.inmaps_selector, style.getIcon('INMAP'), title='INPUT MAPS')
+            self.inmaps_selector, style.getIcon('STACK'), title='INPUT MAPS')
         self.data_tabwid.addTab(
             mask_data_grid, style.getIcon('MASK'), title='MASK')
         self.data_tabwid.addTab(
-            output_data_grid, style.getIcon('MINMAP'), title='OUTPUT MAPS')
+            output_data_grid, style.getIcon('MINERAL'), title='OUTPUT MAPS')
         data_group = CW.CollapsibleArea(
             self.data_tabwid, 'Data panel', collapsed=False)
 

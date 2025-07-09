@@ -205,10 +205,10 @@ class DataManager(QW.QTreeWidget):
         # Load data submenu
             load_submenu = menu.addMenu(style.getIcon('IMPORT'), 'Import...')
         # - Input maps
-            load_submenu.addAction(style.getIcon('INMAP'), 'Input maps', 
+            load_submenu.addAction(style.getIcon('STACK'), 'Input maps', 
                                    lambda: self.loadData(item.inmaps))
         # - Mineral maps
-            load_submenu.addAction(style.getIcon('MINMAP'), 'Mineral maps',
+            load_submenu.addAction(style.getIcon('MINERAL'), 'Mineral maps',
                                    lambda: self.loadData(item.minmaps))
         # - Masks
             load_submenu.addAction(style.getIcon('MASK'), 'Masks',

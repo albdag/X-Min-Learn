@@ -50,9 +50,9 @@ class DataGroup(QW.QTreeWidgetItem):
 
     # Add the subgroups
         self.inmaps = DataSubGroup('Input Maps')
-        self.inmaps.setIcon(0, style.getIcon('INMAP'))
+        self.inmaps.setIcon(0, style.getIcon('STACK'))
         self.minmaps = DataSubGroup('Mineral Maps')
-        self.minmaps.setIcon(0, style.getIcon('MINMAP'))
+        self.minmaps.setIcon(0, style.getIcon('MINERAL'))
         self.masks = DataSubGroup('Masks')
         self.masks.setIcon(0, style.getIcon('MASK'))
         # add self.points = DataSubGroup('Point Analysis')
