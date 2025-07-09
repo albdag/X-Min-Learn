@@ -1059,6 +1059,30 @@ class RoiMap():
         self.update_class_counter()
 
 
+    def __eq__(self, value: object) -> bool:
+        '''
+        Reimplementation of equality method.
+
+        Parameters
+        ----------
+        value : object
+            The object to be compared with this ROI map.
+
+        Returns
+        -------
+        bool
+            Whether the two objects contain the same ROI map data.
+
+        '''
+        if isinstance(value, RoiMap):
+            return (
+                np.array_equal(value.map, self.map) 
+                and value.roilist == self.roilist
+            )
+        else:
+            return False
+
+
     @classmethod
     def load(cls, filepath: str) -> 'RoiMap':
         '''

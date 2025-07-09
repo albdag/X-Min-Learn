@@ -2331,6 +2331,22 @@ class RoiEditor(QW.QWidget):
     # List slicing to avoid rows idx repetitions (there are 2 columns in table)
         selectedIndices = [item.row() for item in selectedItems[::2]]
         return selectedIndices
+    
+
+    @property
+    def currentRoiMapPath(self) -> str | None:
+        '''
+        Get the filepath to the current ROI map.
+
+        Returns
+        -------
+        str or None
+            Filepath to current ROI map.
+
+        '''
+        if self.current_roimap is None:
+            return None
+        return self.current_roimap.filepath
 
 
     def _redraw(self) -> None:
@@ -2975,8 +2991,8 @@ class RoiEditor(QW.QWidget):
     def unloadRoiMap(self) -> None:
         '''
         Wrapper method to easily remove from memory the currently loaded ROI
-        map, if it exists. This method requires a user confirm . This method
-        also redraws the canvas.
+        map, if it exists. This method requires a user confirm if ROI map has
+        unsaved data. This method also redraws the canvas.
 
         '''
     # Do nothing if no ROI map is loaded
@@ -2984,12 +3000,16 @@ class RoiEditor(QW.QWidget):
             return
     
     # Ask for user confirmation
-        warn_text = 'Remove current ROI map? Unsaved changes will be lost.'
-        choice = CW.MsgBox(self, 'QuestWarn', warn_text)
-        if choice.yes():
-            self.removeCurrentRoiMap()
-            self.updateBarPlot()
-            self._redraw()
+        if self.isRoiMapUnsaved():
+            warn_text = 'Remove current ROI map? Unsaved changes will be lost.'
+            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
+            if choice.no():
+                return
+    
+    # Unload ROI map and redraw the canvas
+        self.removeCurrentRoiMap()
+        self.updateBarPlot()
+        self._redraw()
 
 
     def saveRoiMap(self, save_as: bool = False) -> None:
@@ -3012,7 +3032,7 @@ class RoiEditor(QW.QWidget):
     # Save ROI map to a new file if it was requested (save_as = True) and/or
     # if it was never saved before (= it has not a valid filepath). Otherwise,
     # save it to its current filepath (overwrite).
-        if not save_as and (path := self.current_roimap.filepath) is not None:
+        if not save_as and (path := self.currentRoiMapPath) is not None:
             outpath = path
         else:
             ftype = 'ROI maps (*.rmp)'
@@ -3026,6 +3046,34 @@ class RoiEditor(QW.QWidget):
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
 
+
+    def isRoiMapUnsaved(self):
+        '''
+        Check if current ROI map has unsaved data.
+
+        Returns
+        -------
+        bool
+            Whether current ROI map data is unsaved.
+
+        '''
+    # If no ROI map is loaded, it cannot be unsaved
+        if self.current_roimap is None:
+            return False
+    
+    # If current ROI map has no valid filepath, it is unsaved
+        if (roimap_path := self.currentRoiMapPath) is None:
+            return True
+        
+    # If current ROI map has a valid but broken filepath, it is unsaved
+        try:
+            saved_roimap = RoiMap.load(roimap_path)
+        except Exception: # path deleted, moved, renamed or with broken data
+            return True 
+
+    # Check if saved ROI map data differs from current ROI map data
+        return saved_roimap != self.current_roimap
+            
 
     def resetConfig(self) -> None:
         '''
