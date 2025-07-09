@@ -197,7 +197,7 @@ class DataManager(QW.QTreeWidget):
 
         # Clear all
             menu.addAction(
-                style.getIcon('REMOVE'), 'Delete all', self.clearAll)
+                style.getIcon('REMOVE'), 'Remove all', self.clearAll)
 
     # CONTEXT MENU ON GROUP
         elif isinstance(item, CW.DataGroup):
@@ -227,7 +227,7 @@ class DataManager(QW.QTreeWidget):
 
         # Delete selected groups
             menu.addAction(
-                style.getIcon('REMOVE'), 'Delete', self.delSelectedGroups)
+                style.getIcon('REMOVE'), 'Remove', self.delSelectedGroups)
 
     # CONTEXT MENU ON SUBGROUP
         elif isinstance(item, CW.DataSubGroup):

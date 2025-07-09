@@ -1206,7 +1206,7 @@ class RoiMap():
 
     def rename_roi(self, idx: int, new_name: str) -> None:
         '''
-        Rename ROI at index <idx>.
+        Rename ROI at index 'idx'.
 
         Parameters
         ----------

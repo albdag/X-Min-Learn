@@ -1029,9 +1029,9 @@ class MainWindow(QW.QMainWindow):
             return CW.MsgBox(self, 'Crit', 'Failed to open project.', str(e))
         
     # Ask for user's choice if the project and the app version do not coincide
-        if (vers := project_info['Version']) != QW.qApp.applicationVersion():
-            text = f'This project was saved in a different version: {vers}. Proceed?'
-            choice = CW.MsgBox(self, 'QuestWarn',  text)
+        if (v := project_info['Version']) != QW.qApp.applicationVersion():
+            text = f'This project is saved in a different version: {v}. Load?'
+            choice = CW.MsgBox(self, 'QuestWarn', text)
             if choice.no():
                 return
 
@@ -1107,7 +1107,7 @@ class MainTabWidget(QW.QTabWidget):
         Central widget of the X-Min Learn window. It is a reimplementation of a
         QTabWidget, customized to accept drag and drop events of its own tabs. 
         Such tabs are the major X-Min Learn windows, that can be attached to 
-        this widget or detached and visualized as separated windows. See the 
+        this widget or detached and visualized as stand-alone windows. See the 
         "DraggableTool" class in "tools.py" module for more details.
 
         Parameters
@@ -1176,7 +1176,7 @@ class MainTabWidget(QW.QTabWidget):
         Returns
         -------
         wid : QWidget or None
-            The widget in the tab page or None if <index> is out of range.
+            The widget in the tab page or None if 'index' is out of range.
 
         '''
         scroll_area = self.scrollArea(index)
