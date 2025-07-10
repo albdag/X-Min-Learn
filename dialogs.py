@@ -1626,6 +1626,7 @@ class Preferences(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(420, 580)
         self.setWindowTitle('Preferences')
         self.setWindowIcon(style.getIcon('WRENCH'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
@@ -1635,7 +1636,6 @@ class Preferences(QW.QDialog):
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
         
 
@@ -1658,13 +1658,13 @@ class Preferences(QW.QDialog):
 
     # Interface tab (Group Scroll Area)
         gui_form = QW.QFormLayout()
-        gui_form.setVerticalSpacing(15)
+        gui_form.setSpacing(15)
         gui_form.addRow('Font size', self.fontsize_spbox)
         gui_form.addRow('Smooth resize', self.smooth_cbox)
         gui_scroll = CW.GroupScrollArea(gui_form, tight=True, frame=False)
 
 #  -------------------------------------------------------------------------  #
-#                              PLOTS SETTINGS
+#                           PLOT STYLE SETTINGS
 #  -------------------------------------------------------------------------  #
     # ROI color (Styled Button)
         self.roi_col_btn = CW.StyledButton(CW.ColorIcon(self._roi_col))
@@ -1686,25 +1686,26 @@ class Preferences(QW.QDialog):
         self.mask_merge_btns.button(0).setToolTip(tip1)
         self.mask_merge_btns.button(1).setToolTip(tip2)
 
-    # ROI group (Group Area)
+    # ROI group (Collapsible Area)
         roi_form = QW.QFormLayout()
-        roi_form.setVerticalSpacing(15)
+        roi_form.setSpacing(15)
         roi_form.addRow('Color', self.roi_col_btn)
         roi_form.addRow('Selection color', self.roi_selcol_btn)
         roi_form.addRow(self.roi_filled_cbox)
-        roi_group = CW.GroupArea(roi_form, 'ROI')
+        roi_group = CW.CollapsibleArea(roi_form, 'ROI', collapsed=False)
 
-    # Mask group (Group Area)
+    # Mask group (Collapsible Area)
         mask_form = QW.QFormLayout()
-        mask_form.setVerticalSpacing(15)
-        mask_form.addRow('Default merging', self.mask_merge_btns)
-        mask_group = CW.GroupArea(mask_form, 'Mask')
+        mask_form.setSpacing(15)
+        mask_form.addRow('Default merge', self.mask_merge_btns)
+        mask_group = CW.CollapsibleArea(mask_form, 'Mask', collapsed=False)
 
     # Plots tab (Group Scroll Area)
         plots_vbox = QW.QVBoxLayout()
         plots_vbox.setSpacing(10)
         plots_vbox.addWidget(roi_group)
         plots_vbox.addWidget(mask_group)
+        plots_vbox.addStretch(1)
         plots_scroll = CW.GroupScrollArea(plots_vbox, tight=True, frame=False)
 
 #  -------------------------------------------------------------------------  #
@@ -1757,7 +1758,7 @@ class Preferences(QW.QDialog):
         tabwid.tabBar().setExpanding(True)
         tabwid.tabBar().setDocumentMode(True)
         tabwid.addTab(gui_scroll, title='Interface')
-        tabwid.addTab(plots_scroll, title='Plots')
+        tabwid.addTab(plots_scroll, title='Plot Style')
         tabwid.addTab(data_scroll, title='Data')
 
     # Dialog buttons layout
