@@ -3580,7 +3580,6 @@ class DocumentBrowser(QW.QWidget):
     # Set main attributes
         self.readonly = readonly
         self.toolbar_visible = toolbar
-        self._font = QG.QFont()
         self.placeholder_text = placeholder
 
     # Initialize GUI and connect its signals to slots
@@ -3664,8 +3663,8 @@ class DocumentBrowser(QW.QWidget):
         self.search_down_action.triggered.connect(self._findTextDown)
 
     # Change the text font size (zoom in, zoom out)
-        self.zoom_in_action.triggered.connect(lambda: self._alterZoom(+1))
-        self.zoom_out_action.triggered.connect(lambda: self._alterZoom(-1))
+        self.zoom_in_action.triggered.connect(lambda: self.browser.zoomIn(1))
+        self.zoom_out_action.triggered.connect(lambda: self.browser.zoomOut(1))
 
 
     def setDoc(self, doc_path: str) -> None:
@@ -3720,24 +3719,6 @@ class DocumentBrowser(QW.QWidget):
 
         '''
         self.placeholder_text = text
-
-
-    def _alterZoom(self, value: int) -> None:
-        '''
-        Change the font size of the displayed document text.
-
-        Parameters
-        ----------
-        value : int
-            Incremental or decremental size value. For example if +1, the font
-            size will be increased by 1 pt, if -1 it will be decreased by 1 pt.
-
-        '''
-    # The new font size must in any case be in range [0pt, 80pt]
-        newSize = self._font.pointSize() + value
-        if 0 < newSize < 80:
-            self._font.setPointSize(newSize)
-            self.browser.document().setDefaultFont(self._font)
 
 
     def _findTextUp(self) -> None:
