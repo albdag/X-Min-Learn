@@ -171,6 +171,10 @@ class DataGroup(QW.QTreeWidgetItem):
 
 
     def clear(self) -> None:
+        '''
+        Remove data loaded in this group.
+
+        '''
         for subgr in self.subgroups:
             subgr.takeChildren()
 
