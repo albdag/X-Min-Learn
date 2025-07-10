@@ -3544,7 +3544,13 @@ class CoordinatesFinder(QW.QFrame):
 
 class DocumentBrowser(QW.QWidget):
 
-    def __init__(self, readonly: bool = False, parent: QW.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        readonly: bool = False,
+        toolbar: bool = True,
+        placeholder: str = '',
+        parent: QW.QWidget | None = None
+    ) -> None:
         '''
         Custom widget to load, display and browse a text document. It includes
         convenient search, edit and zoom functionalities.
@@ -3553,6 +3559,12 @@ class DocumentBrowser(QW.QWidget):
         ----------
         readonly : bool, optional
             Whether document is read only or editable. The default is False.
+        toolbar : bool, optional
+            Whether a toolbar with search, edit and zoom functionalities should
+            be visible. The default is True.
+        placeholder : str, optional
+            Default placeholder text, which is displayed when browser is empty.
+            The default is ''.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
@@ -3561,8 +3573,9 @@ class DocumentBrowser(QW.QWidget):
 
     # Set main attributes
         self.readonly = readonly
+        self.toolbar_visible = toolbar
         self._font = QG.QFont()
-        self.placeholder_text = ''
+        self.placeholder_text = placeholder
 
     # Initialize GUI and connect its signals to slots
         self._init_ui()
@@ -3575,14 +3588,16 @@ class DocumentBrowser(QW.QWidget):
 
         '''
     # Text browser space (Text Edit)
-        self.browser = QW.QTextEdit(self.placeholder_text)
+        self.browser = QW.QTextEdit()
         self.browser.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical)) 
         self.browser.setStyleSheet(style.SS_MENU)
         self.browser.setReadOnly(self.readonly)
+        self.browser.setPlaceholderText(self.placeholder_text)
 
     # Browser toolbar (Toolbar)
         self.tbar = QW.QToolBar('Browser toolbar')
         self.tbar.setStyleSheet(style.SS_TOOLBAR)
+        self.tbar.setVisible(self.toolbar_visible)
 
     # Zoom in (Action) [-> Browser Toolbar]
         self.zoom_in_action = self.tbar.addAction(
