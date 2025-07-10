@@ -3144,6 +3144,9 @@ class DecimalPointSelector(StyledComboBox):
         self.addItems(['.', ','])
         self.setCurrentText(QC.QLocale().decimalPoint())
 
+    # Avoid the combo box being squeezed too much by layouts 
+        self.setMinimumContentsLength(3)
+
 
 
 class SeparatorSymbolSelector(StyledComboBox):
@@ -3161,6 +3164,9 @@ class SeparatorSymbolSelector(StyledComboBox):
         local_separator = ',' if QC.QLocale().decimalPoint() == '.' else ';'
         self.addItems([',', ';'])
         self.setCurrentText(local_separator)
+
+    # Avoid the combo box being squeezed too much by layouts 
+        self.setMinimumContentsLength(3)
 
 
 
