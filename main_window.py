@@ -753,7 +753,8 @@ class MainWindow(QW.QMainWindow):
             if not item.filepathValid():
                 item.setNotFound(True)
         # Also get mask if present
-            mask = sample.getCompositeMask('checked')
+            mode = pref.get_setting('plots/mask_merging_rule')
+            mask = sample.getCompositeMask('checked', mode=mode)
             if mask is not None:
                 mask = mask.mask
 
