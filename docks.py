@@ -1653,7 +1653,7 @@ class HistogramViewer(QW.QWidget):
     # If the legacy mask exists, merge it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mode = pref.get_setting('plots/mask_merging_rule')
+            mode = pref.get_setting('data/mask_merging_rule')
             mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
         mask = Mask(mask_array)
 
@@ -2054,7 +2054,7 @@ class ModeViewer(CW.StyledTabWidget):
     # If a legacy mask exists, merge it with the new mask
         _, legacy_mask = self.map_canvas.get_map(return_mask=True)
         if legacy_mask is not None:
-            mode = pref.get_setting('plots/mask_merging_rule')
+            mode = pref.get_setting('data/mask_merging_rule')
             mask = iatools.binary_merge([mask, legacy_mask], mode)
 
     # Create a new Mask object
@@ -2854,7 +2854,7 @@ class RoiEditor(QW.QWidget):
 
     # If the legacy mask exists, merge it with the new mask
         if legacy_mask is not None:
-            mode = pref.get_setting('plots/mask_merging_rule')
+            mode = pref.get_setting('data/mask_merging_rule')
             mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
@@ -2893,7 +2893,7 @@ class RoiEditor(QW.QWidget):
         if not self.canvas.is_empty():
             array, legacy_mask = self.canvas.get_map(return_mask=True)
             if array.shape == shape and legacy_mask is not None:
-                mode = pref.get_setting('plots/mask_merging_rule')
+                mode = pref.get_setting('data/mask_merging_rule')
                 mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
@@ -3384,7 +3384,7 @@ class ProbabilityMapViewer(QW.QWidget):
     # If the legacy mask exists, merge it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mode = pref.get_setting('plots/mask_merging_rule')
+            mode = pref.get_setting('data/mask_merging_rule')
             mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
         mask = Mask(mask_array)
 

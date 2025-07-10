@@ -1676,6 +1676,28 @@ class Preferences(QW.QDialog):
         self.roi_filled_cbox = QW.QCheckBox('Filled')
         self.roi_filled_cbox.setChecked(self._roi_filled)
 
+    # ROI group (Collapsible Area)
+        roi_form = QW.QFormLayout()
+        roi_form.setSpacing(15)
+        roi_form.addRow('Color', self.roi_col_btn)
+        roi_form.addRow('Selection color', self.roi_selcol_btn)
+        roi_form.addRow(self.roi_filled_cbox)
+        roi_group = CW.CollapsibleArea(roi_form, 'ROI')
+
+    # Plots tab (Group Scroll Area)
+        plots_form = QW.QFormLayout()
+        plots_form.setSpacing(15)
+        plots_form.addRow(roi_group)
+        plots_scroll = CW.GroupScrollArea(plots_form, tight=True, frame=False)
+
+#  -------------------------------------------------------------------------  #
+#                              DATA SETTINGS
+#  -------------------------------------------------------------------------  #
+    # Decimal precision (Styled Spin Box)
+        self.decimal_spbox = CW.StyledSpinBox(0, 6)
+        self.decimal_spbox.setToolTip('Number of displayed decimal places')
+        self.decimal_spbox.setValue(self._decimal_prec)
+
     # Mask merging rule (Radio Buttons Layout)
         btns = ('Intersection', 'Union')
         idx = btns.index(self._mask_merge_type.capitalize())
@@ -1686,36 +1708,6 @@ class Preferences(QW.QDialog):
         self.mask_merge_btns.button(0).setToolTip(tip1)
         self.mask_merge_btns.button(1).setToolTip(tip2)
 
-    # ROI group (Collapsible Area)
-        roi_form = QW.QFormLayout()
-        roi_form.setSpacing(15)
-        roi_form.addRow('Color', self.roi_col_btn)
-        roi_form.addRow('Selection color', self.roi_selcol_btn)
-        roi_form.addRow(self.roi_filled_cbox)
-        roi_group = CW.CollapsibleArea(roi_form, 'ROI', collapsed=False)
-
-    # Mask group (Collapsible Area)
-        mask_form = QW.QFormLayout()
-        mask_form.setSpacing(15)
-        mask_form.addRow('Default merge', self.mask_merge_btns)
-        mask_group = CW.CollapsibleArea(mask_form, 'Mask', collapsed=False)
-
-    # Plots tab (Group Scroll Area)
-        plots_vbox = QW.QVBoxLayout()
-        plots_vbox.setSpacing(10)
-        plots_vbox.addWidget(roi_group)
-        plots_vbox.addWidget(mask_group)
-        plots_vbox.addStretch(1)
-        plots_scroll = CW.GroupScrollArea(plots_vbox, tight=True, frame=False)
-
-#  -------------------------------------------------------------------------  #
-#                              DATA SETTINGS
-#  -------------------------------------------------------------------------  #
-    # Decimal precision (Styled Spin Box)
-        self.decimal_spbox = CW.StyledSpinBox(0, 6)
-        self.decimal_spbox.setToolTip('Number of displayed decimal places')
-        self.decimal_spbox.setValue(self._decimal_prec)
-
     # Phase count warning (Styled Spin Box)
         self.phase_count_spbox = CW.StyledSpinBox(15, 100)
         tip = 'On mineral map loading, warn user if phases exceed this amount'
@@ -1723,16 +1715,35 @@ class Preferences(QW.QDialog):
         self.phase_count_spbox.setValue(self._warn_phase_count)
 
     # Extended log (Check Box)
-        self.extlog_cbox = QW.QCheckBox('Extended model log')
+        self.extlog_cbox = QW.QCheckBox('Extended log')
         self.extlog_cbox.setToolTip('Save advanced info in custom model logs')
         self.extlog_cbox.setChecked(self._extended_log)
+
+    # Mineral map group (Collapsible Area)
+        mmap_form = QW.QFormLayout()
+        mmap_form.setSpacing(15)
+        mmap_form.addRow('Phase count warning', self.phase_count_spbox)
+        mmap_group = CW.CollapsibleArea(mmap_form, 'Mineral Map')
+
+    # Mask group (Collapsible Area)
+        mask_form = QW.QFormLayout()
+        mask_form.setSpacing(15)
+        mask_form.addRow('Default merge', self.mask_merge_btns)
+        mask_group = CW.CollapsibleArea(mask_form, 'Mask')
+
+    # Model group (Collapsible Area)
+        model_form = QW.QFormLayout()
+        model_form.setSpacing(15)
+        model_form.addRow(self.extlog_cbox)
+        model_group = CW.CollapsibleArea(model_form, 'Model')
 
     # Data tab (Group Scroll Area)
         data_form = QW.QFormLayout()
         data_form.setSpacing(15)
         data_form.addRow('Decimals', self.decimal_spbox)
-        data_form.addRow('Phase count warning', self.phase_count_spbox)
-        data_form.addRow(self.extlog_cbox)
+        data_form.addRow(mmap_group)
+        data_form.addRow(mask_group)
+        data_form.addRow(model_group)
         data_scroll = CW.GroupScrollArea(data_form, tight=True, frame=False)
 
 #  -------------------------------------------------------------------------  #
@@ -1789,9 +1800,6 @@ class Preferences(QW.QDialog):
         self.roi_selcol_btn.clicked.connect(self.changeRoiIconColor)
         self.roi_filled_cbox.stateChanged.connect(
             lambda chk: setattr(self, '_roi_filled', bool(chk)))
-    
-    # Mask merging rule
-        self.mask_merge_btns.selectionChanged.connect(self.changeMaskMergeRule)
 
     # Decimal precision
         self.decimal_spbox.valueChanged.connect(
@@ -1800,6 +1808,9 @@ class Preferences(QW.QDialog):
     # Phase count warning
         self.phase_count_spbox.valueChanged.connect(
             lambda v: setattr(self, '_warn_phase_count', v))
+        
+    # Mask merging rule
+        self.mask_merge_btns.selectionChanged.connect(self.changeMaskMergeRule)
         
     # Extended model logs
         self.extlog_cbox.stateChanged.connect(
@@ -1822,9 +1833,9 @@ class Preferences(QW.QDialog):
         self._roi_col = pref.get_setting('plots/roi_color')
         self._roi_selcol = pref.get_setting('plots/roi_selcolor')
         self._roi_filled = pref.get_setting('plots/roi_filled')
-        self._mask_merge_type = pref.get_setting('plots/mask_merging_rule')
         self._decimal_prec = pref.get_setting('data/decimal_precision')
         self._extended_log = pref.get_setting('data/extended_model_log')
+        self._mask_merge_type = pref.get_setting('data/mask_merging_rule')
         self._warn_phase_count = pref.get_setting('data/warn_phase_count')
 
 
@@ -1838,9 +1849,9 @@ class Preferences(QW.QDialog):
         pref.edit_setting('plots/roi_color', self._roi_col)
         pref.edit_setting('plots/roi_selcolor', self._roi_selcol)
         pref.edit_setting('plots/roi_filled', self._roi_filled)
-        pref.edit_setting('plots/mask_merging_rule', self._mask_merge_type)
         pref.edit_setting('data/decimal_precision', self._decimal_prec)
         pref.edit_setting('data/extended_model_log', self._extended_log)
+        pref.edit_setting('data/mask_merging_rule', self._mask_merge_type)
         pref.edit_setting('data/warn_phase_count', self._warn_phase_count)
 
 
