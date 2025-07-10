@@ -227,7 +227,7 @@ def apply_mode_filter(
 
 def binary_merge(arrays: list[np.ndarray], mode: str) -> np.ndarray:
     '''
-    Merge multiple binary arrays applying a union (product) or an intersection 
+    Merge multiple binary arrays applying an intersection (product) or a union 
     (sum) strategy.
 
     Parameters
@@ -235,7 +235,7 @@ def binary_merge(arrays: list[np.ndarray], mode: str) -> np.ndarray:
     arrays : list[numpy ndarray]
         List of binary arrays.
     mode : str
-        Merge strategy. Can be 'union' (or 'U') or 'intersection' (or 'I').
+        Merge strategy. Can be 'intersection' (or 'I') or 'union' (or 'U').
 
     Returns
     -------
@@ -250,12 +250,12 @@ def binary_merge(arrays: list[np.ndarray], mode: str) -> np.ndarray:
         Raised if 'arrays' list contains less than two arrays.
 
     '''
-# UNION (0 * 1 = 0). If used with masks, all holes are preserved.
-# INTERSECTION (0 + 1 = 1). If used with masks, only overlapping holes survive.
+# INTERSECTION (0 * 1 = 0). If used with masks, all holes are preserved.
+# UNION (0 + 1 = 1). If used with masks, only overlapping holes survive.
     match mode:
-        case 'union' | 'U':
-            func = np.prod
         case 'intersection' | 'I':
+            func = np.prod
+        case 'union' | 'U':
             func = np.sum
         case _:
             raise ValueError(f'{mode} is not a valid argument for mode.')

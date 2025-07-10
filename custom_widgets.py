@@ -115,7 +115,7 @@ class DataGroup(QW.QTreeWidgetItem):
     def getCompositeMask(
         self,
         include: str = 'selected',
-        mode: str = 'intersection',
+        mode: str = 'union',
         ignore_single_mask: bool = False
     ) -> Mask | None:
         '''
@@ -128,8 +128,8 @@ class DataGroup(QW.QTreeWidgetItem):
             Whether to merge the 'selected' or 'checked' maps. The default is
             'selected'.
         mode : str, optional
-            How the composite mask should be constructed. If 'union' or 'U', it
-            is the product of all the masks. If 'intersection' or 'I', it is
+            How the composite mask should be constructed. If 'intersection' or
+            'I', it is the product of all the masks. If 'union' or 'U', it is
             the sum of all the masks. The default is 'union'.
         ignore_single_mask : bool, optional
             Whether the method should not return a composite mask if only one
@@ -143,10 +143,9 @@ class DataGroup(QW.QTreeWidgetItem):
         Raises
         ------
         TypeError
-            Raised if "include" argument is not 'selected' or 'checked'.
+            Raised if "include" is not 'selected' or 'checked'.
         TypeError
-            Raised if "mode" argument is not 'union' ('U') or 'intersection'
-            ('I').
+            Raised if "mode" is not 'intersection' ('I') or 'union' ('U').
 
         '''
         cld = self.masks.getChildren()

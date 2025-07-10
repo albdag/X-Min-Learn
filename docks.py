@@ -343,9 +343,9 @@ class DataManager(QW.QTreeWidget):
             # Merge masks sub-menu
                 mergemask_submenu = menu.addMenu('Merge masks')
                 mergemask_submenu.addAction(
-                    'Union', lambda: self.mergeMasks(group, 'U'))
-                mergemask_submenu.addAction(
                     'Intersection', lambda: self.mergeMasks(group, 'I'))
+                mergemask_submenu.addAction(
+                    'Union', lambda: self.mergeMasks(group, 'U'))
 
         # add specific actions when item holds point data
 

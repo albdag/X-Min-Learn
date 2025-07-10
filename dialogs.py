@@ -1678,11 +1678,11 @@ class Preferences(QW.QDialog):
 
     # Mask merging rule (Radio Buttons Layout)
         btns = ('Intersection', 'Union')
-        selected_btn = btns.index(self._mask_merge_type.capitalize())
-        tip1 = 'Preserve pixels only if visible in all masks'
-        tip2 = 'Preserve pixels visible at least in one mask'
-        self.mask_merge_btns = CW.RadioBtnLayout(btns, default=selected_btn,
-                                                 orient='horizontal')
+        idx = btns.index(self._mask_merge_type.capitalize())
+        tip1 = 'Show pixels if visible through at least one mask'
+        tip2 = 'Show pixels only if visible through all masks'
+        self.mask_merge_btns = CW.RadioBtnLayout(btns, default=idx, orient='h')
+        self.mask_merge_btns.setSpacing(5)
         self.mask_merge_btns.button(0).setToolTip(tip1)
         self.mask_merge_btns.button(1).setToolTip(tip2)
 
