@@ -4239,8 +4239,17 @@ class ModelLearner(DraggableTool):
             Whether to show values as percentages.
 
         '''
-    # Get the matrix canvas from the NavTbar whose action called this method
-        canvas = self.sender().parent().canvas
+    # Determine the matrix canvas from the action that called this method
+        match self.sender():
+            case self.train_cm_perc_action:
+                canvas = self.train_confmat
+            case self.valid_cm_perc_action:
+                canvas = self.valid_confmat
+            case self.test_cm_perc_action:
+                canvas = self.test_confmat
+            case _:
+                return # safety
+
         if canvas.matplot:
             canvas.remove_annotations()
             canvas.annotate(toggled)
