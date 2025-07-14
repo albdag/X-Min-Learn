@@ -1553,10 +1553,9 @@ class DummyMapsBuilder(QW.QDialog):
         right_vbox.addWidget(self.canvas)
         right_scroll = CW.GroupScrollArea(right_vbox, tight=True, frame=False)
  
-        splitter = CW.SplitterGroup((left_scroll, right_scroll), (0, 1))
-        main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(splitter)
-        main_layout.addWidget(self.info_lbl)
+        main_layout = CW.SplitterLayout()
+        main_layout.addWidget(left_scroll, 0)
+        main_layout.addWidget(right_scroll, 1)
         self.setLayout(main_layout)
 
 

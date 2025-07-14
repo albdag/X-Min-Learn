@@ -403,8 +403,8 @@ class MineralClassifier(DraggableTool):
         left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
 
         main_layout = CW.SplitterLayout()
-        main_layout.addWidget(left_scroll)
-        main_layout.addWidget(viewer_group)
+        main_layout.addWidget(left_scroll, 0)
+        main_layout.addWidget(viewer_group, 1)
         self.setLayout(main_layout)
 
 
@@ -1867,7 +1867,8 @@ class DatasetBuilder(DraggableTool):
         right_scroll = CW.GroupScrollArea(right_vbox, frame=False, tight=True)
 
         main_layout = CW.SplitterLayout()
-        main_layout.addWidgets((left_scroll, right_scroll), (0, -1))
+        main_layout.addWidget(left_scroll, 0)
+        main_layout.addWidget(right_scroll, 1)
         self.setLayout(main_layout)
 
 
@@ -2925,7 +2926,8 @@ class ModelLearner(DraggableTool):
 
     # Main Layout
         main_layout = CW.SplitterLayout()
-        main_layout.addWidgets((left_scroll, right_scroll))
+        main_layout.addWidget(left_scroll, 0)
+        main_layout.addWidget(right_scroll, 1)
         self.setLayout(main_layout)
         
 
@@ -4762,7 +4764,8 @@ class PhaseRefiner(DraggableTool):
 
     # Main layout
         main_layout = CW.SplitterLayout()
-        main_layout.addWidgets((left_scroll, right_scroll))
+        main_layout.addWidget(left_scroll, 0)
+        main_layout.addWidget(right_scroll, 1)
         self.setLayout(main_layout)
 
 

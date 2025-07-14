@@ -2487,39 +2487,9 @@ class SplitterLayout(QW.QBoxLayout):
             Optional stretch for the added layout. The default is 0.
 
         '''
-        self.insertLayout(layout, -1, stretch)
-
-
-    def addLayouts(
-        self,
-        layouts: list[QW.QLayout],
-        stretches: list[int] | None = None
-    ) -> None:
-        '''
-        Add multiple layouts after all the other items. 
-
-        Parameters
-        ----------
-        layouts : list[QLayout]
-            List of layouts to be added.
-        stretches : list[int] or None, optional
-            List of stretches for each layout. Must have the same size of 
-            layouts. If None, stretches are automatically set to 0 for each 
-            layout. The default is None.
-
-        Raises
-        ------
-        AssertionError
-            Layouts and stretches must have the same size.
-
-        '''
-        if stretches is None:
-            stretches = [0] * len(layouts)
-        else:
-            assert len(layouts) == len(stretches)
-
-        for l, s in zip(layouts, stretches):
-            self.addLayout(l, s)
+        wid = QW.QWidget()
+        wid.setLayout(layout)
+        self.addWidget(wid, stretch)
 
 
     def insertWidget(self, widget: QW.QWidget, index: int, stretch: int = 0) -> None:
@@ -2553,39 +2523,8 @@ class SplitterLayout(QW.QBoxLayout):
             Optional stretch for the added widget. The default is 0.
 
         '''
-        self.insertWidget(widget, -1, stretch)
-
-
-    def addWidgets(
-        self,
-        widgets: list[QW.QWidget], 
-        stretches: list[int] | None = None
-    ) -> None:
-        '''
-        Add multiple widgets after all the other items. 
-
-        Parameters
-        ----------
-        widgets : list[QWidget]
-            List of widgets to be added.
-        stretches : list[int] or None, optional
-            List of stretches for each widget. Must have the same size of 
-            widgets. If None, stretches are automatically set to 0 for each 
-            widget. The default is None.
-
-        Raises
-        ------
-        AssertionError
-            Widgets and stretches must have the same size.
-
-        '''
-        if stretches is None:
-            stretches = [0] * len(widgets)
-        else:
-            assert len(widgets) == len(stretches)
-
-        for w, s in zip(widgets, stretches):
-            self.addWidget(w, s)
+        self.splitter.addWidget(widget)
+        self.splitter.setStretchFactor(self.splitter.count() - 1, stretch)
 
 
 
