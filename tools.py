@@ -2396,7 +2396,8 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Feature mapping (Check Box)
-        self.feat_mapping_cbox = QW.QCheckBox('Polynomial feature mapping')
+        self.feat_mapping_cbox = QW.QCheckBox('Polynomial mapping')
+        self.feat_mapping_cbox.setToolTip('Enable polynomial feature mapping')
 
     # Polynomial mapping degree (Styled Spin Box)
         self.poly_deg_spbox = CW.StyledSpinBox(min_value=2, max_value=5)
