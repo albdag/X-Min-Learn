@@ -3491,7 +3491,7 @@ class DocumentBrowser(QW.QWidget):
 
     def __init__(
         self,
-        readonly: bool = False,
+        readonly: bool = True,
         toolbar: bool = True,
         placeholder: str = '',
         parent: QW.QWidget | None = None
@@ -3503,7 +3503,7 @@ class DocumentBrowser(QW.QWidget):
         Parameters
         ----------
         readonly : bool, optional
-            Whether document is read only or editable. The default is False.
+            Whether document is read-only. The default is True.
         toolbar : bool, optional
             Whether a toolbar with search, edit and zoom functionalities should
             be visible. The default is True.

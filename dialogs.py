@@ -514,8 +514,8 @@ class MergeDatasets(QW.QDialog):
         self.in_path_list = CW.StyledListWidget()
 
     # Input datasets preview area (Document Browser)
-        ph_text1 = 'Click on any dataset filepath to show its preview here'
-        self.input_info = CW.DocumentBrowser(True, False, placeholder=ph_text1)
+        ph1 = 'Click on any dataset filepath to show its preview here'
+        self.input_info = CW.DocumentBrowser(toolbar=False, placeholder=ph1)
 
     # Number of dataset preview rows (Styled Spinbox)
         self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
@@ -534,8 +534,8 @@ class MergeDatasets(QW.QDialog):
         self.save_btn.setEnabled(False)
 
     # Merged dataset preview area (Document Browser)
-        ph_text2 = 'A preview of the merged dataset will be displayed here'
-        self.merged_info = CW.DocumentBrowser(True, False, ph_text2)
+        ph2 = 'A preview of the merged dataset will be displayed here'
+        self.merged_info = CW.DocumentBrowser(toolbar=False, placeholder=ph2)
 
     # Progress bar (Progress Bar)
         self.progbar = QW.QProgressBar()
@@ -774,8 +774,9 @@ class SubSampleDataset(QW.QDialog):
         self.in_csv_decimal = CW.DecimalPointSelector()
 
     # Imported dataset preview area (Document Browser)
-        ph_text1 = 'A preview of the original dataset will be displayed here'
-        self.in_dataset_info = CW.DocumentBrowser(True, False, ph_text1)
+        ph1 = 'A preview of the original dataset will be displayed here'
+        self.in_dataset_info = CW.DocumentBrowser(
+            toolbar=False, placeholder=ph1)
 
     # Class selector (Twin Styled List Widgets)
         self.original_classes = CW.StyledListWidget()
@@ -809,8 +810,9 @@ class SubSampleDataset(QW.QDialog):
         self.save_btn.setEnabled(False)
 
     # Sub-sampled dataset preview area (Document Browser)
-        ph_text2 = 'A preview of the sub-sampled dataset will be displayed here'
-        self.out_dataset_info = CW.DocumentBrowser(True, False, ph_text2)
+        ph2 = 'A preview of the sub-sampled dataset will be displayed here'
+        self.out_dataset_info = CW.DocumentBrowser(
+            toolbar=False, placeholder=ph2)
 
     # Progress bar (ProgressBar)
         self.progbar = QW.QProgressBar()

@@ -1791,7 +1791,7 @@ class DatasetBuilder(DraggableTool):
         self.merge_class_btn.setToolTip('Merge')
         
     # Dataset preview area (Document Browser)
-        self.preview = CW.DocumentBrowser(readonly=True, toolbar=False)
+        self.preview = CW.DocumentBrowser(toolbar=False)
 
     # CSV decimal point selector (Decimal Point Selector)
         self.decimal_combox = CW.DecimalPointSelector()
@@ -2302,7 +2302,7 @@ class ModelLearner(DraggableTool):
             full_display=False, placeholder='No dataset loaded')
 
     # Loaded dataset preview area (Document Browser)
-        self.dataset_preview = CW.DocumentBrowser(readonly=True, toolbar=False)
+        self.dataset_preview = CW.DocumentBrowser(toolbar=False)
 
     # Ground truth dataset group (Collapsible Area)
         dataset_grid = QW.QGridLayout()
@@ -2334,7 +2334,7 @@ class ModelLearner(DraggableTool):
             full_display=False, placeholder='No model loaded')
         
     # Parent model preview (Document Browser)
-        self.pmodel_preview = CW.DocumentBrowser(readonly=True)
+        self.pmodel_preview = CW.DocumentBrowser()
 
     # Parent model group (Collapsible Area)
         pmodel_grid = QW.QGridLayout()
