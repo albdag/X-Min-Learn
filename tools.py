@@ -1717,7 +1717,7 @@ class DatasetBuilder(DraggableTool):
     # Input grid of chemical elements (Styled Buttons) [-> GroupScrollArea]
         self.elements_btns = []
         elem_grid = QW.QGridLayout()
-        n_cols = 8
+        n_cols = 9
         for n, (k, v) in enumerate(self.elements.items()):
             elem_btn = CW.StyledButton(text=k)
             elem_btn.setToolTip(v)
@@ -1791,8 +1791,7 @@ class DatasetBuilder(DraggableTool):
         self.merge_class_btn.setToolTip('Merge')
         
     # Dataset preview area (Document Browser)
-        self.preview = CW.DocumentBrowser(readonly=True)
-        self.preview.setMinimumHeight(300)
+        self.preview = CW.DocumentBrowser(readonly=True, toolbar=False)
 
     # CSV decimal point selector (Decimal Point Selector)
         self.decimal_combox = CW.DecimalPointSelector()
