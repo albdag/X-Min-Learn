@@ -2303,12 +2303,12 @@ class ModelLearner(DraggableTool):
             full_display=False, placeholder='No dataset loaded')
 
     # Loaded dataset preview area (Document Browser)
-        self.dataset_preview = CW.DocumentBrowser(readonly=True)
-        self.dataset_preview.setMinimumHeight(350)
+        self.dataset_preview = CW.DocumentBrowser(readonly=True, toolbar=False)
 
     # Ground truth dataset group (Collapsible Area)
         dataset_grid = QW.QGridLayout()
-        dataset_grid.setSpacing(20)
+        dataset_grid.setHorizontalSpacing(20)
+        dataset_grid.setVerticalSpacing(10)
         dataset_grid.addWidget(self.load_dataset_btn, 0, 0, 1, 2)
         dataset_grid.addWidget(QW.QLabel('CSV decimal point'), 0, 2)
         dataset_grid.addWidget(self.csv_dec_selector, 0, 3)
@@ -2327,19 +2327,24 @@ class ModelLearner(DraggableTool):
         self.load_pmodel_btn.setEnabled(False)
 
     # Remove loaded parent model button (Styled Button)
-        self.unload_pmodel_btn = CW.StyledButton(style.getIcon('CLEAR'))
+        self.unload_pmodel_btn = CW.StyledButton(
+            style.getIcon('CLEAR'), 'Remove model')
 
     # Parent model path (Path Label)
         self.pmodel_path = CW.PathLabel(
             full_display=False, placeholder='No model loaded')
+        
+    # Parent model preview (Document Browser)
+        self.pmodel_preview = CW.DocumentBrowser(readonly=True)
 
     # Parent model group (Collapsible Area)
         pmodel_grid = QW.QGridLayout()
-        pmodel_grid.setSpacing(20)
-        pmodel_grid.addWidget(self.load_pmodel_btn, 0, 0, 1, -1)
-        pmodel_grid.addWidget(self.unload_pmodel_btn, 1, 0)
-        pmodel_grid.addWidget(self.pmodel_path, 1, 1)
-        pmodel_grid.setColumnStretch(1, 2)
+        pmodel_grid.setHorizontalSpacing(20)
+        pmodel_grid.setVerticalSpacing(10)
+        pmodel_grid.addWidget(self.load_pmodel_btn, 0, 0, 1, 1)
+        pmodel_grid.addWidget(self.unload_pmodel_btn, 0, 1, 1, 1)
+        pmodel_grid.addWidget(self.pmodel_path, 1, 0, 1, -1)
+        pmodel_grid.addWidget(self.pmodel_preview, 2, 0, 1, -1)
         pmodel_group = CW.CollapsibleArea(
             pmodel_grid, title='Update existent model')
 
@@ -2911,8 +2916,8 @@ class ModelLearner(DraggableTool):
         left_vbox.addWidget(pmodel_group)
         left_vbox.addWidget(hparam_group)
         left_vbox.addWidget(pref_group)
-        left_vbox.addLayout(main_ctrl_grid)
         left_vbox.addStretch(1)
+        left_vbox.addLayout(main_ctrl_grid)
         left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
 
     # Adjust learning panels layout (right Group Scroll Area)
@@ -3201,11 +3206,15 @@ class ModelLearner(DraggableTool):
                 path = self.dataset_path_lbl.fullpath
                 self.dataset = dtools.GroundTruthDataset(dataframe, path)
             # Update dataset preview
-                text = f'DATASET PREVIEW\n\n{repr(dataframe)}'
+                head1, head2 = 'DATAFRAME PREVIEW', '\nPER-CLASS DATA COUNT'
+                class_count = self.dataset.column_count(-1)
+                cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
+                text = '\n\n'.join((head1, repr(dataframe), head2, cnt))
                 self.dataset_preview.setText(text)
             # Enable "Split dataset" and "Load previous model" buttons
                 self.load_pmodel_btn.setEnabled(True)
                 self.split_dataset_btn.setEnabled(True)
+
             except Exception as e:
                 self.dataset_path_lbl.clearPath()
                 CW.MsgBox(self, 'Crit', 'Loading dataset failed.', str(e))
@@ -3776,7 +3785,7 @@ class ModelLearner(DraggableTool):
             else:
                 self._reset()
         
-        pbar = CW.PopUpProgBar(self, 3, 'Loading Model')
+        pbar = CW.PopUpProgBar(self, 4, 'Loading Model')
         
         try:
         # Import parent model
@@ -3792,6 +3801,16 @@ class ModelLearner(DraggableTool):
             if pmodel.targets != self.dataset.column_unique(-1):
                 err = 'Model and loaded dataset have incompatible target classes.'
                 raise ValueError(err)
+            pbar.increase()
+
+        # Show parent model preview. Ask for rebuilding missing model log file.
+            if not os.path.exists(logpath := pmodel.generate_log_path(path)):
+                quest_text = 'Unable to find model log file. Rebuild it?'
+                choice = CW.MsgBox(self, 'Quest', quest_text)
+                if choice.yes():
+                    ext_log = pref.get_setting('data/extended_model_log')
+                    self.model.save_log(logpath, extended=ext_log)
+            self.pmodel_preview.setDoc(logpath) # Raises no error if missing
             pbar.increase()
 
         # Update GUI
@@ -3825,6 +3844,7 @@ class ModelLearner(DraggableTool):
 
         '''
         self.pmodel_path.clearPath()
+        self.pmodel_preview.clear()
         # User can select again polynomial feature mapping and algorithm
         self.feat_mapping_cbox.setEnabled(True)
         self.feat_mapping_cbox.setChecked(False)
