@@ -4438,36 +4438,21 @@ class PhaseRefiner(DraggableTool):
 
     # Mineral map selector (Sample Maps Selector)
         self.minmap_selector = CW.SampleMapsSelector('minmaps', False)
-        self.minmap_selector.setMaximumHeight(200)
 
     # Select mineral map (Styled Button)
         self.select_map_btn = CW.StyledButton(text='Select map')
+
+    # Current selected mineral map (Path Label)
+        self.selected_map_lbl = CW.PathLabel(
+            full_display=False, placeholder='No map selected')
 
     # Sample selection group (Collapsible Area)
         sample_vbox = QW.QVBoxLayout()
         sample_vbox.addWidget(self.minmap_selector)
         sample_vbox.addWidget(self.select_map_btn)
+        sample_vbox.addWidget(self.selected_map_lbl)
         sample_group = CW.CollapsibleArea(
             sample_vbox, 'Map selection', collapsed=False)
-
-#  -------------------------------------------------------------------------  #
-#                             LEGEND WIDGETS
-#  -------------------------------------------------------------------------  #
-
-    # Current selected mineral map (Path Label)
-        self.selected_map_lbl = CW.PathLabel(full_display=False)
-
-    # Legend (Legend)
-        self.legend = CW.Legend()
-        self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
-        self.legend.setMinimumHeight(400)
-
-    # Legend group (Collapsible Area)
-        legend_form = QW.QFormLayout()
-        legend_form.addRow('Current map', self.selected_map_lbl)
-        legend_form.addRow(self.legend)
-        legend_group = CW.CollapsibleArea(
-            legend_form, 'Legend', collapsed=False)
 
 #  -------------------------------------------------------------------------  #
 #                              KERNEL WIDGETS
@@ -4495,7 +4480,7 @@ class PhaseRefiner(DraggableTool):
         kern_form.addRow('Shape', self.kern_shape_btns)
         kern_form.addRow('Size', self.kern_size_spbox)
         kern_form.addRow(self.skip_border_cbox)
-        kern_group = CW.GroupArea(kern_form, 'Kernel')
+        kern_group = CW.CollapsibleArea(kern_form, 'Kernel')
 
 #  -------------------------------------------------------------------------  #
 #                              SETTINGS WIDGETS
@@ -4555,7 +4540,8 @@ class PhaseRefiner(DraggableTool):
         basic_settings_grid.addWidget(self.nd_thresh_spbox, 1, 1, 1, -1)
         basic_settings_grid.setColumnStretch(0, 1)
         basic_settings_grid.setColumnStretch(1, 1)
-        basic_settings_group = CW.GroupArea(basic_settings_grid, 'Settings')
+        basic_settings_group = CW.GroupArea(
+            basic_settings_grid, tight=True, frame=False)
 
     # [Advanced Refiner] settings group (Group Area)
         advan_settings_grid = QW.QGridLayout()
@@ -4569,12 +4555,23 @@ class PhaseRefiner(DraggableTool):
         advan_settings_grid.addWidget(self.del_pixels_combox, 3, 2, 1, 1)
         advan_settings_grid.setColumnStretch(0, 1)
         advan_settings_grid.setColumnStretch(2, 1)
-        advan_settings_group = CW.GroupArea(advan_settings_grid, 'Settings')
+        advan_settings_group = CW.GroupArea(
+            advan_settings_grid, tight=True, frame=False)
 
     # Settings container widget (Stacked Widget)
         self.settings_stack = QW.QStackedWidget()
         self.settings_stack.addWidget(basic_settings_group)
         self.settings_stack.addWidget(advan_settings_group)
+        settings_group = CW.CollapsibleArea(self.settings_stack, 'Settings')
+
+#  -------------------------------------------------------------------------  #
+#                             LEGEND WIDGET
+#  -------------------------------------------------------------------------  #
+
+    # Legend group (Group Area)
+        self.legend = CW.Legend()
+        self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
+        legend_group = CW.GroupArea(self.legend, 'Legend')
 
 #  -------------------------------------------------------------------------  #
 #                    CONTROL WIDGETS (APPLY-CANCEL-SAVE)
@@ -4771,11 +4768,10 @@ class PhaseRefiner(DraggableTool):
         left_vbox = QW.QVBoxLayout()
         left_vbox.setSpacing(15)
         left_vbox.addWidget(sample_group)
-        left_vbox.addWidget(legend_group)
         left_vbox.addWidget(kern_group)
-        left_vbox.addWidget(self.settings_stack)
+        left_vbox.addWidget(settings_group)
+        left_vbox.addWidget(legend_group, 1)
         left_vbox.addLayout(ctrl_widgets_grid)
-        left_vbox.addStretch(1)
         left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
 
     # Right panel layout
