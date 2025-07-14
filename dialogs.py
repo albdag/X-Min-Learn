@@ -6,8 +6,8 @@ Created on Tue May  14 15:03:45 2024
 """
 import os
 
-from PyQt5.QtCore import pyqtSignal, QLocale, QSize, Qt
-from PyQt5.QtGui import QColor, QIcon, QPixmap
+from PyQt5.QtCore import pyqtSignal, QLocale, QPoint, QSize, Qt
+from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
 import PyQt5.QtWidgets as QW
 
 import numpy as np
@@ -45,6 +45,7 @@ class AutoRoiDetector(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(1280, 720)
         self.setWindowTitle('ROI detector')
         self.setWindowIcon(style.getIcon('ROI_SEARCH'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
@@ -59,7 +60,6 @@ class AutoRoiDetector(QW.QDialog):
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
         
 
@@ -137,10 +137,9 @@ class AutoRoiDetector(QW.QDialog):
         right_grid.addWidget(self.cancel_btn, 3, 1)
         right_grid.setRowStretch(1, 1)
 
-        main_layout = QW.QHBoxLayout()
-        main_layout.addWidget(left_scroll)
-        main_layout.addSpacing(20)
-        main_layout.addLayout(right_grid)
+        main_layout = CW.SplitterLayout()
+        main_layout.addWidget(left_scroll, 0)
+        main_layout.addLayout(right_grid, 1)
         self.setLayout(main_layout)
 
 
@@ -154,6 +153,9 @@ class AutoRoiDetector(QW.QDialog):
         self.npv_thread.workFinished.connect(self._parse_npv)
         self.roi_detect_thread.taskInitialized.connect(self.progbar.step)
         self.roi_detect_thread.workFinished.connect(self._parse_roi_detection)
+
+    # Canvas right-click context menu
+        self.canvas.customContextMenuRequested.connect(self.showContextMenu)    
 
     # Enable search btn and update parameters when input maps list is populated
         self.maps_selector.mapsDataChanged.connect(
@@ -171,6 +173,22 @@ class AutoRoiDetector(QW.QDialog):
 
     # Reject the result when Cancel button is clicked
         self.cancel_btn.clicked.connect(self.reject)
+
+
+    def showContextMenu(self, point: QPoint) -> None:
+        '''
+        Shows a context menu with custom actions.
+
+        Parameters
+        ----------
+        point : QPoint
+            The position of the context menu event that the widget receives.
+
+        '''
+    # Get context menu from NavTbar actions
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
+    # Show the menu in the same spot where the user triggered the event
+        menu.exec(QCursor.pos())
 
 
     def fix_even_size(self, size: int) -> None:
@@ -464,6 +482,7 @@ class MergeDatasets(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(600, 850)
         self.setWindowTitle('Merge Datasets')
         self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
@@ -474,7 +493,6 @@ class MergeDatasets(QW.QDialog):
 
     # Initialize GUI and connect its signals with slots 
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
 
 
@@ -494,7 +512,17 @@ class MergeDatasets(QW.QDialog):
 
     # Input datasets paths list (Styled List Widget)
         self.in_path_list = CW.StyledListWidget()
-        
+
+    # Input datasets preview area (Document Browser)
+        ph_text1 = 'Click on any dataset filepath to show its preview here'
+        self.input_info = CW.DocumentBrowser(True, False, placeholder=ph_text1)
+
+    # Number of dataset preview rows (Styled Spinbox)
+        self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
+
+    # Merge datasets (Styled Button)
+        self.merge_btn = CW.StyledButton(text='Merge', bg=style.OK_GREEN)
+
     # Decimal point character selector for merged dataset
         self.out_csv_decimal = CW.DecimalPointSelector()
 
@@ -505,54 +533,53 @@ class MergeDatasets(QW.QDialog):
         self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
         self.save_btn.setEnabled(False)
 
-    # Input datasets preview area (Document Browser)
-        self.input_info = CW.DocumentBrowser(readonly=True)
-
-    # Number of dataset preview rows (Styled Spinbox)
-        self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
-
-    # Merge datasets (Styled Button)
-        self.merge_btn = CW.StyledButton(text='Merge', bg=style.OK_GREEN)
-
     # Merged dataset preview area (Document Browser)
-        self.merged_info = CW.DocumentBrowser(readonly=True)
+        ph_text2 = 'A preview of the merged dataset will be displayed here'
+        self.merged_info = CW.DocumentBrowser(True, False, ph_text2)
 
     # Progress bar (Progress Bar)
         self.progbar = QW.QProgressBar()
 
-    # Adjust Layout
+    # Import group (Group Area)
         input_form = QW.QFormLayout()
+        input_form.setSpacing(15)
         input_form.addRow('CSV decimal point', self.in_csv_decimal)
-        input_form.addRow(self.import_btn)
-        input_form.addRow(self.in_path_list)
-        input_form.addRow(self.remove_btn)
-        input_group = CW.GroupArea(input_form, 'Import datasets')
+        input_form.addRow(self.import_btn)               
+        input_form.addRow(self.remove_btn)               
 
+        import_split = CW.SplitterLayout()
+        import_split.addLayout(input_form)
+        import_split.addWidget(self.in_path_list)
+        import_group = CW.GroupArea(import_split, 'Import Datasets')
+
+    # Input datasets preview (Form Layout)
+        preview_form = QW.QFormLayout()
+        preview_form.setSpacing(5)
+        preview_form.addRow(self.input_info)
+        preview_form.addRow('Previewed rows', self.nrows_spbox)
+
+    # Export dataset group (Group Area)
         output_form = QW.QFormLayout()
+        output_form.setSpacing(15)
         output_form.addRow('CSV decimal point', self.out_csv_decimal)
         output_form.addRow('CSV separator', self.out_csv_separator)
         output_form.addRow(self.save_btn)
-        output_group = CW.GroupArea(output_form, 'Export dataset')
 
-        left_vbox = QW.QVBoxLayout()
-        left_vbox.addWidget(input_group)
-        left_vbox.addWidget(output_group)
-        left_vbox.addStretch(1)
-        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
+        export_split = CW.SplitterLayout()
+        export_split.addLayout(output_form)
+        export_split.addWidget(self.merged_info)
+        export_group = CW.GroupArea(export_split, 'Export Dataset')
 
-        right_grid = QW.QGridLayout()
-        right_grid.setRowMinimumHeight(3, 20)
-        right_grid.addWidget(self.input_info, 0, 0, 1, -1)
-        right_grid.addWidget(QW.QLabel('Previewed rows'), 1, 0)
-        right_grid.addWidget(self.nrows_spbox, 1, 1)
-        right_grid.addWidget(self.merge_btn, 2, 0, 1, -1)
-        right_grid.addWidget(self.merged_info, 4, 0, 1, -1)
-        right_scroll = CW.GroupScrollArea(right_grid, frame=False)
-
-        splitter = CW.SplitterGroup((left_scroll, right_scroll), (0, 1))
+    # Adjust main layout
+        main_vbox = QW.QVBoxLayout()
+        main_vbox.setSpacing(25)
+        main_vbox.addWidget(import_group)
+        main_vbox.addLayout(preview_form)
+        main_vbox.addWidget(self.merge_btn)
+        main_vbox.addWidget(export_group)
+        main_vbox.addWidget(self.progbar)
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(splitter)
-        main_layout.addWidget(self.progbar)
+        main_layout.addWidget(CW.GroupScrollArea(main_vbox, frame=False))
         self.setLayout(main_layout)
 
     
@@ -631,8 +658,11 @@ class MergeDatasets(QW.QDialog):
         Show a preview of the output merged dataset.
 
         '''
-        dataframe = self.merged_dataset.dataframe
-        text = f'MERGED DATAFRAME PREVIEW\n\n{repr(dataframe)}'
+        prev = repr(self.merged_dataset.dataframe)
+        class_count = self.merged_dataset.column_count(-1)
+        cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
+        header1, header2 = 'MERGED DATAFRAME PREVIEW', '\nPER-CLASS DATA COUNT'
+        text = '\n\n'.join((header1, prev, header2, cnt))
         self.merged_info.setText(text)
         
 
@@ -712,6 +742,7 @@ class SubSampleDataset(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(600, 850)
         self.setWindowTitle('Sub-sample Dataset')
         self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
@@ -719,11 +750,11 @@ class SubSampleDataset(QW.QDialog):
 
     # Define main attributes
         self.reader = dtools.CsvChunkReader(QLocale().decimalPoint())
-        self._dataset = None
+        self.original_dataset = None
+        self.subsampled_dataset = None
 
     # Initialize GUI and connect its signals with slots 
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
 
 
@@ -733,8 +764,7 @@ class SubSampleDataset(QW.QDialog):
 
         '''
     # Import Dataset (Styled Button)
-        self.import_btn = CW.StyledButton(
-            style.getIcon('IMPORT'), 'Import dataset')
+        self.import_btn = CW.StyledButton(style.getIcon('IMPORT'), 'Import')
 
     # Imported dataset path (Path Label)
         self.in_dataset_path = CW.PathLabel(
@@ -743,68 +773,93 @@ class SubSampleDataset(QW.QDialog):
     # Decimal point character selector for imported dataset
         self.in_csv_decimal = CW.DecimalPointSelector()
 
-    # Decimal point character selector for sub-sampled dataset
-        self.out_csv_decimal = CW.DecimalPointSelector()
+    # Imported dataset preview area (Document Browser)
+        ph_text1 = 'A preview of the original dataset will be displayed here'
+        self.in_dataset_info = CW.DocumentBrowser(True, False, ph_text1)
 
-    # Separator character selector for sub-sampled dataset
-        self.out_csv_separator = CW.SeparatorSymbolSelector()
-
-    # Input dataset preview area (Document Browser)
-        self.dataset_info = CW.DocumentBrowser(readonly=True)
-
-    # Class selector (Twin List Widgets)
+    # Class selector (Twin Styled List Widgets)
         self.original_classes = CW.StyledListWidget()
         self.subsampled_classes = CW.StyledListWidget()
         for wid in (self.original_classes, self.subsampled_classes):
             wid.setAcceptDrops(True)
             wid.setDragEnabled(True)
             wid.setDefaultDropAction(Qt.MoveAction)
+            wid.setSortingEnabled(True)
+
+    # Hint icon (Label)
+        hint_icon = QW.QLabel()
+        hint_icon.setPixmap(QPixmap(str(style.ICONS.get('INVERT'))))
+        hint_icon.setToolTip('Drag & drop to include/exclude classes')
 
     # Class counter (Label)
         self.counter_lbl = QW.QLabel()
+
+    # Sub-sample dataset (Styled Button)
+        self.subsample_btn = CW.StyledButton(
+            text='Sub-sample', bg=style.OK_GREEN)
+
+    # Decimal point character selector for sub-sampled dataset
+        self.out_csv_decimal = CW.DecimalPointSelector()
+
+    # Separator character selector for sub-sampled dataset
+        self.out_csv_separator = CW.SeparatorSymbolSelector()
 
     # Save (Styled Button)
         self.save_btn = CW.StyledButton(style.getIcon('SAVE'), 'Save')
         self.save_btn.setEnabled(False)
 
+    # Sub-sampled dataset preview area (Document Browser)
+        ph_text2 = 'A preview of the sub-sampled dataset will be displayed here'
+        self.out_dataset_info = CW.DocumentBrowser(True, False, ph_text2)
+
     # Progress bar (ProgressBar)
         self.progbar = QW.QProgressBar()
 
-    # Adjust layout
+    # Import group (Group Area)
         input_form = QW.QFormLayout()
+        input_form.setSpacing(15)
         input_form.addRow('CSV decimal point', self.in_csv_decimal)
         input_form.addRow(self.import_btn)
         input_form.addRow(self.in_dataset_path)
-        input_group = CW.GroupArea(input_form, 'Import dataset')
 
+        import_split = CW.SplitterLayout()
+        import_split.addLayout(input_form)
+        import_split.addWidget(self.in_dataset_info)
+        import_group = CW.GroupArea(import_split, 'Import Dataset')
+
+    # Twin lists grid (Grid Layout)
+        twin_grid = QW.QGridLayout()
+        twin_grid.setSpacing(5)
+        twin_grid.addWidget(QW.QLabel('EXCLUDED'), 0, 0, Qt.AlignHCenter)
+        twin_grid.addWidget(QW.QLabel('INCLUDED'), 0, 2, Qt.AlignHCenter)
+        twin_grid.addWidget(self.original_classes, 1, 0)
+        twin_grid.addWidget(hint_icon, 1, 1)
+        twin_grid.addWidget(self.subsampled_classes, 1, 2)
+        twin_grid.addWidget(self.counter_lbl, 2, 0, 1, -1, Qt.AlignHCenter)
+
+
+    # Export group (Group Area)
         output_form = QW.QFormLayout()
+        output_form.setSpacing(15)
         output_form.addRow('CSV decimal point', self.out_csv_decimal)
         output_form.addRow('CSV separator', self.out_csv_separator)
         output_form.addRow(self.save_btn)
-        output_group = CW.GroupArea(output_form, 'Export dataset')
 
-        left_vbox = QW.QVBoxLayout()
-        left_vbox.addWidget(input_group)
-        left_vbox.addWidget(output_group)
-        left_vbox.addStretch(1)
-        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
-        
-        right_grid = QW.QGridLayout()
-        right_grid.setRowMinimumHeight(1, 20)
-        hint = 'Drag & drop to include classes'
-        right_grid.addWidget(self.dataset_info, 0, 0, 1, -1)
-        right_grid.addWidget(QW.QLabel(hint), 2, 0, 1, -1, Qt.AlignCenter)
-        right_grid.addWidget(QW.QLabel('ORIGINAL CLASSES'), 3, 0, Qt.AlignCenter)
-        right_grid.addWidget(QW.QLabel('SUB-SAMPLED CLASSES'), 3, 1, Qt.AlignCenter)
-        right_grid.addWidget(self.original_classes, 4, 0)
-        right_grid.addWidget(self.subsampled_classes, 4, 1)
-        right_grid.addWidget(self.counter_lbl, 5, 0, 1, -1)
-        right_scroll = CW.GroupScrollArea(right_grid, frame=False)
+        export_split = CW.SplitterLayout()
+        export_split.addLayout(output_form)
+        export_split.addWidget(self.out_dataset_info)
+        export_group = CW.GroupArea(export_split, 'Export Dataset')
 
-        splitter = CW.SplitterGroup((left_scroll, right_scroll), (0, 1))
+    # Adjust main layout
+        main_vbox = QW.QVBoxLayout()
+        main_vbox.setSpacing(25)
+        main_vbox.addWidget(import_group)
+        main_vbox.addLayout(twin_grid)
+        main_vbox.addWidget(self.subsample_btn)
+        main_vbox.addWidget(export_group)
+        main_vbox.addWidget(self.progbar)
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(splitter)
-        main_layout.addWidget(self.progbar)
+        main_layout.addWidget(CW.GroupScrollArea(main_vbox, frame=False))
         self.setLayout(main_layout)
 
     
@@ -822,8 +877,9 @@ class SubSampleDataset(QW.QDialog):
         self.original_classes.itemClicked.connect(self.countClass)
         self.subsampled_classes.itemClicked.connect(self.countClass)
 
-    # Import and save buttons
+    # Import, sub-sample and save buttons
         self.import_btn.clicked.connect(self.importDataset)
+        self.subsample_btn.clicked.connect(self.subSampleDataset)
         self.save_btn.clicked.connect(self.save)
 
 
@@ -835,7 +891,8 @@ class SubSampleDataset(QW.QDialog):
         self.original_classes.clear()
         self.subsampled_classes.clear()
         self.counter_lbl.clear()
-        self.dataset_info.clear()
+        self.in_dataset_info.clear()
+        self.out_dataset_info.clear()
         self.save_btn.setEnabled(False)
 
 
@@ -851,8 +908,12 @@ class SubSampleDataset(QW.QDialog):
         if not path:
             return
 
-    # Set current path
+    # Update GUI
+        self.resetDialog()
         self.in_dataset_path.setPath(path)
+
+    # Reset sub-sampled dataset
+        self.subsampled_dataset = None
 
     # Load dataset chunks (threaded)
         self.progbar.setRange(0, self.reader.chunks_number(path))
@@ -878,22 +939,22 @@ class SubSampleDataset(QW.QDialog):
             self.progbar.setRange(0, 3)
 
         # Compile dataset
-            dataframe = self.reader.combine_chunks(result)
-            self._dataset = dtools.GroundTruthDataset(dataframe)
             self.progbar.setValue(1)
+            dataframe = self.reader.combine_chunks(result)
+            self.original_dataset = dtools.GroundTruthDataset(dataframe)
 
         # Update GUI
-            self.resetDialog()
-            self.updateDatasetInfo()
             self.progbar.setValue(2)
+            self.showDatasetPreview('original')
 
         # Split dataset features from targets and update widgets
             try:
-                self._dataset.split_features_targets(split_idx=-1)
-                self.original_classes.addItems(self._dataset.column_unique(-1))
-                self.save_btn.setEnabled(True)
+                self.original_dataset.split_features_targets(split_idx=-1)
+                targets = self.original_dataset.column_unique(-1)
+                self.original_classes.addItems(targets)
+                self.progbar.setValue(3)
             except Exception as e:
-                self._dataset = None
+                self.original_dataset = None
                 self.in_dataset_path.clearPath()
                 CW.MsgBox(self, 'Crit', 'Invalid dataset.', str(e))
 
@@ -901,20 +962,46 @@ class SubSampleDataset(QW.QDialog):
                 self.progbar.reset()
         
         else:
+            self.original_dataset = None
             self.in_dataset_path.clearPath()
             CW.MsgBox(self, 'Crit', 'Dataset loading failed.', str(result[0]))
             
 
-    def updateDatasetInfo(self) -> None:
+    def showDatasetPreview(self, dataset: str) -> None:
         '''
-        Populate the dataset info widget with a preview of the imported ground
-        truth dataset.
+        Show a preview of the provided 'dataset'.
+
+        Parameters
+        ----------
+        dataset : str
+            Which dataset's preview should be displayed. Can be 'original' or
+            'sub-sampled'
+
+        Raises
+        -------
+        ValueError
+            Raised if "dataset" is not 'original' or 'sub-sampled'.
 
         '''
-        text = f'DATAFRAME PREVIEW\n\n{repr(self._dataset.dataframe)}'
-        self.dataset_info.setText(text)
+    # Determine dataset and info browser widget based on "dataset" argument
+        match dataset:
+            case 'original':
+                ds = self.original_dataset
+                wid = self.in_dataset_info
+            case 'sub-sampled':
+                ds = self.subsampled_dataset
+                wid = self.out_dataset_info
+            case _:
+                raise ValueError(f'Invalid "dataset" argument: {dataset}')
+    
+    # Build and show the preview
+        prev = repr(ds.dataframe)
+        cnt = '\n'.join(f'{k} = {v}' for k, v in ds.column_count(-1).items())
+        header = f'{dataset.upper()} DATAFRAME PREVIEW'
+        text = '\n\n'.join((header, prev, '\nPER-CLASS DATA COUNT', cnt))
+        wid.setText(text)
 
-
+        
     def countClass(self, item: QW.QListWidgetItem) -> None:
         '''
         Show the amount of instances of the selected class in the dataset.
@@ -925,50 +1012,69 @@ class SubSampleDataset(QW.QDialog):
             Selected class item.
 
         '''
-        if self._dataset is None: # safety
+        if self.original_dataset is None: # safety
             return
         class_name = item.text()
-        count = np.count_nonzero(self._dataset.targets == class_name)
+        count = np.count_nonzero(self.original_dataset.targets == class_name)
         self.counter_lbl.setText(f'{class_name} = {count}')
 
 
-    def save(self) -> None:
+    def subSampleDataset(self) -> None:
         '''
-        Save sub-sampled version of the loaded ground truth dataset.
+        Sub-sample the original dataset.
 
         '''
+    # Deny sub-sampling if no original dataset is imported
+        if self.original_dataset is None:
+            return CW.MsgBox(self, 'Crit', 'Import a dataset first.')
+        
     # Deny sub-sampling if no classes are selected
         count = self.subsampled_classes.count()
         if count == 0:
             return CW.MsgBox(self, 'Crit', 'Include at least one class.')
+        
+    # Get selected class labels
+        self.progbar.setRange(0, 3)
+        self.progbar.setValue(1)
+        labels = [self.subsampled_classes.item(i).text() for i in range(count)]
+
+    # Sub sample dataset
+        self.progbar.setValue(2)
+        self.subsampled_dataset = self.original_dataset.sub_sample(-1, labels)
+        
+
+    # Update GUI
+        self.progbar.setValue(3)
+        self.showDatasetPreview('sub-sampled')
+        self.save_btn.setEnabled(True)
+        self.progbar.reset()
+
+
+    def save(self) -> None:
+        '''
+        Save sub-sampled dataset to disk.
+
+        '''
+    # Exit function if sub-sampled dataset is invalid (safety)
+        if self.subsampled_dataset is None:
+            self.save_btn.setEnabled(False)
+            return CW.MsgBox(self, 'Crit', 'Sub-sample the dataset first.')
         
     # Exit function if outpath is invalid or file dialog is canceled
         ftype = 'CSV (*.csv)'
         outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get()
         if not outpath:
             return
-    
-    # Get selected class labels
-        self.progbar.setRange(0, 3)
-        labels = [self.subsampled_classes.item(i).text() for i in range(count)]
-        self.progbar.setValue(1)
-
-    # Sub sample dataset
-        subsampled = self._dataset.sub_sample(-1, labels)
-        self.progbar.setValue(2)
 
     # Save dataset
         separator_char = self.out_csv_separator.currentText()
         decimal_char = self.out_csv_decimal.currentText()
         try:
-            subsampled.save(outpath, separator_char, decimal_char)
+            self.subsampled_dataset.save(outpath, separator_char, decimal_char)
             CW.MsgBox(self, 'Info', 'Dataset successfully saved.')
 
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save dataset.', str(e))
-
-        finally:
-            self.progbar.reset()
         
 
 
@@ -992,17 +1098,17 @@ class ImageToInputMap(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(1280, 720)
         self.setWindowTitle('Image To Input Map')
         self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
     # Set main attribute
-        self.preview_size = QSize(64, 64)
+        self.preview_size = QSize(128, 128)
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
 
 
@@ -1020,6 +1126,7 @@ class ImageToInputMap(QW.QDialog):
     # Images list (Styled List Widget)
         self.img_list = CW.StyledListWidget()
         self.img_list.setIconSize(self.preview_size)
+        self.img_list.setSpacing(5)
 
     # Split multichannel images (Check Box)
         self.split_cbox = QW.QCheckBox('Split multi-channel images')
@@ -1167,6 +1274,7 @@ class ImageToMineralMap(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(1280, 720)
         self.setWindowTitle('Image To Mineral Map')
         self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
@@ -1178,7 +1286,6 @@ class ImageToMineralMap(QW.QDialog):
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
 
 
@@ -1209,7 +1316,6 @@ class ImageToMineralMap(QW.QDialog):
 
     # Canvas (Image Canvas)
         self.canvas = plots.ImageCanvas(size=(5, 3.75))
-        self.canvas.setMinimumSize(300, 300)
 
     # Navigation Toolbar (Navigation Toolbar)
         self.navtbar = plots.NavTbar.imageCanvasDefault(self.canvas, self)
@@ -1249,6 +1355,10 @@ class ImageToMineralMap(QW.QDialog):
         Signals-slots connector.
 
         '''
+    # Canvas right-click context menu
+        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
+
+    # Buttons signals
         self.import_btn.clicked.connect(self.importImage)
         self.convert_btn.clicked.connect(self.convertImage)
         self.save_btn.clicked.connect(self.saveMineralMap)
@@ -1257,6 +1367,22 @@ class ImageToMineralMap(QW.QDialog):
         self.legend.colorChangeRequested.connect(self.changeColor)
         self.legend.itemRenameRequested.connect(self.renameClass)
         self.legend.itemHighlightRequested.connect(self.highlightClass)
+
+
+    def showContextMenu(self, point: QPoint) -> None:
+        '''
+        Shows a context menu with custom actions.
+
+        Parameters
+        ----------
+        point : QPoint
+            The position of the context menu event that the widget receives.
+
+        '''
+    # Get context menu from NavTbar actions
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
+    # Show the menu in the same spot where the user triggered the event
+        menu.exec(QCursor.pos())
 
 
     def importImage(self) -> None:
@@ -1474,6 +1600,7 @@ class DummyMapsBuilder(QW.QDialog):
         super().__init__(parent)
 
     # Set dialog widget attributes
+        self.resize(1280, 720)
         self.setWindowTitle('Dummy Maps Builder')
         self.setWindowIcon(style.getIcon('GEAR'))
         self.setAttribute(Qt.WA_QuitOnClose, False)
@@ -1484,7 +1611,6 @@ class DummyMapsBuilder(QW.QDialog):
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
-        self.adjustSize()
         self._connect_slots()
 
 
@@ -1493,14 +1619,10 @@ class DummyMapsBuilder(QW.QDialog):
         GUI constructor.
 
         '''
-    # Tool info (Framed Label)
-        info = (
-            'Build artificial noisy maps with near-zero values, randomized '
-            'through a Gamma distribution function. These maps can be used '
-            'as a placeholder for missing maps in a pre-trained model.'
-        )
-        self.info_lbl = CW.FramedLabel(info)
-        self.info_lbl.setWordWrap(True)
+    # Tool info (Styled Button)
+        self.info_btn = CW.StyledButton(style.getIcon('INFO'))
+        self.info_btn.setFlat(True)
+        self.info_btn.setToolTip('Click for more info')
 
     # Map width (Styled Spin Box)
         self.width_spbox = CW.StyledSpinBox(1, 10**5)
@@ -1528,13 +1650,14 @@ class DummyMapsBuilder(QW.QDialog):
 
     # Preview histogram (Histogram Canvas) 
         self.canvas = plots.HistogramCanvas(wheel_pan=False, wheel_zoom=False)
-        self.canvas.setMinimumSize(300, 300)
     
     # Navigation Toolbar for preview histogram (Navigation Toolbar)
         self.navtbar = plots.NavTbar.histCanvasDefault(self.canvas, self)
 
     # Adjust layout
         options_form = QW.QFormLayout()
+        options_form.setVerticalSpacing(15)
+        options_form.addRow(self.info_btn)
         options_form.addRow('Map width', self.width_spbox)
         options_form.addRow('Map height', self.height_spbox)
         options_form.addRow('Function shape', self.shape_spbox)
@@ -1564,8 +1687,42 @@ class DummyMapsBuilder(QW.QDialog):
         Signals-slots connector.
 
         '''
+    # Canvas right-click context menu
+        self.canvas.customContextMenuRequested.connect(self.showContextMenu)
+
+    # Buttons signals
+        self.info_btn.clicked.connect(self.showToolInfo)
         self.rand_btn.clicked.connect(self.generateMap)
         self.save_btn.clicked.connect(self.saveMap)
+
+
+    def showToolInfo(self) -> None:
+        '''
+        Show a message box with information about the tool.
+
+        '''
+        info = (
+            'Build artificial noisy maps with near-zero values, randomized '
+            'through a Gamma distribution function. These maps can be used '
+            'as a placeholder for missing maps in a pre-trained model.'
+        )
+        CW.MsgBox(self, 'Info', info)
+
+
+    def showContextMenu(self, point: QPoint) -> None:
+        '''
+        Shows a context menu with custom actions.
+
+        Parameters
+        ----------
+        point : QPoint
+            The position of the context menu event that the widget receives.
+
+        '''
+    # Get context menu from NavTbar actions
+        menu = self.canvas.get_navigation_context_menu(self.navtbar)
+    # Show the menu in the same spot where the user triggered the event
+        menu.exec(QCursor.pos())
 
 
     def generateMap(self) -> None:
