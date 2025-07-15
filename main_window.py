@@ -375,8 +375,8 @@ class MainWindow(QW.QMainWindow):
         Signals-slots connector.
 
         '''
-    # Detach tool from main tabWidget when double clicked on tab
-        self.tabWidget.tabBarDoubleClicked.connect(self.popOutTool)
+    # Main Tab Widget signals
+        self.tabWidget.tabDetachRequested.connect(self.popOutTool)
 
     # Connect all panes toggle view actions with a custom slot to force showing
     # them when they are tabified
@@ -473,19 +473,23 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Dataset Builder 
         self.ds_builder_action.triggered.connect(
-            lambda: self.openTool('DatasetBuilder'))
+            lambda: self.openTool(
+                'DatasetBuilder', pref.get_setting('GUI/tools_tabbed')))
 
     # Launch Model Learner 
         self.model_learner_action.triggered.connect(
-            lambda: self.openTool('ModelLearner'))
+            lambda: self.openTool(
+                'ModelLearner', pref.get_setting('GUI/tools_tabbed')))
 
     # Launch Mineral Classifier 
         self.classifier_action.triggered.connect(
-            lambda: self.openTool('MineralClassifier'))
+            lambda: self.openTool(
+                'MineralClassifier', pref.get_setting('GUI/tools_tabbed')))
 
     # Launch Phase Refiner 
         self.refiner_action.triggered.connect(
-            lambda: self.openTool('PhaseRefiner'))
+            lambda: self.openTool(
+                'PhaseRefiner', pref.get_setting('GUI/tools_tabbed')))
 
 
     def about(self) -> None:
@@ -657,15 +661,16 @@ class MainWindow(QW.QMainWindow):
 
         '''
         tool = self.tabWidget.widget(index)
-        point = self.tabWidget.tabBar().tabRect(index).center()
 
         if isinstance(tool, tools.DraggableTool):
         # Set tool as floating (parent=None) and remove it from tab widget
             tool.setParent(None)
             self.tabWidget.closeTab(index)
-        # Move tool close to where it was originally tabbed
-            parent_point = self.tabWidget.tabBar().mapToParent(point)
-            QC.QTimer.singleShot(0, lambda: tool.move(parent_point))
+        # Set tool preferred size and move it to the center of the main window
+            center = self.geometry().center()
+            w, h = tool._floating_size.width(), tool._floating_size.height()
+            x, y = center.x() - w // 2, center.y() - h // 2
+            QC.QTimer.singleShot(0, lambda: tool.setGeometry(x, y, w, h))
             tool.setVisible(True)
             
 
@@ -1141,6 +1146,8 @@ class MainWindow(QW.QMainWindow):
 
 class MainTabWidget(QW.QTabWidget):
 
+    tabDetachRequested = QC.pyqtSignal(int)
+
     def __init__(self, parent: QW.QWidget) -> None:
         '''
         Central widget of the X-Min Learn window. It is a reimplementation of a
@@ -1165,6 +1172,9 @@ class MainTabWidget(QW.QTabWidget):
         self.setMovable(True)
         self.setTabsClosable(True)
 
+    # Enable custom context menu for tab bar
+        self.tabBar().setContextMenuPolicy(QC.Qt.CustomContextMenu)
+
     # Connect signals to slots
         self._connect_slots()
 
@@ -1174,8 +1184,60 @@ class MainTabWidget(QW.QTabWidget):
         Signals-slots connector.
 
         '''
-    # Tab 'X' button pressed --> triggers the closeEvent of the widget
+    # Tab bar signals
         self.tabCloseRequested.connect(lambda idx: self.widget(idx).close())
+        self.tabBarDoubleClicked.connect(self.tabDetachRequested.emit)
+        self.tabBar().customContextMenuRequested.connect(self.showContextMenu)
+
+
+    def showContextMenu(self, point: QC.QPoint) -> None:
+        '''
+        Show a context menu in the tab bar with custom actions.
+
+        Parameters
+        ----------
+        point : QPoint
+            The position of the context menu event that the widget receives.
+
+        ''' 
+    # Do nothing if the point is not on a tab
+        tabbar = self.tabBar()
+        tab_idx = tabbar.tabAt(point)
+        if tab_idx == -1:
+            return
+    
+    # Do nothing if the widget at 'tab_idx' is not a DraggableTool
+        tool = self.widget(tab_idx)
+        if not isinstance(tool, tools.DraggableTool):
+            return
+
+    # Define a menu (Menu)
+        menu = QW.QMenu()
+        menu.setStyleSheet(style.SS_MENU)
+
+    # Detach tool (Action)
+        menu.addAction(
+            style.getIcon('UNDOCK'), 
+            'Detach', 
+            lambda: self.tabDetachRequested.emit(tab_idx)
+        )
+        
+    # Close tool (Action)
+        menu.addAction(
+            style.getIcon('CLOSE'),
+            'Close',
+            lambda: self.tabCloseRequested.emit(tab_idx)
+        )
+
+    # Show the menu in the same spot where the user triggered the event
+        menu.exec(tabbar.mapToGlobal(point)) 
+
+    # Force tab bar to update hover state after menu closes (fix visual bug)
+        global_pos = QG.QCursor.pos()
+        pos = tabbar.mapFromGlobal(global_pos)
+        evt = QG.QMouseEvent(QC.QEvent.MouseMove, pos, global_pos,
+                             QC.Qt.NoButton, QC.Qt.NoButton, QC.Qt.NoModifier)
+        QW.qApp.sendEvent(tabbar, evt)
 
 
     def addTab(self, widget: tools.DraggableTool | QW.QWidget) -> None:

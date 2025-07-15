@@ -12,6 +12,7 @@ SETTINGS = QSettings('.//SETTINGS//X-MinLearn.ini', QSettings.IniFormat)
 DEFAULT_SETTINGS = {
     'GUI/fontsize': (10, int),
     'GUI/smooth_animation': (False, bool),
+    'GUI/tools_tabbed': (True, bool),
     'GUI/window_state': (None, QByteArray),
     'plots/roi_color': ('#19232d', str),
     'plots/roi_selcolor': ('#55ffff', str),

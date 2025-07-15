@@ -30,6 +30,7 @@ class DraggableTool(QW.QWidget):
 
     closed = QC.pyqtSignal()
     tabified = QC.pyqtSignal()
+    _floating_size = QC.QSize(1600, 900)
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -45,6 +46,7 @@ class DraggableTool(QW.QWidget):
 
         '''
         super().__init__(parent)
+        self.resize(self._floating_size)
         self.setAttribute(QC.Qt.WA_QuitOnClose, False)
         self.setAttribute(QC.Qt.WA_DeleteOnClose, True)
 

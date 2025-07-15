@@ -1809,8 +1809,13 @@ class Preferences(QW.QDialog):
         self.fontsize_spbox = CW.StyledSpinBox(8, 16)
         self.fontsize_spbox.setValue(self._fontsize)
 
+    # Tools tabbed on opening (Check Box)
+        self.tooltab_cbox = QW.QCheckBox('Tabbed tools')
+        self.tooltab_cbox.setToolTip('Tab opened tools in the main window')
+        self.tooltab_cbox.setChecked(self._tools_tabbed)
+
     # Smooth GUI (Check Box)
-        self.smooth_cbox = QW.QCheckBox()
+        self.smooth_cbox = QW.QCheckBox('Smooth resize')
         self.smooth_cbox.setToolTip('Smooth feedback when resizing widgets')
         self.smooth_cbox.setChecked(self._smooth_gui)
 
@@ -1818,7 +1823,8 @@ class Preferences(QW.QDialog):
         gui_form = QW.QFormLayout()
         gui_form.setSpacing(15)
         gui_form.addRow('Font size', self.fontsize_spbox)
-        gui_form.addRow('Smooth resize', self.smooth_cbox)
+        gui_form.addRow(self.tooltab_cbox)
+        gui_form.addRow(self.smooth_cbox)
         gui_scroll = CW.GroupScrollArea(gui_form, tight=True, frame=False)
 
 #  -------------------------------------------------------------------------  #
@@ -1949,6 +1955,10 @@ class Preferences(QW.QDialog):
         Signals-slots connector.
 
         '''
+    # Tabbed tools
+        self.tooltab_cbox.stateChanged.connect(
+            lambda chk: setattr(self, '_tools_tabbed', bool(chk)))
+        
     # Smooth GUI
         self.smooth_cbox.stateChanged.connect(
             lambda chk: setattr(self, '_smooth_gui', bool(chk)))
@@ -1988,6 +1998,7 @@ class Preferences(QW.QDialog):
         '''
         self._fontsize = pref.get_setting('GUI/fontsize')
         self._smooth_gui = pref.get_setting('GUI/smooth_animation')
+        self._tools_tabbed = pref.get_setting('GUI/tools_tabbed')
         self._roi_col = pref.get_setting('plots/roi_color')
         self._roi_selcol = pref.get_setting('plots/roi_selcolor')
         self._roi_filled = pref.get_setting('plots/roi_filled')
@@ -2004,6 +2015,7 @@ class Preferences(QW.QDialog):
         '''
         pref.edit_setting('GUI/fontsize', self._fontsize)
         pref.edit_setting('GUI/smooth_animation', self._smooth_gui)
+        pref.edit_setting('GUI/tools_tabbed', self._tools_tabbed)
         pref.edit_setting('plots/roi_color', self._roi_col)
         pref.edit_setting('plots/roi_selcolor', self._roi_selcol)
         pref.edit_setting('plots/roi_filled', self._roi_filled)
