@@ -541,7 +541,7 @@ class MineralClassifier(DraggableTool):
         menu = self.maps_viewer.get_navigation_context_menu(
             self.viewer_navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QG.QCursor.pos())
+        menu.exec(self.maps_viewer.mapToGlobal(point))
 
 
     def showInputMap(self, item: CW.DataObject | None) -> None:
@@ -5695,7 +5695,7 @@ class DataViewer(QW.QWidget):
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QG.QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
 

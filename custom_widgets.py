@@ -1048,7 +1048,7 @@ class Legend(QW.QTreeWidget):
                        self.requestMaskFromClass)
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QG.QCursor.pos())
+        menu.exec(self.mapToGlobal(point))
 
 
     def onDoubleClick(self, item: QW.QTreeWidgetItem, column: int) -> None:

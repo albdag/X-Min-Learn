@@ -8,7 +8,7 @@ Created on Tue Mar  26 11:25:14 2024
 import os
 
 from PyQt5.QtCore import pyqtSignal, QPoint, Qt
-from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPixmap
 from PyQt5 import QtWidgets as QW
 
 import numpy as np
@@ -355,7 +355,7 @@ class DataManager(QW.QTreeWidget):
             return
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.mapToGlobal(point))
 
 
     def getAllGroups(self) -> list[CW.DataGroup]:
@@ -1469,7 +1469,7 @@ class HistogramViewer(QW.QWidget):
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def onScalerToggled(self, toggled: bool) -> None:
@@ -1842,7 +1842,7 @@ class ModeViewer(CW.StyledTabWidget):
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def _update_mode_canvas(self, minmap: MineralMap, title: str = '') -> None:
@@ -2420,7 +2420,7 @@ class RoiEditor(QW.QWidget):
         menu.addAction(style.getIcon('REMOVE'), 'Remove', self.removeRoi)
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.table.mapToGlobal(point))
 
 
     def showCanvasContextMenu(self, point: QPoint) -> None:
@@ -2436,7 +2436,7 @@ class RoiEditor(QW.QWidget):
     # Get context menu from NavTbar actions
         menu = self.barCanvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.barCanvas.mapToGlobal(point))
 
 
     def onRectSelect(
@@ -3306,7 +3306,7 @@ class ProbabilityMapViewer(QW.QWidget):
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def onViewRangeToggled(self, toggled: bool) -> None:
@@ -3553,7 +3553,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         clear_submenu.addAction('Clear all', self.clearAllChannels)
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def clearChannel(self, channel: str) -> None:

@@ -7,7 +7,7 @@ Created on Tue May  14 15:03:45 2024
 import os
 
 from PyQt5.QtCore import pyqtSignal, QLocale, QPoint, QSize, Qt
-from PyQt5.QtGui import QColor, QCursor, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPixmap
 import PyQt5.QtWidgets as QW
 
 import numpy as np
@@ -188,7 +188,7 @@ class AutoRoiDetector(QW.QDialog):
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def fix_even_size(self, size: int) -> None:
@@ -1384,7 +1384,7 @@ class ImageToMineralMap(QW.QDialog):
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def importImage(self) -> None:
@@ -1724,7 +1724,7 @@ class DummyMapsBuilder(QW.QDialog):
     # Get context menu from NavTbar actions
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(QCursor.pos())
+        menu.exec(self.canvas.mapToGlobal(point))
 
 
     def generateMap(self) -> None:
