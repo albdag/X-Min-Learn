@@ -916,7 +916,6 @@ class SampleMapsSelector(QW.QWidget):
 class Legend(QW.QTreeWidget):
 
     colorChangeRequested = QC.pyqtSignal(QW.QTreeWidgetItem, tuple) # item, col
-    randomPaletteRequested = QC.pyqtSignal()
     itemRenameRequested = QC.pyqtSignal(QW.QTreeWidgetItem, str) # item, name
     itemsMergeRequested = QC.pyqtSignal(list, str) # list of classes, name
     itemHighlightRequested = QC.pyqtSignal(bool, QW.QTreeWidgetItem) # on/off, item
@@ -1027,12 +1026,8 @@ class Legend(QW.QTreeWidget):
                        lambda: self.requestColorChange(i))
 
     # Randomize color
-        menu.addAction(style.getIcon('RANDOMIZE_COLOR'), 'Random color',
+        menu.addAction(style.getIcon('RANDOMIZE_COLOR'), 'Randomize color',
                        lambda: self.requestRandomColorChange(i))
-
-    # Randomize palette
-        menu.addAction(style.getIcon('RANDOMIZE_COLOR'), 'Randomize all',
-                       self.randomPaletteRequested.emit)
         
     # Separator
         menu.addSeparator()

@@ -913,8 +913,7 @@ class MineralMap():
 
     def set_palette(self, colorlist: list[tuple[int, int, int]]) -> None:
         '''
-        Set a palette based on a color list. The length of the list must match
-        the number of phases.
+        Set a palette based on a color list.
 
         Parameters
         ----------
@@ -922,6 +921,13 @@ class MineralMap():
             A list of RGB triplets (e.g. [(0,0,0), (255, 0, 0), ...].
 
         '''
+    # Ensure the colorlist has the correct length
+        phase_count = self.phase_count()
+        colorlist = colorlist[:phase_count]
+        if diff := (len(colorlist) - phase_count) < 0:
+            colorlist = colorlist + self.rand_colorlist(-diff)
+            
+    # Set the palette dictionary
         IDs = self.get_phases_ids()
         self.palette = dict(zip(IDs, colorlist))
 

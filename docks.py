@@ -5,9 +5,10 @@ Created on Tue Mar  26 11:25:14 2024
 @author: albdag
 """
 
+import json
 import os
 
-from PyQt5.QtCore import pyqtSignal, QPoint, Qt
+from PyQt5.QtCore import pyqtSignal, QMimeData, QPoint, Qt
 from PyQt5.QtGui import QColor, QIcon, QPixmap
 from PyQt5 import QtWidgets as QW
 
@@ -102,6 +103,7 @@ class DataManager(QW.QTreeWidget):
     updateSceneRequested = pyqtSignal(object)
     clearSceneRequested = pyqtSignal()
     rgbaChannelSet = pyqtSignal(str)
+    PALETTE_MIMETYPE = 'application/x-palette+json'
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -328,6 +330,28 @@ class DataManager(QW.QTreeWidget):
 
         # Specific actions when item holds MINERAL MAPS
             elif item.holdsMineralMap():
+
+            # Palette sub-menu
+                palette_submenu = menu.addMenu('Palette')
+                palette_submenu.setIcon(style.getIcon('PALETTE'))
+            # - Randomize palette
+                palette_submenu.addAction(
+                    style.getIcon('RANDOMIZE_COLOR'), 'Randomize',
+                    lambda: self.randomizePalette(item))
+            # - Separator
+                palette_submenu.addSeparator()
+            # - Copy palette
+                palette_submenu.addAction(
+                    style.getIcon('COPY'), 'Copy', 
+                    lambda: self.copyPaletteToClipboard(item))
+            # - Paste palette
+                paste_palette = palette_submenu.addAction(
+                    style.getIcon('PASTE'), 'Paste')
+                paste_palette.triggered.connect(
+                    lambda: self.pastePaletteFromClipboard(item))
+                paste_palette.setEnabled(
+                    QW.qApp.clipboard().mimeData().hasFormat(
+                        self.PALETTE_MIMETYPE))
 
             # Export Array
                 menu.addAction(style.getIcon('EXPORT'), 'Export map',
@@ -1020,6 +1044,89 @@ class DataManager(QW.QTreeWidget):
             child.setChecked(checked)
         self.refreshView()
 
+    
+    def copyPaletteToClipboard(self, item: CW.DataObject) -> None:
+        '''
+        Copy the palette of the mineral map to the clipboard.
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            The data object holding the mineral map data.
+
+        '''
+    # Exit function if item does not contain mineral map data (safety)
+        if not item.holdsMineralMap(): 
+            return
+    
+    # Try converting the palette to JSON bytes data
+        colors = list(item.get('data').palette.values())
+        try:
+            data = json.dumps(colors).encode('utf-8')
+        except TypeError as e:
+            return CW.MsgBox(self, 'Crit', 'Invalid palette data', str(e))
+
+    # Set JSON data as MIME data for the clipboard
+        mimedata = QMimeData()
+        mimedata.setData(self.PALETTE_MIMETYPE, data)
+        clipboard = QW.qApp.clipboard()
+        clipboard.setMimeData(mimedata)
+
+
+    def pastePaletteFromClipboard(self, item: CW.DataObject) -> None:
+        '''
+        Paste palette from the clipboard to the mineral map.
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            The data object holding the mineral map data.
+
+        '''
+    # Exit function if item does not contain mineral map data (safety)
+        if not item.holdsMineralMap(): 
+            return
+        
+    # Exit function if clipboard does not contain palette data (safety)
+        mimedata = QW.qApp.clipboard().mimeData()
+        if not mimedata.hasFormat(self.PALETTE_MIMETYPE):
+            return
+    
+    # Try loading the palette data as list of RGB tuples from the clipboard
+        try:
+            data = mimedata.data(self.PALETTE_MIMETYPE).data().decode('utf-8')
+            colors = [tuple(rgb) for rgb in json.loads(data)]
+        except json.JSONDecodeError as e:
+            text = 'Invalid palette data in clipboard'
+            return CW.MsgBox(self, 'Crit', text, str(e))
+    
+    # Set the palette to the mineral map and mark it as edited
+        minmap = item.get('data')
+        minmap.set_palette(colors)
+        item.setEdited(True)
+        self.refreshView()
+
+
+    def randomizePalette(self, item: CW.DataObject) -> None:
+        '''
+        Randomize mineral map's palette.
+
+        Parameters
+        ----------
+        item : CW.DataObject
+            The data object holding the mineral map data.
+
+        '''
+    # Exit function if item does not contain mineral map data (safety)
+        if not item.holdsMineralMap(): 
+            return
+        
+    # Randomize the mineral map's palette and mark it as edited
+        minmap = item.get('data')
+        minmap.set_palette(minmap.rand_colorlist())
+        item.setEdited(True)
+        self.refreshView()
+
 
     def exportMineralMap(self, item: CW.DataObject) -> None:
         '''
@@ -1033,7 +1140,7 @@ class DataManager(QW.QTreeWidget):
             The data object holding the mineral map data.
 
         '''
-    # Exit function if item does not held mineral map data (safety)
+    # Exit function if item does not contain mineral map data (safety)
         if not item.holdsMineralMap(): 
             return
 
@@ -1822,7 +1929,6 @@ class ModeViewer(CW.StyledTabWidget):
 
     # Connect legend signals
         self.legend.colorChangeRequested.connect(self.onColorChanged)
-        self.legend.randomPaletteRequested.connect(self.onPaletteRandomized)
         self.legend.itemRenameRequested.connect(self.onClassRenamed)
         self.legend.itemsMergeRequested.connect(self.onClassMerged)
         self.legend.itemHighlightRequested.connect(self.onItemHighlighted)
@@ -1921,7 +2027,8 @@ class ModeViewer(CW.StyledTabWidget):
         minmap = self._current_data_object.get('data')
 
     # Apply the color change to mineral map (if color is empty, randomize it)
-        if not len(color): color = minmap.rand_colorlist(1)[0]
+        if not len(color):
+            color = minmap.rand_colorlist(1)[0]
         phase_name = item.text(1)
         minmap.set_phase_color(phase_name, color)
 
@@ -1929,29 +2036,6 @@ class ModeViewer(CW.StyledTabWidget):
         self.map_canvas.alter_cmap(minmap.palette.values())
         self._update_mode_canvas(minmap)
         self.legend.changeItemColor(item, color)
-
-    # Set the current data object as edited
-        self._current_data_object.setEdited(True)
-
-
-    def onPaletteRandomized(self) -> None:
-        '''
-        Randomize the palette of the mineral map. This method propagates the
-        changes to the mineral map, the map canvas, the mode bar plot and the
-        legend.
-
-        '''
-    # Extract mineral map data
-        minmap = self._current_data_object.get('data')
-
-    # Apply random palette to mineral map
-        rand_palette = minmap.rand_colorlist()
-        minmap.set_palette(rand_palette)
-
-    # Update the image canvas colormap, the mode canvas and the legend
-        self.map_canvas.alter_cmap(rand_palette)
-        self._update_mode_canvas(minmap)
-        self.legend.update(minmap)
 
     # Set the current data object as edited
         self._current_data_object.setEdited(True)
