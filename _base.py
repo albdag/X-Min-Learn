@@ -252,6 +252,8 @@ class MineralMap():
                 minmap = file['minmap']
                 probmap = file['probmap']
                 palette = file['palette'].item()
+                # Ensure RGB triplets contain native Python integers
+                palette = {k: tuple(map(int, v)) for k, v in palette.items()}
 
     # Legacy file extensions (.gz, .txt).
     # From these we can retrieve only the mineral map array. Useful to load
@@ -1113,6 +1115,11 @@ class RoiMap():
             file = np.load(filepath, allow_pickle=True)
             map_array = file['map_array']
             roilist = file['roilist'].tolist()
+            # Ensure ROI list contains native Python integers and floats
+            roilist = [
+                [lbl, (float(x), float(y), int(w), int(h))]
+                for lbl, (x, y, w, h) in roilist
+            ]
 
     # Any other file extension is discarded and exits the function.
         else:
