@@ -1019,7 +1019,8 @@ class Legend(QW.QTreeWidget):
         menu.addSeparator()
  
     # Copy current color HEX string
-        menu.addAction('Copy color', lambda: self.copyColorHexToClipboard(i))
+        menu.addAction(style.getIcon('COPY'), 'Copy color HEX',
+                       lambda: self.copyColorHexToClipboard(i))
 
     # Change color
         menu.addAction(style.getIcon('PALETTE'), 'Set color',

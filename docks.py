@@ -202,7 +202,7 @@ class DataManager(QW.QTreeWidget):
     # CONTEXT MENU ON GROUP
         elif isinstance(item, CW.DataGroup):
 
-        # Load data submenu
+        # Load data sub-menu
             load_submenu = menu.addMenu(style.getIcon('IMPORT'), 'Import...')
         # - Input maps
             load_submenu.addAction(style.getIcon('STACK'), 'Input maps', 
@@ -244,13 +244,13 @@ class DataManager(QW.QTreeWidget):
 
             # Check all masks
                 chk_mask = menu.addAction('Check all')
-                chk_mask.setEnabled(not item.isEmpty())
                 chk_mask.triggered.connect(lambda: self.checkMasks(1, group))
+                chk_mask.setEnabled(not item.isEmpty())
 
             # Uncheck all masks
                 unchk_mask = menu.addAction('Uncheck all')
-                unchk_mask.setEnabled(not item.isEmpty())
                 unchk_mask.triggered.connect(lambda: self.checkMasks(0, group))
+                unchk_mask.setEnabled(not item.isEmpty())
 
             # Separator
                 menu.addSeparator()
@@ -281,7 +281,7 @@ class DataManager(QW.QTreeWidget):
             menu.addAction(style.getIcon('ARROW_DOWN'), 'Move down',
                            lambda: self.moveItemDown(item))
 
-        # Move item to group
+        # Move item to group sub-menu
             move_submenu = menu.addMenu('Move to sample...')
             for g in self.getAllGroups():
                 if g != group:
@@ -293,10 +293,9 @@ class DataManager(QW.QTreeWidget):
             menu.addSeparator()
 
         # Correct data source
-            fix_source_action = QW.QAction(style.getIcon('FIX'), 'Fix source')
-            fix_source_action.setEnabled(item.get('not_found'))
-            fix_source_action.triggered.connect(lambda: self.fixDataSource(item))
-            menu.addAction(fix_source_action)
+            fix_source = menu.addAction(style.getIcon('FIX'), 'Fix source')
+            fix_source.triggered.connect(lambda: self.fixDataSource(item))
+            fix_source.setEnabled(item.get('not_found'))
 
         # Refresh data source
             menu.addAction(style.getIcon('REFRESH'), 'Refresh source',
@@ -320,8 +319,9 @@ class DataManager(QW.QTreeWidget):
                 menu.addAction(
                     style.getIcon('INVERT'), 'Invert', self.invertInputMap)
 
-            # RGBA submenu
+            # RGBA sub-menu
                 rgba_submenu = menu.addMenu('Set as RGBA channel...')
+                rgba_submenu.setIcon(style.getIcon('RGBA'))
                 for c in ('R', 'G', 'B', 'A'):
                     rgba_submenu.addAction(
                         f'{c} channel', lambda c=c: self.rgbaChannelSet.emit(c))
@@ -338,17 +338,17 @@ class DataManager(QW.QTreeWidget):
 
             # Invert mask
                 menu.addAction(
-                    style.getIcon('INVERT'), 'Invert mask', self.invertMask)
+                    style.getIcon('INVERT'), 'Invert', self.invertMask)
 
             # Merge masks sub-menu
-                mergemask_submenu = menu.addMenu('Merge masks')
+                mergemask_submenu = menu.addMenu('Merge')
+                mergemask_submenu.setIcon(style.getIcon('MERGE'))
                 mergemask_submenu.addAction(
                     'Intersection', lambda: self.mergeMasks(group, 'I'))
                 mergemask_submenu.addAction(
                     'Union', lambda: self.mergeMasks(group, 'U'))
 
         # add specific actions when item holds point data
-
 
     # Do nothing if item is invalid (safety)
         else: 
