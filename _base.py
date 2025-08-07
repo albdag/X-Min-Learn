@@ -6,6 +6,7 @@ Created on Fri Dec 16 17:52:30 2022
 """
 from collections.abc import Iterable
 import os
+import random
 
 import numpy as np
 
@@ -815,43 +816,49 @@ class MineralMap():
 
     def rand_colorlist(
         self,
-        n_colors: int | None = None,
-        tol: int | None = None
+        n: int | None = None,
+        attempts: int = 10
     ) -> list[tuple[int, int, int]]:
         '''
-        Generate random color lists of desired length.
+        Generate a random color list of desired length, using a dynamic color
+        delta tolerance to maximize color distinctiveness.
 
         Parameters
         ----------
-        n_colors : int or None
-            Number of colors in the list. If None, the current number of unique
-            phases is used. The default is None.
-        tol : int, optional
-            RNG tolerance parameter. Controls how similar the colors can be.
-            Bigger tolerance values means more different colors. If None, it
-            is automatically computed as 256 / 'n_colors'. The default is None.
+        n : int or None
+            Number of colors in the list. If None or non-positive number, the
+            current number of unique phases is used. The default is None.
+        attempts : int, optional
+            Maximum allowed attempts per color before reducing the color 
+            tolerance. Must be a positive number. The default is 10.
 
         Returns
         -------
-        list[tuple[int, int, int]]
+        colors : list[tuple[int, int, int]]
             A list of random RGB triplets.
 
         '''
-        if n_colors is None: 
-            n_colors = self.phase_count()
+        if n is None or n <= 0: 
+            n = self.phase_count()
 
-        if tol is None:
-            tol = 256//n_colors
+        if attempts <= 0:
+            attempts = 1
 
-        _rgb = np.random.default_rng().integers(256, size=3)
-        RGB_arr = _rgb.reshape(1,3)
+        t = 256
+        a = 0
+        colors = []
+        while len(colors) < n:
+            a += 1
+            rgb = tuple(random.randint(0, 255) for _ in range(3))
+            if all(any(abs(i1 - i2) > t for i1, i2 in zip(rgb, c)) for c in colors):
+                colors.append(rgb)
+                a = 0
+                continue
+            if a > attempts:
+                t -= 1
+                a = 0
 
-        for _ in range(n_colors - 1):
-            while np.any(np.all(abs(_rgb - RGB_arr) <= tol, axis=1)):
-                _rgb = np.random.default_rng().integers(256, size=3)
-            RGB_arr = np.r_[RGB_arr, _rgb.reshape(1, 3)]
-
-        return list(map(tuple, RGB_arr))
+        return colors
 
 
     def rename_phase(self, old: str, new: str) -> None:
