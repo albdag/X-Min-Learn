@@ -314,23 +314,26 @@ class MineralClassifier(DraggableTool):
     # Data panel layout
         
         # - Input data
-        self.inmaps_selector.setContentsMargins(9, 9, 9, 9)
+        mask_grid = QW.QGridLayout()
+        mask_grid.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignTop)
+        mask_grid.setVerticalSpacing(15)
+        mask_grid.addWidget(self.del_mask_btn, 0, 0)
+        mask_grid.addWidget(self.mask_pathlbl, 0, 1)
+        mask_grid.addWidget(self.mask_radbtn_1, 1, 0, 1, -1)
+        mask_grid.addWidget(self.load_mask_btn, 2, 1)
+        mask_grid.addWidget(self.mask_radbtn_2, 3, 0, 1, -1)
+        mask_grid.addWidget(QW.QLabel('Select mineral map'), 4, 1)
+        mask_grid.addWidget(self.minmap_combox, 5, 1)
+        mask_grid.addWidget(QW.QLabel('Select class'), 6, 1)
+        mask_grid.addWidget(self.class_combox, 7, 1)
+        mask_grid.setColumnStretch(1, 2)
+        self.mask_group = CW.GroupArea(mask_grid, 'Mask', checkable=True)
+        self.mask_group.setChecked(False)
 
-        # - Mask data
-        mask_data_grid = QW.QGridLayout()
-        mask_data_grid.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignTop)
-        mask_data_grid.setVerticalSpacing(15)
-        mask_data_grid.addWidget(self.del_mask_btn, 0, 0)
-        mask_data_grid.addWidget(self.mask_pathlbl, 0, 1)
-        mask_data_grid.setRowMinimumHeight(1, 20)
-        mask_data_grid.addWidget(self.mask_radbtn_1, 2, 0, 1, -1)
-        mask_data_grid.addWidget(self.load_mask_btn, 3, 1)
-        mask_data_grid.addWidget(self.mask_radbtn_2, 4, 0, 1, -1)
-        mask_data_grid.addWidget(QW.QLabel('Select mineral map'), 5, 1)
-        mask_data_grid.addWidget(self.minmap_combox, 6, 1)
-        mask_data_grid.addWidget(QW.QLabel('Select class'), 7, 1)
-        mask_data_grid.addWidget(self.class_combox, 8, 1)
-        mask_data_grid.setColumnStretch(1, 2)
+        input_data_vbox = QW.QVBoxLayout()
+        input_data_vbox.setSpacing(20)
+        input_data_vbox.addWidget(self.inmaps_selector)
+        input_data_vbox.addWidget(self.mask_group)
 
         # - Output data
         barplot_vbox = QW.QVBoxLayout()
@@ -371,9 +374,7 @@ class MineralClassifier(DraggableTool):
         self.data_tabwid.tabBar().setExpanding(True)
         self.data_tabwid.tabBar().setDocumentMode(True)
         self.data_tabwid.addTab(
-            self.inmaps_selector, style.getIcon('STACK'), title='INPUT MAPS')
-        self.data_tabwid.addTab(
-            mask_data_grid, style.getIcon('MASK'), title='MASK')
+            input_data_vbox, style.getIcon('STACK'), title='INPUT MAPS')
         self.data_tabwid.addTab(
             output_data_grid, style.getIcon('MINERAL'), title='OUTPUT MAPS')
         data_group = CW.CollapsibleArea(
@@ -421,8 +422,11 @@ class MineralClassifier(DraggableTool):
         self.inmaps_selector.mapsDataChanged.connect(
             self.updateClassifyButtonState)
 
-    # Actions to be performed when an input map is clicked
+    # Display input maps when clicked from the input selector
         self.inmaps_selector.mapClicked.connect(self.showInputMap)
+
+    # Hide/show masks when mask group is enabled/disabled
+        self.mask_group.clicked.connect(self.onMaskGroupClicked)
 
     # Enable/disable mask radio buttons actions
         self.mask_radbtn_1.toggled.connect(self.onMaskRadioButtonToggled)
@@ -466,6 +470,18 @@ class MineralClassifier(DraggableTool):
     # Change probability threshold with spinbox and scaler
         self.conf_spbox.valueChanged.connect(self.setConfidenceThreshold)
         self.conf_slider.valueChanged.connect(self.setConfidenceThreshold)
+
+
+    def onMaskGroupClicked(self) -> None:
+        '''
+        Actions to be performed when the mask group is clicked. This method
+        provides feedback when mask group is toggled on/off, by re-rendering
+        the current input map.
+
+        '''
+    # Re-render input map only if already displayed 
+        if self.maps_viewer.contains_heatmap():
+            self.showInputMap(self.inmaps_selector.currentItem())
 
     
     def onMaskRadioButtonToggled(self, toggled: bool) -> None:
@@ -561,8 +577,8 @@ class MineralClassifier(DraggableTool):
             self.maps_viewer.clear_canvas()
             return
 
-    # Get data required to plot the map 
-        if self._mask is None:
+    # Check whether data should be masked or not 
+        if self._mask is None or not self.mask_group.isChecked():
             array = item.get('data').map
         else:
             array = item.get('data').get_masked(self._mask.mask)
@@ -1017,7 +1033,7 @@ class MineralClassifier(DraggableTool):
             self.minmaps_list.addTopLevelItem(item)
 
         # Force show the output maps tab and display the mineral map
-            self.data_tabwid.setCurrentIndex(2) 
+            self.data_tabwid.setCurrentIndex(1) 
             self.minmaps_list.setCurrentItem(item)
             self.showMineralMap(item)
 
