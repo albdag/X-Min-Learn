@@ -128,7 +128,7 @@ ICONS = {
 
 # qss folder
     'CARET_DOWN': Path('Icons') / 'qss' / 'caret_down.png',
-    'CARET_DOWN_BLACK': Path('Icons') / 'qss' / 'caret_down_black.png',
+    'CARET_DOWN_GRAY': Path('Icons') / 'qss' / 'caret_down_gray.png',
     'CARET_RIGHT': Path('Icons') / 'qss' / 'caret_right.png',
     'CLOSE': Path('Icons') / 'qss' / 'close.png',
     'RADIOBTN_CHECKED': Path('Icons') / 'qss' / 'radiobtn_checked.png',
@@ -190,7 +190,7 @@ SS_BUTTON = (
 
 SS_RADIOBUTTON = (
     f'''
-    QRadioButton::indicator::checked {{
+    QRadioButton::indicator::checked:enabled {{
         image: url({ICONS.get('RADIOBTN_CHECKED').as_posix()});
     }}
     '''
@@ -260,7 +260,7 @@ SS_COMBOX = (
     }}
 
     QComboBox::drop-down:!enabled {{
-        background-color: darkgray;
+        background-color: {CASPER_DARK};
     }}
 
     QComboBox::down-arrow {{
@@ -268,7 +268,7 @@ SS_COMBOX = (
     }}
 
     QComboBox::down-arrow:!enabled {{
-        image: url({ICONS.get('CARET_DOWN_BLACK').as_posix()});
+        image: url({ICONS.get('CARET_DOWN_GRAY').as_posix()});
     }}
 
     QComboBox QAbstractItemView {{
@@ -750,10 +750,16 @@ SS_PATHLABEL = (
     f'''
     QLabel {{
         background-color: {BLACK_PEARL};
-        border: 3px inset {SAN_MARINO};
+        border: 3px solid {SAN_MARINO};
         border-radius: 3px;
         color: {IVORY};
         padding: 2px;
+    }}
+
+    QLabel:!enabled {{
+        background-color: {CASPER_DARK};
+        border-color: {CASPER};
+        color: gray;
     }}
     '''
 )
