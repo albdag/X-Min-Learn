@@ -425,8 +425,8 @@ class MineralClassifier(DraggableTool):
     # Display input maps when clicked from the input selector
         self.inmaps_selector.mapClicked.connect(self.showInputMap)
 
-    # Hide/show masks when mask group is enabled/disabled
-        self.mask_group.clicked.connect(self.onMaskGroupClicked)
+    # Hide/show masks on input maps when mask group is enabled/disabled
+        self.mask_group.clicked.connect(self.refreshInputMap)
 
     # Enable/disable mask radio buttons actions
         self.mask_radbtn_1.toggled.connect(self.onMaskRadioButtonToggled)
@@ -470,18 +470,6 @@ class MineralClassifier(DraggableTool):
     # Change probability threshold with spinbox and scaler
         self.conf_spbox.valueChanged.connect(self.setConfidenceThreshold)
         self.conf_slider.valueChanged.connect(self.setConfidenceThreshold)
-
-
-    def onMaskGroupClicked(self) -> None:
-        '''
-        Actions to be performed when the mask group is clicked. This method
-        provides feedback when mask group is toggled on/off, by re-rendering
-        the current input map.
-
-        '''
-    # Re-render input map only if already displayed 
-        if self.maps_viewer.contains_heatmap():
-            self.showInputMap(self.inmaps_selector.currentItem())
 
     
     def onMaskRadioButtonToggled(self, toggled: bool) -> None:
@@ -594,6 +582,17 @@ class MineralClassifier(DraggableTool):
     # Plot the map
         self.maps_viewer.draw_heatmap(array, title)
 
+    
+    def refreshInputMap(self) -> None:
+        '''
+        Re-render the currently selected input map in the maps viewer. This is
+        useful when a mask is loaded/removed or shown/hidden.
+
+        '''
+    # Re-render input map only if already displayed in the maps viewer
+        if self.maps_viewer.contains_heatmap():
+            self.showInputMap(self.inmaps_selector.currentItem())
+
 
     def loadMaskFromFile(self) -> None:
         '''
@@ -657,10 +656,7 @@ class MineralClassifier(DraggableTool):
 
         '''
         self._mask = mask
-    
-    # We want masks to only rendered on input maps
-        if self.maps_viewer.contains_heatmap():
-            self.showInputMap(self.inmaps_selector.currentItem())
+        self.refreshInputMap()
 
 
     def removeMask(self) -> None:
@@ -670,10 +666,7 @@ class MineralClassifier(DraggableTool):
         '''
         self._mask = None
         self.mask_pathlbl.clearPath()
-
-    # Masks are only rendered on top of Input Maps
-        if self.maps_viewer.contains_heatmap():
-            self.showInputMap(self.inmaps_selector.currentItem())
+        self.refreshInputMap()
 
 
     def addRoiMap(self, roimap: RoiMap) -> None:
