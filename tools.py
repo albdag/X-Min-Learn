@@ -525,7 +525,7 @@ class MineralClassifier(DraggableTool):
         Toggle on/off the CLASSIFY button.
 
         '''
-        enabled = self.inmaps_selector.itemCount()
+        enabled = self.inmaps_selector.mapsCount()
         self.classify_btn.setEnabled(enabled)
 
 
@@ -589,7 +589,7 @@ class MineralClassifier(DraggableTool):
         '''
     # Re-render input map only if already displayed in the maps viewer
         if self.maps_viewer.contains_heatmap():
-            self.showInputMap(self.inmaps_selector.currentItem())
+            self.showInputMap(self.inmaps_selector.currentMap())
 
 
     def loadMaskFromFile(self) -> None:
@@ -4856,7 +4856,7 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Exit function if selection is invalid
-        selected = self.minmap_selector.currentItem()
+        selected = self.minmap_selector.currentMap()
         if selected is None:
             return
         

@@ -770,6 +770,7 @@ class SampleMapsSelector(QW.QWidget):
             raise ValueError(f'Invalid "maps_type" argument: {maps_type}.')
         self.maps_type = maps_type
         self.checkable = checkable
+        self._current_sample = None
 
     # Initialize GUI and connect its signals to slots
         self._init_ui()
@@ -827,6 +828,7 @@ class SampleMapsSelector(QW.QWidget):
         '''
         samples_names = [s.text(0) for s in samples]
         self.sample_combox.updateItems(samples_names)
+        self._current_sample = None
 
     
     def updateList(self, sample: DataGroup) -> None:
@@ -841,8 +843,9 @@ class SampleMapsSelector(QW.QWidget):
             The currently selected sample as a DataGroup.
 
         '''
-    # Clear the input maps lists
+    # Clear the input maps lists and set current sample
         self.maps_list.clear()
+        self._current_sample = sample
 
     # Exit function if the subgroup is empty
         subgr = sample.inmaps if self.maps_type == 'inmaps' else sample.minmaps
@@ -877,7 +880,7 @@ class SampleMapsSelector(QW.QWidget):
             return checked
     
 
-    def itemCount(self) -> int:
+    def mapsCount(self) -> int:
         '''
         Return the amount of maps loaded in the maps list.
 
@@ -890,7 +893,7 @@ class SampleMapsSelector(QW.QWidget):
         return self.maps_list.topLevelItemCount()
     
 
-    def currentItem(self) -> DataObject:
+    def currentMap(self) -> DataObject:
         '''
         Return the currently selected map.
 
@@ -901,6 +904,19 @@ class SampleMapsSelector(QW.QWidget):
 
         '''
         return self.maps_list.currentItem()
+    
+
+    def currentSample(self) -> DataGroup | None:
+        '''
+        Return the currently selected sample.
+
+        Returns
+        -------
+        DataGroup or None
+            Currently selected sample.
+
+        '''
+        return self._current_sample
     
 
     def clear(self) -> None:
