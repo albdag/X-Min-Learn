@@ -181,23 +181,34 @@ class MineralClassifier(DraggableTool):
     # Loaded mask (Path Label)
         self.mask_pathlbl = CW.PathLabel(full_display=False)
 
-    # Load mask from file choice (Radio Button) [Default choice]
-        self.mask_radbtn_1 = QW.QRadioButton('Load from file')
+    # Mask warning icon (Label)
+        warn_icon = QG.QPixmap(str(style.ICONS.get('WARNING')))
+        self.mask_warn = QW.QLabel()
+        self.mask_warn.setPixmap(warn_icon.scaled(24, 24, QC.Qt.KeepAspectRatio))
+        self.mask_warn.setToolTip('Invalid shape detected. Mask not applied.')
+        self.mask_warn.setVisible(False)
+
+    # Load mask from file (Radio Button) [Default choice]
+        self.mask_radbtn_1 = QW.QRadioButton('From mask file')
         self.mask_radbtn_1.setStyleSheet(style.SS_RADIOBUTTON)
         self.mask_radbtn_1.setChecked(True)
+
+    # Mask selector (Auto Update Combo Box)
+        self.mask_combox = CW.AutoUpdateComboBox()
     
-    # Load mask from file (Styled Button)
-        self.load_mask_btn = CW.StyledButton(style.getIcon('IMPORT'), 'Load')
+    # Load mask button (Styled Button)
+        self.load_mask_btn = CW.StyledButton(style.getIcon('IMPORT'))
+        self.load_mask_btn.setToolTip('Load from file...')
         
-    # Get mask from class choice (Radio Button)
-        self.mask_radbtn_2 = QW.QRadioButton('Get from output map')
+    # Get mask from classificaton result (Radio Button)
+        self.mask_radbtn_2 = QW.QRadioButton('From classification result')
         self.mask_radbtn_2.setStyleSheet(style.SS_RADIOBUTTON)
 
-    # Minmap selector to get mask from (Auto Update Combo Box)
+    # Classification result selector (Auto Update Combo Box)
         self.minmap_combox = CW.AutoUpdateComboBox()
         self.minmap_combox.setEnabled(False)
 
-    # Mineral Class selector to get mask from (Combo Box)
+    # Mineral Class selector (Combo Box)
         self.class_combox = CW.StyledComboBox()
         self.class_combox.setEnabled(False)
 
@@ -314,18 +325,19 @@ class MineralClassifier(DraggableTool):
         
         # - Input data
         mask_grid = QW.QGridLayout()
-        mask_grid.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignTop)
         mask_grid.setVerticalSpacing(15)
-        mask_grid.addWidget(self.del_mask_btn, 0, 0)
-        mask_grid.addWidget(self.mask_pathlbl, 0, 1)
+        mask_grid.addWidget(self.mask_warn, 0, 0)
+        mask_grid.addWidget(self.mask_pathlbl, 0, 1, 1, 2)
+        mask_grid.addWidget(self.del_mask_btn, 0, 3)
         mask_grid.addWidget(self.mask_radbtn_1, 1, 0, 1, -1)
-        mask_grid.addWidget(self.load_mask_btn, 2, 1)
+        mask_grid.addWidget(self.mask_combox, 2, 0, 1, 3)
+        mask_grid.addWidget(self.load_mask_btn, 2, 3)
         mask_grid.addWidget(self.mask_radbtn_2, 3, 0, 1, -1)
-        mask_grid.addWidget(QW.QLabel('Select mineral map'), 4, 1)
-        mask_grid.addWidget(self.minmap_combox, 5, 1)
-        mask_grid.addWidget(QW.QLabel('Select class'), 6, 1)
-        mask_grid.addWidget(self.class_combox, 7, 1)
-        mask_grid.setColumnStretch(1, 2)
+        mask_grid.addWidget(self.minmap_combox, 4, 0, 1, 2)
+        mask_grid.addWidget(QW.QLabel('Output map'), 4, 2, 1, 2)
+        mask_grid.addWidget(self.class_combox, 5, 0, 1, 2)
+        mask_grid.addWidget(QW.QLabel('Class'), 5, 2, 1, 2)
+        mask_grid.setColumnStretch(1, 1)
         self.mask_group = CW.GroupArea(mask_grid, 'Mask', checkable=True)
         self.mask_group.setChecked(False)
 
@@ -426,9 +438,13 @@ class MineralClassifier(DraggableTool):
     # Hide/show masks on input maps when mask group is enabled/disabled
         self.mask_group.clicked.connect(self.refreshInputMap)
 
-    # Enable/disable mask radio buttons actions
+    # Mask combobox actions
+        self.mask_combox.clicked.connect(self.updateMaskCombox)
+        self.mask_combox.activated.connect(self.getMaskFromSample)
+
+    # Enable/disable mask radio buttons actions. We only check the toggle state
+    # of one of them, since they are mutually exclusive.
         self.mask_radbtn_1.toggled.connect(self.onMaskRadioButtonToggled)
-        self.mask_radbtn_2.toggled.connect(self.onMaskRadioButtonToggled)
 
     # Load/remove masks actions
         self.del_mask_btn.clicked.connect(self.removeMask)
@@ -473,7 +489,9 @@ class MineralClassifier(DraggableTool):
     def onMaskRadioButtonToggled(self, toggled: bool) -> None:
         '''
         Manage the GUI visualization of the input mask options. When one option
-        is toggled, the other is disabled.
+        is toggled, the other is disabled. This method is called just by one of
+        the two radio buttons (arbitrarily the first one - see '_connect_slots'
+        method), since they are mutually exclusive.
 
         Parameters
         ----------
@@ -481,16 +499,29 @@ class MineralClassifier(DraggableTool):
             State of radio button.
 
         '''
-        if self.sender() == self.mask_radbtn_1:
-            self.load_mask_btn.setEnabled(toggled)
-            self.minmap_combox.setEnabled(not toggled)
-            self.class_combox.setEnabled(not toggled)
+    # Assuming checking against the toggle state of 'self.mask_radbtn_1'
+        self.mask_combox.setEnabled(toggled)
+        self.load_mask_btn.setEnabled(toggled)
+        self.minmap_combox.setEnabled(not toggled)
+        self.class_combox.setEnabled(not toggled)
         
-        else:
-            self.load_mask_btn.setEnabled(not toggled)
-            self.minmap_combox.setEnabled(toggled)
-            self.class_combox.setEnabled(toggled)
 
+    def updateMaskCombox(self) -> None:
+        '''
+        Populate the combobox that allows the selection of a mask from the
+        currently loaded sample.
+
+        '''
+    # Clear the combobox and exit function if no sample is selected
+        sample = self.inmaps_selector.currentSample()
+        if sample is None:
+            self.mask_combox.clear()
+            return
+    
+    # Update the combobox with the names of the masks in the selected sample
+        items = [c.get('name') for c in sample.masks.getChildren()]
+        self.mask_combox.updateItems(items)
+        
 
     def updateMineralMapsCombox(self) -> None:
         '''
@@ -563,21 +594,25 @@ class MineralClassifier(DraggableTool):
             self.maps_viewer.clear_canvas()
             return
 
-    # Check whether data should be masked or not 
-        if self._mask is None or not self.mask_group.isChecked():
-            array = item.get('data').map
-        else:
+    # Check whether data should be masked or not
+        mask_available = self.mask_group.isChecked() and self._mask is not None
+        if mask_available:
             array = item.get('data').get_masked(self._mask.mask)
+        else:
+            array = item.get('data').map
             
-        map_name = item.get('name')
-        sample_name = self.inmaps_selector.sample_combox.currentText()
-        title = f'{sample_name} - {map_name}'
+    # Show warn icon if available mask has wrong shape and thus is not applied
+        visible = mask_available and not isinstance(array, np.ma.MaskedArray)
+        self.mask_warn.setVisible(visible)
 
     # Disable confidence spinbox and slider
         self.conf_spbox.setEnabled(False)
         self.conf_slider.setEnabled(False)
 
     # Plot the map
+        map_name = item.get('name')
+        sample_name = self.inmaps_selector.sample_combox.currentText()
+        title = f'{sample_name} - {map_name}'
         self.maps_viewer.draw_heatmap(array, title)
 
     
@@ -602,19 +637,38 @@ class MineralClassifier(DraggableTool):
         path = CW.FileDialog(self, 'open', 'Load Mask', ftypes).get()
         if not path:
             return
-        
+    
+    # Try loading mask
         try:
             mask = Mask.load(path)     
         except Exception as e:
-            mask = None 
-            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', str(e))
+            return CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', str(e))
 
-        finally:
-            if mask:
-                self.mask_pathlbl.setPath(path)
-                self.setMask(mask)
-            else:
-                self.removeMask()
+    # Update GUI
+        self.mask_pathlbl.setPath(path)
+        self.mask_combox.clear()
+        self.setMask(mask)
+
+
+    def getMaskFromSample(self, mask_idx: int) -> None:
+        '''
+        Extract from the current sample the mask at index 'mask_idx'.
+
+        Parameters
+        ----------
+        mask_idx : int
+            Index of the mask.
+
+        '''
+    # Exit function if an invalid index is provided
+        sample_masks = self.inmaps_selector.currentSample().masks.getChildren()
+        if mask_idx < 0 or mask_idx > len(sample_masks) - 1:
+            return
+    
+    # Extract mask
+        mask_path, mask_data = sample_masks[mask_idx].get('filepath', 'data')
+        self.mask_pathlbl.setPath(mask_path)
+        self.setMask(mask_data)
 
 
     def getMaskFromClass(self, class_name: str) -> None:
@@ -951,7 +1005,8 @@ class MineralClassifier(DraggableTool):
         inmaps, names = zip(*[i.get('data', 'name') for i in checked_inmaps])
 
     # Build the input maps stack
-        input_stack = InputMapStack(inmaps, self._mask)
+        mask = self._mask if self.mask_group.isChecked() else None
+        input_stack = InputMapStack(inmaps, mask)
     
     # Check for maps perfect overlapping
         if not input_stack.maps_fit():
