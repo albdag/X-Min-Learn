@@ -254,8 +254,7 @@ class MineralClassifier(DraggableTool):
 
     # Classifier panel (Styled Tab Widget)
         self.classifier_tabwid = CW.StyledTabWidget()
-        self.classifier_tabwid.tabBar().setDocumentMode(True)
-        self.classifier_tabwid.tabBar().setExpanding(True)
+        self.classifier_tabwid.setTabBarExpanding()
         self.pre_train_tab = self.PreTrainedClassifierTab()
         self.roi_based_tab = self.RoiBasedClassifierTab()
         self.unsuperv_tab = self.UnsupervisedClassifierTab()
@@ -371,14 +370,13 @@ class MineralClassifier(DraggableTool):
         
         # - Panel layout
         self.data_tabwid = CW.StyledTabWidget()
-        self.data_tabwid.tabBar().setExpanding(True)
-        self.data_tabwid.tabBar().setDocumentMode(True)
+        self.data_tabwid.setTabBarExpanding()
         self.data_tabwid.addTab(
             input_data_vbox, style.getIcon('STACK'), title='INPUT MAPS')
         self.data_tabwid.addTab(
             output_data_grid, style.getIcon('MINERAL'), title='OUTPUT MAPS')
         data_group = CW.CollapsibleArea(
-            self.data_tabwid, 'Data panel', collapsed=False)
+            self.data_tabwid, 'Data', collapsed=False)
 
     # Classifier panel layout
         class_grid = QW.QGridLayout()
@@ -386,7 +384,7 @@ class MineralClassifier(DraggableTool):
         class_grid.addWidget(self.progbar, 1, 0, 1, -1)
         class_grid.addWidget(self.classify_btn, 2, 0)
         class_grid.addWidget(self.stop_btn, 2, 1)
-        class_group = CW.CollapsibleArea(class_grid, 'Classifier panel')
+        class_group = CW.CollapsibleArea(class_grid, 'Classifier')
 
     # Viewer panel layout
         viewer_grid = QW.QGridLayout()
@@ -395,7 +393,7 @@ class MineralClassifier(DraggableTool):
         viewer_grid.addWidget(conf_lbl, 2, 0, 1, -1)
         viewer_grid.addWidget(self.conf_spbox, 3, 0)
         viewer_grid.addWidget(self.conf_slider, 3, 1)
-        viewer_group = CW.GroupArea(viewer_grid, 'Viewer panel')
+        right_scroll = CW.GroupScrollArea(viewer_grid)
 
     # Main layout
         left_vbox = QW.QVBoxLayout()
@@ -403,11 +401,11 @@ class MineralClassifier(DraggableTool):
         left_vbox.addWidget(class_group)
         left_vbox.addWidget(data_group)
         left_vbox.addStretch(1)
-        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox)
 
         main_layout = CW.SplitterLayout()
         main_layout.addWidget(left_scroll, 0)
-        main_layout.addWidget(viewer_group, 1)
+        main_layout.addWidget(right_scroll, 1)
         self.setLayout(main_layout)
 
 
@@ -1149,6 +1147,7 @@ class MineralClassifier(DraggableTool):
 
         # Adjust main layout
             main_layout = QW.QVBoxLayout()
+            main_layout.setContentsMargins(0, 0, 0, 0)
             main_layout.addWidget(self.load_btn)
             main_layout.addWidget(self.model_path)
             main_layout.addSpacing(20)
@@ -1324,6 +1323,7 @@ class MineralClassifier(DraggableTool):
 
         # Adjust main layout
             main_layout = QW.QGridLayout()
+            main_layout.setContentsMargins(0, 0, 0, 0)
             main_layout.addWidget(self.load_btn, 0, 0, 1, -1)
             main_layout.addWidget(self.unload_btn, 1, 0)
             main_layout.addWidget(self.roimap_path, 1, 1)
@@ -1550,16 +1550,18 @@ class MineralClassifier(DraggableTool):
 
         # Adjust layout
             scores_grid = QW.QGridLayout()
+            scores_grid.setContentsMargins(9, 9, 9, 9)
             scores_grid.addWidget(self.silscore_cbox, 0, 0)
             scores_grid.addWidget(QW.QLabel('Data ratio'), 0, 1, QC.Qt.AlignRight)
             scores_grid.addWidget(self.silscore_ratio_spbox, 0, 2)
             scores_grid.addWidget(self.chiscore_cbox, 1, 0, 1, -1)
             scores_grid.addWidget(self.dbiscore_cbox, 2, 0, 1, -1)
             scores_group = CW.GroupArea(scores_grid, 'Clustering scores',
-                                          checkable=True)
+                                        checkable=True, align=QC.Qt.AlignLeft)
             scores_group.setChecked(False)
 
             main_layout = QW.QVBoxLayout()
+            main_layout.setContentsMargins(0, 0, 0, 0)
             main_layout.addWidget(self.seed_generator)
             main_layout.addSpacing(20)
             main_layout.addWidget(self.pixprox_cbox)
@@ -1830,7 +1832,7 @@ class DatasetBuilder(DraggableTool):
         infeat_grid.addWidget(self.delfeat_btn, 2, 0, 1, 1)
         infeat_grid.addWidget(self.refresh_btn, 2, 1, 1, 1)
         
-        infeat_vsplit = CW.SplitterLayout(QC.Qt.Vertical)
+        infeat_vsplit = CW.SplitterLayout(orient='vertical')
         infeat_vsplit.addWidget(elem_scroll, 0)
         infeat_vsplit.addLayout(infeat_grid, 1)
         infeat_group = CW.GroupArea(infeat_vsplit, 'Input features')
@@ -1868,13 +1870,13 @@ class DatasetBuilder(DraggableTool):
         left_vbox.setSpacing(20)
         left_vbox.addWidget(infeat_group)
         left_vbox.addWidget(outpref_group)
-        left_scroll = CW.GroupScrollArea(left_vbox, frame=False, tight=True)
+        left_scroll = CW.GroupScrollArea(left_vbox)
 
         right_vbox = QW.QVBoxLayout()
         right_vbox.setSpacing(20)
         right_vbox.addWidget(designer_group)
         right_vbox.addWidget(refine_group)
-        right_scroll = CW.GroupScrollArea(right_vbox, frame=False, tight=True)
+        right_scroll = CW.GroupScrollArea(right_vbox)
 
         main_layout = CW.SplitterLayout()
         main_layout.addWidget(left_scroll, 0)
@@ -2780,8 +2782,7 @@ class ModelLearner(DraggableTool):
         accuracy_grid.setColumnStretch(3, 1)
 
         learn_plot_tabwid = CW.StyledTabWidget()
-        learn_plot_tabwid.tabBar().setDocumentMode(True)
-        learn_plot_tabwid.tabBar().setExpanding(True)
+        learn_plot_tabwid.setTabBarExpanding()
         learn_plot_tabwid.addTab(
             loss_grid, style.getIcon('LOSS'), 'LOSS PLOT')
         learn_plot_tabwid.addTab(
@@ -2897,8 +2898,7 @@ class ModelLearner(DraggableTool):
         ts_cm_grid.setColumnStretch(5, 1)
 
         confmat_tabwid = CW.StyledTabWidget()
-        confmat_tabwid.tabBar().setDocumentMode(True)
-        confmat_tabwid.tabBar().setExpanding(True)
+        confmat_tabwid.setTabBarExpanding()
         confmat_tabwid.addTab(
             tr_cm_grid, style.getIcon('TRAIN_SET'), 'TRAIN SET')
         confmat_tabwid.addTab(
@@ -2929,7 +2929,7 @@ class ModelLearner(DraggableTool):
         left_vbox.addWidget(pref_group)
         left_vbox.addStretch(1)
         left_vbox.addLayout(main_ctrl_grid)
-        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox)
 
     # Adjust learning panels layout (right Group Scroll Area)
         right_vbox = QW.QVBoxLayout()
@@ -2938,7 +2938,7 @@ class ModelLearner(DraggableTool):
         right_vbox.addWidget(self.balancing_group)
         right_vbox.addWidget(learn_group)
         right_vbox.addWidget(confmat_group)
-        right_scroll = CW.GroupScrollArea(right_vbox, frame=False)
+        right_scroll = CW.GroupScrollArea(right_vbox)
 
     # Main Layout
         main_layout = CW.SplitterLayout()
@@ -4544,6 +4544,7 @@ class PhaseRefiner(DraggableTool):
     
     # [Basic Refiner] settings group (Group Area)
         basic_settings_grid = QW.QGridLayout()
+        basic_settings_grid.setAlignment(QC.Qt.AlignTop)
         basic_settings_grid.setVerticalSpacing(10)
         basic_settings_grid.addWidget(QW.QLabel('NoData class'), 0, 0, 1, 1)
         basic_settings_grid.addWidget(self.nd_combox, 0, 1, 1, 1)
@@ -4552,11 +4553,11 @@ class PhaseRefiner(DraggableTool):
         basic_settings_grid.addWidget(self.nd_thresh_spbox, 1, 1, 1, -1)
         basic_settings_grid.setColumnStretch(0, 1)
         basic_settings_grid.setColumnStretch(1, 1)
-        basic_settings_group = CW.GroupArea(
-            basic_settings_grid, tight=True, frame=False)
+        basic_settings_group = CW.GroupArea(basic_settings_grid, frame=False)
 
     # [Advanced Refiner] settings group (Group Area)
         advan_settings_grid = QW.QGridLayout()
+        advan_settings_grid.setAlignment(QC.Qt.AlignTop)
         advan_settings_grid.setVerticalSpacing(10)
         advan_settings_grid.addWidget(QW.QLabel('Algorithm'), 0, 0, 1, 1)
         advan_settings_grid.addWidget(self.algm_warn, 0, 1, 1, 1)
@@ -4567,8 +4568,7 @@ class PhaseRefiner(DraggableTool):
         advan_settings_grid.addWidget(self.del_pixels_combox, 3, 2, 1, 1)
         advan_settings_grid.setColumnStretch(0, 1)
         advan_settings_grid.setColumnStretch(2, 1)
-        advan_settings_group = CW.GroupArea(
-            advan_settings_grid, tight=True, frame=False)
+        advan_settings_group = CW.GroupArea(advan_settings_grid, frame=False)
 
     # Settings container widget (Stacked Widget)
         self.settings_stack = QW.QStackedWidget()
@@ -4784,7 +4784,7 @@ class PhaseRefiner(DraggableTool):
         left_vbox.addWidget(settings_group)
         left_vbox.addWidget(legend_group, 1)
         left_vbox.addLayout(ctrl_widgets_grid)
-        left_scroll = CW.GroupScrollArea(left_vbox, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox)
 
     # Right panel layout
         self.mode_tabwid = CW.StyledTabWidget()
@@ -4796,7 +4796,7 @@ class PhaseRefiner(DraggableTool):
         advan_tip = 'Class-wise advanced refinement with multiple binary filters'
         self.mode_tabwid.tabBar().setTabToolTip(0, basic_tip)
         self.mode_tabwid.tabBar().setTabToolTip(1, advan_tip)
-        right_scroll = CW.GroupScrollArea(self.mode_tabwid, frame=False)
+        right_scroll = CW.GroupScrollArea(self.mode_tabwid)
 
     # Main layout
         main_layout = CW.SplitterLayout()

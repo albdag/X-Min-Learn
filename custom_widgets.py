@@ -1813,6 +1813,7 @@ class StyledTabWidget(QW.QTabWidget):
 
     def __init__(
         self,
+        tabs_align: str = 'left',
         wheel_scroll: bool = False,
         parent: QW.QWidget | None = None
     ) -> None:
@@ -1822,11 +1823,19 @@ class StyledTabWidget(QW.QTabWidget):
 
         Parameters
         ----------
+        tabs_align : str, optional
+            Tabs alignment in the tab bar. Can be: 'left', 'l', 'right', 'r',
+            'center', 'c'. The default is 'left'.
         wheel_scroll : bool, optional
             Whether mouse wheel event should allow to change current tab. The 
             default is False.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
+
+        Raises
+        ------
+        ValueError
+            Raised if "tabs_align" is not a valid string.
 
         '''
         super().__init__(parent)
@@ -1836,7 +1845,17 @@ class StyledTabWidget(QW.QTabWidget):
             self.setTabBar(self.UnscrollableTabBar())
 
     # Set stylesheet
-        self.setStyleSheet(style.SS_TABWIDGET)
+        match tabs_align:
+            case 'left' | 'l':
+                ss_align = 'QTabWidget::tab-bar {alignment: left;}'
+            case 'right' | 'r':
+                ss_align = 'QTabWidget::tab-bar {alignment: right;}'
+            case 'center' | 'c':
+                ss_align = 'QTabWidget::tab-bar {alignment: center;}'
+            case _:
+                raise ValueError(f'Invalid "tabs_align" argument: {tabs_align}')
+
+        self.setStyleSheet(style.SS_TABWIDGET + ss_align)
 
 
     def addTab(
@@ -1864,33 +1883,59 @@ class StyledTabWidget(QW.QTabWidget):
             Raised when qobject is not a QWidget or a QLayout.
 
         '''
-        # If qobject is a layout, tab is a QWidget with layout set to qobject
-        if isinstance(qobject, QW.QLayout):
-            tab = QW.QWidget()
-            tab.setLayout(qobject)
+    # Set a GroupArea as the wrapper widget for "qobject"
+        if isinstance(qobject, (QW.QLayout, QW.QWidget)):
+            has_frame = self.tabBar().documentMode()
+            tab = GroupArea(qobject, frame=has_frame, tight=False)
+            if has_frame:
+                tab.setStyleSheet(None)
+                tab.setObjectName('FramedWrapper')  # Name for custom qss
 
-        # If qobject is a widget that contains a layout, tab is the qobject.
-        # If it does not contain a layout, tab is a QWidget, containing a
-        # QVBoxLayout, containing the qobject.
-        elif isinstance(qobject, QW.QWidget):
-            if qobject.layout():
-                tab = qobject
-            else:
-                tab = QW.QWidget()
-                layout = QW.QVBoxLayout(tab)
-                layout.addWidget(qobject)
-
-        # Raise TypeError if qobject is neither a QWidget nor a QLayout
+    # Raise error if "qobject" is invalid
         else:
             raise TypeError(f'Invalid qobject type: {type(qobject)}.')
 
-
-        # Add the tab with or without an icon
+    # Add the tab with or without an icon
         if icon:
             super().addTab(tab, icon, title)
         else:
             super().addTab(tab, title)
 
+
+    def setTabBarExpanding(self) -> None:
+        '''
+        A workaround method to display expanding tabs, without compromising the
+        style of the Tab Widget pane.
+
+        '''
+        self.tabBar().setExpanding(True)
+        self.tabBar().setDocumentMode(True)
+        ss = 'QTabWidget::pane {padding: 0px; border: 0px; margin: 0px;}'
+        self.setStyleSheet(self.styleSheet() + ss)
+
+
+    def widget(self, index: int) -> QW.QWidget | None:
+        '''
+        Reimplementation of the original "widget" method to ensure to get the
+        object held by the tab at index "index" and not its wrapper widget.
+
+        Parameters
+        ----------
+        index : int
+            Index of tab.
+
+        Returns
+        -------
+        QWidget or None
+            Widget held by the tab or None if the index is invalid.
+
+        '''
+        wrapper = super().widget(index)
+        if isinstance(wrapper, GroupArea):
+            wrapped_object = wrapper.wrappedObject() 
+            if isinstance(wrapped_object, QW.QWidget):
+                return wrapped_object 
+        return wrapper
 
     class UnscrollableTabBar(QW.QTabBar):
 
@@ -2117,8 +2162,8 @@ class GroupArea(QW.QGroupBox):
         qobject: QW.QLayout | QW.QWidget,
         title: str | None = None,
         checkable: bool = False,
-        tight: bool = False,
         frame: bool = True,
+        tight: bool | None = None,
         align: QC.Qt.Alignment = QC.Qt.AlignHCenter,
         parent: QW.QWidget | None = None
     ) -> None:
@@ -2133,12 +2178,13 @@ class GroupArea(QW.QGroupBox):
             The title of the group box. The default is None.
         checkable : bool, optional
             Whether the group box is checkable. The default is False.
-        tight : bool, optional
-            Whether the layout of the group box should take all the available 
-            space. The default is False.
         frame : bool, optional
-            Whether the area should show a visible frame. This is ignored if
-            the title is provided. The default is True.
+            Whether the area should show a visible frame. This is forced to be
+            True if "title" is provided. The default is True.
+        tight : bool or None, optional
+            Whether the layout of the group box should take all the available 
+            space. If None, this is automatically set depending on "title" and
+            "frame". The default is None.
         align : Qt.Alignment, optional
             The alignment of the title. Can be Qt.AlignLeft, Qt.AlignRight or
             Qt.AlignHCenter. The default is Qt.AlignHCenter.
@@ -2153,11 +2199,9 @@ class GroupArea(QW.QGroupBox):
             Raised if an invalid "align" argument is passed.
 
         '''
-    # Set the title of the group box. Change the style-sheet depending on title
-    # orientation.
+    # Set the style of the GroupBox, depending on "title", "align" and "frame"
         if title:
             super().__init__(title, parent)
-
             match align:
                 case QC.Qt.AlignLeft:
                     align_css = 'top left'
@@ -2169,38 +2213,51 @@ class GroupArea(QW.QGroupBox):
                     valid = ("Qt.AlignLeft", "Qt.AlignRight", "Qt.AlignHCenter")
                     raise ValueError(f'Argument "align" can only be {valid}.')
 
-            title_ss = (f'QGroupBox::title {{subcontrol-position: {align_css};}}')
+            title_ss = f'QGroupBox::title {{subcontrol-position: {align_css};}}'
             self.setStyleSheet(style.SS_GROUPAREA_TITLE + title_ss)
         
         else:
             super().__init__(parent)
-            ss = style.SS_GROUPAREA_NOTITLE
-            if not frame:
-                ss += 'QGroupBox {border-width: 0px;}' 
-            self.setStyleSheet(ss)
+            if frame:
+                self.setStyleSheet(style.SS_GROUPAREA_BASE)
+            else:
+                self.setStyleSheet(style.SS_GROUPAREA_NOFRAME)
 
-    # Set if the group box is checkable or not
+    # Set if the GroupBox is checkable or not
         self.setCheckable(checkable)
 
-    # If the qobject is a widget, wrap it into a layout box
+    # Set a layout according to "qobject" type
         if isinstance(qobject, QW.QLayout):
-            layout_box = qobject
-
-        elif isinstance(qobject, QW.QWidget):  
-            layout_box = QW.QBoxLayout(QW.QBoxLayout.TopToBottom)
-            layout_box.addWidget(qobject)
-        
-        else: # raise error for invalid qobject
+            layout = qobject
+        elif isinstance(qobject, QW.QWidget):
+            layout = QW.QVBoxLayout()
+            layout.setObjectName('GroupAreaWrapperLayout')
+            layout.addWidget(qobject)
+        else: # raise error if "qobject" is invalid
             raise TypeError(f'Invalid "qobject" type: {type(qobject)}.')
-
+        
     # Set a tight layout if required
-        if tight:
-            layout_box.setContentsMargins(0, 0, 0, 0)
+        if tight or (tight is None and not title and not frame):
+            layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+
+    def wrappedObject(self) -> QW.QLayout | QW.QWidget:
+        '''
+        Return the object wrapped in the group area.
+
+        Returns
+        -------
+        QW.QLayout or QW.QWidget
+            Original layout or widget wrapped in the group area.
+
+        '''
+        layout = self.layout()
+        if layout.objectName() == 'GroupAreaWrapperLayout':
+            return layout.itemAt(0).widget()
+        else:
+            return layout
     
-    # Wrap the qobject in the group box
-        self.setLayout(layout_box)
-
-
 
 class CollapsibleArea(QW.QWidget):
 
@@ -2342,32 +2399,33 @@ class GroupScrollArea(QW.QScrollArea):
         self,
         qobject: QW.QLayout | QW.QWidget,
         title: str | None = None,
+        title_align: QC.Qt.Alignment = QC.Qt.AlignHCenter,
         hscroll: bool = True,
         vscroll: bool = True,
-        tight: bool = False,
-        frame: bool = True,
+        frame: bool = False,
         parent: QW.QWidget | None = None
     ) -> None:
         '''
-        A convenient class to easily wrap a layout or a widget in a QScrollArea.
+        A convenient class to easily wrap a layout or a widget in a scrollable
+        area.
 
         Parameters
         ----------
         qobject : QLayout or QWidget
             A layout-like or a widget-like object.
         title : str or None, optional
-            If set, the qobject will be also wrapped in a GroupArea that shows
-            this title. Ignored if qobject is a widget. The default is None.
+            If set, "qobject" will be wrapped in a GroupArea that shows this
+            title. The default is None.
+        title_align : Qt.Alignment, optional
+            The alignment of the title. Can be Qt.AlignLeft, Qt.AlignRight or
+            Qt.AlignHCenter. The default is Qt.AlignHCenter.
         hscroll : bool, optional
             Whether the horizontal scrollbar is shown. The default is True.
         vscroll : bool, optional
             Whether the vertical scrollbar is shown. The default is True.
-        tight : bool, optional
-            Whether the layout of the scroll area should take all the available 
-            space. Ignored if qobject is a widget. The default is False.
         frame : bool, optional
             Whether the scroll area should have a visible frame. The default is
-            True.
+            False.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
@@ -2388,67 +2446,142 @@ class GroupScrollArea(QW.QScrollArea):
     # Set the scrollbars
         self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
         self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
-        if not hscroll:
-            self.setHorizontalScrollBarPolicy(QC.Qt.ScrollBarAlwaysOff)
-        if not vscroll:
-            self.setVerticalScrollBarPolicy(QC.Qt.ScrollBarAlwaysOff)
+        hpol = QC.Qt.ScrollBarAsNeeded if hscroll else QC.Qt.ScrollBarAlwaysOff
+        vpol = QC.Qt.ScrollBarAsNeeded if vscroll else QC.Qt.ScrollBarAlwaysOff
+        self.setHorizontalScrollBarPolicy(hpol)
+        self.setVerticalScrollBarPolicy(vpol)
 
-    # If the qobject is a layout, wrap it into a QWidget or a GroupArea 
+    # Set a layout according to "qobject" type
         if isinstance(qobject, QW.QLayout):
-            if title is None:
-                if tight:
-                    qobject.setContentsMargins(0, 0, 0, 0)
-                wid = QW.QWidget()
-                wid.setLayout(qobject)
-            else:
-                wid = GroupArea(qobject, title, tight=tight)
-        
+            layout = qobject
         elif isinstance(qobject, QW.QWidget):
-            wid = qobject
-
-        else: # raise error if qobject is invalid
+            layout = QW.QVBoxLayout()
+            layout.addWidget(qobject)
+        else: # raise error if "qobject" is invalid
             raise TypeError(f'Invalid "qobject" of type {type(qobject)}.')
 
-    # Wrap the qobject in the scroll bar.
-        self.setWidget(wid)
+    # Set a wrapper widget
+        if title is None:
+            wrapper = QW.QWidget()
+            layout.setContentsMargins(0, 0, 0, 0)
+            wrapper.setLayout(layout)
+        else:
+            wrapper = GroupArea(layout, title, align=title_align)
+
+    # Insert the wrapper widget in the scroll area
+        wrapper.setObjectName('GroupScrollAreaWrapper') # Name for custom qss
+        self.setWidget(wrapper)
         self.setWidgetResizable(True)
 
+
+    def wrappedObject(self) -> QW.QLayout | QW.QWidget:
+        '''
+        Return the object wrapped in the scroll area.
+
+        Returns
+        -------
+        QW.QLayout or QW.QWidget
+            Original layout or widget wrapped in the scroll area.
+
+        '''
+        wrapper = self.widget()
+        if isinstance(wrapper, GroupArea):
+            return wrapper.wrappedObject()
+        else:
+            return wrapper.layout().itemAt(0).widget()
 
 
 class SplitterLayout(QW.QBoxLayout):
 
     def __init__(
         self,
-        orient: QC.Qt.Orientation = QC.Qt.Horizontal,
+        spacing: int = 5,
+        orient: str = 'horizontal',
         parent: QW.QWidget | None = None
     ) -> None:
         '''
         A ready to use layout box that comes with pre-coded splitters dividing
-        each inserted wdget.
+        each inserted widget.
 
         Parameters
         ----------
-        orient : Qt.Orientation, optional
-            The orientation of the latout. The default is Qt.Horizontal.
+        spacing : int, optional
+            Spacing between widgets within the layout. The default is 5.
+        orient : str, optional
+            The orientation of the layout. Must be one of 'horizontal', 'h', 
+            'vertical', 'v'. The default is 'horizontal'.
         parent : QWidget or None, optional
             The GUI parent of this layout. The default is None.
 
-        '''
-    # Set the orientation of the layout box
-        if orient == QC.Qt.Horizontal:
-            direction = QW.QBoxLayout.LeftToRight
-        else:
-            direction = QW.QBoxLayout.TopToBottom
+        Raises
+        ------
+        ValueError
+            Raised if "orient" is not 'horizontal', 'h', 'vertical' or 'v'.
 
-    # Initialize the layout box and add a splitter to it. Here we are using the
-    # super method 'addWidget' to add the splitter, because such method has
-    # been reimplemented (see below methods), and calling it would determine an
-    # infinite loop where the app tries to insert the splitter inside itself.
-        super().__init__(direction, parent)
-        self.splitter = QW.QSplitter(orient)
+        '''
+    # Set main attributes
+        self.splitter_spacing = spacing
+        self.orientation = orient
+
+    # Set the orientation of the layout and the splitter
+        match self.orientation:
+            case 'horizontal' | 'h':
+                layout_direction = QW.QBoxLayout.LeftToRight
+                splitter_orientation = QC.Qt.Horizontal
+            case 'vertical' | 'v':
+                layout_direction = QW.QBoxLayout.TopToBottom
+                splitter_orientation = QC.Qt.Vertical
+            case _:
+                raise ValueError(f'{orient} is not a valid orientation.')
+
+    # Initialize the layout and add the splitter. Here we are using the super
+    # method 'addWidget' to add the splitter, because it has been reimplemented
+    # (see below), and calling it would cause infinite recursions to occur.
+        super().__init__(layout_direction, parent)
+        self.splitter = QW.QSplitter(splitter_orientation)
         self.splitter.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
         self.splitter.setStyleSheet(style.SS_SPLITTER)
         super().addWidget(self.splitter)
+
+
+    def _getLayoutMargins(self, layout: QW.QLayout, index: int) -> QC.QMargins:
+        '''
+        Adjust content margins of given "layout" at the given "index" to ensure
+        a visually consistent spacing of items within the splitter.
+
+        Parameters
+        ----------
+        layout : QW.QLayout
+            Layout whose margins should be adjusted.
+        index : int
+            Positional index of the layout in the splitter.
+
+        Returns
+        -------
+        QC.QMargins
+            Adjusted content margins.
+
+        '''
+        margins = layout.contentsMargins()
+        max_index = self.splitter.count()
+        match self.orientation:
+            case 'horizontal' | 'h':
+                if index == 0: # only at the left of a splitter
+                    margins.setRight(margins.right() + self.splitter_spacing)
+                elif index == max_index: # only at the right of a splitter
+                    margins.setLeft(margins.left() + self.splitter_spacing)
+                else: # between two splitters
+                    margins.setRight(margins.right() + self.splitter_spacing)
+                    margins.setLeft(margins.left() + self.splitter_spacing)
+            case 'vertical' | 'v':
+                if index == 0: # only at the top of a splitter
+                    margins.setBottom(margins.bottom() + self.splitter_spacing)
+                elif index == max_index: # only at the bottom of a splitter
+                    margins.setTop(margins.top() + self.splitter_spacing)
+                else: # between two splitters
+                    margins.setBottom(margins.bottom() + self.splitter_spacing)
+                    margins.setTop(margins.top() + self.splitter_spacing)
+        return margins
 
 
     def insertLayout(self, layout: QW.QLayout, index: int, stretch: int = 0) -> None:
@@ -2466,9 +2599,11 @@ class SplitterLayout(QW.QBoxLayout):
             Optional stretch for the inserted layout. The default is 0.
 
         '''
-        wid = QW.QWidget()
-        wid.setLayout(layout)
-        self.insertWidget(wid, index, stretch)
+        wrapper = QW.QWidget()
+        layout.setContentsMargins(self._getLayoutMargins(layout, index))
+        wrapper.setLayout(layout)
+        self.splitter.insertWidget(index, wrapper)
+        self.splitter.setStretchFactor(index, stretch)
 
 
     def addLayout(self, layout: QW.QLayout, stretch: int = 0) -> None:
@@ -2483,9 +2618,12 @@ class SplitterLayout(QW.QBoxLayout):
             Optional stretch for the added layout. The default is 0.
 
         '''
-        wid = QW.QWidget()
-        wid.setLayout(layout)
-        self.addWidget(wid, stretch)
+        index = self.splitter.count()
+        wrapper = QW.QWidget()
+        layout.setContentsMargins(self._getLayoutMargins(layout, index))
+        wrapper.setLayout(layout)
+        self.splitter.addWidget(wrapper)
+        self.splitter.setStretchFactor(index, stretch)
 
 
     def insertWidget(self, widget: QW.QWidget, index: int, stretch: int = 0) -> None:
@@ -2503,7 +2641,12 @@ class SplitterLayout(QW.QBoxLayout):
             Optional stretch for the inserted widget. The default is 0.
 
         '''
-        self.splitter.insertWidget(index, widget)
+        wrapper = QW.QWidget()
+        layout = QW.QVBoxLayout()
+        layout.addWidget(widget)
+        layout.setContentsMargins(self._getLayoutMargins(layout, index))
+        wrapper.setLayout(layout)
+        self.splitter.insertWidget(index, wrapper)
         self.splitter.setStretchFactor(index, stretch)
 
 
@@ -2519,8 +2662,14 @@ class SplitterLayout(QW.QBoxLayout):
             Optional stretch for the added widget. The default is 0.
 
         '''
-        self.splitter.addWidget(widget)
-        self.splitter.setStretchFactor(self.splitter.count() - 1, stretch)
+        index = self.splitter.count()
+        wrapper = QW.QWidget()
+        layout = QW.QVBoxLayout()
+        layout.addWidget(widget)
+        layout.setContentsMargins(self._getLayoutMargins(layout, index))
+        wrapper.setLayout(layout)
+        self.splitter.addWidget(wrapper)
+        self.splitter.setStretchFactor(index, stretch)
 
 
 
@@ -3442,6 +3591,7 @@ class CoordinatesFinder(QW.QFrame):
     # Go to pixel button (Styled Button)
         self.go_btn = StyledButton(style.getIcon('BULLSEYE'))
         self.go_btn.setFlat(True)
+        self.go_btn.setToolTip('Zoom to pixel')
         self.go_btn.clicked.connect(self.onButtonClicked)
 
     # Adjust widget layout
@@ -3726,7 +3876,7 @@ class RandomSeedGenerator(QW.QWidget):
     # Adjust layout
         layout = QW.QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QW.QLabel('Random seed'))
+        layout.addWidget(QW.QLabel('Seed'))
         layout.addWidget(self.seed_input, 1)
         layout.addWidget(self.rand_btn, alignment = QC.Qt.AlignRight)
         self.setLayout(layout)

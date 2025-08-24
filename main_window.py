@@ -37,7 +37,6 @@ class MainWindow(QW.QMainWindow):
         self.setWindowIcon(style.getIcon('LOGO_32X32'))
         self.setDockOptions(self.AllowTabbedDocks)
         self.setAnimated(pref.get_setting('GUI/smooth_animation'))
-        self.statusBar()
         self.setStyleSheet(style.SS_MAINWINDOW)
 
     # Set main window attributes
@@ -80,6 +79,10 @@ class MainWindow(QW.QMainWindow):
     # Initialize menu
         self._init_menu()
 
+    # Add app version label to status bar
+        version_lbl = QW.QLabel(QW.qApp.applicationVersion())
+        self.statusBar().addPermanentWidget(version_lbl)
+
 
     def _init_panes(self) -> None:
         '''
@@ -113,32 +116,38 @@ class MainWindow(QW.QMainWindow):
             self.dataManager,
             'Data Manager', 
             style.getIcon('DATA_MANAGER'),
-            scroll=False
+            scroll=False,
+            tip='Load, view, and manage your project data.'
         )
         histogram_pane = docks.Pane(
             self.histViewer,
             'Histogram',
-            style.getIcon('HISTOGRAM_VIEWER')
+            style.getIcon('HISTOGRAM_VIEWER'),
+            tip='Interact with input map histograms.'
         )
         mode_pane = docks.Pane(
             self.modeViewer,
             'Mode',
-            style.getIcon('MODE_VIEWER')
+            style.getIcon('MODE_VIEWER'),
+            tip='Inspect and edit mineral classes.'
         )
         roi_pane = docks.Pane(
             self.roiEditor,
             'ROI Editor',
-            style.getIcon('ROI_EDITOR')
+            style.getIcon('ROI_EDITOR'),
+            tip='Define and manage Regions of Interest (ROIs).'
         )
         probmap_pane = docks.Pane(
             self.pmapViewer,
             'Probability Map',
-            style.getIcon('PROBABILITY_MAP_VIEWER')
+            style.getIcon('PROBABILITY_MAP_VIEWER'),
+            tip='Evaluate mineral classifications confidence.'
         )
         rgba_pane = docks.Pane(
             self.rgbaViewer,
             'RGBA Map',
-            style.getIcon('RGBA_MAP_VIEWER')
+            style.getIcon('RGBA_MAP_VIEWER'),
+            tip='Create RGBA composite maps from input maps.'
         )
         
         self.panes = (manager_pane, histogram_pane, mode_pane, roi_pane, 
@@ -148,6 +157,7 @@ class MainWindow(QW.QMainWindow):
         self.panes_tva = []
         for p in self.panes:
             action = p.toggleViewAction()
+            action.setStatusTip(p.tip)
             p.setObjectName(p.title) # required for saving pane state
             if p.icon is not None:
                 action.setIcon(p.icon)
@@ -167,7 +177,7 @@ class MainWindow(QW.QMainWindow):
         self.tabifyDockWidget(roi_pane, rgba_pane)
 
     # Resize panes
-        w = max([p.trueWidget().minimumSizeHint().width() for p in self.panes])
+        w = max([p.widget().minimumSizeHint().width() for p in self.panes])
         self.resizeDocks(self.panes, [w] * len(self.panes), QC.Qt.Horizontal)
         
 
@@ -220,55 +230,55 @@ class MainWindow(QW.QMainWindow):
 
     # Launch Convert Image to Input Map
         self.conv2inmap_action = QW.QAction('Image to Input Map')
-        self.conv2inmap_action.setStatusTip('Convert image to Input Map')
+        self.conv2inmap_action.setStatusTip('Convert image to Input Map.')
 
     # Launch Convert Image to Mineral Maps
         self.conv2minmap_action = QW.QAction('Image to Mineral Map')
-        self.conv2minmap_action.setStatusTip('Convert image to Mineral Map')
+        self.conv2minmap_action.setStatusTip('Convert image to Mineral Map.')
 
     # Launch Generate Dummy Maps
         self.dummymap_action = QW.QAction('Generate &Dummy Maps')
-        self.dummymap_action.setStatusTip('Build placeholder noisy maps')
+        self.dummymap_action.setStatusTip('Build placeholder noisy maps.')
 
     # Launch Sub-sample Dataset
         self.subsample_ds_action = QW.QAction('&Sub-sample Dataset')
-        self.subsample_ds_action.setStatusTip('Extract sub-sets from dataset')
+        self.subsample_ds_action.setStatusTip('Extract sub-sets from dataset.')
 
     # Launch Merge Datasets
         self.merge_ds_action = QW.QAction('&Merge Datasets')
-        self.merge_ds_action.setStatusTip('Merge multiple datasets into one')
+        self.merge_ds_action.setStatusTip('Merge multiple datasets into one.')
 
     # Launch Dataset Builder
         self.ds_builder_action = QW.QAction(
             style.getIcon('DATASET_BUILDER'), 'Dataset &Builder')
         self.ds_builder_action.setShortcut('Ctrl+Alt+B')
-        self.ds_builder_action.setStatusTip('Compile ground truth datasets')
+        self.ds_builder_action.setStatusTip('Compile ground truth datasets.')
 
     # Launch Model Learner
         self.model_learner_action = QW.QAction(
             style.getIcon('MODEL_LEARNER'), 'Model &Learner')
         self.model_learner_action.setShortcut('Ctrl+Alt+L')
-        self.model_learner_action.setStatusTip('Build machine learning models')
+        self.model_learner_action.setStatusTip('Build machine learning models.')
 
     # Launch Mineral Classifier
         self.classifier_action = QW.QAction(
             style.getIcon('MINERAL_CLASSIFIER'), 'Mineral &Classifier')
         self.classifier_action.setShortcut('Ctrl+Alt+C')
-        self.classifier_action.setStatusTip('Predict mineral maps')
+        self.classifier_action.setStatusTip('Predict mineral data.')
 
     # Launch Phase Refiner
         self.refiner_action = QW.QAction(
             style.getIcon('PHASE_REFINER'), 'Phase &Refiner')
         self.refiner_action.setShortcut('Ctrl+Alt+R')
-        self.refiner_action.setStatusTip('Refine mineral maps')
+        self.refiner_action.setStatusTip('Refine mineral maps.')
 
     # About X-Min Learn
         self.about_action = QW.QAction('About X-Min Learn')
-        self.about_action.setStatusTip('About X-Min Learn app')
+        self.about_action.setStatusTip('About X-Min Learn app.')
 
     # About Qt
         self.aboutqt_action = QW.QAction('About Qt')
-        self.aboutqt_action.setStatusTip('About Qt toolkit')
+        self.aboutqt_action.setStatusTip('About Qt toolkit.')
 
 
     def _init_toolbars(self) -> None:
@@ -966,7 +976,7 @@ class MainWindow(QW.QMainWindow):
         }
         
         panes_data = {
-            p.objectName(): p.trueWidget().getConfig() for p in self.panes
+            p.objectName(): p.widget().getConfig() for p in self.panes
         }
         
         tools_data = {} # TODO
@@ -1035,7 +1045,7 @@ class MainWindow(QW.QMainWindow):
 
     # Reset panes GUI state
         for pane in self.panes:
-            pane.trueWidget().resetConfig()
+            pane.widget().resetConfig()
         
     # Kill floating and tabbed tools
         for tool in reversed(self.open_tools):
@@ -1093,7 +1103,7 @@ class MainWindow(QW.QMainWindow):
         for pane in self.panes:
             pane_name = pane.objectName()
             try:
-                pane.trueWidget().loadConfig(panes_data[pane_name])
+                pane.widget().loadConfig(panes_data[pane_name])
             except Exception as e:
                 loading_errors.append((pane_name, e))
 
@@ -1254,7 +1264,7 @@ class MainTabWidget(QW.QTabWidget):
         '''
     # Insert widget in a scroll area, add it and set it as the current tab
         icon, title = widget.windowIcon(), widget.windowTitle()
-        scroll = CW.GroupScrollArea(widget, frame=False)
+        scroll = CW.GroupScrollArea(widget)
         super().addTab(scroll, icon, title)
         self.setCurrentWidget(scroll)
 
@@ -1266,8 +1276,8 @@ class MainTabWidget(QW.QTabWidget):
     def widget(self, index: int) -> QW.QWidget | None:
         '''
         Reimplementation of the default 'widget' method. Returns the widget
-        held by the tab at 'index' by passing the GroupScrollArea widget that
-        contains it (see 'addTab' method for more details).
+        held by the tab at 'index' by extracting it from the GroupScrollArea
+        that wraps it (see 'addTab' method for more details).
 
         Parameters
         ----------
@@ -1281,7 +1291,7 @@ class MainTabWidget(QW.QTabWidget):
 
         '''
         scroll_area = self.scrollArea(index)
-        wid = None if scroll_area is None else scroll_area.widget()
+        wid = None if scroll_area is None else scroll_area.wrappedObject()
         return wid
 
 

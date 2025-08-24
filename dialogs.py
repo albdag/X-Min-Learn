@@ -116,18 +116,18 @@ class AutoRoiDetector(QW.QDialog):
         self.cancel_btn = CW.StyledButton(text='Cancel')
 
     # Set layout
-        params_form = QW.QFormLayout()
-        params_form.addRow('Number of ROI', self.nroi_spbox)
-        params_form.addRow('ROI size', self.size_spbox)
-        params_form.addRow('ROI distance', self.distance_spbox)
+        roi_form = QW.QFormLayout()
+        roi_form.addRow('Number', self.nroi_spbox)
+        roi_form.addRow('Size', self.size_spbox)
+        roi_form.addRow('Distance', self.distance_spbox)
 
         left_vbox = QW.QVBoxLayout()
         left_vbox.setSpacing(15)
         left_vbox.addWidget(self.maps_selector)
-        left_vbox.addLayout(params_form)
+        left_vbox.addWidget(CW.GroupArea(roi_form, 'ROI settings'))
         left_vbox.addWidget(CW.GroupArea(self.npv_btns, 'NPV type'))
         left_vbox.addWidget(self.search_btn)
-        left_scroll = CW.GroupScrollArea(left_vbox)
+        left_scroll = CW.GroupScrollArea(left_vbox, frame=True)
 
         right_grid = QW.QGridLayout()
         right_grid.addWidget(self.navtbar, 0, 0, 1, -1)
@@ -579,7 +579,7 @@ class MergeDatasets(QW.QDialog):
         main_vbox.addWidget(export_group)
         main_vbox.addWidget(self.progbar)
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(CW.GroupScrollArea(main_vbox, frame=False))
+        main_layout.addWidget(CW.GroupScrollArea(main_vbox))
         self.setLayout(main_layout)
 
     
@@ -861,7 +861,7 @@ class SubSampleDataset(QW.QDialog):
         main_vbox.addWidget(export_group)
         main_vbox.addWidget(self.progbar)
         main_layout = QW.QVBoxLayout()
-        main_layout.addWidget(CW.GroupScrollArea(main_vbox, frame=False))
+        main_layout.addWidget(CW.GroupScrollArea(main_vbox))
         self.setLayout(main_layout)
 
     
@@ -1150,7 +1150,7 @@ class ImageToInputMap(QW.QDialog):
         left_form.addRow(self.split_cbox)
         left_form.addRow('Output map format', self.map_ext_combox)
         left_form.addRow(self.convert_btn)
-        left_scroll = CW.GroupScrollArea(left_form, 'Options', frame=False)
+        left_scroll = CW.GroupScrollArea(left_form, 'Options')
 
         right_grid = QW.QGridLayout()
         right_grid.addWidget(self.import_btn, 0, 0)
@@ -1338,12 +1338,12 @@ class ImageToMineralMap(QW.QDialog):
         left_vbox.addWidget(self.import_btn)
         left_vbox.addWidget(self.path_lbl)
         left_vbox.addWidget(options_group)
-        left_scoll = CW.GroupScrollArea(left_vbox, frame=False)
+        left_scoll = CW.GroupScrollArea(left_vbox)
 
         right_vbox = QW.QVBoxLayout()
         right_vbox.addWidget(self.navtbar)
         right_vbox.addWidget(self.canvas)
-        right_scroll = CW.GroupScrollArea(right_vbox, frame=False)
+        right_scroll = CW.GroupScrollArea(right_vbox)
 
         splitter = CW.SplitterGroup((left_scoll, right_scroll), (0, 1))
         main_layout = QW.QVBoxLayout()
@@ -1671,12 +1671,12 @@ class DummyMapsBuilder(QW.QDialog):
         left_vbox.addWidget(options_group)
         left_vbox.addWidget(self.rand_btn)
         left_vbox.addWidget(self.save_btn)
-        left_scroll = CW.GroupScrollArea(left_vbox, tight=True, frame=False)
+        left_scroll = CW.GroupScrollArea(left_vbox)
 
         right_vbox = QW.QVBoxLayout()
         right_vbox.addWidget(self.navtbar)
         right_vbox.addWidget(self.canvas)
-        right_scroll = CW.GroupScrollArea(right_vbox, tight=True, frame=False)
+        right_scroll = CW.GroupScrollArea(right_vbox)
  
         main_layout = CW.SplitterLayout()
         main_layout.addWidget(left_scroll, 0)
@@ -1825,7 +1825,7 @@ class Preferences(QW.QDialog):
         gui_form.addRow('Font size', self.fontsize_spbox)
         gui_form.addRow(self.tooltab_cbox)
         gui_form.addRow(self.smooth_cbox)
-        gui_scroll = CW.GroupScrollArea(gui_form, tight=True, frame=False)
+        gui_scroll = CW.GroupScrollArea(gui_form)
 
 #  -------------------------------------------------------------------------  #
 #                           PLOT STYLE SETTINGS
@@ -1852,7 +1852,7 @@ class Preferences(QW.QDialog):
         plots_form = QW.QFormLayout()
         plots_form.setSpacing(15)
         plots_form.addRow(roi_group)
-        plots_scroll = CW.GroupScrollArea(plots_form, tight=True, frame=False)
+        plots_scroll = CW.GroupScrollArea(plots_form)
 
 #  -------------------------------------------------------------------------  #
 #                              DATA SETTINGS
@@ -1908,7 +1908,7 @@ class Preferences(QW.QDialog):
         data_form.addRow(mmap_group)
         data_form.addRow(mask_group)
         data_form.addRow(model_group)
-        data_scroll = CW.GroupScrollArea(data_form, tight=True, frame=False)
+        data_scroll = CW.GroupScrollArea(data_form)
 
 #  -------------------------------------------------------------------------  #
 #                              DIALOG BUTTONS
@@ -1930,8 +1930,7 @@ class Preferences(QW.QDialog):
 #  -------------------------------------------------------------------------  #
     # Main widget (Styled Tab Widget)
         tabwid = CW.StyledTabWidget()
-        tabwid.tabBar().setExpanding(True)
-        tabwid.tabBar().setDocumentMode(True)
+        tabwid.setTabBarExpanding()
         tabwid.addTab(gui_scroll, title='Interface')
         tabwid.addTab(plots_scroll, title='Plot Style')
         tabwid.addTab(data_scroll, title='Data')

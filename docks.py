@@ -33,7 +33,8 @@ class Pane(QW.QDockWidget):
         widget: QW.QWidget,
         title: str = '',
         icon: QIcon | None = None,
-        scroll: bool = True
+        scroll: bool = True,
+        tip: str = ''
     ) -> None:
         '''
         The base class for every pane of X-Min Learn.
@@ -49,6 +50,9 @@ class Pane(QW.QDockWidget):
             default is None.
         scroll : bool, optional
             Whether or not the pane should be scrollable. The default is True.
+        tip : str, optional
+            A short pane description to be displayed in the status bar of the
+            main window. The default is ''.
 
         '''
         super().__init__()
@@ -60,30 +64,24 @@ class Pane(QW.QDockWidget):
     # Set main attributes
         self.title = title
         self.icon = icon
-        self._scrollable = scroll
+        self.tip = tip
 
-    # Wrap the widget into a container widget (scroll area or group area)
+    # Wrap the widget in a scroll area if requested
         if scroll:
             scroll_area = CW.GroupScrollArea(widget)
-            scroll_area.setStyleSheet(None)
             scroll_area.setObjectName('PaneScrollArea') # Name for custom qss
             self.setWidget(scroll_area)
-
         else:
-            group_area = CW.GroupArea(widget, tight=True)
-            group_area.setStyleSheet(None)
-            group_area.setObjectName('PaneGroupArea')  # Name for custom qss
-            self.setWidget(group_area)
+            self.setWidget(widget)
 
     # Set the style-sheet 
         self.setStyleSheet(style.SS_PANE)
 
 
-    def trueWidget(self) -> QW.QWidget:
+    def widget(self) -> QW.QWidget:
         '''
-        Convenient method to return the actual pane widget and not just its
-        container widget, which is returned when invoking the default 'widget'
-        method.
+        Reimplemented 'widget' method that ensures the actual pane's widget
+        is returned rather than the scroll area that wraps it.
 
         Returns
         -------
@@ -91,10 +89,11 @@ class Pane(QW.QDockWidget):
             The widget of the pane.
 
         '''
-        if self._scrollable:
-            return self.widget().widget()
+        widget = super().widget()
+        if isinstance(widget, CW.GroupScrollArea):
+            return widget.wrappedObject()
         else:
-            return self.widget().layout().itemAt(0).widget()
+            return widget
 
 
 
@@ -1533,6 +1532,7 @@ class HistogramViewer(QW.QWidget):
 
     # Adjust Layout
         main_layout = QW.QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.navtbar)
         main_layout.addWidget(self.scaler_tbar)
         main_layout.addLayout(bins_form)
@@ -1879,7 +1879,7 @@ class ModeViewer(CW.StyledTabWidget):
             The GUI parent of this widget. The default is None.
 
         '''
-        super().__init__(parent)
+        super().__init__(parent=parent)
 
     # Set principal attributes
         self._current_data_object = None
@@ -2317,18 +2317,12 @@ class RoiEditor(QW.QWidget):
         self.unload_btn = CW.StyledButton(style.getIcon('CLEAR'))
         self.unload_btn.setToolTip('Clear ROI map')
 
-    # Remove ROI button [-> Corner table widget]
-        self.delroi_btn = CW.StyledButton(style.getIcon('REMOVE'))
-        self.delroi_btn.setFlat(True)
-
     # Roi table
         self.table = CW.StyledTable(0, 2)
         self.table.setSelectionBehavior(QW.QAbstractItemView.SelectRows)
-        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.table.setHorizontalHeaderLabels(['Class', 'Pixel Count'])
         self.table.horizontalHeader().setSectionResizeMode(1) # Stretch
         self.table.verticalHeader().setSectionResizeMode(3) # ResizeToContent
-        self.table.setCornerWidget(self.delroi_btn)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
 
     # Bar plot canvas
@@ -2354,6 +2348,7 @@ class RoiEditor(QW.QWidget):
 
     # Adjust Layout
         main_layout = QW.QGridLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.toolbar, 0, 0, 1, -1)
         main_layout.addWidget(self.mappath, 1, 0)
         main_layout.addWidget(self.hideroi_btn, 1, 1)
@@ -2402,9 +2397,6 @@ class RoiEditor(QW.QWidget):
 
     # Remove loaded ROI map
         self.unload_btn.clicked.connect(self.unloadRoiMap)
-
-    # Remove ROI(s)
-        self.delroi_btn.clicked.connect(self.removeRoi)
 
     # Connect table signals (ROI selected & ROI name edited)
         self.table.itemSelectionChanged.connect(self.updatePatchSelection)
@@ -2994,7 +2986,7 @@ class RoiEditor(QW.QWidget):
     def removeRoi(self) -> None:
         '''
         Wrapper method to easily remove selected ROIs. This method requires a
-        a user confirm. This method also redraws the canvas.
+        user confirm. This method also redraws the canvas.
 
         '''
     # Exit function if no ROI is selected
@@ -3351,6 +3343,7 @@ class ProbabilityMapViewer(QW.QWidget):
 
     # Adjust layout
         main_layout = QW.QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.navtbar)
         main_layout.addWidget(self.rangeTbar)
         main_layout.addWidget(self.canvas)
@@ -3596,6 +3589,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Adjust layout
         main_layout = QW.QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(self.navtbar)
         main_layout.addWidget(self.canvas, stretch=1)
         main_layout.addLayout(channels_layout)

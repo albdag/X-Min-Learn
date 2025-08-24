@@ -129,12 +129,14 @@ ICONS = {
 # qss folder
     'CARET_DOWN': Path('Icons') / 'qss' / 'caret_down.png',
     'CARET_DOWN_GRAY': Path('Icons') / 'qss' / 'caret_down_gray.png',
+    'CARET_LEFT': Path('Icons') / 'qss' / 'caret_left.png',
     'CARET_RIGHT': Path('Icons') / 'qss' / 'caret_right.png',
+    'CARET_UP': Path('Icons') / 'qss' / 'caret_up.png',
     'CLOSE': Path('Icons') / 'qss' / 'close.png',
+    'HANDLE_H': Path('Icons') / 'qss' / 'handle_h.png',
+    'HANDLE_V': Path('Icons') / 'qss' / 'handle_v.png',
     'RADIOBTN_CHECKED': Path('Icons') / 'qss' / 'radiobtn_checked.png',
     'TICK_BLACK': Path('Icons') / 'qss' / 'tick_black.png',
-    'TOOLBAR_HANDLE_H': Path('Icons') / 'qss' / 'toolbar_handle_h.png',
-    'TOOLBAR_HANDLE_V': Path('Icons') / 'qss' / 'toolbar_handle_v.png',
     'UNDOCK': Path('Icons') / 'qss' / 'undock.png',
 
 # tools folder
@@ -164,12 +166,7 @@ SS_BUTTON = (
         border: 1px solid {CASPER_DARK};
     }}
 
-    QPushButton:flat {{
-        border: none;
-        background-color: transparent;
-    }}
-
-    QPushButton:!flat:hover {{
+    QPushButton:hover {{
         background-color: qlineargradient(
             x1: 0, y1: 0, x2: 0, y2: 1,
             stop: 0 white, stop: 1 {BLOSSOM}
@@ -183,6 +180,11 @@ SS_BUTTON = (
     QPushButton:checked {{
         background-color: {BLOSSOM};
         border: 2px solid {SAN_MARINO};
+    }}
+
+    QPushButton:flat {{
+        border: none;
+        background-color: transparent;
     }}
     '''
 )
@@ -298,10 +300,10 @@ SS_MENU = (
     }}
 
     QMenu::item:selected {{
-        border-color: {SAN_MARINO};
-        background: qlineargradient(
+        border-color: {BLACK_PEARL};
+        background-color: qlineargradient(
             x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 white, stop: 1 {BLOSSOM}
+            stop: 0 white, stop: 1 {BLOSSOM_LIGHT}
         );
     }}
 
@@ -334,143 +336,182 @@ SS_MENUBAR = (
     f'''
     QMenuBar {{
         background-color: {IVORY};
-        border: 1px outset transparent;
+        border-top: 1px solid {BLACK_PEARL};
         padding: 3px;
+    }}
+
+    QMenuBar::item {{
+        border: 1px solid transparent;
+        border-radius: 2px;
+        margin-bottom: 1px;
+        padding: 5px;
     }}
 
     QMenuBar::item:selected {{
         background-color: qlineargradient(
             x1: 0, y1: 0, x2: 0, y2: 1, 
-            stop: 0 white, stop: 1 {BLOSSOM}
+            stop: 0 {IVORY}, stop: 1 {BLOSSOM_LIGHT}
         );
-        border: 1px outset {BLACK_PEARL};
-        border-radius: 3px;
+        border-color: {BLACK_PEARL};
     }}
+
+    QToolButton {{
+        border: 1px solid transparent;
+        border-radius: 2px;
+        padding: 1px;
+    }}
+
+    QToolButton:hover {{
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1, 
+            stop: 0 {IVORY}, stop: 1 {BLOSSOM_LIGHT}
+        );
+        border-color: {BLACK_PEARL};
+    }} 
+
+    QToolButton:pressed {{
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1, 
+            stop: 0 {IVORY}, stop: 1 {BLOSSOM_LIGHT}
+        );
+        border-color: {BLACK_PEARL};
+        padding: 2px;
+    }} 
     '''
 )
 
 
 SS_SCROLLBARH = (
+    SS_MENU + 
     f'''
     QScrollBar:horizontal {{
-        border: 1px solid {BLACK_PEARL};
-        background: {CASPER_DARK};
-        height: 18px;
-        margin: 0px 20px 0px 20px;
+        background-color: {CASPER_DARK};
+        border: 1px solid transparent;
+        height: 23px;
+        margin: 5px 20px 0px 20px;
     }}
 
     QScrollBar::handle:horizontal {{
+        background-color: {IVORY};
         border: 1px solid {BLACK_PEARL};
-        background: {IVORY};
         min-width: 20px;
     }}
 
     QScrollBar::handle:horizontal:hover {{
-        border: 2px solid {SAN_MARINO};
+        border: 1px solid {SAN_MARINO};
     }}
 
     QScrollBar::add-line:horizontal {{
-        border: 2px solid {SAN_MARINO};
-        border-radius: 4px;
-        background: {BLACK_PEARL};
+        background-color: {BLACK_PEARL};
+        border: 1px solid {SAN_MARINO};
+        border-radius: 3px;
+        margin-top: 5px;
         width: 20px;
         subcontrol-position: right;
         subcontrol-origin: margin;
     }}
 
-    QScrollBar::add-line:horizontal:hover {{
-        border: 2px solid {BLACK_PEARL};
-        background: {SAN_MARINO};
-    }}
-
     QScrollBar::sub-line:horizontal {{
-        border: 2px solid {SAN_MARINO};
-        border-radius: 4px;
-        background: {BLACK_PEARL};
+        background-color: {BLACK_PEARL};
+        border: 1px solid {SAN_MARINO};
+        border-radius: 3px;
+        margin-top: 5px;
         width: 20px;
         subcontrol-position: left;
         subcontrol-origin: margin;
     }}
 
+    QScrollBar::add-line:horizontal:hover,
     QScrollBar::sub-line:horizontal:hover {{
-        border: 2px solid {BLACK_PEARL};
-        background: {SAN_MARINO};
+        background-color: {SAN_MARINO};
+        border: 1px solid {BLACK_PEARL};
     }}
 
-    QScrollBar::left-arrow:horizontal,
+    QScrollBar::left-arrow:horizontal {{
+        background-color: transparent;
+        border-width: 0px;
+        padding: 0px;
+        image: url({ICONS.get('CARET_LEFT').as_posix()});
+    }}
+
     QScrollBar::right-arrow:horizontal {{
-        border: 1px solid {SAN_MARINO};
-        width: 3px;
-        height: 3px;
-        background: {IVORY};
+        background-color: transparent;
+        border-width: 0px;
+        padding: 0px;
+        image: url({ICONS.get('CARET_RIGHT').as_posix()});
     }}
 
     QScrollBar::left-arrow:horizontal:pressed,
     QScrollBar::right-arrow:horizontal:pressed {{
-        background: {BLACK_PEARL};
+        padding: 1px;
     }}
     '''
 )
 
 
 SS_SCROLLBARV = (
+    SS_MENU +
     f'''
     QScrollBar:vertical {{
-        border: 1px solid {BLACK_PEARL};
-        background: {CASPER_DARK};
-        width: 18px;
-        margin: 20px 0px 20px 0px;
+        background-color: {CASPER_DARK};
+        border: 1px solid transparent;
+        width: 23px;
+        margin: 20px 0px 20px 5px;
     }}
 
     QScrollBar::handle:vertical {{
+        background-color: {IVORY};
         border: 1px solid {BLACK_PEARL};
-        background: {IVORY};
         min-height: 20px;
     }}
 
     QScrollBar::handle:vertical:hover {{
-        border: 2px solid {SAN_MARINO};
+        border: 1px solid {SAN_MARINO};
     }}
 
     QScrollBar::add-line:vertical {{
-        border: 2px solid {SAN_MARINO};
-        border-radius: 4px;
-        background: {BLACK_PEARL};
+        background-color: {BLACK_PEARL};
+        border: 1px solid {SAN_MARINO};
+        border-radius: 3px;
+        margin-left: 5px;
         height: 20px;
         subcontrol-position: bottom;
         subcontrol-origin: margin;
     }}
 
-    QScrollBar::add-line:vertical:hover {{
-        border: 2px solid {BLACK_PEARL};
-        background: {SAN_MARINO};
-    }}
-
     QScrollBar::sub-line:vertical {{
-        border: 2px solid {SAN_MARINO};
-        border-radius: 4px;
-        background: {BLACK_PEARL};
+        background-color: {BLACK_PEARL};
+        border: 1px solid {SAN_MARINO};
+        border-radius: 3px;
+        margin-left: 5px;
         height: 20px;
         subcontrol-position: top;
         subcontrol-origin: margin;
     }}
 
+    QScrollBar::add-line:vertical:hover,
     QScrollBar::sub-line:vertical:hover {{
-        border: 2px solid {BLACK_PEARL};
-        background: {SAN_MARINO};
+        background-color: {SAN_MARINO};
+        border: 1px solid {BLACK_PEARL};
     }}
 
-    QScrollBar::up-arrow:vertical,
+    QScrollBar::up-arrow:vertical {{
+        background-color: transparent;
+        border-width: 0px;
+        padding: 0px;
+        image: url({ICONS.get('CARET_UP').as_posix()});
+    }}
+
     QScrollBar::down-arrow:vertical {{
-        border: 1px solid {SAN_MARINO};
-        width: 3px;
-        height: 3px;
-        background: {IVORY};
+        background-color: transparent;
+        border-width: 0px;
+        padding: 0px;
+        image: url({ICONS.get('CARET_DOWN').as_posix()});
     }}
 
     QScrollBar::up-arrow:vertical:pressed,
     QScrollBar::down-arrow:vertical:pressed {{
-        background: {BLACK_PEARL};
+        padding: 1px;
     }}
     '''
 )
@@ -484,19 +525,24 @@ SS_TOOLBAR = (
     }}
 
     QToolBar::separator {{
-        background: {SAN_MARINO};
+        background-color: {SAN_MARINO};
         height: 2px;
         margin: 7px;
         width: 2px;
     }}
 
     QToolButton {{
-        border: 2px solid transparent;
+        border: 1px solid transparent;
         border-radius: 3px;
+        padding: 1px;
     }}
 
     QToolButton[popupMode="1"] {{
         padding-right: 12px;
+    }}
+
+    QToolButton[popupMode="1"]:pressed{{
+        padding-right: 16px;
     }}
 
     QToolButton::menu-button {{
@@ -508,8 +554,19 @@ SS_TOOLBAR = (
         border-color: {BLACK_PEARL};
     }}
 
-    QToolButton:pressed {{
-        border-color: {SAN_MARINO};
+
+    QToolButton:hover,
+    QToolButton:checked:hover {{
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {IVORY}, stop: 1 {BLOSSOM}
+        );
+        border-color: {BLACK_PEARL};
+    }}
+
+    QToolButton:pressed,
+    QToolButton:checked:pressed {{
+        padding: 4px;
     }}
 
     QToolButton:checked {{
@@ -517,14 +574,18 @@ SS_TOOLBAR = (
             x1: 0, y1: 0, x2: 0, y2: 1,
             stop: 0 {IVORY}, stop: 0.5 {CASPER_LIGHT}, stop: 1 {CASPER_DARK}
         );
-        border-color: {SAN_MARINO};
+        border: 2px solid {SAN_MARINO};
+        padding: 0px;
     }}
 
-    QToolButton:hover {{
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 white, stop: 1 {BLOSSOM}
-        );
+    QToolBarExtension {{
+        border-radius: 2px;
+        margin: 1px;
+        padding: 1px;
+    }}
+
+    QToolBarExtension:pressed {{
+        padding: 1px;
     }}
     '''
 )
@@ -533,66 +594,87 @@ SS_TOOLBAR = (
 SS_MAINTOOLBAR = (
     f'''
     QToolBar {{
-        background-color: {CASPER_DARK};
-        border: 3px groove {SAN_MARINO};
+        background-color: {CASPER_LIGHT};
+        border: 1px solid {BLACK_PEARL};
         border-radius: 4px;
-        margin: 4px;
-        spacing: 16px;
+        margin: 2px;
+        padding: 4px;
+        spacing: 8px;
     }}
 
     QToolBar::handle {{
         background-color: {SAN_MARINO};
         border: 1px solid {BLACK_PEARL};
         border-radius: 2px;
+        margin: 2px;
+        padding: 0px;
     }}
 
     QToolBar::handle:top,
     QToolBar::handle:bottom {{
-        image: url({ICONS.get('TOOLBAR_HANDLE_H').as_posix()});
-        width: 10px;
+        image: url({ICONS.get('HANDLE_H').as_posix()});
+        width: 12px;
     }}
 
     QToolBar::handle:left,
     QToolBar::handle:right {{
-        image: url({ICONS.get('TOOLBAR_HANDLE_V').as_posix()});
-        height: 10px;
+        image: url({ICONS.get('HANDLE_V').as_posix()});
+        height: 12px;
     }}
 
     QToolBar::separator {{
-        background: {SAN_MARINO};
+        background-color: {SAN_MARINO};
         height: 3px;
         margin: 7px;
         width: 3px;
     }}
 
     QToolButton {{
-        border: 2px solid transparent;
+        border: 1px solid transparent;
         border-radius: 3px;
         icon-size: 32px;
+        margin: 2px;
         padding: 10px;
     }}
 
-    QToolButton:pressed {{
-        border-color: {SAN_MARINO};
+    QToolButton:hover,
+    QToolButton:checked:hover {{
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {IVORY}, stop: 1 {BLOSSOM}
+        );
+        border-color: {BLACK_PEARL}
+    }}
+
+    QToolButton:pressed,
+    QToolButton:checked:pressed {{
+        padding: 14px;
     }}
 
     QToolButton:checked {{
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 {IVORY}, stop: 0.5 {CASPER_LIGHT}, stop: 1 {CASPER_DARK}
-        );
-        border-color: {SAN_MARINO};
-    }}
-
-    QToolButton:hover {{
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 white, stop: 1 {BLOSSOM}
-        );
+        border: 2px solid {SAN_MARINO};
+        padding: 9px;
     }}
 
     QToolBarExtension {{
-        padding: 0px;
+        border-radius: 2px;
+        margin: 1px;
+        padding: 1px;
+    }}
+
+    QToolBarExtension:hover,
+    QToolBarExtension:checked:hover {{
+        border-color: {BLACK_PEARL};
+    }} 
+
+    QToolBarExtension:pressed,
+    QToolBarExtension:checked:pressed {{
+        padding: 2px;
+    }}
+
+    QToolBarExtension:checked {{
+        border: 1px solid {SAN_MARINO};
+        padding: 1px;
     }}
     '''
 )
@@ -610,30 +692,44 @@ SS_TABWIDGET = (
         padding: 1px;
     }}
 
+    QTabBar {{
+        background-color: transparent;
+        
+    }}
+
     QTabBar::tab {{
-        background: {IVORY};
-        border: 1px solid {CASPER_DARK};
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {IVORY}, stop: 0.75 {IVORY}, stop: 1 {CASPER_LIGHT}
+        );
+        border-color: {BLACK_PEARL};
+        border-style: solid;
+        border-width: 1px 1px 0px 1px;
         border-top-left-radius: 4px;
         border-top-right-radius: 4px;
         min-width: 8ex;
-        padding-top: 2px;
-        padding-bottom: 2px;
-        padding-right: 6px;
-        padding-left: 6px;
-        margin-right: 4px;
+        margin: 0px 1px 0px 1px;
+        padding: 5px 10px 10px 10px;
     }}
 
-    QTabBar::tab:!selected {{
-        margin-top: 3px;
+    QTabBar::tab:first {{
+        margin-left: 0px;
     }}
 
-    QTabBar::tab:selected {{
-        border-color: {SAN_MARINO};
-        border-bottom: 5px solid {SAN_MARINO};
+    QTabBar::tab:last {{
+        margin-right: 0px;
     }}
 
     QTabBar::tab:hover {{
-        background: {SAN_MARINO};
+        border-width: 2px 2px 0px 2px;
+        border-color: {SAN_MARINO};
+        padding: 4px 9px 10px 9px;
+    }}
+
+    QTabBar::tab:selected {{
+        border-width: 2px 2px 5px 2px;
+        border-color: {SAN_MARINO};
+        padding: 4px 9px 5px 9px;
     }}
 
     QTabBar::close-button {{
@@ -644,6 +740,13 @@ SS_TABWIDGET = (
     QTabBar::close-button:pressed {{
         border: 1px solid {SAN_MARINO};
     }}
+
+    QGroupBox#FramedWrapper {{
+        background-color: transparent;
+        border: 2px solid {SAN_MARINO};
+        border-radius: 0px 0px 3px 3px;
+        padding: 2px;
+    }}
     '''
 )
 
@@ -652,13 +755,18 @@ SS_MAINTABWIDGET = (
     SS_TABWIDGET +
     f'''
     QTabWidget::pane {{
-        background-color: {CASPER_DARK};
+        background-color: {CASPER};
         border: 3px solid {SAN_MARINO};
         border-top: 4px solid {SAN_MARINO};
         border-top-right-radius: 4px;
         border-top-left-radius: 0px;
         border-bottom-right-radius: 4px;
         border-bottom-left-radius: 4px;
+        margin-bottom: 2px;
+    }}
+
+    QTabBar::tab {{
+        margin: 2px 2px 0px 0px;
     }}
     '''
 )
@@ -667,24 +775,31 @@ SS_MAINTABWIDGET = (
 SS_SPLITTER = (
     f'''
     QSplitter::handle {{
-        background-color: {SAN_MARINO};
-        border: 1px solid {BLACK_PEARL};
-        border-radius: 2px;
-        margin: 10px;
+        margin: 0px;
+        width: 16px;
+        height: 16px
+    }}
+
+    QSplitter::handle:horizontal {{
+        image: url({ICONS.get('HANDLE_H').as_posix()});
+    }}
+
+    QSplitter::handle:vertical {{
+        image: url({ICONS.get('HANDLE_V').as_posix()});
     }}
 
     QSplitter::handle:hover {{
-        background-color: qradialgradient(
-            cx: 0.5, cy: 0.5, radius: 0.5,
-            fx: 0.5, fy: 0.5,
-            stop: 0 {BLOSSOM_LIGHT}, stop: 1 {BLOSSOM}
-        );
+        background-color: {BLOSSOM_LIGHT};
+        border: 1px solid {BLACK_PEARL};
+        border-radius: 3px;
+        image: none;
+        margin: 5px;
     }}
     '''
 )
 
 
-SS_GROUPAREA_NOTITLE = (
+SS_GROUPAREA_BASE = (
     f'''
     QGroupBox {{
         border: 2px solid {SAN_MARINO};
@@ -692,7 +807,7 @@ SS_GROUPAREA_NOTITLE = (
         padding-top: 2px;
     }}
 
-    QGroupBox:enabled {{
+    QGroupBox {{
         background-color: qlineargradient(
             x1: 0, y1: 0, x2: 1, y2: 1,
             stop: 0 {IVORY}, stop: 0.25 {CASPER_LIGHT},
@@ -703,8 +818,19 @@ SS_GROUPAREA_NOTITLE = (
 )
 
 
+SS_GROUPAREA_NOFRAME = (
+    SS_GROUPAREA_BASE +
+    '''
+    QGroupBox {
+        background-color: transparent;
+        border-width: 0px;
+    }
+    '''
+)
+
+
 SS_GROUPAREA_TITLE = (
-    SS_GROUPAREA_NOTITLE + 
+    SS_GROUPAREA_BASE + 
     f'''
     QGroupBox {{
         font: bold;
@@ -713,7 +839,7 @@ SS_GROUPAREA_TITLE = (
 
     QGroupBox::title {{
         color: {BLACK_PEARL};
-        padding: 0px;
+        padding: 0px 9px 0px 9px;
         subcontrol-origin: padding;
         top: 3ex;
     }}
@@ -728,9 +854,15 @@ SS_GROUPAREA_TITLE = (
 SS_GROUPSCROLLAREA_FRAME = (
     f'''
     QScrollArea {{
+        background-color: transparent;
         border: 1px solid {SAN_MARINO};
         border-radius: 2px;
-        padding: 1px;
+        padding: 10px;
+    }}
+
+    QGroupBox#GroupScrollAreaWrapper,
+    QWidget#GroupScrollAreaWrapper {{
+        background-color: transparent;
     }}
     '''
 )
@@ -740,7 +872,8 @@ SS_GROUPSCROLLAREA_NOFRAME = (
     SS_GROUPSCROLLAREA_FRAME +
     '''
     QScrollArea {
-        border-color: transparent;
+        border: none;
+        padding: 0px;
     }
     '''
 )
@@ -768,37 +901,55 @@ SS_PATHLABEL = (
 SS_MAINWINDOW = (
     f'''
     QMainWindow::separator {{
-        width: 8px;
-        height: 8px;
-        border-radius: 2px;
-        margin: 8px;
+        margin: 0px;
+        width: 16px;
+        height: 16px;
+    }}
+
+    QMainWindow::separator:horizontal {{
+        image: url({ICONS.get('HANDLE_V').as_posix()});
+    }}
+
+    QMainWindow::separator:vertical {{
+        image: url({ICONS.get('HANDLE_H').as_posix()});
     }}
 
     QMainWindow::separator:hover {{
-        background: qradialgradient(
-            cx: 0.5, cy: 0.5, radius: 0.5,
-            fx: 0.5, fy: 0.5,
-            stop: 0 {BLOSSOM_LIGHT}, stop: 1 {BLOSSOM}
-        );
+        background-color: {BLOSSOM_LIGHT};
         border: 1px solid {BLACK_PEARL};
+        border-radius: 3px;
+        image: none;
+        margin: 5px;
+    }}
+
+    QTabBar {{
+        background-color: transparent;
     }}
 
     QTabBar::tab {{
-        background: qlineargradient(
+        background-color: qlineargradient(
             x1: 0, y1: 0, x2: 0, y2: 1,
             stop: 0 {IVORY}, stop: 0.75 {IVORY}, stop: 1 {CASPER_LIGHT}
         );
-        border: 1px solid {BLACK_PEARL};
-        border-bottom-color: {CASPER}; 
+        border-color: {BLACK_PEARL};
+        border-style: solid;
+        border-width: 1px 1px 0px 1px; 
         border-top-left-radius: 2px;
         border-top-right-radius: 2px;
+        margin: 5px 1px 0px 0px;
         padding: 5px 10px 5px 10px;
-        margin: 5px 2px 0px 0px;
     }}
 
-    QTabBar::tab:selected,
+    QTabBar::tab:first {{
+        margin-left: 4px;
+    }}
+
+    QTabBar::tab:last {{
+        margin-right: 4px;
+    }}
+
     QTabBar::tab:hover {{
-        background: qlineargradient(
+        background-color: qlineargradient(
             x1: 0, y1: 0, x2: 0, y2: 1,
             stop: 0 {SAN_MARINO_LIGHT}, stop: 0.75 {SAN_MARINO_LIGHT}, 
             stop: 1 {CASPER_LIGHT}
@@ -807,8 +958,17 @@ SS_MAINWINDOW = (
     }}
 
     QTabBar::tab:selected {{
-        border-bottom-color: {SAN_MARINO};
-        border-bottom-width: 2px;
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 {SAN_MARINO_LIGHT}, stop: 0.75 {SAN_MARINO_LIGHT}, 
+            stop: 1 {CASPER_LIGHT}
+        );
+        border-bottom: 3px solid {SAN_MARINO};
+        margin-top: 3px;
+    }}
+
+    QStatusBar {{
+        background-color: {IVORY};
     }}
     '''
 )
@@ -823,12 +983,17 @@ SS_PANE = (
     }}
 
     QDockWidget::title {{
-        background: {SAN_MARINO_LIGHT};
-        border: 2px outset {BLACK_PEARL};
-        border-bottom-width: 0px;
-        border-top-left-radius: 1px;
-        border-top-right-radius: 1px;
+        background-color: {SAN_MARINO_LIGHT};
+        border-color: {SAN_MARINO};
+        border-style: solid;
+        border-width: 1px 0px 1px 10px; 
+        margin: 2px 0px 2px 0px;
         padding: 8px;
+    }}
+
+    QDockWidget::title:hover {{
+        border-width: 2px 0px 2px 12px;
+        padding: 7px 8px 7px 6px;
     }}
 
     QDockWidget::close-button,
@@ -849,7 +1014,7 @@ SS_PANE = (
 
     QDockWidget::close-button:hover,
     QDockWidget::float-button:hover {{
-        background: qlineargradient(
+        background-color: qlineargradient(
             x1: 0, y1: 0, x2: 0, y2: 1,
             stop: 0 white, stop: 1 {BLOSSOM}
         );
@@ -861,14 +1026,10 @@ SS_PANE = (
         border: 1px solid {SAN_MARINO};
     }}
 
-    QScrollArea#PaneScrollArea,
-    QGroupBox#PaneGroupArea {{
-        border: 2px solid {BLACK_PEARL};
-        border-bottom-left-radius: 2px;
-        border-bottom-right-radius: 2px;
-        margin-right: 1px;
-        margin-left: 1px;
-        padding: 8px;
+    QScrollArea#PaneScrollArea {{
+        border: 1px solid transparent;
+        margin: 0px; /* margin bottom and right must be 0 to avoid scrollbar glitches */
+        padding-bottom: 1px;
     }}
     '''
 )
