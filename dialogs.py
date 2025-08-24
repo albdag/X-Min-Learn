@@ -1412,11 +1412,11 @@ class ImageToMineralMap(QW.QDialog):
 
         '''
     # Deny conversion if no image is loaded
-        array = self.image_array.copy()
-        if array is None:
+        if self.image_array is None:
             return CW.MsgBox(self, 'Crit', 'No image loaaded.')
         
     # Get image array shape
+        array = self.image_array.copy()
         if array.ndim == 3:
             row, col, chan = array.shape
         else:
