@@ -1930,6 +1930,21 @@ class StyledTabWidget(QW.QTabWidget):
         self.setStyleSheet(self.styleSheet() + ss)
 
 
+    def currentWidget(self) -> QW.QWidget | None:
+        '''
+        Reimplementation of the original "currentWidget" method to ensure to
+        get the object held by the currently selected tab and not its wrapper
+        widget.
+
+        Returns
+        -------
+        QW.QWidget or None
+            Widget held by the current tab or None if no tab is selected.
+            
+        '''
+        return self.widget(self.currentIndex())
+
+
     def widget(self, index: int) -> QW.QWidget | None:
         '''
         Reimplementation of the original "widget" method to ensure to get the
