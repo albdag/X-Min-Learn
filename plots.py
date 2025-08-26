@@ -91,7 +91,7 @@ class PanHandler(panhandler):
 
 class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
-    _title_pad = 15
+    _title_pad = 5
 
     def __init__(
         self,
