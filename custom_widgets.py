@@ -1940,6 +1940,7 @@ class StyledTabWidget(QW.QTabWidget):
         '''
         self.tabBar().setExpanding(True)
         self.tabBar().setDocumentMode(True)
+        self.tabBar().setUsesScrollButtons(False)
         ss = 'QTabWidget::pane {padding: 0px; border: 0px; margin: 0px;}'
         self.setStyleSheet(self.styleSheet() + ss)
 
@@ -1954,7 +1955,7 @@ class StyledTabWidget(QW.QTabWidget):
         -------
         QW.QWidget or None
             Widget held by the current tab or None if no tab is selected.
-            
+
         '''
         return self.widget(self.currentIndex())
 
