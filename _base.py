@@ -1805,7 +1805,8 @@ class InputMapStack():
 
     def reorder(self, index_list: list[int]) -> None:
         '''
-        Sort the stack using a list of indices.
+        Sort the stack using a list of indices. This method can also be used
+        to slice the stack.
 
         Parameters
         ----------
@@ -1813,6 +1814,5 @@ class InputMapStack():
             List of indices.
 
         '''
-        self.input_maps[:] = [self.input_maps[i] for i in index_list]
-        self.arrays[:] = [self.arrays[i] for i in index_list]
-        self._stack = np.stack(self.arrays)
+        input_maps = [self.input_maps[i] for i in index_list]
+        self.__init__(input_maps, self.mask)

@@ -158,9 +158,9 @@ class AutoRoiDetector(QW.QDialog):
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)    
 
     # Enable search btn and update parameters when input maps list is populated
-        self.maps_selector.mapsDataChanged.connect(
+        self.maps_selector.mapsListUpdated.connect(
             lambda: self.search_btn.setEnabled(True))
-        self.maps_selector.mapsDataChanged.connect(self.update_params_range)
+        self.maps_selector.mapsListUpdated.connect(self.update_params_range)
 
     # Fix even size values
         self.size_spbox.valueChanged.connect(self.fix_even_size)
@@ -264,7 +264,7 @@ class AutoRoiDetector(QW.QDialog):
         npv_func = self.npv_encoder[self.npv_btns.getChecked().text()]
         
     # Get input map data
-        checked_maps = self.maps_selector.getChecked()
+        checked_maps = self.maps_selector.getCheckedMaps()
         if not len(checked_maps):
             return CW.MsgBox(self, 'Crit', 'Select at least one map.')
         inmaps, names = zip(*[i.get('data', 'name') for i in checked_maps])

@@ -124,8 +124,7 @@ def extend_filename(fname: str, add: str, ext: str | None = None) -> str:
     return name + add + e
 
 
-# Find a more elegant solution
-def guessMap( 
+def match_map( 
     map_name: str,
     targets: Iterable[str],
     match_case: bool = False

@@ -214,18 +214,24 @@ class MineralClassifier(DraggableTool):
 
     # Mineral maps list (Tree Widget)
         self.minmaps_list = QW.QTreeWidget()
-        self.minmaps_list.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
         self.minmaps_list.setHeaderHidden(True)
+        self.minmaps_list.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
+        self.minmaps_list.verticalScrollBar().setStyleSheet(style.SS_SCROLLBARV)
         self.minmaps_list.setStyleSheet(style.SS_MENU)
-        self.minmaps_list.setMinimumHeight(150)
+        
 
-    # Save mineral map (Styled Button)
-        self.save_minmap_btn = CW.StyledButton(style.getIcon('SAVE_AS'))
-        self.save_minmap_btn.setToolTip('Save mineral map as...')
+    # Mineral maps toolbar (Toolbar)
+        self.minmaps_tbar = QW.QToolBar('Mineral maps toolbar')
+        self.minmaps_tbar.setOrientation(QC.Qt.Vertical)
+        self.minmaps_tbar.setStyleSheet(style.SS_TOOLBAR)
 
-    # Delete mineral map (Styled Button)
-        self.del_minmap_btn = CW.StyledButton(style.getIcon('REMOVE'))
-        self.del_minmap_btn.setToolTip('Remove mineral map')
+    # Save mineral map (Action) [-> Mineral maps toolbar]
+        self.save_minmap_action = self.minmaps_tbar.addAction(
+            style.getIcon('SAVE_AS'), 'Save mineral map as...')
+
+    # Delete mineral map (Action) [-> Mineral maps toolbar]
+        self.del_minmap_action = self.minmaps_tbar.addAction(
+            style.getIcon('REMOVE'), 'Remove mineral map')
 
     # Mineral maps legend (Legend)
         self.legend = CW.Legend()
@@ -233,8 +239,7 @@ class MineralClassifier(DraggableTool):
 
     # Mineral maps bar canvas (Bar Canvas)
         self.barplot = plots.BarCanvas(
-            orientation='h', size=(3.6, 6.4), wheel_zoom=False, wheel_pan=False)
-        self.barplot.setMinimumSize(200, 350)
+            orientation='h', size=(3, 5.3), wheel_zoom=False, wheel_pan=False)
     
     # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
         self.barplot_navtbar = plots.NavTbar.barCanvasDefault(
@@ -242,22 +247,22 @@ class MineralClassifier(DraggableTool):
 
     # Silhouette canvas (Silhouette Canvas)
         self.silscore_canvas = plots.SilhouetteCanvas(
-            wheel_zoom=False, wheel_pan=False)
-        self.silscore_canvas.setMinimumHeight(450)
+            size=(3, 5.3), wheel_zoom=False, wheel_pan=False)
+        self.silscore_canvas.setMinimumHeight(400)
 
     # Silhouette canvas navigation toolbar (Navigation Toolbar)
         self.silscore_navtbar = plots.NavTbar(
             self.silscore_canvas, self, coords=False)
         self.silscore_navtbar.removeToolByIndex([3, 4, 8, 9])
 
-    # Silhouette average score (Framed Label)
-        self.silscore_lbl = CW.FramedLabel('None')
+    # Silhouette average score (Label)
+        self.silscore_lbl = QW.QLabel('-')
         
-    # Calinski-Harabasz Index (CHI) score (Framed Label)
-        self.chiscore_lbl = CW.FramedLabel('None')
+    # Calinski-Harabasz Index (CHI) score (Label)
+        self.chiscore_lbl = QW.QLabel('-')
 
-    # Davies-Bouldin Index (DBI) score (Framed Label)
-        self.dbiscore_lbl = CW.FramedLabel('None')
+    # Davies-Bouldin Index (DBI) score (Label)
+        self.dbiscore_lbl = QW.QLabel('-')
 
 #  -------------------------------------------------------------------------  #
 #                              CLASSIFIER PANEL 
@@ -289,7 +294,7 @@ class MineralClassifier(DraggableTool):
 
     # Maps viewer (Image Canvas)
         self.maps_viewer = plots.ImageCanvas()
-        self.maps_viewer.setMinimumWidth(250)
+        self.maps_viewer.setMinimumHeight(100)
 
     # Viewer Navigation Toolbar (Navigation Toolbar)
         self.viewer_navtbar = plots.NavTbar.imageCanvasDefault(
@@ -305,12 +310,9 @@ class MineralClassifier(DraggableTool):
 
     # Confidence Label (Label)
         conf_lbl = QW.QLabel('Confidence threshold')
-        conf_lbl.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
 
     # Confidence slider (Slider)
         self.conf_slider = QW.QSlider(QC.Qt.Horizontal)
-        self.conf_slider.setSizePolicy(
-            QW.QSizePolicy.MinimumExpanding, QW.QSizePolicy.Fixed)
         self.conf_slider.setRange(0, 100)
         self.conf_slider.setSingleStep(5)
         self.conf_slider.setTracking(False)
@@ -321,9 +323,9 @@ class MineralClassifier(DraggableTool):
 #                                 LAYOUT 
 #  -------------------------------------------------------------------------  #
         
-    # Data panel layout
+    # Data panel (Styled Tab Widget)
         
-        # - Input data
+        # - Input data tab (Splitter Group) 
         mask_grid = QW.QGridLayout()
         mask_grid.setVerticalSpacing(15)
         mask_grid.addWidget(self.mask_warn, 0, 0)
@@ -341,27 +343,27 @@ class MineralClassifier(DraggableTool):
         self.mask_group = CW.GroupArea(mask_grid, 'Mask', checkable=True)
         self.mask_group.setChecked(False)
 
-        input_data_vbox = QW.QVBoxLayout()
-        input_data_vbox.setSpacing(20)
-        input_data_vbox.addWidget(self.inmaps_selector)
-        input_data_vbox.addWidget(self.mask_group)
+        input_data_split = CW.SplitterGroup(
+            (self.inmaps_selector, self.mask_group), 
+            (1, 0),
+            orient=QC.Qt.Vertical
+        )
 
-        # - Output data
+        # - Output data tab (Splitter Group)
         barplot_vbox = QW.QVBoxLayout()
         barplot_vbox.addWidget(self.barplot_navtbar)
         barplot_vbox.addWidget(self.barplot)
 
         scores_grid = QW.QGridLayout()
-        scores_grid.setVerticalSpacing(10)
+        scores_grid.setRowStretch(1, 1)
         scores_grid.addWidget(self.silscore_navtbar, 0, 0, 1, -1)
         scores_grid.addWidget(self.silscore_canvas, 1, 0, 1, -1)
-        scores_grid.setRowMinimumHeight(2, 10)
-        scores_grid.addWidget(QW.QLabel('Average silhouette score'), 3, 0)
-        scores_grid.addWidget(self.silscore_lbl, 3, 1)
-        scores_grid.addWidget(QW.QLabel('Calinski-Harabasz Index'), 4, 0)
-        scores_grid.addWidget(self.chiscore_lbl, 4, 1)
-        scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 5, 0)
-        scores_grid.addWidget(self.dbiscore_lbl, 5, 1)
+        scores_grid.addWidget(QW.QLabel('Average silhouette score'), 2, 0)
+        scores_grid.addWidget(self.silscore_lbl, 2, 1, QC.Qt.AlignRight)
+        scores_grid.addWidget(QW.QLabel('Calinski-Harabasz Index'), 3, 0)
+        scores_grid.addWidget(self.chiscore_lbl, 3, 1, QC.Qt.AlignRight)
+        scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 4, 0)
+        scores_grid.addWidget(self.dbiscore_lbl, 4, 1, QC.Qt.AlignRight)
 
         graph_tabwid = CW.StyledTabWidget()
         graph_tabwid.addTab(self.legend, style.getIcon('LEGEND'), None)
@@ -371,49 +373,46 @@ class MineralClassifier(DraggableTool):
         graph_tabwid.setTabToolTip(1, 'Bar plot')
         graph_tabwid.setTabToolTip(2, 'Clustering scores')
 
-        output_data_grid = QW.QGridLayout()
-        output_data_grid.addWidget(self.minmaps_list, 0, 0, 1, -1)
-        output_data_grid.addWidget(self.save_minmap_btn, 1, 1)
-        output_data_grid.addWidget(self.del_minmap_btn, 1, 2)
-        output_data_grid.addWidget(graph_tabwid, 2, 0, 1, -1)
-        output_data_grid.setColumnStretch(0, 2)
-        output_data_grid.setColumnStretch(1, 1)
-        output_data_grid.setColumnStretch(2, 1)
+        minmaps_list_hbox = QW.QHBoxLayout()
+        minmaps_list_hbox.setContentsMargins(0, 0, 0, 0)
+        minmaps_list_hbox.addWidget(self.minmaps_tbar)
+        minmaps_list_hbox.addWidget(self.minmaps_list)
+
+        output_data_split = CW.SplitterGroup(
+            (minmaps_list_hbox, graph_tabwid),
+            (1, 0),
+            orient=QC.Qt.Vertical
+        )
         
-        # - Panel layout
+        # - Tab Widget
         self.data_tabwid = CW.StyledTabWidget()
         self.data_tabwid.setTabBarExpanding()
         self.data_tabwid.addTab(
-            input_data_vbox, style.getIcon('STACK'), title='INPUT MAPS')
+            input_data_split, style.getIcon('STACK'), title='INPUT MAPS')
         self.data_tabwid.addTab(
-            output_data_grid, style.getIcon('MINERAL'), title='OUTPUT MAPS')
-        data_group = CW.CollapsibleArea(
-            self.data_tabwid, 'Data', collapsed=False)
+            output_data_split, style.getIcon('MINERAL'), title='OUTPUT MAPS')
 
-    # Classifier panel layout
-        class_grid = QW.QGridLayout()
-        class_grid.addWidget(self.classifier_tabwid, 0, 0, 1, -1)
-        class_grid.addWidget(self.progbar, 1, 0, 1, -1)
-        class_grid.addWidget(self.classify_btn, 2, 0)
-        class_grid.addWidget(self.stop_btn, 2, 1)
-        class_group = CW.CollapsibleArea(class_grid, 'Classifier')
-
-    # Viewer panel layout
-        viewer_grid = QW.QGridLayout()
-        viewer_grid.addWidget(self.viewer_navtbar, 0, 0, 1, -1)
-        viewer_grid.addWidget(self.maps_viewer, 1, 0, 1, -1)
-        viewer_grid.addWidget(conf_lbl, 2, 0, 1, -1)
-        viewer_grid.addWidget(self.conf_spbox, 3, 0)
-        viewer_grid.addWidget(self.conf_slider, 3, 1)
-        right_scroll = CW.GroupScrollArea(viewer_grid)
+    # Classifier settings panel (Collapsible Area)
+        class_group = CW.CollapsibleArea(
+            self.classifier_tabwid, title='Classifier settings', collapsed=False)
 
     # Main layout
-        left_vbox = QW.QVBoxLayout()
-        left_vbox.setSpacing(30)
-        left_vbox.addWidget(class_group)
-        left_vbox.addWidget(data_group)
-        left_vbox.addStretch(1)
-        left_scroll = CW.GroupScrollArea(left_vbox)
+        left_grid = QW.QGridLayout()
+        left_grid.addWidget(self.data_tabwid, 0, 0, 1, -1)
+        left_grid.addWidget(self.progbar, 1, 0, 1, -1)
+        left_grid.addWidget(self.classify_btn, 2, 0)
+        left_grid.addWidget(self.stop_btn, 2, 1)
+        left_scroll = CW.GroupScrollArea(left_grid)
+
+        right_grid = QW.QGridLayout()
+        right_grid.setRowStretch(2, 1)
+        right_grid.addWidget(class_group, 0, 0, 1, -1)
+        right_grid.addWidget(self.viewer_navtbar, 1, 0, 1, -1)
+        right_grid.addWidget(self.maps_viewer, 2, 0, 1, -1)
+        right_grid.addWidget(conf_lbl, 3, 0, 1, -1)
+        right_grid.addWidget(self.conf_spbox, 4, 0)
+        right_grid.addWidget(self.conf_slider, 4, 1)
+        right_scroll = CW.GroupScrollArea(right_grid)
 
         main_layout = CW.SplitterLayout()
         main_layout.addWidget(left_scroll, 0)
@@ -426,15 +425,18 @@ class MineralClassifier(DraggableTool):
         Signals-slots connector.
 
         '''
-    # Reset canvas and enable/disable classify button if input data is updated
-        self.inmaps_selector.mapsDataChanged.connect(
-            self.maps_viewer.clear_canvas)
-        self.inmaps_selector.mapsDataChanged.connect(
-            self.updateClassifyButtonState)
+    # Actions to be performed when input maps are updated
+        self.inmaps_selector.mapsListUpdated.connect(self.onInmapsDataUpdated)
 
     # Display input maps when clicked from the input selector
         self.inmaps_selector.mapClicked.connect(self.showInputMap)
-
+    
+    # Actions related to maps matcher widget in PreTrainedClassifierTab
+        self.inmaps_selector.mapChanged.connect(self.autoFillMatcher)
+        self.pre_train_tab.matcher.mapsChanged.connect(self.autoFillMatcher)
+        self.pre_train_tab.matcher.selectorClicked.connect(
+            self.updateMatcherSelector)
+        
     # Hide/show masks on input maps when mask group is enabled/disabled
         self.mask_group.clicked.connect(self.refreshInputMap)
 
@@ -462,9 +464,9 @@ class MineralClassifier(DraggableTool):
     # Actions to be performed when a mineral map is clicked
         self.minmaps_list.itemClicked.connect(self.showMineralMap)
 
-    # Save and remove mineral maps button actions
-        self.save_minmap_btn.clicked.connect(self.saveMineralMap)
-        self.del_minmap_btn.clicked.connect(self.removeMineralMap)
+    # Save and remove mineral maps actions
+        self.save_minmap_action.triggered.connect(self.saveMineralMap)
+        self.del_minmap_action.triggered.connect(self.removeMineralMap)
 
     # Connect legend signals (change item color, rename item, highlight item)
         self.legend.colorChangeRequested.connect(self.changeClassColor)
@@ -484,6 +486,42 @@ class MineralClassifier(DraggableTool):
     # Change probability threshold with spinbox and scaler
         self.conf_spbox.valueChanged.connect(self.setConfidenceThreshold)
         self.conf_slider.valueChanged.connect(self.setConfidenceThreshold)
+
+
+    def onInmapsDataUpdated(self) -> None:
+        '''
+        Actions to be performed when Input Maps are updated in the selector.
+
+        '''
+        self.maps_viewer.clear_canvas()
+        self.updateClassifyButtonState()
+        self.autoFillMatcher()
+
+
+    def autoFillMatcher(self) -> None:
+        '''
+        Attempt to automatically match the input features of matcher widget.
+
+        '''
+        checked_maps = self.inmaps_selector.getCheckedMaps()
+        maps_names = [i.get('name') for i in checked_maps]
+        self.pre_train_tab.matcher.autoFillSelectors(maps_names)
+
+
+    def updateMatcherSelector(self, index: int) -> None:
+        '''
+        Update the items of matcher widget's selector at 'index' with currently
+        checked input maps. 
+
+        Parameters
+        ----------
+        index : int
+            Index of selector to be updated.
+
+        '''
+        checked_maps = self.inmaps_selector.getCheckedMaps()
+        maps_names = [i.get('name') for i in checked_maps]
+        self.pre_train_tab.matcher.updateSelector(index, maps_names)
 
     
     def onMaskRadioButtonToggled(self, toggled: bool) -> None:
@@ -772,8 +810,9 @@ class MineralClassifier(DraggableTool):
             self.barplot.clear_canvas()
             self.maps_viewer.clear_canvas()
             self.silscore_canvas.clear_canvas()
-            self.chiscore_lbl.setText('None')
-            self.dbiscore_lbl.setText('None')
+            self.silscore_lbl.setText('-')
+            self.chiscore_lbl.setText('-')
+            self.dbiscore_lbl.setText('-')
             return
             
     # Enable confidence spinbox and slider
@@ -803,9 +842,14 @@ class MineralClassifier(DraggableTool):
         else:
             self.silscore_canvas.clear_canvas()
 
-        self.silscore_lbl.setText(str(sil_avg))
-        self.chiscore_lbl.setText(str(chi))
-        self.dbiscore_lbl.setText(str(dbi))
+    # Round scores according to global decimal precision value
+        precision = pref.get_setting('data/decimal_precision')
+        sil_lbl = '-' if sil_avg is None else str(round(sil_avg, precision))
+        chi_lbl = '-' if chi is None else str(round(chi, precision))
+        dbi_lbl = '-' if dbi is None else str(round(dbi, precision))
+        self.silscore_lbl.setText(sil_lbl)
+        self.chiscore_lbl.setText(chi_lbl)
+        self.dbiscore_lbl.setText(dbi_lbl)
 
     # Update the maps viewer
         mmap, enc, col = minmap_thr.get_plot_data()
@@ -1000,11 +1044,9 @@ class MineralClassifier(DraggableTool):
         if self._isBusyClassifying:
             return CW.MsgBox(self, 'C', 'Cannot run multiple classifications.')
         
-    # Get checked input maps data and their dispayed names
-        checked_inmaps = self.inmaps_selector.getChecked()
-        inmaps, names = zip(*[i.get('data', 'name') for i in checked_inmaps])
-
     # Build the input maps stack
+        checked_inmaps = self.inmaps_selector.getCheckedMaps()
+        inmaps = [i.get('data') for i in checked_inmaps]
         mask = self._mask if self.mask_group.isChecked() else None
         input_stack = InputMapStack(inmaps, mask)
     
@@ -1018,7 +1060,7 @@ class MineralClassifier(DraggableTool):
 
     # Get the classifier and launch the classification thread
         active_tab = self.classifier_tabwid.currentWidget()
-        csf = active_tab.getClassifier(input_stack, names) 
+        csf = active_tab.getClassifier(input_stack) 
 
         if isinstance(csf, mltools._ClassifierBase):
             csf.thread.taskInitialized.connect(self.progbar.step)
@@ -1075,7 +1117,9 @@ class MineralClassifier(DraggableTool):
             mineral_map.set_clustering_scores(sil_avg, sil_clust, chi, dbi)
             item = CW.DataObject(mineral_map)
             dt = datetime.now().strftime("%Y%m%d-%H%M%S")
-            item.setText(0, f'{self._current_classifier.name} [{dt}]')
+            name = f'{self._current_classifier.name} [{dt}]'
+            item.setText(0, name)
+            item.setToolTip(0, name)
             self.minmaps_list.addTopLevelItem(item)
 
         # Force show the output maps tab and display the mineral map
@@ -1200,13 +1244,23 @@ class MineralClassifier(DraggableTool):
             self.model_info = CW.DocumentBrowser()
             self.model_info.setDefaultPlaceHolderText(placeholder_text)
 
+        # Maps selector (Maps Matcher)
+            self.matcher = CW.MapsMatcher()
+
         # Adjust main layout
-            main_layout = QW.QVBoxLayout()
+            left_vbox = QW.QVBoxLayout()
+            left_vbox.addWidget(self.load_btn)
+            left_vbox.addWidget(self.model_path)
+            left_vbox.addWidget(self.model_info)
+
+            right_vbox = QW.QVBoxLayout()
+            right_vbox.addWidget(QW.QLabel('Match input features'))
+            right_vbox.addWidget(self.matcher)
+            
+            main_layout = CW.SplitterLayout()
             main_layout.setContentsMargins(0, 0, 0, 0)
-            main_layout.addWidget(self.load_btn)
-            main_layout.addWidget(self.model_path)
-            main_layout.addSpacing(20)
-            main_layout.addWidget(self.model_info)
+            main_layout.addLayout(left_vbox)
+            main_layout.addLayout(right_vbox)
             self.setLayout(main_layout)
 
 
@@ -1237,7 +1291,7 @@ class MineralClassifier(DraggableTool):
             self.model_path.setPath(path)
             logpath = self.model.generate_log_path(path)
 
-            # If model log was deleted or moved, ask for rebuilding it
+        # If model log was deleted or moved, ask for rebuilding it
             if not os.path.exists(logpath):
                 quest_text = 'Unable to find model log file. Rebuild it?'
                 choice = CW.MsgBox(self, 'Quest', quest_text)
@@ -1245,14 +1299,14 @@ class MineralClassifier(DraggableTool):
                     ext_log = pref.get_setting('data/extended_model_log')
                     self.model.save_log(logpath, extended=ext_log)
 
-            # Load log file. No error will be raised if it does not exist
+        # Load log file. No error will be raised if it does not exist
             self.model_info.setDoc(logpath)
 
+        # Populate the matcher widget
+            self.matcher.setMaps(self.model.features)
 
-        def getClassifier(
-            self,
-            input_stack: InputMapStack,
-            maps_names: list[str]
+
+        def getClassifier(self, input_stack: InputMapStack
         ) -> mltools.ModelBasedClassifier | None:
             '''
             Return the classifier stored in the loaded pre-trained model. This
@@ -1263,33 +1317,38 @@ class MineralClassifier(DraggableTool):
             ----------
             input_stack : InputMapStack
                 The stack of input maps.
-            maps_names : list[str]
-                List of input maps names.
 
             Returns
             -------
             ModelBasedClassifier or None
-                The pre-trained classifier or None if the required input maps
-                are not present.
+                The pre-trained classifier or None if input maps data is not 
+                properly provided.
 
             '''
+        # Check if model is loaded
             if self.model == None:
                 CW.MsgBox(self, 'Crit', 'A pre-trained model is required.')
-                return None
+                return
 
-        # Check if all required input maps are present and order them to fit
-        # the correct order
-        # ENHANCEMENT: user-friendly popup to link each map to required feature 
-            ordered_indices = []
-            for feat in self.model.features:
-                if cf.guessMap(feat, maps_names, match_case=True) is None:
-                    CW.MsgBox(self, 'Crit', f'Unable to identify {feat} map.')
-                    return None
-                else:
-                    ordered_indices.append(maps_names.index(feat))
-
-            input_stack.reorder(ordered_indices)
-
+        # Check if all required input maps are matched
+            idx = self.matcher.getMatchedIndices()
+            empty_rows = [n for n, i in enumerate(idx) if i == -1]
+            if empty_rows:
+                missing = [self.matcher.item(r, 0).text() for r in empty_rows]
+                text = 'One or more features have not been matched.'
+                CW.MsgBox(self, 'Crit', text, ', '.join(missing))
+                return
+            
+        # Send warning if maps have been matched to multiple features
+            maps = self.matcher.getMatchedMaps()
+            dupes = {maps[n] for n, i in enumerate(idx) if idx.count(i) > 1}
+            if dupes:
+                text = 'One or more maps match multiple features. Proceed?'
+                if CW.MsgBox(self, 'QuestWarn', text, ', '.join(dupes)).no():
+                    return
+            
+        # Reorder input maps to fit the order of model's features
+            input_stack.reorder(idx)
             return mltools.ModelBasedClassifier(input_stack, self.model)
 
 
@@ -1337,6 +1396,20 @@ class MineralClassifier(DraggableTool):
         # Loaded model path (Path Label)
             self.roimap_path = CW.PathLabel(full_display=False)
 
+        # Canvas for preview of loaded ROI map (ImageCanvas)
+            self.roi_canvas = plots.ImageCanvas(
+                binary=True,
+                cbar=False,
+                size=(2, 1.5),
+                layout='constrained',
+                wheel_zoom=False,
+                wheel_pan=False
+            )
+            self.roi_canvas.fig.patch.set(facecolor=style.CASPER_LIGHT)
+            self.roi_canvas.ax.xaxis.set_visible(False)
+            self.roi_canvas.ax.yaxis.set_visible(False)
+            self.roi_canvas.setMinimumHeight(50)
+
         # Include pixel proximity (Check Box)
             self.pixprox_cbox = QW.QCheckBox('Pixel Proximity (experimental)')
             self.pixprox_cbox.setToolTip('Use pixel coords as input features')
@@ -1356,7 +1429,7 @@ class MineralClassifier(DraggableTool):
             self.algm_panel = QW.QStackedWidget()
 
 
-        #----------------K-NEAREST NEIGHBORS ALGORITHM WIDGETS----------------#
+        #---------------K-NEAREST NEIGHBORS ALGORITHM SETTINGS----------------#
         # N. of neighbors  (Styled Spin Box)
             self.knn_nneigh_spbox = CW.StyledSpinBox(1, 100)
             self.knn_nneigh_spbox.setValue(5)
@@ -1371,26 +1444,31 @@ class MineralClassifier(DraggableTool):
             knn_layout = QW.QFormLayout()
             knn_layout.addRow('N. of neighbours', self.knn_nneigh_spbox)
             knn_layout.addRow('Neighbors weight', self.knn_weight_combox)
-            knn_group = CW.GroupArea(knn_layout, 'K-Nearest Neighbors')
+            knn_group = CW.GroupArea(knn_layout)
             
             self.algm_panel.addWidget(knn_group)
         #---------------------------------------------------------------------#
 
         # Adjust main layout
-            main_layout = QW.QGridLayout()
+            left_grid = QW.QGridLayout()
+            left_grid.setColumnStretch(1, 1)
+            left_grid.setRowStretch(2, 1)
+            left_grid.addWidget(self.load_btn, 0, 0, 1, -1)
+            left_grid.addWidget(self.unload_btn, 1, 0, 1, 1)
+            left_grid.addWidget(self.roimap_path, 1, 1)
+            left_grid.addWidget(self.roi_canvas, 2, 0, 1, -1)
+            left_grid.addWidget(self.pixprox_cbox, 3, 0, 1, -1)
+            left_grid.addWidget(self.multithread_cbox, 4, 0, 1, -1)
+
+            right_vbox = QW.QVBoxLayout()
+            right_vbox.addWidget(QW.QLabel('Select algorithm'))
+            right_vbox.addWidget(self.algm_combox)
+            right_vbox.addWidget(self.algm_panel)
+
+            main_layout = CW.SplitterLayout()
             main_layout.setContentsMargins(0, 0, 0, 0)
-            main_layout.addWidget(self.load_btn, 0, 0, 1, -1)
-            main_layout.addWidget(self.unload_btn, 1, 0)
-            main_layout.addWidget(self.roimap_path, 1, 1)
-            main_layout.setRowMinimumHeight(2, 20)
-            main_layout.addWidget(self.pixprox_cbox, 3, 0, 1, -1)
-            main_layout.addWidget(self.multithread_cbox, 4, 0, 1, -1)
-            main_layout.setRowMinimumHeight(5, 20)
-            main_layout.addWidget(QW.QLabel('Select algorithm'), 6, 0, 1, -1)
-            main_layout.addWidget(self.algm_combox, 7, 0, 1, -1)
-            main_layout.setRowMinimumHeight(8, 10)
-            main_layout.addWidget(self.algm_panel, 9, 0, 1, -1)
-            main_layout.setColumnStretch(1, 2)
+            main_layout.addLayout(left_grid)
+            main_layout.addLayout(right_vbox)
             self.setLayout(main_layout)
 
 
@@ -1439,6 +1517,7 @@ class MineralClassifier(DraggableTool):
             self._roimap = new_roimap
             self.addRoiMapRequested.emit(new_roimap)
             self.roimap_path.setPath(path)
+            self.roi_canvas.draw_heatmap(self._roimap.map != '')
             pbar.increase()
 
 
@@ -1451,6 +1530,7 @@ class MineralClassifier(DraggableTool):
             if self._roimap is not None:
                 self._roimap = None
                 self.roimap_path.clearPath()
+                self.roi_canvas.clear_canvas()
                 self.removeRoiMapRequested.emit()
                 
 
@@ -1468,10 +1548,7 @@ class MineralClassifier(DraggableTool):
             self.algm_panel.setCurrentWidget(idx)
 
 
-        def getClassifier(
-            self,
-            input_stack: InputMapStack,
-            maps_names: list[str] | None = None
+        def getClassifier(self, input_stack: InputMapStack
         ) -> mltools.RoiBasedClassifier | None: 
             '''
             Return the ROI-based classifier with the selected parameters. This
@@ -1482,9 +1559,6 @@ class MineralClassifier(DraggableTool):
             ----------
             input_stack : InputMapStack
                 The stack of input maps.
-            maps_names : list[str] or None, optional
-                This has no use. It is here only for args compatibility with
-                ModelBased Classifier. The default is None.
 
             Returns
             -------
@@ -1598,36 +1672,37 @@ class MineralClassifier(DraggableTool):
         # Add K-Means widgets to the Algorithm Panel
             kmeans_layout = QW.QFormLayout()
             kmeans_layout.addRow('N. of clusters', self.kmeans_nclust_spbox)
-            kmeans_group = CW.GroupArea(kmeans_layout, 'K-Means')
+            kmeans_group = CW.GroupArea(kmeans_layout)
 
             self.algm_panel.addWidget(kmeans_group)
         #---------------------------------------------------------------------#
 
         # Adjust layout
-            scores_grid = QW.QGridLayout()
+            scores_grid = QW.QFormLayout()
             scores_grid.setContentsMargins(9, 9, 9, 9)
-            scores_grid.addWidget(self.silscore_cbox, 0, 0)
-            scores_grid.addWidget(QW.QLabel('Data ratio'), 0, 1, QC.Qt.AlignRight)
-            scores_grid.addWidget(self.silscore_ratio_spbox, 0, 2)
-            scores_grid.addWidget(self.chiscore_cbox, 1, 0, 1, -1)
-            scores_grid.addWidget(self.dbiscore_cbox, 2, 0, 1, -1)
+            scores_grid.addRow(self.silscore_cbox)
+            scores_grid.addRow('Silhouette ratio', self.silscore_ratio_spbox)
+            scores_grid.addRow(self.chiscore_cbox)
+            scores_grid.addRow(self.dbiscore_cbox)
             scores_group = CW.GroupArea(scores_grid, 'Clustering scores',
                                         checkable=True, align=QC.Qt.AlignLeft)
             scores_group.setChecked(False)
 
-            main_layout = QW.QVBoxLayout()
+            left_vbox = QW.QVBoxLayout()
+            left_vbox.addWidget(self.seed_generator)
+            left_vbox.addWidget(scores_group, 1)
+            left_vbox.addWidget(self.pixprox_cbox)
+            left_vbox.addWidget(self.multithread_cbox)
+
+            right_vbox = QW.QVBoxLayout()
+            right_vbox.addWidget(QW.QLabel('Select algorithm'))
+            right_vbox.addWidget(self.algm_combox)
+            right_vbox.addWidget(self.algm_panel)
+
+            main_layout = CW.SplitterLayout()
             main_layout.setContentsMargins(0, 0, 0, 0)
-            main_layout.addWidget(self.seed_generator)
-            main_layout.addSpacing(20)
-            main_layout.addWidget(self.pixprox_cbox)
-            main_layout.addWidget(self.multithread_cbox)
-            main_layout.addSpacing(20)
-            main_layout.addWidget(scores_group)
-            main_layout.addSpacing(20)
-            main_layout.addWidget(QW.QLabel('Select algorithm'))
-            main_layout.addWidget(self.algm_combox)
-            main_layout.addSpacing(10)
-            main_layout.addWidget(self.algm_panel)
+            main_layout.addLayout(left_vbox)
+            main_layout.addLayout(right_vbox)
             self.setLayout(main_layout)
 
 
@@ -1658,10 +1733,7 @@ class MineralClassifier(DraggableTool):
             self.algm_panel.setCurrentWidget(idx)
 
 
-        def getClassifier(
-            self,
-            input_stack: InputMapStack,
-            maps_names: list[str] | None = None
+        def getClassifier(self, input_stack: InputMapStack
         ) -> mltools.UnsupervisedClassifier | None:
             '''
             Return the unsupervised classifier with the selected parameters.
@@ -1670,9 +1742,6 @@ class MineralClassifier(DraggableTool):
             ----------
             input_stack : InputMapStack
                 The stack of input maps.
-            maps_names : list[str] or None, optional
-                This has no use. It is here only for args compatibility with
-                ModelBased Classifier. The default is None.
 
             Returns
             -------

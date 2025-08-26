@@ -730,8 +730,9 @@ class SampleMapsSelector(QW.QWidget):
 
     sampleUpdateRequested = QC.pyqtSignal()
     mapsUpdateRequested = QC.pyqtSignal(int) # index of sample
-    mapsDataChanged = QC.pyqtSignal()
+    mapsListUpdated = QC.pyqtSignal()
     mapClicked = QC.pyqtSignal(DataObject)
+    mapChanged = QC.pyqtSignal(DataObject)
 
     def __init__(
         self,
@@ -812,6 +813,7 @@ class SampleMapsSelector(QW.QWidget):
         
     # Send tree widget signals as custom signals
         self.maps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
+        self.maps_list.itemChanged.connect(lambda i: self.mapChanged.emit(i))
 
 
     def updateCombox(self, samples: list[DataGroup]) -> None:
@@ -860,12 +862,25 @@ class SampleMapsSelector(QW.QWidget):
             self.maps_list.addTopLevelItem(item)
 
     # Send a signal to inform that maps data changed
-        self.mapsDataChanged.emit()
+        self.mapsListUpdated.emit()
 
 
-    def getChecked(self) -> list[DataObject]:
+    def getMaps(self) -> list[DataObject]:
         '''
-        Get the currently checked maps.
+        Get all maps.
+
+        Returns
+        -------
+        list[DataObject]
+            List of all maps.
+
+        '''
+        return [self.maps_list.topLevelItem(i) for i in range(self.mapsCount())]
+
+
+    def getCheckedMaps(self) -> list[DataObject]:
+        '''
+        Get the currently checked maps. Returns all maps if not checkable.
 
         Returns
         -------
@@ -873,11 +888,10 @@ class SampleMapsSelector(QW.QWidget):
             List of checked maps.
 
         '''
+        maps = self.getMaps()
         if self.checkable:
-            n_maps = self.maps_list.topLevelItemCount()
-            items = [self.maps_list.topLevelItem(i) for i in range(n_maps)]
-            checked = [i for i in items if i.checkState(0)]
-            return checked
+            maps = [m for m in maps if m.checkState(0)]
+        return maps
     
 
     def mapsCount(self) -> int:
@@ -2297,6 +2311,7 @@ class CollapsibleArea(QW.QWidget):
         qobject: QW.QLayout | QW.QWidget,
         title: str,
         collapsed: bool = True,
+        animated: bool = True,
         parent: QW.QWidget | None = None
     ) -> None:
         '''
@@ -2312,14 +2327,20 @@ class CollapsibleArea(QW.QWidget):
         collapsed : bool, optional
             Whether the section should be collapsed by default. The default is 
             True.
+        animated : bool, optional
+            Whether a simple animation should be played when switching views.
+            Set this to False if certain widgets, like matplotlib canvas, send
+            rendering errors or warnings.
+            The default is True.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
         '''
         super().__init__(parent)
 
-    # Set private attributes
+    # Set main attributes
         self._collapsed = collapsed
+        self._animated = animated
         self._section = qobject
         self._title = title
 
@@ -2406,9 +2427,13 @@ class CollapsibleArea(QW.QWidget):
         '''
         self._collapsed = True
         self.arrow.setArrowType(QC.Qt.RightArrow)
-        self.animation.setStartValue(self.area.height())
-        self.animation.setEndValue(0)
-        self.animation.start()
+
+        if self._animated:
+            self.animation.setStartValue(self.area.height())
+            self.animation.setEndValue(0)
+            self.animation.start()
+        else:
+            self.area.setVisible(False)
 
     
     def expand(self) -> None:
@@ -2418,9 +2443,13 @@ class CollapsibleArea(QW.QWidget):
         '''
         self._collapsed = False
         self.arrow.setArrowType(QC.Qt.DownArrow)
-        self.animation.setStartValue(0)
-        self.animation.setEndValue(self.area.sizeHint().height())
-        self.animation.start()
+
+        if self._animated:
+            self.animation.setStartValue(0)
+            self.animation.setEndValue(self.area.sizeHint().height())
+            self.animation.start()
+        else:
+            self.area.setVisible(True)
 
 
 
@@ -4396,7 +4425,7 @@ class DatasetDesigner(StyledTable):
         bad_files = []
         for n, p in enumerate(paths, start=1):
             try:
-                matching_col = cf.guessMap(cf.path2filename(p), required_maps) # !!! find a more elegant solution
+                matching_col = cf.match_map(cf.path2filename(p), required_maps)
             # If a filename matches with a column, then add it
                 if matching_col is not None:
                     row = self.indexAt(self.sender().pos()).row()
@@ -4607,3 +4636,125 @@ class StatusFileLoader(QW.QWidget):
                 raise ValueError(f'Invalid status: {status}.')
         
         self.status = status
+
+
+
+class MapsMatcher(StyledTable):
+
+    mapsChanged = QC.pyqtSignal()
+    selectorClicked = QC.pyqtSignal(int) # index of combo box
+
+    def __init__(self, parent: QW.QWidget | None = None) -> None:
+        '''
+        Interactive widget for matching the input maps (or features) required
+        for running custom machine learning models with Input Maps data. Its
+        signals must be properly connected to enable all its functionalities. 
+
+        Parameters
+        ----------
+        parent : QW.QWidget or None, optional
+            The GUI parent of this class. The default is None.
+
+        '''
+    # Set widget properties
+        super().__init__(0, 2, ext_sel=False, parent=parent)
+        self.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
+        self.setSelectionMode(QW.QAbstractItemView.NoSelection)
+
+    # Set headers properties
+        self.horizontalHeader().setSectionResizeMode(3) # resize to contents
+        self.horizontalHeader().setStretchLastSection(True)
+        self.horizontalHeader().setHidden(True)
+
+
+    def setMaps(self, maps_names: list[str]) -> None:
+        '''
+        Populate the table with the required input maps names. The left column
+        displays each map's name, while the right column is populated with 
+        Auto-Update ComboBoxes that allow the interactive selection of matching
+        input maps.
+
+        Parameters
+        ----------
+        maps_names : list[str]
+            List of required maps names.
+
+        '''
+        self.clear()
+        self.setRowCount(len(maps_names))
+        for row, name in enumerate(maps_names):
+            i0 = QW.QTableWidgetItem(name) # map name 
+            i1 = AutoUpdateComboBox() # iteractive selector
+            i1.clicked.connect(lambda idx=row: self.selectorClicked.emit(idx))
+            self.setItem(row, 0, i0)
+            self.setCellWidget(row, 1, i1)
+        self.mapsChanged.emit()
+
+    
+    def updateSelector(self, index: int, items: list[str]) -> None:
+        '''
+        Populate the selector at 'index' with 'items'.
+
+        Parameters
+        ----------
+        index : int
+            Index of the selector.
+        items : list[str]
+            List of maps names available for matching.
+
+        '''
+        selector: AutoUpdateComboBox = self.cellWidget(index, 1)
+        selector.updateItems(items)
+
+
+    def autoFillSelectors(self, items: list[str]):
+        '''
+        Attempt to automatically fill selectors based on matching maps names.
+        This method also updates each individual selector. This method should
+        be called every time the available Input Maps change.
+
+        Parameters
+        ----------
+        items : list[str]
+            List of maps names available for matching.
+        '''
+        for row in range(self.rowCount()):
+        # Update each selector with 'items'
+            map_name = self.item(row, 0).text()
+            selector: AutoUpdateComboBox = self.cellWidget(row, 1)
+            selector.updateItems(items)
+        # Setting selector index to -1 will display an empty current text
+            matching = cf.match_map(map_name, items)
+            index = -1 if matching is None else items.index(matching)
+            selector.setCurrentIndex(index)
+
+
+    def getMatchedMaps(self) -> list[str]:
+        '''
+        Get a list of all matched maps names, i.e., maps chosen within each 
+        selector. Empty selectors return empty strings.
+
+        Returns
+        -------
+        list[str]
+            List of selected matching maps.
+
+        '''
+        rows = range(self.rowCount())
+        return [self.cellWidget(r, 1).currentText() for r in rows]
+    
+
+    def getMatchedIndices(self) -> list[int]:
+        '''
+        Get a list of all matched maps' indices, i.e., the indices of selected
+        maps in reference to each selector's list of available maps. Empty 
+        selectors return index -1.
+
+        Returns
+        -------
+        list[int]
+            List of selected matching maps' indices.
+
+        '''
+        rows = range(self.rowCount())
+        return [self.cellWidget(r, 1).currentIndex() for r in rows]
