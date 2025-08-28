@@ -345,6 +345,8 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
 class ImageCanvas(_CanvasBase):
 
+    _title_pad = 15 # overrides parent class attribute
+
     def __init__(
         self,
         binary: bool = False,
