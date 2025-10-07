@@ -1892,7 +1892,8 @@ class StyledTabWidget(QW.QTabWidget):
         self,
         qobject: QW.QLayout | QW.QWidget,
         icon: QG.QIcon | None = None,
-        title: str | None = None
+        title: str | None = None,
+        tight: bool = False
     ) -> None:
         '''
         Reimplementation of the 'addTab' method, useful to achive consistent 
@@ -1906,6 +1907,9 @@ class StyledTabWidget(QW.QTabWidget):
             Tab icon. The default is None.
         title : str or None, optional
             Tab name. The default is None.
+        tight : bool, optional
+            Whether the tab's layout should take all the available space. The
+            default is False.
 
         Raises
         ------
@@ -1916,7 +1920,7 @@ class StyledTabWidget(QW.QTabWidget):
     # Set a GroupArea as the wrapper widget for "qobject"
         if isinstance(qobject, (QW.QLayout, QW.QWidget)):
             has_frame = self.tabBar().documentMode()
-            tab = GroupArea(qobject, frame=has_frame, tight=False)
+            tab = GroupArea(qobject, frame=has_frame, tight=tight)
             if has_frame:
                 tab.setStyleSheet(None)
                 tab.setObjectName('FramedWrapper')  # Name for custom qss

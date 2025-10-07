@@ -1901,6 +1901,7 @@ class ModeViewer(CW.StyledTabWidget):
     # Canvas
         self.canvas = plots.BarCanvas(
             orientation='h', size=(3.6, 6.4), wheel_zoom=False, wheel_pan=False)
+        self.canvas.fig.set_linewidth(0)
         self.canvas.setMinimumSize(200, 350)
 
     # Navigation Toolbar
@@ -1912,8 +1913,8 @@ class ModeViewer(CW.StyledTabWidget):
         plot_vbox.addWidget(self.canvas)
 
     # Add tabs to the Mode Viewer
-        self.addTab(self.legend, style.getIcon('LEGEND'), None)
-        self.addTab(plot_vbox, style.getIcon('PLOT'), None)
+        self.addTab(self.legend, style.getIcon('LEGEND'), title=None, tight=True)
+        self.addTab(plot_vbox, style.getIcon('PLOT'), title=None, tight=True)
         self.setTabToolTip(0, 'Legend')
         self.setTabToolTip(1, 'Bar plot')
 
@@ -2326,9 +2327,10 @@ class RoiEditor(QW.QWidget):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
 
     # Bar plot canvas
-        self.barCanvas = plots.BarCanvas(size=(3.6, 2.4), wheel_zoom=False, 
-                                         wheel_pan=False)
+        self.barCanvas = plots.BarCanvas(
+            size=(3.6, 2.4), wheel_zoom=False, wheel_pan=False)
         self.barCanvas.set_decimal_precision(0)
+        self.barCanvas.fig.set_linewidth(0)
         self.barCanvas.setMinimumSize(300, 300)
 
     # Bar plot Navigation toolbar
@@ -2341,8 +2343,10 @@ class RoiEditor(QW.QWidget):
 
     # ROI visualizer (Styled Tab Widget -> [ROI table | bar plot])
         roi_visualizer = CW.StyledTabWidget()
-        roi_visualizer.addTab(self.table, style.getIcon('TABLE'), None)
-        roi_visualizer.addTab(barplot_vbox, style.getIcon('PLOT'), None)
+        roi_visualizer.addTab(
+            self.table, style.getIcon('TABLE'), title=None, tight=True)
+        roi_visualizer.addTab(
+            barplot_vbox, style.getIcon('PLOT'), title=None, tight=True)
         roi_visualizer.setTabToolTip(0, 'Table')
         roi_visualizer.setTabToolTip(1, 'Bar plot')
 
