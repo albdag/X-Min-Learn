@@ -11,6 +11,7 @@ from PyQt5.QtCore import QByteArray, QSettings
 SETTINGS = QSettings('.//SETTINGS//X-MinLearn.ini', QSettings.IniFormat)
 DEFAULT_SETTINGS = {
     'GUI/fontsize': (10, int),
+    'GUI/high_dpi_scaling': (False, bool),
     'GUI/smooth_animation': (False, bool),
     'GUI/tools_tabbed': (True, bool),
     'GUI/window_state': (None, QByteArray),

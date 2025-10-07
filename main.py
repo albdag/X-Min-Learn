@@ -12,6 +12,7 @@ from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
 import style
+import preferences as pref
 
 
 # WINDOWS SHELL OPTION FOR DISTRIBUTION
@@ -23,11 +24,12 @@ except ImportError:
     pass
 
 # DPI MANAGEMENT
+high_dpi_scaling = pref.get_setting('GUI/high_dpi_scaling')
 if hasattr(Qt, 'AA_EnableHighDpiScaling'):
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, high_dpi_scaling)
 
 if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, high_dpi_scaling)
 
 
 if __name__ == "__main__":

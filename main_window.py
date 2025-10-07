@@ -32,7 +32,6 @@ class MainWindow(QW.QMainWindow):
         super().__init__()
 
     # Set main window properties
-        self.resize(1600, 900)
         self.setWindowTitle('New project[*]') 
         self.setWindowIcon(style.getIcon('LOGO_32X32'))
         self.setDockOptions(self.AllowTabbedDocks)
@@ -45,6 +44,7 @@ class MainWindow(QW.QMainWindow):
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
+        self.showMaximized()
         self._connect_slots()
 
     # Restore last window state (toolboxes and panes)
