@@ -635,7 +635,7 @@ class ImageCanvas(_CanvasBase):
 
     # Otherwise we use the current image clims (reset clims)
         else:
-            array = self.get_map()
+            array = self.image.get_array()
             vmin, vmax = np.nanmin(array), np.nanmax(array)
             self.image.set_clim(vmin, vmax)
         # Re-apply boundary norm if image is a discrete map
