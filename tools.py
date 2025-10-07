@@ -240,6 +240,7 @@ class MineralClassifier(DraggableTool):
     # Mineral maps bar canvas (Bar Canvas)
         self.barplot = plots.BarCanvas(
             orientation='h', size=(3, 5.3), wheel_zoom=False, wheel_pan=False)
+        self.barplot.fig.set_linewidth(0)
     
     # Mineral maps bar canvas navigation toolbar (Navigation Toolbar)
         self.barplot_navtbar = plots.NavTbar.barCanvasDefault(
@@ -248,6 +249,7 @@ class MineralClassifier(DraggableTool):
     # Silhouette canvas (Silhouette Canvas)
         self.silscore_canvas = plots.SilhouetteCanvas(
             size=(3, 5.3), wheel_zoom=False, wheel_pan=False)
+        self.silscore_canvas.fig.set_linewidth(0)
         self.silscore_canvas.setMinimumHeight(400)
 
     # Silhouette canvas navigation toolbar (Navigation Toolbar)
@@ -366,9 +368,12 @@ class MineralClassifier(DraggableTool):
         scores_grid.addWidget(self.dbiscore_lbl, 4, 1, QC.Qt.AlignRight)
 
         graph_tabwid = CW.StyledTabWidget()
-        graph_tabwid.addTab(self.legend, style.getIcon('LEGEND'), None)
-        graph_tabwid.addTab(barplot_vbox, style.getIcon('PLOT'), None)
-        graph_tabwid.addTab(scores_grid, style.getIcon('SCORES'), None)
+        graph_tabwid.addTab(
+            self.legend, style.getIcon('LEGEND'), title=None, tight=True)
+        graph_tabwid.addTab(
+            barplot_vbox, style.getIcon('PLOT'), title=None, tight=True)
+        graph_tabwid.addTab(
+            scores_grid, style.getIcon('SCORES'), title=None, tight=True)
         graph_tabwid.setTabToolTip(0, 'Legend')
         graph_tabwid.setTabToolTip(1, 'Bar plot')
         graph_tabwid.setTabToolTip(2, 'Clustering scores')
@@ -394,8 +399,12 @@ class MineralClassifier(DraggableTool):
 
     # Classifier settings panel (Collapsible Area)
         class_group = CW.CollapsibleArea(
-            self.classifier_tabwid, title='Classifier settings', collapsed=False)
-
+            self.classifier_tabwid,
+            title='Classifier settings',
+            frame=False,
+            collapsed=False
+        )
+        
     # Main layout
         left_grid = QW.QGridLayout()
         left_grid.addWidget(self.data_tabwid, 0, 0, 1, -1)

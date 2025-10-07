@@ -2315,6 +2315,7 @@ class CollapsibleArea(QW.QWidget):
         self,
         qobject: QW.QLayout | QW.QWidget,
         title: str,
+        frame: bool = True,
         collapsed: bool = True,
         animated: bool = True,
         parent: QW.QWidget | None = None
@@ -2329,6 +2330,8 @@ class CollapsibleArea(QW.QWidget):
             A layout-like or a widget-like object.
         title : str
             The title of the section.
+        frame : bool, optional
+            Whether the section area should have a frame. The default is True.
         collapsed : bool, optional
             Whether the section should be collapsed by default. The default is 
             True.
@@ -2344,6 +2347,7 @@ class CollapsibleArea(QW.QWidget):
         super().__init__(parent)
 
     # Set main attributes
+        self._framed = frame
         self._collapsed = collapsed
         self._animated = animated
         self._section = qobject
@@ -2375,8 +2379,9 @@ class CollapsibleArea(QW.QWidget):
         font.setBold(True)
         self.title.setFont(font)
 
-    # Section area (Group Area)
-        self.area = GroupArea(self._section)
+    # Section area (Group Area)ù
+        # 'frame' argument also influences 'tight' (see GroupArea for details) 
+        self.area = GroupArea(self._section, frame=self._framed, tight=None)
 
     # Expand/Collapse animation (Property Animation)
         self.animation = QC.QPropertyAnimation(self.area, b'maximumHeight')
