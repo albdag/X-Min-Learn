@@ -4640,7 +4640,7 @@ class PhaseRefiner(DraggableTool):
         self.nd_clear_btn = CW.StyledButton(style.getIcon('CLEAR'))
 
     # NoData threshold (Styled Double Spin Box) [-> Basic Refiner]
-        thresh_tip = 'Output NoData class only if its pixels exceed this ratio'
+        thresh_tip = 'Output NoData class if its pixels exceed this ratio'
         self.nd_thresh_spbox = CW.StyledDoubleSpinBox(max_value=0.99)
         self.nd_thresh_spbox.setValue(0.5)
         self.nd_thresh_spbox.setToolTip(thresh_tip)
