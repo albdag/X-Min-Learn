@@ -1500,7 +1500,7 @@ class HistogramViewer(QW.QWidget):
         self.scaler_vmax.setToolTip('Max. span value')
         for wid in (self.scaler_vmin, self.scaler_vmax):
             wid.setMaximum(2**16)
-            wid.setSingleStep(10)
+            wid.setSingleStep(1)
             wid.setMaximumWidth(100)
             wid.setEnabled(False)
 
@@ -3328,7 +3328,7 @@ class ProbabilityMapViewer(QW.QWidget):
         self.max_input.setToolTip('Max. range value')
         for wid in (self.min_input, self.max_input):
             wid.setMaximum(1.0)
-            wid.setSingleStep(0.05)
+            wid.setSingleStep(0.01)
             wid.setMaximumWidth(100)
             wid.setEnabled(False)
 
