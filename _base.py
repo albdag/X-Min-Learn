@@ -82,7 +82,7 @@ class InputMap():
         return InputMap(self.map.copy())
 
 
-    def get_masked(self, mask: np.ndarray) -> np.ma.MaskedArray | np.ndarray:
+    def get_masked(self, mask: np.ndarray) -> np.ndarray:
         '''
         Returns a masked version of the map array.
 
@@ -93,7 +93,7 @@ class InputMap():
 
         Returns
         -------
-        map_array_ma : numpy MaskedArray or numpy ndarray
+        map_array_ma : numpy ndarray
             Masked input map or the original one if 'mask' is invalid. 
 
         '''
@@ -665,11 +665,7 @@ class MineralMap():
 
 
     def get_masked(self, mask: np.ndarray) -> (
-        tuple[
-            np.ma.MaskedArray | np.ndarray,
-            np.ma.MaskedArray | np.ndarray,
-            np.ma.MaskedArray | np.ndarray
-        ]
+        tuple[np.ndarray, np.ndarray, np.ndarray]
     ):
         '''
         Returns a masked version of mineral map, encoded mineral map and
@@ -682,11 +678,11 @@ class MineralMap():
 
         Returns
         -------
-        minmap_ma : numpy MaskedArray or numpy ndarray
+        minmap_ma : numpy ndarray
             Masked mineral map or the original one if 'mask' is invalid.
-        minmap_encoded_ma : numpy MaskedArray or numpy ndarray
+        minmap_encoded_ma : numpy ndarray
             Masked encoded mineral map or the original one if 'mask' is invalid.
-        probmap_ma : numpy MaskedArray or numpy ndarray
+        probmap_ma : numpy ndarray
             Masked probability map or the original one if 'mask' is invalid.
 
         Example

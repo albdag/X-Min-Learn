@@ -860,8 +860,7 @@ class ImageCanvas(_CanvasBase):
 
 
     def get_map(self, return_mask: bool = False) -> (
-        np.ndarray | np.ma.MaskedArray | None
-        | tuple[np.ndarray | np.ma.MaskedArray | None, np.ndarray | None]
+        tuple[np.ndarray, np.ndarray | None] | np.ndarray | None
     ):
         '''
         Get an unmasked version of the array displayed in the canvas and,
@@ -876,7 +875,7 @@ class ImageCanvas(_CanvasBase):
 
         Returns
         -------
-        array : numpy ndarray or numpy MaskedArray or None
+        array : numpy ndarray or None
             The displayed map array or None if no map is displayed.
         mask : numpy ndarray or None, optional
             The mask array, if 'return_mask' is True and the array is masked.

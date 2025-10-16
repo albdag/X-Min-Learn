@@ -649,7 +649,7 @@ class MineralClassifier(DraggableTool):
             array = item.get('data').map
             
     # Show warn icon if available mask has wrong shape and thus is not applied
-        visible = mask_available and not isinstance(array, np.ma.MaskedArray)
+        visible = mask_available and not np.ma.is_masked(array)
         self.mask_warn.setVisible(visible)
 
     # Disable confidence spinbox and slider
