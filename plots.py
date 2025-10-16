@@ -1283,7 +1283,10 @@ class HistogramCanvas(_CanvasBase):
         self.hist = self.ax.hist(self.hist_data, **hist_kw)
 
     # Plot the ROI histogram data, if requested
-        if roi_data is not None:
+        if roi_data is None:
+            self.roi_hist_data = None
+            self.roi_hist = None
+        else:
             masked = np.ma.is_masked(roi_data)
             self.roi_hist_data = roi_data.compressed() if masked else roi_data.flatten()
             roi_hist_kw = {**hist_kw, 'fc': style.HIST_MASK}
