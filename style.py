@@ -135,7 +135,6 @@ ICONS = {
     'CLOSE': Path('Icons') / 'qss' / 'close.png',
     'HANDLE_H': Path('Icons') / 'qss' / 'handle_h.png',
     'HANDLE_V': Path('Icons') / 'qss' / 'handle_v.png',
-    'RADIOBTN_CHECKED': Path('Icons') / 'qss' / 'radiobtn_checked.png',
     'TICK_BLACK': Path('Icons') / 'qss' / 'tick_black.png',
     'UNDOCK': Path('Icons') / 'qss' / 'undock.png',
 
@@ -192,8 +191,29 @@ SS_BUTTON = (
 
 SS_RADIOBUTTON = (
     f'''
-    QRadioButton::indicator::checked:enabled {{
-        image: url({ICONS.get('RADIOBTN_CHECKED').as_posix()});
+    QRadioButton::indicator {{
+        border: 3px solid {BLACK_PEARL};
+        border-radius: 6px; /* circle-like */
+        height: 7px;
+        width: 7px;
+    }}
+
+    QRadioButton::indicator:enabled:checked {{
+        background-color: {BLOSSOM};
+    }}
+
+    QRadioButton::indicator:enabled:unchecked {{
+        background-color: {BLACK_PEARL};
+    }}
+
+    QRadioButton::indicator:!enabled:checked {{
+        border-color: {CASPER_DARK};
+        background-color: {CASPER};
+    }}
+
+    QRadioButton::indicator:!enabled:unchecked {{
+        border-color: {CASPER_DARK};
+        background-color: {CASPER_DARK};
     }}
     '''
 )
