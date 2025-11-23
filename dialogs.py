@@ -1304,6 +1304,7 @@ class ImageToMineralMap(QW.QDialog):
 
     # Pixel color delta (Styled Spin Box)
         self.delta_spbox = CW.StyledSpinBox(1, 255)
+        self.delta_spbox.setValue(128)
         self.delta_spbox.setToolTip('Minimum color variance to split classes')
 
     # Convert (Styled Button)
