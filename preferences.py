@@ -8,7 +8,7 @@ Created on Tue Dec 14 14:09:21 2021
 from PyQt5.QtCore import QByteArray, QSettings
 
 
-SETTINGS = QSettings('.//SETTINGS//X-MinLearn.ini', QSettings.IniFormat)
+SETTINGS = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
 DEFAULT_SETTINGS = {
     'GUI/fontsize': (10, int),
     'GUI/high_dpi_scaling': (False, bool),
