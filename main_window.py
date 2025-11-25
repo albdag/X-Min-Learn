@@ -33,7 +33,7 @@ class MainWindow(QW.QMainWindow):
 
     # Set main window properties
         self.setWindowTitle('New project[*]') 
-        self.setWindowIcon(style.getIcon('LOGO_32X32'))
+        self.setWindowIcon(style.getIcon('LOGO_32'))
         self.setDockOptions(self.AllowTabbedDocks)
         self.setAnimated(pref.get_setting('GUI/smooth_animation'))
         self.setStyleSheet(style.SS_MAINWINDOW)

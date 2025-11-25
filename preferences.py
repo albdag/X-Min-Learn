@@ -4,11 +4,14 @@ Created on Tue Dec 14 14:09:21 2021
 
 @author: albdag
 """
+from pathlib import Path
 
 from PyQt5.QtCore import QByteArray, QSettings
 
+ROOT = Path(__name__).resolve().parent
+SETTINGS = QSettings(
+    (ROOT / 'settings' / 'X-MinLearn.ini').as_posix(), QSettings.IniFormat)
 
-SETTINGS = QSettings('.//settings//X-MinLearn.ini', QSettings.IniFormat)
 DEFAULT_SETTINGS = {
     'GUI/fontsize': (10, int),
     'GUI/high_dpi_scaling': (False, bool),

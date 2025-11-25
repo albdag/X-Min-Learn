@@ -18,7 +18,7 @@ import preferences as pref
 # WINDOWS SHELL OPTION FOR DISTRIBUTION
 try:
     from ctypes import windll  # Only exists on Windows.
-    myappid = 'X-MinLearn.beta.1.0.0'
+    myappid = 'XMinLearn.beta.1.0.0'
     windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except ImportError:
     pass
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
 # Show splash screen
-    loader_bg = QPixmap(str(style.ICONS.get('LOGO_512X512')))
+    loader_bg = QPixmap(str(style.ICONS.get('LOGO_SPLASH')))
     flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     loader = QSplashScreen(loader_bg, flags=flags)
     loader.show()
