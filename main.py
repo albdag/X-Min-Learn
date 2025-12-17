@@ -4,27 +4,40 @@ Created on Wed Mar 20 12:31:39 2024
 
 @author: albdag
 """
-
+from pathlib import Path
+import resources
 import sys
 
-from PyQt5.QtCore import Qt
+
+from PyQt5.QtCore import Qt, QStandardPaths
 from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
+import settings
 import style
-import preferences as pref
 
 
-# WINDOWS SHELL OPTION FOR DISTRIBUTION
+# Global application information
+APPNAME = 'XMinLearn'
+APPVERSION = '1.0.0-beta.2'
+
+# Windows shell options for distribution
 try:
     from ctypes import windll  # Only exists on Windows.
-    myappid = 'XMinLearn.beta.1.0.0'
+    myappid = '.'.join((APPNAME, APPVERSION))
     windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except ImportError:
     pass
 
-# DPI MANAGEMENT
-high_dpi_scaling = pref.get_setting('GUI/high_dpi_scaling')
+# Set directory for user configurations (settings)
+config_loc = QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation)
+settings_dir = Path(config_loc) / APPNAME
+if not settings_dir.is_dir():
+    settings_dir.mkdir(parents=True, exist_ok=True)
+settings._setup_manager(settings_dir)
+
+# Set high DPI management
+high_dpi_scaling = settings.manager.get('GUI/high_dpi_scaling')
 if hasattr(Qt, 'AA_EnableHighDpiScaling'):
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, high_dpi_scaling)
 
@@ -32,21 +45,22 @@ if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, high_dpi_scaling)
 
 
+# Main application execution
 if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
 # Show splash screen
-    loader_bg = QPixmap(str(style.ICONS.get('LOGO_SPLASH')))
-    flags = Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
-    loader = QSplashScreen(loader_bg, flags=flags)
+    loader = QSplashScreen(QPixmap(str(style.ICONS.get('LOGO_SPLASH'))))
     loader.show()
     loader.showMessage('\n\nLoading app', Qt.AlignHCenter, QColor(style.IVORY))
 
 # Set application properties
-    app.setApplicationName('X-Min Learn')
+    app.setApplicationName(APPNAME)
     app.setApplicationDisplayName('X-Min Learn')
-    app.setApplicationVersion('beta.1.0.0')
+    app.setApplicationVersion(APPVERSION)
+
+# Set application style
     app.setStyle('fusion')
     app.setPalette(style.getPalette('default'))
     app.setFont(style.getFont('Arial'))

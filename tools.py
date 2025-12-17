@@ -21,7 +21,7 @@ import dataset_tools as dtools
 import image_analysis_tools as iatools
 import machine_learning_tools as mltools
 import plots
-import preferences as pref
+import settings
 import style
 import threads
 
@@ -778,8 +778,8 @@ class MineralClassifier(DraggableTool):
             The ROI map to be rendered.
 
         '''
-        color = iatools.hex2rgb(pref.get_setting('plots/roi_color'))
-        filled = pref.get_setting('plots/roi_filled')
+        color = iatools.hex2rgb(settings.manager.get('plots/roi_color'))
+        filled = settings.manager.get('plots/roi_filled')
 
         for name, bbox in roimap.roilist:
             patch = plots.RoiPatch(bbox, plots.rgb_to_float([color]), filled)
@@ -852,7 +852,7 @@ class MineralClassifier(DraggableTool):
             self.silscore_canvas.clear_canvas()
 
     # Round scores according to global decimal precision value
-        precision = pref.get_setting('data/decimal_precision')
+        precision = settings.manager.get('data/decimal_precision')
         sil_lbl = '-' if sil_avg is None else str(round(sil_avg, precision))
         chi_lbl = '-' if chi is None else str(round(chi, precision))
         dbi_lbl = '-' if dbi is None else str(round(dbi, precision))
@@ -1305,7 +1305,7 @@ class MineralClassifier(DraggableTool):
                 quest_text = 'Unable to find model log file. Rebuild it?'
                 choice = CW.MsgBox(self, 'Quest', quest_text)
                 if choice.yes():
-                    ext_log = pref.get_setting('data/extended_model_log')
+                    ext_log = settings.manager.get('data/extended_model_log')
                     self.model.save_log(logpath, extended=ext_log)
 
         # Load log file. No error will be raised if it does not exist
@@ -3952,7 +3952,7 @@ class ModelLearner(DraggableTool):
                 quest_text = 'Unable to find model log file. Rebuild it?'
                 choice = CW.MsgBox(self, 'Quest', quest_text)
                 if choice.yes():
-                    ext_log = pref.get_setting('data/extended_model_log')
+                    ext_log = settings.manager.get('data/extended_model_log')
                     self.model.save_log(logpath, extended=ext_log)
             self.pmodel_preview.setDoc(logpath) # Raises no error if missing
             pbar.increase()
@@ -4487,7 +4487,7 @@ class ModelLearner(DraggableTool):
         
         try:
             log_path = self.model.generate_log_path(path)
-            extended_log = pref.get_setting('data/extended_model_log')
+            extended_log = settings.manager.get('data/extended_model_log')
             self.model.save(path, log_path, extended_log)
             CW.MsgBox(self, 'Info', 'Model saved successfully.')
         except Exception as e:
@@ -5352,7 +5352,7 @@ class PhaseRefiner(DraggableTool):
         prev_removed = np.count_nonzero(variance_map == 1)
 
     # Update info widgets
-        prec = pref.get_setting('data/decimal_precision')
+        prec = settings.manager.get('data/decimal_precision')
         # original name
         self.advan_info[0].setText(self._phase)
         # original pixels                  
@@ -5941,11 +5941,11 @@ class DataViewer(QW.QWidget):
 
 #         editedMap = self.tempResult
 #         outpath, _ = QW.QFileDialog.getSaveFileName(self, 'Save edited map',
-#                                                     pref.get_dir('out'),
+#                                                     settings.get_dir('out'),
 #                                                     '''Compressed ASCII file (*.gz)
 #                                                        ASCII file (*.txt)''')
 #         if outpath:
-#             pref.set_dir('out', os.path.dirname(outpath))
+#             settings.set_dir('out', os.path.dirname(outpath))
 #             np.savetxt(outpath, editedMap, fmt='%s')
 #             QW.QMessageBox.information(self, 'X-Min Learn',
 #                                        'Edited map saved with success.')

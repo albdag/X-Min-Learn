@@ -19,7 +19,7 @@ import torch.utils.data as torch_data
 
 from _base import *
 import convenient_functions as cf
-import preferences as pref
+import settings
 import threads
 
 
@@ -758,7 +758,7 @@ class EagerModel():
     # Save the converted model and its log file if a path is provided
         if path is not None:
             log_path = self.generate_log_path(path)
-            extended = pref.get_setting('data/extended_model_log')
+            extended = settings.manager.get('data/extended_model_log')
             self.save(path, log_path=log_path, extended_log=extended)
 
 

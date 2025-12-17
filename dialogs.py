@@ -18,7 +18,7 @@ import custom_widgets as CW
 import dataset_tools as dtools
 import image_analysis_tools as iatools
 import plots
-import preferences as pref
+import settings
 import style
 import threads
 
@@ -2006,17 +2006,17 @@ class Preferences(QW.QDialog):
         Read settings from settings.ini file.
 
         '''
-        self._fontsize = pref.get_setting('GUI/fontsize')
-        self._high_dpi_scaling = pref.get_setting('GUI/high_dpi_scaling')
-        self._smooth_gui = pref.get_setting('GUI/smooth_animation')
-        self._tools_tabbed = pref.get_setting('GUI/tools_tabbed')
-        self._roi_col = pref.get_setting('plots/roi_color')
-        self._roi_selcol = pref.get_setting('plots/roi_selcolor')
-        self._roi_filled = pref.get_setting('plots/roi_filled')
-        self._decimal_prec = pref.get_setting('data/decimal_precision')
-        self._extended_log = pref.get_setting('data/extended_model_log')
-        self._mask_merge_type = pref.get_setting('data/mask_merging_rule')
-        self._warn_phase_count = pref.get_setting('data/warn_phase_count')
+        self._fontsize = settings.manager.get('GUI/fontsize')
+        self._high_dpi_scaling = settings.manager.get('GUI/high_dpi_scaling')
+        self._smooth_gui = settings.manager.get('GUI/smooth_animation')
+        self._tools_tabbed = settings.manager.get('GUI/tools_tabbed')
+        self._roi_col = settings.manager.get('plots/roi_color')
+        self._roi_selcol = settings.manager.get('plots/roi_selcolor')
+        self._roi_filled = settings.manager.get('plots/roi_filled')
+        self._decimal_prec = settings.manager.get('data/decimal_precision')
+        self._extended_log = settings.manager.get('data/extended_model_log')
+        self._mask_merge_type = settings.manager.get('data/mask_merging_rule')
+        self._warn_phase_count = settings.manager.get('data/warn_phase_count')
 
 
     def writeSettings(self) -> None:
@@ -2024,17 +2024,17 @@ class Preferences(QW.QDialog):
         Write settings to settings.ini file.
 
         '''
-        pref.edit_setting('GUI/fontsize', self._fontsize)
-        pref.edit_setting('GUI/high_dpi_scaling', self._high_dpi_scaling)
-        pref.edit_setting('GUI/smooth_animation', self._smooth_gui)
-        pref.edit_setting('GUI/tools_tabbed', self._tools_tabbed)
-        pref.edit_setting('plots/roi_color', self._roi_col)
-        pref.edit_setting('plots/roi_selcolor', self._roi_selcol)
-        pref.edit_setting('plots/roi_filled', self._roi_filled)
-        pref.edit_setting('data/decimal_precision', self._decimal_prec)
-        pref.edit_setting('data/extended_model_log', self._extended_log)
-        pref.edit_setting('data/mask_merging_rule', self._mask_merge_type)
-        pref.edit_setting('data/warn_phase_count', self._warn_phase_count)
+        settings.manager.set('GUI/fontsize', self._fontsize)
+        settings.manager.set('GUI/high_dpi_scaling', self._high_dpi_scaling)
+        settings.manager.set('GUI/smooth_animation', self._smooth_gui)
+        settings.manager.set('GUI/tools_tabbed', self._tools_tabbed)
+        settings.manager.set('plots/roi_color', self._roi_col)
+        settings.manager.set('plots/roi_selcolor', self._roi_selcol)
+        settings.manager.set('plots/roi_filled', self._roi_filled)
+        settings.manager.set('data/decimal_precision', self._decimal_prec)
+        settings.manager.set('data/extended_model_log', self._extended_log)
+        settings.manager.set('data/mask_merging_rule', self._mask_merge_type)
+        settings.manager.set('data/warn_phase_count', self._warn_phase_count)
 
 
     def changeRoiIconColor(self) -> None:
@@ -2092,7 +2092,7 @@ class Preferences(QW.QDialog):
         )
         choice = CW.MsgBox(self, 'Quest', text)
         if choice.yes():
-            pref.clear_settings()
+            settings.manager.default()
             self.close()
 
 

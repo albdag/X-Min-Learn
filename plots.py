@@ -28,7 +28,7 @@ from matplotlib import widgets as mpl_widgets
 from mpl_interactions import panhandler
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
-import preferences as pref
+import settings
 import style
 
 # mpl.use('Qt5Agg')
@@ -931,7 +931,7 @@ class BarCanvas(_CanvasBase):
         self.orient = orientation
         self.plot = None
         self.bar_width = 0.5
-        self.decimal_precision = pref.get_setting('data/decimal_precision')
+        self.decimal_precision = settings.manager.get('data/decimal_precision')
         self.label_amounts = []
         self.visible_amounts = False
 

@@ -20,7 +20,7 @@ import custom_widgets as CW
 import image_analysis_tools as iatools
 import dialogs
 import plots
-import preferences as pref
+import settings
 import style
 
 DataManagerWidgetItem = CW.DataGroup | CW.DataSubGroup | CW.DataObject
@@ -874,7 +874,7 @@ class DataManager(QW.QTreeWidget):
             try:
                 mmap = MineralMap.load(p)
                 # Ask user confirm if a large number of classes is detected
-                count_warn = pref.get_setting('data/warn_phase_count')
+                count_warn = settings.manager.get('data/warn_phase_count')
                 if (cnt := mmap.phase_count()) > count_warn:
                     txt = f'{cnt} mineral classes detected for {p}. Proceed?'
                     dtxt = '\n'.join(mmap.get_phases())
@@ -1760,7 +1760,7 @@ class HistogramViewer(QW.QWidget):
     # If the legacy mask exists, merge it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mode = pref.get_setting('data/mask_merging_rule')
+            mode = settings.manager.get('data/mask_merging_rule')
             mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
         mask = Mask(mask_array)
 
@@ -2139,7 +2139,7 @@ class ModeViewer(CW.StyledTabWidget):
     # If a legacy mask exists, merge it with the new mask
         _, legacy_mask = self.map_canvas.get_map(return_mask=True)
         if legacy_mask is not None:
-            mode = pref.get_setting('data/mask_merging_rule')
+            mode = settings.manager.get('data/mask_merging_rule')
             mask = iatools.binary_merge([mask, legacy_mask], mode)
 
     # Create a new Mask object
@@ -2233,9 +2233,9 @@ class RoiEditor(QW.QWidget):
         self.rect_sel = plots.RectSel(self.canvas.ax, self.onRectSelect)
 
     # Load ROIs visual properties
-        hex_roi_color = pref.get_setting('plots/roi_color')
-        hex_roi_selcolor = pref.get_setting('plots/roi_selcolor')
-        self.roi_filled = pref.get_setting('plots/roi_filled')
+        hex_roi_color = settings.manager.get('plots/roi_color')
+        hex_roi_selcolor = settings.manager.get('plots/roi_selcolor')
+        self.roi_filled = settings.manager.get('plots/roi_filled')
         self.roi_color = iatools.hex2rgb(hex_roi_color)
         self.roi_selcolor = iatools.hex2rgb(hex_roi_selcolor)
 
@@ -2737,7 +2737,7 @@ class RoiEditor(QW.QWidget):
         '''
         rgb = self.getColorFromDialog(self.roi_color)
         if rgb:
-            pref.edit_setting('plots/roi_color', iatools.rgb2hex(rgb))
+            settings.manager.set('plots/roi_color', iatools.rgb2hex(rgb))
             self.roi_color = rgb
             self.updatePatchSelection()
 
@@ -2749,7 +2749,7 @@ class RoiEditor(QW.QWidget):
         '''
         rgb = self.getColorFromDialog(self.roi_selcolor)
         if rgb:
-            pref.edit_setting('plots/roi_selcolor', iatools.rgb2hex(rgb))
+            settings.manager.set('plots/roi_selcolor', iatools.rgb2hex(rgb))
             self.roi_selcolor = rgb
             self.updatePatchSelection()
 
@@ -2766,7 +2766,7 @@ class RoiEditor(QW.QWidget):
 
         '''
         self.roi_filled = filled
-        pref.edit_setting('plots/roi_filled', filled)
+        settings.manager.set('plots/roi_filled', filled)
         for _, patch in self.patches:
             patch.set_fill(filled)
         self._redraw()
@@ -2934,7 +2934,7 @@ class RoiEditor(QW.QWidget):
 
     # If the legacy mask exists, merge it with the new mask
         if legacy_mask is not None:
-            mode = pref.get_setting('data/mask_merging_rule')
+            mode = settings.manager.get('data/mask_merging_rule')
             mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
@@ -2973,7 +2973,7 @@ class RoiEditor(QW.QWidget):
         if not self.canvas.is_empty():
             array, legacy_mask = self.canvas.get_map(return_mask=True)
             if array.shape == shape and legacy_mask is not None:
-                mode = pref.get_setting('data/mask_merging_rule')
+                mode = settings.manager.get('data/mask_merging_rule')
                 mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
@@ -3465,7 +3465,7 @@ class ProbabilityMapViewer(QW.QWidget):
     # If the legacy mask exists, merge it with the new mask
         mask_array = np.logical_or(array < vmin, array > vmax)
         if legacy_mask is not None:
-            mode = pref.get_setting('data/mask_merging_rule')
+            mode = settings.manager.get('data/mask_merging_rule')
             mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
         mask = Mask(mask_array)
 

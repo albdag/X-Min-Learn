@@ -17,7 +17,7 @@ import convenient_functions as cf
 import custom_widgets as CW
 import dialogs
 import docks
-import preferences as pref
+import settings
 import style
 import tools
 
@@ -35,7 +35,7 @@ class MainWindow(QW.QMainWindow):
         self.setWindowTitle('New project[*]') 
         self.setWindowIcon(style.getIcon('LOGO_32'))
         self.setDockOptions(self.AllowTabbedDocks)
-        self.setAnimated(pref.get_setting('GUI/smooth_animation'))
+        self.setAnimated(settings.manager.get('GUI/smooth_animation'))
         self.setStyleSheet(style.SS_MAINWINDOW)
 
     # Set main window attributes
@@ -48,7 +48,7 @@ class MainWindow(QW.QMainWindow):
         self._connect_slots()
 
     # Restore last window state (toolboxes and panes)
-        self.restoreState(pref.get_setting('GUI/window_state'), version=0)
+        self.restoreState(settings.manager.get('system/window_state'), version=0)
 
 
     def _init_ui(self) -> None:
@@ -484,22 +484,22 @@ class MainWindow(QW.QMainWindow):
     # Launch Dataset Builder 
         self.ds_builder_action.triggered.connect(
             lambda: self.openTool(
-                'DatasetBuilder', pref.get_setting('GUI/tools_tabbed')))
+                'DatasetBuilder', settings.manager.get('GUI/tools_tabbed')))
 
     # Launch Model Learner 
         self.model_learner_action.triggered.connect(
             lambda: self.openTool(
-                'ModelLearner', pref.get_setting('GUI/tools_tabbed')))
+                'ModelLearner', settings.manager.get('GUI/tools_tabbed')))
 
     # Launch Mineral Classifier 
         self.classifier_action.triggered.connect(
             lambda: self.openTool(
-                'MineralClassifier', pref.get_setting('GUI/tools_tabbed')))
+                'MineralClassifier', settings.manager.get('GUI/tools_tabbed')))
 
     # Launch Phase Refiner 
         self.refiner_action.triggered.connect(
             lambda: self.openTool(
-                'PhaseRefiner', pref.get_setting('GUI/tools_tabbed')))
+                'PhaseRefiner', settings.manager.get('GUI/tools_tabbed')))
 
 
     def about(self) -> None:
@@ -768,7 +768,7 @@ class MainWindow(QW.QMainWindow):
             if not item.filepathValid():
                 item.setNotFound(True)
         # Also get mask if present
-            mode = pref.get_setting('data/mask_merging_rule')
+            mode = settings.manager.get('data/mask_merging_rule')
             mask = sample.getCompositeMask('checked', mode=mode)
             if mask is not None:
                 mask = mask.mask
@@ -1146,7 +1146,7 @@ class MainWindow(QW.QMainWindow):
                 self.closeTool(tool)
 
         # Save the current state of main window's panes and toolbars
-            pref.edit_setting('GUI/window_state', self.saveState(version=0))
+            settings.manager.set('system/window_state', self.saveState(version=0))
             event.accept()
             
         else:

@@ -16,7 +16,7 @@ import numpy as np
 from _base import *
 import convenient_functions as cf
 import image_analysis_tools as iatools
-import preferences as pref
+import settings
 import style
 
 
@@ -983,7 +983,7 @@ class Legend(QW.QTreeWidget):
         self._highlighted_item = None
         self.amounts = amounts
         self.has_context_menu = context_menu
-        self.precision = pref.get_setting('data/decimal_precision')
+        self.precision = settings.manager.get('data/decimal_precision')
         
     # Customize the legend appearence and properties (headers & selection mode)
         self.setColumnCount(2 + self.amounts)
@@ -2609,7 +2609,7 @@ class SplitterLayout(QW.QBoxLayout):
     # (see below), and calling it would cause infinite recursions to occur.
         super().__init__(layout_direction, parent)
         self.splitter = QW.QSplitter(splitter_orientation)
-        self.splitter.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
+        self.splitter.setOpaqueResize(settings.manager.get('GUI/smooth_animation'))
         self.splitter.setStyleSheet(style.SS_SPLITTER)
         super().addWidget(self.splitter)
 
@@ -2776,7 +2776,7 @@ class SplitterGroup(QW.QSplitter):
     # Use super class to create the oriented splitter and set its stylesheet
         self.orient = orient
         super().__init__(self.orient)
-        self.setOpaqueResize(pref.get_setting('GUI/smooth_animation'))
+        self.setOpaqueResize(settings.manager.get('GUI/smooth_animation'))
         self.setStyleSheet(style.SS_SPLITTER)
 
     # Add each object to the splitter. If the object is a layout, wrap it first
@@ -3537,9 +3537,9 @@ class FileDialog(QW.QFileDialog):
                 raise ValueError(f'Invalid "action" argument: {action}')
 
     # Fix home directory if non existent 
-        home_dir = pref.get_dir(dir_type)
+        home_dir = settings.manager.get(f'system/{dir_type}_path')
         if not os.path.exists(home_dir):
-            home_dir = '.\\'
+            home_dir = settings.DOC_DIR
 
     # Construct dialog
         super().__init__(parent, caption, home_dir, filters)
@@ -3556,7 +3556,7 @@ class FileDialog(QW.QFileDialog):
         if self.exec() and set_default_folder:
             path = self.selectedFiles()[0]
             folder = path if file_mode == 2 else os.path.dirname(path)
-            pref.set_dir(dir_type, folder)
+            settings.manager.set(f'system/{dir_type}_path', folder)
 
 
     def get(self) -> list[str] | str | None:
