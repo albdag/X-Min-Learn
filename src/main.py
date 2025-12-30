@@ -19,7 +19,7 @@ import style
 
 # Global application information
 APPNAME = 'XMinLearn'
-APPVERSION = '1.0.0-beta.2'
+APPVERSION = '1.0.0-beta.3'
 
 # Windows shell options for distribution
 try:
