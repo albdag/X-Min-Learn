@@ -471,7 +471,7 @@ class EagerModel():
     _base_vrb = [
         'version',
         'algorithm', 
-        'loss', 
+        'loss_function', 
         'optimizer',
         'input_features', 
         'class_encoder', 
@@ -730,7 +730,7 @@ class EagerModel():
         return self.variables.get('seed')
     
 
-    def _convert_legacy_model(self, version: int, path: str | None = None):
+    def _convert_legacy_model(self, version: int, path: str | None = None) -> None:
         '''
         Convert old model to latest version. The applied changes depend on the
         version of the old model.
@@ -747,7 +747,7 @@ class EagerModel():
     # Apply changes based on model version
         if version < 1:
             self.variables['algorithm'] = self.variables.pop('algm_name')
-            self.variables['loss'] = self.variables.pop('loss_name')
+            self.variables['loss_function'] = self.variables.pop('loss_name')
             self.variables['optimizer'] = self.variables.pop('optim_name')
             self.variables['input_features'] = self.variables.pop('ordered_Xfeat')
             self.variables['class_encoder'] = self.variables.pop('Y_dict')
@@ -777,7 +777,6 @@ class EagerModel():
             log_path = self.generate_log_path(path)
             extended = settings.manager.get('data/extended_model_log')
             self.save(path, log_path=log_path, extended_log=extended)
-
 
 
     def missing_variables(self) -> set[str]:

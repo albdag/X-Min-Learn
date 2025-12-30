@@ -4165,7 +4165,7 @@ class ModelLearner(DraggableTool):
         self.network = self.model.get_network_architecture()
         self.network.to(device)
         self.optimizer = self.model.get_optimizer(self.network)
-        var_dict['loss'] = self.network._loss
+        var_dict['loss_function'] = self.network._loss
 
         if parent_model_state_dict := var_dict['model_state_dict']:
             self.network.load_state_dict(parent_model_state_dict)
