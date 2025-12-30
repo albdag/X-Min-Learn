@@ -23,6 +23,23 @@ import settings
 import threads
 
 
+# Set allowed global classes when loading pytorch models 
+torch.serialization.add_safe_globals([
+    np.core.multiarray._reconstruct,
+    np.core.multiarray.scalar,
+    np.dtype,
+    np.ndarray,
+    np.dtypes.Int8DType,
+    np.dtypes.Int16DType,
+    np.dtypes.Int32DType,
+    np.dtypes.UInt8DType,
+    np.dtypes.UInt16DType,
+    np.dtypes.UInt32DType,
+    np.dtypes.Float64DType,
+    np.dtypes.StrDType
+])
+
+
 class NeuralNetwork(torch.nn.Module):
 
     def __init__(
