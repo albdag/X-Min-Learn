@@ -83,5 +83,8 @@ CUDA compatibility depends on your GPU model and the installed NVIDIA drivers. [
    python -m .\src\main.py
    ```
 
+## User Guide
+Check the software user guide [here](https://github.com/albdag/X-Min-Learn/blob/main/User%20Guide%20X-Min%20Learn.pdf).
+
 ## Credits
 Many of X-Min Learn icons are provided by [Icons8](https://icons8.it/).
