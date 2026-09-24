@@ -4,13 +4,10 @@ Created on Wed Oct 23 12:32:14 2024
 
 @author: albdag
 """
-import os
-
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 from PIL import Image
 from scipy import ndimage
-import tifffile
 
 
 def construct_kernel_filter(shape: str, size: int) -> np.ndarray:
@@ -435,18 +432,10 @@ def image2array(path: str, dtype: DTypeLike = 'int64') -> np.ndarray:
         Output array.
 
     '''
-# If the image has a .tiff format we use the 'tiffile' module
-    if os.path.splitext(path)[1].upper() in ('.TIFF', '.TIF'):
-        # Adjust array shape by removing dimensions that are == 1 (squeeze)
-        array = tifffile.imread(path).squeeze().astype(dtype)
-
-# For all the other image formats we use PIL
-    else:
-        img = Image.open(path)
-        if img.mode == 'CMYK':
-            img = img.convert('RGB')
-        array = np.array(img, dtype=dtype)
-    
+    img = Image.open(path)
+    if img.mode == 'CMYK':
+        img = img.convert('RGB')
+    array = np.array(img, dtype=dtype)
     return array
 
 
