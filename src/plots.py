@@ -59,7 +59,9 @@ class PanHandler(panhandler):
 
     def _press(self, event: mpl_backend_bases.MouseEvent) -> None:
         '''
-        Reimplementation of the '_press' method. It just changes the cursor.
+        Reimplementation of the '_press' method. It changes the cursor before
+        calling parent method. Moreover, the current cursor is stored as the 
+        new '_releaseCursor'.
 
         Parameters
         ----------
@@ -67,15 +69,32 @@ class PanHandler(panhandler):
             The mouse press event.
 
         '''
-        super()._press(event)
         if event.button == self.wheelButton:
             self._releaseCursor = self.fig.canvas.cursor()
             self.fig.canvas.setCursor(self._pressCursor)
+        super()._press(event)
+
+
+    def _mouse_move(self, event: mpl_backend_bases.MouseEvent) -> None:
+        '''
+        Reimplementation of the '_mouse_move' method. It forces the cursor to
+        be the '_pressCursor' during mouse wheel dragging.
+
+        Parameters
+        ----------
+        event : mpl_backend_bases.MouseEvent
+            The mouse move event.
+
+        '''
+        if self._id_drag is not None:
+            self.fig.canvas.setCursor(self._pressCursor)
+        super()._mouse_move(event)
 
 
     def _release(self, event: mpl_backend_bases.MouseEvent) -> None:
         '''
-        Reimplementation of the '_release' method. It just changes the cursor.
+        Reimplementation of the '_release' method. It changes the cursor back 
+        after calling the parent method.
 
         Parameters
         ----------
