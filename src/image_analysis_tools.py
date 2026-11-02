@@ -22,18 +22,21 @@ BinaryMorphologyAlgorithms = Literal[
     'Fill Holes'
 ]
 
+# Kernel shape types
+KernelShape = Literal['square', 'circle', 'diamond']
+
 # Binary merge modes
 BinaryMergeModes = Literal['I', 'intersection', 'U', 'union']
 
 
-def construct_kernel_filter(shape: str, size: int) -> npt.NDArray[Any]:
+def construct_kernel_filter(shape: KernelShape, size: int) -> npt.NDArray[Any]:
     '''
     Return a binary kernel structure of shape 'shape' and size 'size', required
     by image filtering algorithms.
 
     Parameters
     ----------
-    shape : str
+    shape : KernelShape
         Kernel shape. Can be one of 'square', 'circle' or 'diamond'.
     size : int
         Kernel size. 

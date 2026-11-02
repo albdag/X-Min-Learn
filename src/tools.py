@@ -5000,7 +5000,7 @@ class PhaseRefiner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Kernel shape selector (Radio Buttons Group)
-        shapes = ('square', 'circle', 'diamond')
+        shapes = get_args(iatools.KernelShape)
         shp_icons = [style.getIcon(s.upper()) for s in shapes]
         self.kern_shape_btns = CW.RadioBtnLayout(['']*3, shp_icons, orient='h')
         for shp, btn in zip(shapes, self.kern_shape_btns.buttons()):
@@ -5995,7 +5995,8 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Construct kernel structure
-        kern_shape = self.kern_shape_btns.get_checked().objectName()
+        kern_btn_name = self.kern_shape_btns.get_checked().objectName()
+        kern_shape = cast(iatools.KernelShape, kern_btn_name)
         kern_size = self.kern_size_spbox.value()
         kernel = iatools.construct_kernel_filter(kern_shape, kern_size)
 
@@ -6031,7 +6032,8 @@ class PhaseRefiner(DraggableTool):
         '''
 
     # Construct kernel structure
-        kern_shape = self.kern_shape_btns.get_checked().objectName()
+        kern_btn_name = self.kern_shape_btns.get_checked().objectName()
+        kern_shape = cast(iatools.KernelShape, kern_btn_name)
         kern_size = self.kern_size_spbox.value()
         kernel = iatools.construct_kernel_filter(kern_shape, kern_size)
         
