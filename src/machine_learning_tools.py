@@ -20,7 +20,7 @@ import sklearn.preprocessing
 import torch
 import torch.utils.data as torch_data
 
-from _base import *
+from base import *
 import dataset_tools as dtools
 import convenient_functions as cf
 import settings

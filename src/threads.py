@@ -13,7 +13,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 import numpy as np
 from scipy import ndimage
 
-from _base import RoiMap
+from base import RoiMap
 
 
 class DynamicStepsThread(QThread):
