@@ -1431,8 +1431,10 @@ class MineralClassifier(DraggableTool):
                 CW.MsgBox(self, 'Crit', 'Incompatible model.', str(e))
                 return
 
+        # Model's path changed if model was converted to a newer version
+            path = self.model.filepath
             self.model_path.setPath(path)
-            logpath = self.model.generate_log_path(path)
+            logpath = '' if path is None else self.model.generate_log_path(path)
 
         # If model log was deleted or moved, ask for rebuilding it
             if not os.path.exists(logpath):
@@ -4287,6 +4289,7 @@ class ModelLearner(DraggableTool):
         try:
         # Import parent model
             pmodel = mltools.EagerModel.load(path)
+            path = pmodel.filepath # refresh path in case of version update
             pbar.increase()
 
         # Check if parent model shares the same features of loaded dataset
@@ -4301,7 +4304,8 @@ class ModelLearner(DraggableTool):
             pbar.increase()
 
         # Show parent model preview. Ask for rebuilding missing model log file.
-            if not os.path.exists(logpath := pmodel.generate_log_path(path)):
+            logpath = '' if path is None else pmodel.generate_log_path(path)
+            if not os.path.exists(logpath):
                 quest_text = 'Unable to find model log file. Rebuild it?'
                 choice = CW.MsgBox(pbar, 'Quest', quest_text)
                 if choice.yes():
