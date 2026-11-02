@@ -8,7 +8,7 @@ Created on Tue Mar  26 11:25:14 2024
 from collections.abc import Collection
 import json
 import os
-from typing import cast
+from typing import Literal, cast, get_args
 
 from PyQt5.QtCore import pyqtSignal, QMimeData, QPoint, Qt
 from PyQt5.QtGui import QColor, QIcon, QPixmap
@@ -3769,10 +3769,10 @@ class ProbabilityMapViewer(QW.QWidget):
         self.max_input.setValue(vmax)
 
 
-
+RgbaChannelName = Literal['R', 'G', 'B', 'A']
 class RgbaCompositeMapViewer(QW.QWidget):
 
-    channels = ('R', 'G', 'B', 'A')
+    channels = get_args(RgbaChannelName)
     rgbaModified = pyqtSignal()
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
@@ -3865,14 +3865,14 @@ class RgbaCompositeMapViewer(QW.QWidget):
         menu.exec(self.canvas.mapToGlobal(point))
 
 
-    def clearChannel(self, channel: str) -> None:
+    def clearChannel(self, channel: RgbaChannelName) -> None:
         '''
         Clear provided RGBA channel.
 
         Parameters
         ----------
-        channel : str
-            Channel to be cleared. Valid strings are 'R', 'G', 'B', 'A'.
+        channel : RgbaChannelName
+            Channel to be cleared. Valid channels are 'R', 'G', 'B' or 'A'.
 
         '''
     # Do nothing if canvas is empty (invalid RGBA map array)
@@ -3912,14 +3912,14 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.rgbaModified.emit()
 
 
-    def setChannel(self, channel: str, inmap: InputMap) -> None:
+    def setChannel(self, channel: RgbaChannelName, inmap: InputMap) -> None:
         '''
         Set one channel's data.
 
         Parameters
         ----------
-        channel : str
-            One of 'R', 'G', 'B' and 'A'.
+        channel : RgbaChannelName
+            One of 'R', 'G', 'B' or 'A'.
         inmap : InputMap
             Input map to be set as channel 'channel'.
 

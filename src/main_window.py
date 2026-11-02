@@ -927,15 +927,15 @@ class MainWindow(QW.QMainWindow):
         self.histViewer.canvas.update_canvas(data, roi_mask, title)
 
 
-    def setRgbaChannel(self, channel: str) -> None:
+    def setRgbaChannel(self, channel: docks.RgbaChannelName) -> None:
         '''
         Set current item in the Data Manager as channel 'channel' in the RGBA
         Composite Map Viewer pane.
 
         Parameters
         ----------
-        channel : str
-            RGBA channel. Must be one of 'R', 'G', 'B', 'A'.
+        channel : RgbaChannelName
+            RGBA channel. Must be one of 'R', 'G', 'B' or 'A'.
 
         '''
     # Get the current item in the data manager. If it is valid (= a DataObject
