@@ -585,7 +585,7 @@ class EagerModel():
         '''
     # Set main attributes
         self.variables = variables
-        self.filepath = model_path
+        self._filepath = model_path
 
     # Check model version compatibility
         version = self.variables.get('version', 0)
@@ -659,6 +659,20 @@ class EagerModel():
         '''
         variables = torch.load(model_path)
         return cls(variables, model_path)
+
+
+    @property
+    def filepath(self) -> str | None:
+        '''
+        Current model's filepath, if any.
+
+        Returns
+        -------
+        str | None
+            Model filepath.
+
+        '''
+        return self._filepath
 
 
     @property
@@ -1032,7 +1046,7 @@ class EagerModel():
 
         '''
         torch.save(self.variables, outpath)
-        self.filepath = outpath
+        self._filepath = outpath
         if log_path is not None:
             self.save_log(log_path, extended_log)
 
