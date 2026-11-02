@@ -6,7 +6,7 @@ Created on Wed Oct 23 09:21:45 2024
 """
 
 from collections.abc import Hashable, Iterable, Sequence
-from typing import Any, Literal, TypedDict, overload
+from typing import Any, Literal, TypedDict, get_args, overload
 
 from imblearn import over_sampling, under_sampling
 import pandas as pd
@@ -17,8 +17,26 @@ from base import InputMapStack, MineralMap
 import convenient_functions as cf
 import threads
 
+# Balancing algorithm names
+OverSamplingAlgorithmName = Literal[
+    'SMOTE',
+    'BorderlineSMOTE',
+    'SVMSMOTE',
+    'ADASYN'
+]
+UnderSamplingAlgorithmName = Literal[
+    'RandUS',
+    'NearMiss',
+    'ClusterCentroids',
+    'TomekLinks',
+    'ENN-all',
+    'ENN-mode',
+    'NCR'
+]
+
 # Balancing strategy dict = {class_ID : value}
 type BalancingStrategy = int | dict[int, int] | Literal['Min', 'Max', 'Mean', 'Median']
+
 # Verbose balancing strategy dict = {class_lbl : "<old_count> -> <new_count>"}
 type BalancingStrategyVerbose = dict[str, str]
 BalancingInfo = TypedDict('BalancingInfo', {
@@ -768,7 +786,7 @@ class GroundTruthDataset():
     def oversample(
         self,
         os_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: OverSamplingAlgorithmName | None,
         seed: int,
         k_neigh: int, 
         m_neigh: int,
@@ -781,7 +799,7 @@ class GroundTruthDataset():
     def oversample(
         self,
         os_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: OverSamplingAlgorithmName | None,
         seed: int,
         k_neigh: int, 
         m_neigh: int,
@@ -796,7 +814,7 @@ class GroundTruthDataset():
     def oversample(
         self,
         os_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: OverSamplingAlgorithmName | None,
         seed: int,
         k_neigh: int, 
         m_neigh: int,
@@ -812,7 +830,7 @@ class GroundTruthDataset():
     def oversample(
         self,
         os_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: OverSamplingAlgorithmName | None,
         seed: int,
         k_neigh: int = 5, 
         m_neigh: int = 10,
@@ -831,7 +849,7 @@ class GroundTruthDataset():
         ----------
         os_strat : dict[int, int]
             Over-sampling strategy. See 'parse_balancing_strategy' method.
-        algorithm : str or None
+        algorithm : OverSamplingAlgorithmName or None
             Over-sampling algorithm. Must be one of 'SMOTE', 'BorderlineSMOTE',
             'SVMSMOTE', 'ADASYN' or None. If None, no over-sampling will be 
             performed.
@@ -867,8 +885,7 @@ class GroundTruthDataset():
         Raises
         ------
         ValueError
-            Raised if 'algorithm' is not a valid argument (not one of 'SMOTE',
-            'BorderlineSMOTE', 'SVMSMOTE', 'ADASYN' or None).
+            Raised if 'algorithm' is not a valid over-sampling algorithm name.
 
         '''
     # Initialize over-sampler
@@ -902,7 +919,7 @@ class GroundTruthDataset():
                     n_neighbors = k_neigh
                 )
             case _:
-                valid = ['SMOTE', 'BorderlineSMOTE', 'SVMSMOTE', 'ADASYN']
+                valid = get_args(OverSamplingAlgorithmName)
                 err = f'Invalid algorithm: {algorithm}. Must be one of {valid}'
                 raise ValueError(err)
         
@@ -926,7 +943,7 @@ class GroundTruthDataset():
     def undersample(
         self,
         us_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: UnderSamplingAlgorithmName | None,
         seed: int,
         n_neigh: int,
         njobs: int,
@@ -939,7 +956,7 @@ class GroundTruthDataset():
     def undersample(
         self,
         us_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: UnderSamplingAlgorithmName | None,
         seed: int,
         n_neigh: int,
         njobs: int,
@@ -954,7 +971,7 @@ class GroundTruthDataset():
     def undersample(
         self,
         us_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: UnderSamplingAlgorithmName | None,
         seed: int,
         n_neigh: int,
         njobs: int,
@@ -970,7 +987,7 @@ class GroundTruthDataset():
     def undersample(
         self,
         us_strat: dict[int, int],
-        algorithm: str | None,
+        algorithm: UnderSamplingAlgorithmName | None,
         seed: int,
         n_neigh: int = 3, 
         njobs: int = 1,
@@ -989,7 +1006,7 @@ class GroundTruthDataset():
         ----------
         us_strat : dict
             Under-sampling strategy. See 'parse_balancing_strategy' method.
-        algorithm : str or None
+        algorithm : UnderSamplingAlgorithmName or None
             Under-sampling algorithm. Must be one of 'RandUS', 'NearMiss', 
             'ClusterCentroids', 'TomekLinks', 'ENN-all', 'ENN-mode', 'NCR' or
             None. If None, no under-sampling will be performed.
@@ -1024,9 +1041,7 @@ class GroundTruthDataset():
         Raises
         ------
         ValueError
-            Raised if 'algorithm' is not a valid argument (not one of 'RandUS',
-            'NearMiss', 'ClusterCentroids', 'TomekLinks', 'ENN-all', 'ENN-mode',
-            'NCR' or None).
+            Raised if 'algorithm' is not a valid under-sampling algorithm name.
 
         '''
     # Initialize under-sampler
@@ -1068,8 +1083,7 @@ class GroundTruthDataset():
                     n_jobs = njobs
                 )
             case _:
-                valid = ['RandUS', 'NearMiss', 'ClusterCentroids', 'TomekLinks',
-                         'ENN-all', 'ENN-mode', 'NCR']
+                valid = get_args(UnderSamplingAlgorithmName)
                 err = f'Invalid algorithm: {algorithm}. Must be one of {valid}'
                 raise ValueError(err)
 
@@ -1141,8 +1155,8 @@ class GroundTruthDataset():
         self,
         strategy: BalancingStrategy,
         seed: int, 
-        osa: str | None = None,
-        usa: str | None = None,
+        osa: OverSamplingAlgorithmName | None = None,
+        usa: UnderSamplingAlgorithmName | None = None,
         kos: int = 5,
         mos: int = 10,
         nus: int = 3,
@@ -1158,11 +1172,11 @@ class GroundTruthDataset():
             Overall balancing strategy. See 'parse_balancing_strategy' method.
         seed : int
             Random seed for reproducible results.
-        osa : str or None, optional
+        osa : OverSamplingAlgorithmName or None, optional
             Over-sampling algorithm. See 'oversample' method for a list of 
             possible choices. If None, no over-sampling will be performed. The
             default is None.
-        usa : str or None, optional
+        usa : UnderSamplingAlgorithmNames or None, optional
             Under-sampling algorithm. See 'undersample' method for a list of
             possible choices. If None, no under-sampling will be performed. The
             default is None.
