@@ -26,7 +26,10 @@ import convenient_functions as cf
 import settings
 import threads
 
-# Define a generic TensorLike type, that includes both tensors and numpy arrays
+# Device types
+type DeviceType = Literal['cpu', 'cuda']
+
+# Generic TensorLike type, that includes both tensors and numpy arrays
 type TensorLike = torch.Tensor | npt.NDArray[Any]
 
 # Set allowed global classes when loading pytorch models 
@@ -257,7 +260,7 @@ class NeuralNetwork(torch.nn.Module):
         x_test: torch.Tensor,
         y_test: torch.Tensor, 
         optimizer: Optimizer,
-        device: str
+        device: DeviceType
     ) -> tuple[float, float, float, float]:
         '''
         Defines a single learning iteration.
@@ -274,7 +277,7 @@ class NeuralNetwork(torch.nn.Module):
             Test set target data.
         optimizer : Optimizer
             Model optimization function.
-        device : str
+        device : DeviceType
             Where learning iteration is computed. Can be 'cpu' or 'cuda'.
 
         Returns
@@ -327,7 +330,7 @@ class NeuralNetwork(torch.nn.Module):
         train_loader: DataLoader,
         test_loader: DataLoader, 
         optimizer: Optimizer,
-        device: str
+        device: DeviceType
     ) -> tuple[float, float, float, float]:
         '''
         Defines a single batched learning iteration. 
@@ -340,7 +343,7 @@ class NeuralNetwork(torch.nn.Module):
             Test set data loader. See 'DataLoader' class for details. 
         optimizer : Optimizer
             Model optimization function.
-        device : str
+        device : DeviceType
             Where learning iteration is computed. Can be 'cpu' or 'cuda'.
 
         Returns
@@ -524,7 +527,7 @@ class _BaseModelVariables(TypedDict):
     optimizer: str
     input_features: list[str]
     class_encoder: dict[str, int]
-    device: str
+    device: DeviceType | Literal['']
     seed: int
     parent_model_path: str
     dataset_path: str
