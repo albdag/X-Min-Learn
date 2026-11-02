@@ -1737,7 +1737,8 @@ class MineralClassifier(DraggableTool):
 
             if algm == 'K-Nearest Neighbors':
                 nneigh = self.knn_nneigh_spbox.value()
-                weight = self.knn_weight_combox.currentText().lower()
+                weight_combox_text = self.knn_weight_combox.currentText().lower()
+                weight = cast(mltools.KnnWeightsType, weight_combox_text)
                 njobs = -1 if self.multithread_cbox.checkState() else 1
                 args = (input_stack, roimap, nneigh, weight)
                 kwargs = {'n_jobs': njobs, 'pixel_proximity': prox}

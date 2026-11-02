@@ -1709,6 +1709,7 @@ class RoiBasedClassifier(_ClassifierBase):
 
 
 
+KnnWeightsType = Literal['distance', 'uniform']
 class KNearestNeighbors(RoiBasedClassifier):
 
     def __init__(
@@ -1716,7 +1717,7 @@ class KNearestNeighbors(RoiBasedClassifier):
         input_stack: InputMapStack,
         roimap: RoiMap,
         neigh: int,
-        weights: str,
+        weights: KnnWeightsType,
         **kwargs
     ) -> None:
         '''
@@ -1730,8 +1731,8 @@ class KNearestNeighbors(RoiBasedClassifier):
             ROI map containing training data.
         neigh : int
             Number of neighbors.
-        weights : str
-            Neighbors weight function. Can be either 'uniform' or 'distance'.
+        weights : KnnWeightsType
+            Neighbors weight function. Can be 'distance' or 'uniform'.
         **kwargs
             Parent class keyword arguments (see RoiBasedClassifier class).
 
