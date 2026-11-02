@@ -4,13 +4,29 @@ Created on Wed Oct 23 12:32:14 2024
 
 @author: albdag
 """
+
+from typing import Any, Literal
+
 import numpy as np
-from numpy.typing import DTypeLike, NDArray
+import numpy.typing as npt
 from PIL import Image
 from scipy import ndimage
 
+# Available binary morphological image processing algorithms
+BinaryMorphologyAlgorithms = Literal[
+    'Erosion + Reconstruction', 
+    'Opening', 
+    'Closing', 
+    'Erosion', 
+    'Dilation', 
+    'Fill Holes'
+]
 
-def construct_kernel_filter(shape: str, size: int) -> np.ndarray:
+# Binary merge modes
+BinaryMergeModes = Literal['I', 'intersection', 'U', 'union']
+
+
+def construct_kernel_filter(shape: str, size: int) -> npt.NDArray[Any]:
     '''
     Return a binary kernel structure of shape 'shape' and size 'size', required
     by image filtering algorithms.
@@ -24,7 +40,7 @@ def construct_kernel_filter(shape: str, size: int) -> np.ndarray:
 
     Returns
     -------
-    np.ndarray
+    NDArray[Any]
         Binary kernel structure.
 
     Raises
@@ -34,15 +50,18 @@ def construct_kernel_filter(shape: str, size: int) -> np.ndarray:
 
     Example
     -------
-    construct_kernel_filter('square', 3)
+    >>> kern_square = construct_kernel_filter('square', 3)
+    >>> kern_square
     >>> [[1 1 1],
          [1 1 1],
          [1 1 1]]
-    construct_kernel_filter('diamond', 3)
+    >>> kern_diamond = construct_kernel_filter('diamond', 3)
+    >>> kern_diamond
     >>> [[0 1 0],
          [1 1 1],
          [0 1 0]]
-    construct_kernel_filter('circle', 5)
+    >>> kern_circle = construct_kernel_filter('circle', 5)
+    >>> kern_circle
     >>> [[0 1 1 1 0],
          [1 1 1 1 1],
          [1 1 1 1 1],
@@ -68,35 +87,35 @@ def construct_kernel_filter(shape: str, size: int) -> np.ndarray:
         # Obtain the circle structure [size/2 = radius (float)]
         kernel = dist <= size/2
 
-    return kernel
+    return np.asarray(kernel)
 
-        
+
 def apply_binary_morph(
-    arr: np.ndarray,
-    operation: str,
-    structure: np.ndarray,
-    mask: np.ndarray | None = None
-) -> np.ndarray:
+    arr: npt.NDArray[Any],
+    operation: BinaryMorphologyAlgorithms,
+    structure: npt.NDArray[Any],
+    mask: npt.NDArray[Any] | None = None
+) -> npt.NDArray[Any]:
     '''
     Apply binary morphological image processing operation to the given array.
 
     Parameters
     ----------
-    arr : numpy ndarray
+    arr : NDArray[Any]
         Input binary array.
-    operation : str
+    operation : BinaryMorphologyAlgorithms
         Morphological operation. Must be one of 'Erosion + Reconstruction', 
         'Opening', 'Closing', 'Erosion', 'Dilation' or 'Fill Holes'.
-    structure : numpy ndarray
+    structure : NDArray[Any]
         Binary structuring element used for the operation. For more details see
         'construct_kernel_filter' function.
-    mask : ndarray or None, optional
+    mask : NDArray[Any] | None, optional
         If given, only element with a True mask value will be processed. It 
         must have the same shape of 'arr'. The default is None.
 
     Returns
     -------
-    numpy ndarray
+    NDArray[Any]
         Filtered array.
 
     Raises
@@ -118,12 +137,14 @@ def apply_binary_morph(
         case 'Dilation':
             return ndimage.binary_dilation(arr, structure, mask=mask)
         case 'Fill Holes':
-            return ndimage.binary_fill_holes(arr, structure)
+            result = ndimage.binary_fill_holes(arr, structure)
+            return arr if result is None else result
         case _:
             raise ValueError('f"{operation}" is not a valid operation.')
     
 
-def replace_with_nearest(array: np.ndarray, mask: np.ndarray) -> np.ndarray:
+def replace_with_nearest(
+        array: npt.NDArray[Any], mask: npt.NDArray[Any]) -> npt.NDArray[Any]:
     '''
     Replace elements in 'array' with their nearest non-masked values only where
     the corresponding positions in the 'mask' are marked as 'True' (non-zero). 
@@ -131,26 +152,29 @@ def replace_with_nearest(array: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
     Parameters
     ----------
-    array : numpy ndarray
+    array : NDArray[Any]
         The original array.
-    mask : numpy ndarray
+    mask : NDArray[Any]
         Binary array indicating the values that must be replaced. It must have
         the same shape of 'array'.
 
     Returns
     -------
-    numpy ndarray
+    NDArray[Any]
         A modified version of 'array' where values at masked positions are 
         replaced by their nearest unmasked neighbors.
 
     '''
-    idx = ndimage.distance_transform_edt(mask, return_distances=False,
-                                         return_indices=True)
+    idx = ndimage.distance_transform_edt(
+        mask, return_distances=False, return_indices=True)
+    
+    if idx is None: # safety
+        return array
     return array[tuple(idx)]
 
 
 def nan_aware_mode(
-    array: np.ndarray,
+    array: npt.NDArray[Any],
     nan_value: float | int | str | None = None,
     nan_threshold: float = 0.5
 ) -> float | int | str :
@@ -161,7 +185,7 @@ def nan_aware_mode(
 
     Parameters
     ----------
-    array : numpy ndarray
+    array : NDArray[Any]
         Input array.
     nan_value : float or int or str or None, optional
         The value to be treated as NaN. If None, no value will be treated as 
@@ -176,32 +200,33 @@ def nan_aware_mode(
         The most frequent value in the input array or the NaN value.
 
     '''
+    # NaN threshold logic
+    if nan_value is not None:
+        nan_count = np.count_nonzero(array == nan_value)
+        if nan_count > array.size * nan_threshold:
+            return nan_value
+        array = array[array != nan_value]
 
-# NaN threshold logic
-    nan_count = np.count_nonzero(array == nan_value)
-    if nan_count > array.size * nan_threshold:
-        return nan_value
-
-# Return most frequent value
-    unique, counts = np.unique(array[array != nan_value], return_counts=True)
+    # Return most frequent value
+    unique, counts = np.unique(array, return_counts=True)
     return unique[np.argmax(counts)]
 
 
 def apply_mode_filter(
-    array: np.ndarray,
-    structure: np.ndarray,
+    array: npt.NDArray[Any],
+    structure: npt.NDArray[Any],
     nan_value: float | int | str | None = None,
     nan_threshold: float = 0.5
-) -> np.ndarray:
+) -> npt.NDArray[Any]:
     '''
     Apply a maximum frequency (mode) filter on input array, using a NaN aware
     approach. See 'nan_aware_mode' function for more details.
 
     Parameters
     ----------
-    array : numpy ndarray
+    array : NDArray[Any]
         Input array.
-    structure : numpy ndarray
+    structure : NDArray[Any]
         Binary structuring element used for the operation. For more details see
         'construct_kernel_filter'.
     nan_value : float or int or str or None, optional
@@ -212,31 +237,36 @@ def apply_mode_filter(
 
     Returns
     -------
-    out : numpy ndarray
+    NDArray[Any]
         Filtered array.
         
     '''
-    kwargs = {'nan_value': nan_value, 'nan_threshold': nan_threshold}
-    out = ndimage.generic_filter(array, nan_aware_mode, footprint=structure, 
-                                 mode='nearest', extra_keywords=kwargs)
-    return out
+    extra_kwargs = {'nan_value': nan_value, 'nan_threshold': nan_threshold}
+    return ndimage.generic_filter(
+        array,
+        nan_aware_mode,
+        footprint=structure, 
+        mode='nearest',
+        extra_keywords=extra_kwargs
+    )
 
 
-def binary_merge(arrays: list[np.ndarray], mode: str) -> np.ndarray:
+def binary_merge(
+        arrays: list[npt.NDArray[Any]], mode: BinaryMergeModes) -> npt.NDArray[Any]:
     '''
     Merge multiple binary arrays applying an intersection (product) or a union 
     (sum) strategy.
 
     Parameters
     ----------
-    arrays : list[numpy ndarray]
+    arrays : list[NDArray[Any]]
         List of binary arrays.
-    mode : str
+    mode : BinaryMergeModes
         Merge strategy. Can be 'intersection' (or 'I') or 'union' (or 'U').
 
     Returns
     -------
-    numpy ndarray
+    NDArray[Any]
         Merged binary array.
 
     Raises
@@ -276,13 +306,12 @@ def hex2rgb(hex: str) -> tuple[int, int, int]:
 
     Returns
     -------
-    rgb : tuple[int, int, int]
+    tuple[int, int, int]
         RGB color triplet.
 
     '''
     hex = hex.lstrip('#')
-    rgb = tuple(int(hex[i:i+2], 16) for i in (0, 2, 4))
-    return rgb
+    return (int(hex[0:2], 16), int(hex[2:4], 16), int(hex[4:6], 16))
 
 
 def rgb2hex(rgb: tuple[int, int, int]) -> str:
@@ -327,39 +356,39 @@ def rgb_complementary(rgb: tuple[int, int, int]) -> tuple[int, int, int]: # Curr
     if b < g: g, b = b, g
     k = r + b
 
-    return tuple(k - u for u in (_r, _g, _b))
+    return (k - _r, k - _g, k - _b)
 
 
-def rescale_to_8bit(array: np.ndarray) -> NDArray[np.uint8]: # Currently not used
+def rescale_to_8bit(array: npt.NDArray[Any]) -> npt.NDArray[np.uint8]: # Currently not used
     '''
     Rescale an array to 8bit. Unsigned integer type only.
 
     Parameters
     ----------
-    array : numpy ndarray
+    array : NDArray[Any]
         Input array.
 
     Returns
     -------
-    numpy ndarray
+    NDArray[np.uint8]
         The array rescaled to 8-bit unsigned integer.
 
     '''
-    return np.round((array/array.max())*255).astype('uint8')
+    return np.round((array / array.max()) * 255).astype('uint8', copy=False)
 
 
-def rgba2rgb(rgba: np.ndarray) -> np.ndarray:
+def rgba2rgb(rgba: npt.NDArray[Any]) -> npt.NDArray[Any]:
     '''
     Convert RGBA array to RGB array.
 
     Parameters
     ----------
-    rgba : numpy ndarray
+    rgba : NDArray[Any]
         RGBA array.
 
     Returns
     -------
-    rgb : numpy ndarray
+    rgb : NDArray[Any]
         Converted RGB array.
 
     '''
@@ -377,18 +406,18 @@ def rgba2rgb(rgba: np.ndarray) -> np.ndarray:
     return np.asarray(rgb, dtype=rgba.dtype)
 
 
-def greyscale2rgb(greyscale: np.ndarray) -> np.ndarray:
+def greyscale2rgb(greyscale: npt.NDArray[Any]) -> npt.NDArray[Any]:
     '''
     Convert 1 channel "greyscale" array to 3 channels "RGB" array.
 
     Parameters
     ----------
-    greyscale : numpy ndarray
+    greyscale : NDArray[Any]
         Input greyscale array.
 
     Returns
     -------
-    rgb : numpy ndarray
+    rgb : NDArray[Any]
         Output RGB array.
 
     '''
@@ -396,26 +425,26 @@ def greyscale2rgb(greyscale: np.ndarray) -> np.ndarray:
     return rgb
 
 
-def binary2greyscale(binary: np.ndarray) -> NDArray[np.uint8]:
+def binary2greyscale(binary: npt.NDArray[np.bool_]) -> npt.NDArray[np.uint8]:
     '''
     Convert binary array to greyscale array. Unsigned integer type only.
 
     Parameters
     ----------
-    binary : numpy ndarray
+    binary : NDArray[np.bool_]
         Input binary array.
 
     Returns
     -------
-    greyscale : numpy ndarray
+    greyscale : NDArray[np.uint8]
         Output 8-bit unsigned integer "greyscale" array.
         
     '''
-    greyscale = binary.astype('uint8') * 255
+    greyscale = (binary * 255).astype('uint8', copy=False)
     return greyscale
 
 
-def image2array(path: str, dtype: DTypeLike = 'int64') -> np.ndarray:
+def image2array(path: str, dtype: npt.DTypeLike = 'int64') -> npt.NDArray[Any]:
     '''
     Convert image data to array.
 
@@ -423,28 +452,27 @@ def image2array(path: str, dtype: DTypeLike = 'int64') -> np.ndarray:
     ----------
     path : str
         Path to image.
-    dtype : numpy DTypeLike, optional
+    dtype : DTypeLike, optional
         Output array dtype. The default is 'int64'.
 
     Returns
     -------
-    array : numpy ndarray
+    NDArray[Any]
         Output array.
 
     '''
     img = Image.open(path)
     if img.mode == 'CMYK':
         img = img.convert('RGB')
-    array = np.array(img, dtype=dtype)
-    return array
+    return np.array(img, dtype=dtype)
 
 
 def noisy_array(
     shape: float,
     scale: float,
     array_shape: tuple[int, int], 
-    dtype: DTypeLike = 'int32'
-) -> np.ndarray:
+    dtype: npt.DTypeLike = 'int32'
+) -> npt.NDArray[Any]:
     '''
     Generate random noisy integer array using a Gamma distribution function.
 
@@ -456,14 +484,14 @@ def noisy_array(
         The scale of the Gamma distribution.
     array_shape : tuple[int, int]
         The shape of the output array.
-    dtype : numpy DTypeLike, optional
+    dtype : DTypeLike, optional
         Output array dtype. The default is 'int32'.
 
     Returns
     -------
-    noisy : numpy ndarray
+    noisy : NDArray[Any]
         Noisy integer array.
 
     '''
     noisy = np.random.gamma(shape, scale, size=array_shape).round()
-    return noisy.astype(dtype)
+    return noisy.astype(dtype, copy=False)

@@ -7,12 +7,49 @@ Created on Tue Oct 29 10:41:40 2024
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
+from PyQt5.QtWidgets import QSizePolicy, QHeaderView
 
 import settings
 
+#  -------------------------------------------------------------------------  #
+#                         COMMON QT FLAGS AND ATTRIBUTES
+#  -------------------------------------------------------------------------  #
+
+# Alignment
+A_TOP = Qt.AlignmentFlag.AlignTop
+A_RIGHT = Qt.AlignmentFlag.AlignRight
+A_BOTTOM = Qt.AlignmentFlag.AlignBottom
+A_LEFT = Qt.AlignmentFlag.AlignLeft
+A_CENTER = Qt.AlignmentFlag.AlignCenter
+A_HCENTER = Qt.AlignmentFlag.AlignHCenter
+A_VCENTER = Qt.AlignmentFlag.AlignVCenter
+
+# Aspect ratio mode
+ARM_IGNORE = Qt.AspectRatioMode.IgnoreAspectRatio
+ARM_KEEP = Qt.AspectRatioMode.KeepAspectRatio
+ARM_KEEPBYEXPANDING = Qt.AspectRatioMode.KeepAspectRatioByExpanding
+
+# Orientation
+O_HORIZONTAL = Qt.Orientation.Horizontal
+O_VERTICAL = Qt.Orientation.Vertical
+
+# Header resize mode
+HRM_INTERACTIVE = QHeaderView.ResizeMode.Interactive
+HRM_FIXED = QHeaderView.ResizeMode.Fixed
+HRM_STRETCH = QHeaderView.ResizeMode.Stretch
+HRM_RESIZETOCONTENTS = QHeaderView.ResizeMode.ResizeToContents
+
+# Size policy
+SP_EXPANDING = QSizePolicy.Policy.Expanding
+SP_FIXED = QSizePolicy.Policy.Fixed
+SP_IGNORED = QSizePolicy.Policy.Ignored
+SP_MAXIMUM = QSizePolicy.Policy.Maximum
+SP_MINIMUM = QSizePolicy.Policy.Minimum
+SP_MINIMUMEXPANDING = QSizePolicy.Policy.MinimumExpanding
+SP_PREFERRED = QSizePolicy.Policy.Preferred
 
 #  -------------------------------------------------------------------------  #
-#                              GUI COLORS 
+#                                  GUI COLORS 
 #  -------------------------------------------------------------------------  #
 
 # Interface colors
@@ -284,11 +321,11 @@ SS_COMBOX = (
     }}
 
     QComboBox::down-arrow {{
-        image: url({ICONS.get('CARET_DOWN').as_posix()});
+        image: url({ICONS['CARET_DOWN'].as_posix()});
     }}
 
     QComboBox::down-arrow:!enabled {{
-        image: url({ICONS.get('CARET_DOWN_GRAY').as_posix()});
+        image: url({ICONS['CARET_DOWN_GRAY'].as_posix()});
     }}
 
     QComboBox QAbstractItemView {{
@@ -344,7 +381,7 @@ SS_MENU = (
     }}
 
     QMenu::indicator:checked {{
-        image: url({ICONS.get('TICK_BLACK').as_posix()});
+        image: url({ICONS['TICK_BLACK'].as_posix()});
     }}
     '''
 )
@@ -449,14 +486,14 @@ SS_SCROLLBARH = (
         background-color: transparent;
         border-width: 0px;
         padding: 0px;
-        image: url({ICONS.get('CARET_LEFT').as_posix()});
+        image: url({ICONS['CARET_LEFT'].as_posix()});
     }}
 
     QScrollBar::right-arrow:horizontal {{
         background-color: transparent;
         border-width: 0px;
         padding: 0px;
-        image: url({ICONS.get('CARET_RIGHT').as_posix()});
+        image: url({ICONS['CARET_RIGHT'].as_posix()});
     }}
 
     QScrollBar::left-arrow:horizontal:pressed,
@@ -517,14 +554,14 @@ SS_SCROLLBARV = (
         background-color: transparent;
         border-width: 0px;
         padding: 0px;
-        image: url({ICONS.get('CARET_UP').as_posix()});
+        image: url({ICONS['CARET_UP'].as_posix()});
     }}
 
     QScrollBar::down-arrow:vertical {{
         background-color: transparent;
         border-width: 0px;
         padding: 0px;
-        image: url({ICONS.get('CARET_DOWN').as_posix()});
+        image: url({ICONS['CARET_DOWN'].as_posix()});
     }}
 
     QScrollBar::up-arrow:vertical:pressed,
@@ -630,13 +667,13 @@ SS_MAINTOOLBAR = (
 
     QToolBar::handle:top,
     QToolBar::handle:bottom {{
-        image: url({ICONS.get('HANDLE_H').as_posix()});
+        image: url({ICONS['HANDLE_H'].as_posix()});
         width: 12px;
     }}
 
     QToolBar::handle:left,
     QToolBar::handle:right {{
-        image: url({ICONS.get('HANDLE_V').as_posix()});
+        image: url({ICONS['HANDLE_V'].as_posix()});
         height: 12px;
     }}
 
@@ -751,7 +788,7 @@ SS_TABWIDGET = (
     }}
 
     QTabBar::close-button {{
-        image: url({ICONS.get('CLOSE').as_posix()});
+        image: url({ICONS['CLOSE'].as_posix()});
         subcontrol-position: right;
     }}
 
@@ -799,11 +836,11 @@ SS_SPLITTER = (
     }}
 
     QSplitter::handle:horizontal {{
-        image: url({ICONS.get('HANDLE_H').as_posix()});
+        image: url({ICONS['HANDLE_H'].as_posix()});
     }}
 
     QSplitter::handle:vertical {{
-        image: url({ICONS.get('HANDLE_V').as_posix()});
+        image: url({ICONS['HANDLE_V'].as_posix()});
     }}
 
     QSplitter::handle:hover {{
@@ -925,11 +962,11 @@ SS_MAINWINDOW = (
     }}
 
     QMainWindow::separator:horizontal {{
-        image: url({ICONS.get('HANDLE_V').as_posix()});
+        image: url({ICONS['HANDLE_V'].as_posix()});
     }}
 
     QMainWindow::separator:vertical {{
-        image: url({ICONS.get('HANDLE_H').as_posix()});
+        image: url({ICONS['HANDLE_H'].as_posix()});
     }}
 
     QMainWindow::separator:hover {{
@@ -996,8 +1033,8 @@ SS_PANE = (
     f'''
     QDockWidget {{
         font-weight: bold;
-        titlebar-close-icon: url({ICONS.get('CLOSE').as_posix()});
-        titlebar-normal-icon: url({ICONS.get('UNDOCK').as_posix()});
+        titlebar-close-icon: url({ICONS['CLOSE'].as_posix()});
+        titlebar-normal-icon: url({ICONS['UNDOCK'].as_posix()});
     }}
 
     QDockWidget::title {{
@@ -1059,13 +1096,13 @@ SS_DATAMANAGER = (
     QTreeWidget::branch:has-children:!has-siblings:closed,
     QTreeWidget::branch:closed:has-children:has-siblings {{
         border-image: none;
-        image: url({ICONS.get('CARET_RIGHT').as_posix()});
+        image: url({ICONS['CARET_RIGHT'].as_posix()});
     }}
 
     QTreeWidget::branch:open:has-children:!has-siblings,
     QTreeWidget::branch:open:has-children:has-siblings {{
         border-image: none;
-        image: url({ICONS.get('CARET_DOWN').as_posix()});
+        image: url({ICONS['CARET_DOWN'].as_posix()});
     }}
     '''
 )
@@ -1137,96 +1174,98 @@ def getPalette(kind: str = 'default') -> QPalette:
         
     '''
     palette = QPalette()
+    ColorGroup = QPalette.ColorGroup
+    ColorRole = QPalette.ColorRole
     
     if kind == 'default':
     # Window (A general background color)
-        palette.setColor(QPalette.Active, QPalette.Window, QColor(CASPER)) 
-        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(CASPER)) 
+        palette.setColor(ColorGroup.Active, ColorRole.Window, QColor(CASPER)) 
+        palette.setColor(ColorGroup.Inactive, ColorRole.Window, QColor(CASPER)) 
 
     # WindowText (A general foreground color)
-        palette.setColor(QPalette.WindowText, QColor(BLACK_PEARL))
+        palette.setColor(ColorRole.WindowText, QColor(BLACK_PEARL))
 
     # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
-        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
+        palette.setColor(ColorGroup.Active, ColorRole.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(ColorGroup.Inactive, ColorRole.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(ColorGroup.Disabled, ColorRole.Base, QColor('darkGray'))
 
     # AlternateBase (Alternate background in views with alternating row colors)
-        # palette.setColor(QPalette.AlternateBase, Qt.red)
+        # palette.setColor(ColorRole.AlternateBase, QColor('red'))
 
     # ToolTips background & text
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
+        # palette.setColor(ColorGroup.Inactive, ColorRole.ToolTipBase, QColor(SAN_MARINO))
+        # palette.setColor(ColorGroup.Inactive, ColorRole.ToolTipText, QColor(IVORY))
 
     # PlaceholderText (Placeholder color for various text input widgets)
-        palette.setColor(QPalette.PlaceholderText, QColor(CASPER))
+        palette.setColor(ColorRole.PlaceholderText, QColor(CASPER))
 
     # Text (The foreground color used with Base)
-        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(CASPER))
+        palette.setColor(ColorGroup.Active, ColorRole.Text, QColor(IVORY))
+        palette.setColor(ColorGroup.Inactive, ColorRole.Text, QColor(IVORY))
+        palette.setColor(ColorGroup.Disabled, ColorRole.Text, QColor(CASPER))
 
     # Button (The general button background color)
-        palette.setColor(QPalette.Active, QPalette.Button, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Button, QColor(CASPER))
+        palette.setColor(ColorGroup.Active, ColorRole.Button, QColor(IVORY))
+        palette.setColor(ColorGroup.Inactive, ColorRole.Button, QColor(IVORY))
+        palette.setColor(ColorGroup.Disabled, ColorRole.Button, QColor(CASPER))
 
     # ButtonText (A foreground color used with the Button color)
-        palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Disabled, QPalette.ButtonText, Qt.darkGray)
+        palette.setColor(ColorGroup.Active, ColorRole.ButtonText, QColor(BLACK_PEARL))
+        palette.setColor(ColorGroup.Inactive, ColorRole.ButtonText, QColor(BLACK_PEARL))
+        palette.setColor(ColorGroup.Disabled, ColorRole.ButtonText, QColor('darkGray'))
 
     # Highlight and highlighted text
-        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
-        palette.setColor(QPalette.HighlightedText, QColor(BLACK_PEARL))
+        palette.setColor(ColorRole.Highlight, QColor(BLOSSOM))
+        palette.setColor(ColorRole.HighlightedText, QColor(BLACK_PEARL))
 
-        # palette.setColor(QPalette.BrightText, Qt.red)
-        # palette.setColor(QPalette.Link, Qt.red)
+        # palette.setColor(ColorRole.BrightText, QColor('red'))
+        # palette.setColor(ColorRole.Link, QColor('red'))
 
 
     elif kind == 'darkmode': # not ready to use yet. Stylesheets need reworking
     # Window (A general background color)
-        palette.setColor(QPalette.Active, QPalette.Window, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Window, QColor(BLACK_PEARL)) 
+        palette.setColor(ColorGroup.Active, ColorRole.Window, QColor(BLACK_PEARL)) 
+        palette.setColor(ColorGroup.Inactive, ColorRole.Window, QColor(BLACK_PEARL)) 
 
     # WindowText (A general foreground color)
-        palette.setColor(QPalette.WindowText, QColor(IVORY))
+        palette.setColor(ColorRole.WindowText, QColor(IVORY))
 
     # Base (Background for text entry widgets, comboboxes, toolbar handle etc.)
-        palette.setColor(QPalette.Active, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Inactive, QPalette.Base, QColor(BLACK_PEARL)) 
-        palette.setColor(QPalette.Disabled, QPalette.Base, Qt.darkGray)
+        palette.setColor(ColorGroup.Active, ColorRole.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(ColorGroup.Inactive, ColorRole.Base, QColor(BLACK_PEARL)) 
+        palette.setColor(ColorGroup.Disabled, ColorRole.Base, QColor('darkGray'))
 
     # AlternateBase (Alternate background in views with alternating row colors)
-        # palette.setColor(QPalette.AlternateBase, Qt.red)
+        # palette.setColor(ColorRole.AlternateBase, QColor('red'))
 
     # ToolTips background & text
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipBase, QColor(SAN_MARINO))
-        # palette.setColor(QPalette.Inactive, QPalette.ToolTipText, QColor(IVORY))
+        # palette.setColor(ColorGroup.Inactive, ColorRole.ToolTipBase, QColor(SAN_MARINO))
+        # palette.setColor(ColorGroup.Inactive, ColorRole.ToolTipText, QColor(IVORY))
 
     # PlaceholderText (Placeholder color for various text input widgets)
-        palette.setColor(QPalette.PlaceholderText, QColor(CASPER))
+        palette.setColor(ColorRole.PlaceholderText, QColor(CASPER))
 
     # Text (The foreground color used with Base)
-        palette.setColor(QPalette.Active, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.Text, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(CASPER))
+        palette.setColor(ColorGroup.Active, ColorRole.Text, QColor(IVORY))
+        palette.setColor(ColorGroup.Inactive, ColorRole.Text, QColor(IVORY))
+        palette.setColor(ColorGroup.Disabled, ColorRole.Text, QColor(CASPER))
 
     # Button (The general button background color)
-        palette.setColor(QPalette.Active, QPalette.Button, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Inactive, QPalette.Button, QColor(BLACK_PEARL))
-        palette.setColor(QPalette.Disabled, QPalette.Button, Qt.darkGray)
+        palette.setColor(ColorGroup.Active, ColorRole.Button, QColor(BLACK_PEARL))
+        palette.setColor(ColorGroup.Inactive, ColorRole.Button, QColor(BLACK_PEARL))
+        palette.setColor(ColorGroup.Disabled, ColorRole.Button, QColor('darkGray'))
 
     # ButtonText (A foreground color used with the Button color)
-        palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(IVORY))
-        palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(IVORY))
-        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(CASPER))
+        palette.setColor(ColorGroup.Active, ColorRole.ButtonText, QColor(IVORY))
+        palette.setColor(ColorGroup.Inactive, ColorRole.ButtonText, QColor(IVORY))
+        palette.setColor(ColorGroup.Disabled, ColorRole.ButtonText, QColor(CASPER))
 
     # Highlight and highlighted text
-        palette.setColor(QPalette.Highlight, QColor(BLOSSOM))
-        palette.setColor(QPalette.HighlightedText, QColor(BLACK_PEARL))
+        palette.setColor(ColorRole.Highlight, QColor(BLOSSOM))
+        palette.setColor(ColorRole.HighlightedText, QColor(BLACK_PEARL))
 
-        # palette.setColor(QPalette.BrightText, Qt.red)
-        # palette.setColor(QPalette.Link, Qt.red)
+        # palette.setColor(ColorRole.BrightText, QColor('red'))
+        # palette.setColor(ColorRole.Link, QColor('red'))
 
     return palette

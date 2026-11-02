@@ -6,62 +6,63 @@ Created on Wed Apr 28 12:12:28 2021
 """
 
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 import os
+from typing import Any, Literal
 
-
-def get_dictkey(
-    dictionary: dict,
-    value: object,
-    default: object | None = None
-) -> object | None:
+def get_dictkey[K, V](dictionary: Mapping[K, V], value: V) -> K:
     '''
     Get a dictionary key from a given value. If multiple keys are linked to the
     same value, only the first occurrence will be returned.
 
     Parameters
     ----------
-    dictionary : dict
+    dictionary : Mapping[K, V]
         The input dictionary.
-    value : object
-        The filter value to search the key. Can be any type.
-    default : object or None, optional
-        If no key is found, this value is returned instead. Can be any type.
-        The default is None.
+    value : V
+        A valid value to search for.
 
     Returns
     -------
-    k : object or None
-        The corresponding key or 'default' if no matching key is found.
+    K
+        The corresponding key.
+
+    Raises
+    ------
+    ValueError
+        Raised if 'value' does not exist in the dictionary.
 
     '''
-    keys = [k for k, v in dictionary.items() if v == value]
-    k = default if not keys else keys[0]
-    return k
+    for k, v in dictionary.items():
+        if v == value:
+            return k
+    raise ValueError(f'{value} is not a valid dictionary value.')
 
 
-def sort_dict_by_list(dictionary: dict, ordered_list: list, mode: str = 'keys') -> dict:
+def sort_dict[K, V](
+    dictionary: Mapping[K, V],
+    ordered: Iterable,
+    mode: Literal['keys', 'values'] = 'keys'
+) -> dict[K, V]:
     '''
-    Sort a dictionary according to a desidered ordered list of its keys or 
-    values.
+    Sort a dictionary according to an ordered iterable of its keys or values.
 
     Parameters
     ----------
-    dictionary : dict
+    dictionary : Mapping[K, V]
         The dictionary to be ordered.
-    ordered_list : list
-        The ordered list used to sort the dictionary. It cannot contain keys or
-        values not included in the dictionary, but it can include just some of 
-        them. In this case, the returned sorted dictionary will only contain 
-        those keys with their associated values.
-    mode : str, optional
-        If 'keys', dictionary will be sorted by its keys; if 'values', it will
-        be sorted by its values. The default is 'keys'.
+    ordered : Iterable
+        The ordered iterable of dictionary keys or values used to sort the 
+        dictionary. Contained values that do not match any key or value are
+        skipped. The iterable can include only some keys or values; in this
+        case, the returned sorted dictionary will also be sliced accordingly.
+    mode : Literal['keys', 'values'], optional
+        Whether 'ordered' contains keys or values. The default is 'keys'.
 
     Returns
     -------
-    dict
-        The sorted dictionary.
+    dict[K, V]
+        The sorted, and potentially sliced, dictionary.
 
     Raises
     ------
@@ -71,9 +72,17 @@ def sort_dict_by_list(dictionary: dict, ordered_list: list, mode: str = 'keys') 
     '''
     match mode:
         case 'keys':
-            return {k: dictionary[k] for k in ordered_list}
+            return {k: dictionary[k] for k in ordered if k in dictionary}
+
         case 'values':
-            return {get_dictkey(dictionary, v): v for v in ordered_list}
+            result: dict[K, V] = {}
+            for v in ordered:
+                try:
+                    result[get_dictkey(dictionary, v)] = v
+                except ValueError:
+                    continue  # Skip values not present in dictionary
+            return result
+
         case _:
             raise ValueError(f'Invalid "mode" argument: {mode}.')
 
@@ -158,18 +167,18 @@ def match_map(
     return None
 
 
-def most_frequent(iterable: Iterable) -> object:
+def most_frequent(iterable: Iterable[Any]) -> Any:
     '''
     Get most frequent element in iterable.
 
     Parameters
     ----------
-    iterable : Iterable
+    iterable : Iterable[Any]
         Iterable of elements.
 
     Returns
     -------
-    most_freq : object
+    most_freq : Any
         Most frequent element in the iterable.
 
     '''

@@ -4,8 +4,11 @@ Created on Mon Jun 21 17:16:01 2021
 
 @author: albdag
 """
+
+from collections.abc import Sequence
 import os
 from datetime import datetime
+from typing import Literal, cast, get_args, overload
 import webbrowser
 
 import numpy as np
@@ -30,7 +33,6 @@ class DraggableTool(QW.QWidget):
 
     closed = QC.pyqtSignal()
     tabified = QC.pyqtSignal()
-    _floating_size = QC.QSize(1600, 900)
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -46,9 +48,10 @@ class DraggableTool(QW.QWidget):
 
         '''
         super().__init__(parent)
-        self.resize(self._floating_size)
-        self.setAttribute(QC.Qt.WA_QuitOnClose, False)
-        self.setAttribute(QC.Qt.WA_DeleteOnClose, True)
+        self.floating_size = QC.QSize(1600, 900)
+        self.resize(self.floating_size)
+        self.setAttribute(QC.Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(QC.Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
 
     def isFloating(self) -> bool:
@@ -64,73 +67,91 @@ class DraggableTool(QW.QWidget):
         return self.parent() == None
 
 
-    def mouseMoveEvent(self, e: QG.QMouseEvent) -> None:
+    def mouseMoveEvent(self, a0: QG.QMouseEvent | None) -> None:
         '''
         Reimplementation of the 'mouseMoveEvent' method. It provides a custom
         animation for the widget drag & drop action (left-click drag).
 
         Parameters
         ----------
-        e : QMouseEvent
+        a0 : QMouseEvent | None
             The mouse move event triggered by the user.
 
         '''
-    # Ignore the event if the tool is already anchored to parent widget
-        if not self.isWindow(): return
+    # Ignore the event if the tool is tabified
+        if not self.isFloating():
+            return
+        
+        if a0 is not None and a0.buttons() == QC.Qt.MouseButton.LeftButton:
+            # Generate mime data and a pixmap for the drag & drop event
+                icon = self.windowIcon()
+                pixmap = icon.pixmap(icon.actualSize(QC.QSize(32, 32)))
+                mimeData = QC.QMimeData()
 
-        if e.buttons() == QC.Qt.LeftButton:
-        # Generate mime data and a pixmap for the drag & drop event
-            icon = self.windowIcon()
-            pixmap = icon.pixmap(icon.actualSize(QC.QSize(32, 32)))
-            mimeData = QC.QMimeData()
+            # Generate a drag event and execute it
+                drag = QG.QDrag(self)
+                drag.setMimeData(mimeData)
+                drag.setPixmap(pixmap)
+                drag.exec_(QC.Qt.DropAction.MoveAction)
 
-        # Generate a drag event and execute it
-            drag = QG.QDrag(self)
-            drag.setMimeData(mimeData)
-            drag.setPixmap(pixmap)
-            drag.exec_(QC.Qt.MoveAction)
+    # deprecated
+    # def killReferences(self) -> None:
+    #     '''
+    #     Remove all the references that keep the tool alive. This method must be
+    #     called to properly close the tool.
+
+    #     '''
+    #     for child in self.findChildren(QW.QWidget):
+    #         child.disconnect()
 
 
-    def killReferences(self) -> None:
+    def is_safe_to_close(self) -> bool:
         '''
-        Remove all the references that keep the tool alive. This method must be
-        called to properly close the tool.
-
-        '''
-        for child in self.findChildren(QW.QWidget):
-            child.disconnect()
-
-
-    def closeEvent(self, event: QG.QCloseEvent) -> bool:
-        '''
-        Reimplementation of the 'closeEvent' method. It adds a question dialog
-        to confirm the closing action. It returns True if event is accepted,
-        False otherwise.
-
-        Parameters
-        ----------
-        event : QCloseEvent
-            The close event triggered by the user.
+        Ask user confirmation to close the tool.
 
         Returns
         -------
         bool
-            Whether or not the close event is accepted.
+            Whether the user confirms to close the tool or not.
 
         '''
         text = f'Close {self.windowTitle()}? Any unsaved data will be lost.'
-        choice = CW.MsgBox(self, 'Quest', text)
+        msgbox = CW.MsgBox(self, 'Quest', text)
+        return msgbox.is_choice('Yes')
 
-    # accept() or ignore() are returned as boolean output, so that the event is
-    # propagated to the parent. The parent can be: a) None, when this widget is 
-    # a floating window, or b) the MainTabWidget, when this widget is tabbed.
-    # In this latter case, the MainTabWidget catches the event output and use 
-    # that info to "choose" whether or not to close the corresponding tab.
-        if choice.yes():
-            self.closed.emit()
-            return event.accept()
+
+    def force_close(self) -> None:
+        '''
+        Close the tool without asking for user confirmation. This method is 
+        meant only for programmatically close a tool.
+
+        '''
+        # Close after resetting the close event to default (skip user confirm)
+        self.closeEvent = super().closeEvent
+        self.close()
+
+
+    def closeEvent(self, a0: QG.QCloseEvent | None) -> None:
+        '''
+        Reimplementation of the default 'closeEvent' method. It adds a question
+        dialog to confirm the closing action. It sends the 'closed' signal when
+        the close event is accepted.
+
+        Parameters
+        ----------
+        a0 : QG.QCloseEvent | None
+            The close event.
+
+        '''
+        if a0 is None:
+            return
+
+        if self.is_safe_to_close():
+            a0.accept()
+            # Defer signal emission to next event loop pass
+            QC.QTimer.singleShot(0, self.closed.emit)
         else:
-            return event.ignore()
+            a0.ignore()
 
 
 
@@ -150,12 +171,12 @@ class MineralClassifier(DraggableTool):
         self.setWindowIcon(style.getIcon('MINERAL_CLASSIFIER'))
 
     # Initialize main attributes
-        self._mask = None
-        self._nodata_color = (0, 0, 0)
+        self._mask: Mask | None = None
+        self._nodata_color: tuple[int, int, int] = (0, 0, 0)
 
     # Initialize classification state and attributes
-        self._isBusyClassifying = False
-        self._current_classifier = None
+        self._isBusyClassifying: bool = False
+        self._current_classifier: mltools._ClassifierBase | None = None
 
     # Initialize GUI and connect its signals with slots 
         self._init_ui()
@@ -184,7 +205,7 @@ class MineralClassifier(DraggableTool):
     # Mask warning icon (Label)
         warn_icon = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.mask_warn = QW.QLabel()
-        self.mask_warn.setPixmap(warn_icon.scaled(24, 24, QC.Qt.KeepAspectRatio))
+        self.mask_warn.setPixmap(warn_icon.scaled(24, 24, style.ARM_KEEP))
         self.mask_warn.setToolTip('Invalid shape detected. Mask not applied.')
         self.mask_warn.setVisible(False)
 
@@ -215,27 +236,31 @@ class MineralClassifier(DraggableTool):
     # Mineral maps list (Tree Widget)
         self.minmaps_list = QW.QTreeWidget()
         self.minmaps_list.setHeaderHidden(True)
-        self.minmaps_list.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
-        self.minmaps_list.verticalScrollBar().setStyleSheet(style.SS_SCROLLBARV)
+        no_edit_triggers = QW.QAbstractItemView.EditTrigger.NoEditTriggers
+        self.minmaps_list.setEditTriggers(no_edit_triggers)
+        if (vscrollbar := self.minmaps_list.verticalScrollBar()) is not None:
+            vscrollbar.setStyleSheet(style.SS_SCROLLBARV)
         self.minmaps_list.setStyleSheet(style.SS_MENU)
         
-
+    #[Mineral maps toolbar actions]
+    #|Save mineral map
+        self.save_minmap_action = QW.QAction(
+            style.getIcon('SAVE_AS'), 'Save mineral map as...', self)
+    #|Delete mineral map
+        self.del_minmap_action = QW.QAction(
+            style.getIcon('REMOVE'), 'Remove mineral map', self)
+        
     # Mineral maps toolbar (Toolbar)
         self.minmaps_tbar = QW.QToolBar('Mineral maps toolbar')
-        self.minmaps_tbar.setOrientation(QC.Qt.Vertical)
+        self.minmaps_tbar.setOrientation(style.O_VERTICAL)
         self.minmaps_tbar.setStyleSheet(style.SS_TOOLBAR)
-
-    # Save mineral map (Action) [-> Mineral maps toolbar]
-        self.save_minmap_action = self.minmaps_tbar.addAction(
-            style.getIcon('SAVE_AS'), 'Save mineral map as...')
-
-    # Delete mineral map (Action) [-> Mineral maps toolbar]
-        self.del_minmap_action = self.minmaps_tbar.addAction(
-            style.getIcon('REMOVE'), 'Remove mineral map')
+        self.minmaps_tbar.addAction(self.save_minmap_action)
+        self.minmaps_tbar.addAction(self.del_minmap_action)
 
     # Mineral maps legend (Legend)
         self.legend = CW.Legend()
-        self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
+        selection_mode = QW.QAbstractItemView.SelectionMode.SingleSelection
+        self.legend.setSelectionMode(selection_mode)
 
     # Mineral maps bar canvas (Bar Canvas)
         self.barplot = plots.BarCanvas(
@@ -276,9 +301,9 @@ class MineralClassifier(DraggableTool):
         self.pre_train_tab = self.PreTrainedClassifierTab()
         self.roi_based_tab = self.RoiBasedClassifierTab()
         self.unsuperv_tab = self.UnsupervisedClassifierTab()
-        self.classifier_tabwid.addTab(self.pre_train_tab, title='PRE-TRAINED')
-        self.classifier_tabwid.addTab(self.roi_based_tab, title='ROI-BASED')
-        self.classifier_tabwid.addTab(self.unsuperv_tab, title='UNSUPERVISED')
+        self.classifier_tabwid.wrap_tab(self.pre_train_tab, title='PRE-TRAINED')
+        self.classifier_tabwid.wrap_tab(self.roi_based_tab, title='ROI-BASED')
+        self.classifier_tabwid.wrap_tab(self.unsuperv_tab, title='UNSUPERVISED')
 
     # Classification progress bar (Descriptive Progress Bar)
         self.progbar = CW.DescriptiveProgressBar()
@@ -314,7 +339,7 @@ class MineralClassifier(DraggableTool):
         conf_lbl = QW.QLabel('Confidence threshold')
 
     # Confidence slider (Slider)
-        self.conf_slider = QW.QSlider(QC.Qt.Horizontal)
+        self.conf_slider = QW.QSlider(style.O_HORIZONTAL)
         self.conf_slider.setRange(0, 100)
         self.conf_slider.setSingleStep(5)
         self.conf_slider.setTracking(False)
@@ -346,10 +371,7 @@ class MineralClassifier(DraggableTool):
         self.mask_group.setChecked(False)
 
         input_data_split = CW.SplitterGroup(
-            (self.inmaps_selector, self.mask_group), 
-            (1, 0),
-            orient=QC.Qt.Vertical
-        )
+            (self.inmaps_selector, self.mask_group), (1, 0), style.O_VERTICAL)
 
         # - Output data tab (Splitter Group)
         barplot_vbox = QW.QVBoxLayout()
@@ -361,22 +383,22 @@ class MineralClassifier(DraggableTool):
         scores_grid.addWidget(self.silscore_navtbar, 0, 0, 1, -1)
         scores_grid.addWidget(self.silscore_canvas, 1, 0, 1, -1)
         scores_grid.addWidget(QW.QLabel('Average silhouette score'), 2, 0)
-        scores_grid.addWidget(self.silscore_lbl, 2, 1, QC.Qt.AlignRight)
+        scores_grid.addWidget(self.silscore_lbl, 2, 1, style.A_RIGHT)
         scores_grid.addWidget(QW.QLabel('Calinski-Harabasz Index'), 3, 0)
-        scores_grid.addWidget(self.chiscore_lbl, 3, 1, QC.Qt.AlignRight)
+        scores_grid.addWidget(self.chiscore_lbl, 3, 1, style.A_RIGHT)
         scores_grid.addWidget(QW.QLabel('Davies-Bouldin Index'), 4, 0)
-        scores_grid.addWidget(self.dbiscore_lbl, 4, 1, QC.Qt.AlignRight)
+        scores_grid.addWidget(self.dbiscore_lbl, 4, 1, style.A_RIGHT)
 
         graph_tabwid = CW.StyledTabWidget()
-        graph_tabwid.addTab(
+        legend_idx = graph_tabwid.wrap_tab(
             self.legend, style.getIcon('LEGEND'), title=None, tight=True)
-        graph_tabwid.addTab(
+        plot_idx = graph_tabwid.wrap_tab(
             barplot_vbox, style.getIcon('PLOT'), title=None, tight=True)
-        graph_tabwid.addTab(
+        scores_idx = graph_tabwid.wrap_tab(
             scores_grid, style.getIcon('SCORES'), title=None, tight=True)
-        graph_tabwid.setTabToolTip(0, 'Legend')
-        graph_tabwid.setTabToolTip(1, 'Bar plot')
-        graph_tabwid.setTabToolTip(2, 'Clustering scores')
+        graph_tabwid.setTabToolTip(legend_idx, 'Legend')
+        graph_tabwid.setTabToolTip(plot_idx, 'Bar plot')
+        graph_tabwid.setTabToolTip(scores_idx, 'Clustering scores')
 
         minmaps_list_hbox = QW.QHBoxLayout()
         minmaps_list_hbox.setContentsMargins(0, 0, 0, 0)
@@ -384,22 +406,19 @@ class MineralClassifier(DraggableTool):
         minmaps_list_hbox.addWidget(self.minmaps_list)
 
         output_data_split = CW.SplitterGroup(
-            (minmaps_list_hbox, graph_tabwid),
-            (1, 0),
-            orient=QC.Qt.Vertical
-        )
+            (minmaps_list_hbox, graph_tabwid), (1, 0), style.O_VERTICAL)
         
         # - Tab Widget
         self.data_tabwid = CW.StyledTabWidget()
         self.data_tabwid.setTabBarExpanding()
-        self.data_tabwid.addTab(
+        self.data_tabwid.wrap_tab(
             input_data_split, style.getIcon('STACK'), title='INPUT MAPS')
-        self.data_tabwid.addTab(
+        self.data_tabwid.wrap_tab(
             output_data_split, style.getIcon('MINERAL'), title='OUTPUT MAPS')
 
     # Classifier settings panel (Collapsible Area)
         class_group = CW.CollapsibleArea(
-            self.classifier_tabwid,
+            qobject=self.classifier_tabwid,
             title='Classifier settings',
             frame=False,
             collapsed=False
@@ -513,7 +532,7 @@ class MineralClassifier(DraggableTool):
 
         '''
         checked_maps = self.inmaps_selector.getCheckedMaps()
-        maps_names = [i.get('name') for i in checked_maps]
+        maps_names = [i.getComponents()['name'] for i in checked_maps]
         self.pre_train_tab.matcher.autoFillSelectors(maps_names)
 
 
@@ -529,7 +548,7 @@ class MineralClassifier(DraggableTool):
 
         '''
         checked_maps = self.inmaps_selector.getCheckedMaps()
-        maps_names = [i.get('name') for i in checked_maps]
+        maps_names = [i.getComponents()['name'] for i in checked_maps]
         self.pre_train_tab.matcher.updateSelector(index, maps_names)
 
     
@@ -566,7 +585,7 @@ class MineralClassifier(DraggableTool):
             return
     
     # Update the combobox with the names of the masks in the selected sample
-        items = [c.get('name') for c in sample.masks.getChildren()]
+        items = [c.getComponents()['name'] for c in sample.masks.getChildren()]
         self.mask_combox.updateItems(items)
         
 
@@ -578,7 +597,7 @@ class MineralClassifier(DraggableTool):
         '''
         count = self.minmaps_list.topLevelItemCount()
         items = [self.minmaps_list.topLevelItem(idx) for idx in range(count)]
-        self.minmap_combox.updateItems([i.text(0) for i in items])
+        self.minmap_combox.updateItems([i.text(0) for i in items if i is not None])
 
 
     def updateClassesCombox(self, idx: int) -> None:
@@ -592,10 +611,16 @@ class MineralClassifier(DraggableTool):
             The choosen mineral map index.
 
         '''
-        mmap = self.minmaps_list.topLevelItem(idx)
-        classes = mmap.get('data').get_phases()
+    # Do nothing if mineral map data object is invalid
+        if (mmap_obj := self.getMineralMap(idx)) is None:
+            return
+
+    # Do nothing if mineral map data object has invalid data
+        if (minmap := mmap_obj.getMineralMapData()) is None:
+            return
+         
         self.class_combox.clear()
-        self.class_combox.addItems(classes)
+        self.class_combox.addItems(minmap.get_phases())
 
 
     def updateClassifyButtonState(self) -> None:
@@ -603,8 +628,8 @@ class MineralClassifier(DraggableTool):
         Toggle on/off the CLASSIFY button.
 
         '''
-        enabled = self.inmaps_selector.mapsCount()
-        self.classify_btn.setEnabled(enabled)
+        inmaps_count = self.inmaps_selector.mapsCount()
+        self.classify_btn.setEnabled(inmaps_count > 0)
 
 
     def showMapsViewerContextMenu(self, point: QC.QPoint) -> None:
@@ -641,14 +666,21 @@ class MineralClassifier(DraggableTool):
             self.maps_viewer.clear_canvas()
             return
 
+    # Exit function if item has invalid input map data
+        components = item.getComponents()
+        if not isinstance(inmap := components['data'], InputMap):
+            return 
+
     # Check whether data should be masked or not
-        mask_available = self.mask_group.isChecked() and self._mask is not None
-        if mask_available:
-            array = item.get('data').get_masked(self._mask.mask)
+        if self.mask_group.isChecked() and self._mask is not None:
+            mask_available = True
+            array = inmap.get_masked(self._mask.mask)
         else:
-            array = item.get('data').map
+            mask_available = False
+            array = inmap.map
             
-    # Show warn icon if available mask has wrong shape and thus is not applied
+    # "get_masked" returns an unmasked array if mask shape is invalid. If that
+    # happens, show the mask warning icon.
         visible = mask_available and not np.ma.is_masked(array)
         self.mask_warn.setVisible(visible)
 
@@ -657,7 +689,7 @@ class MineralClassifier(DraggableTool):
         self.conf_slider.setEnabled(False)
 
     # Plot the map
-        map_name = item.get('name')
+        map_name = components['name']
         sample_name = self.inmaps_selector.sample_combox.currentText()
         title = f'{sample_name} - {map_name}'
         self.maps_viewer.draw_heatmap(array, title)
@@ -670,7 +702,7 @@ class MineralClassifier(DraggableTool):
 
         '''
     # Re-render input map only if already displayed in the maps viewer
-        if self.maps_viewer.contains_heatmap():
+        if self.maps_viewer.has_heatmap():
             self.showInputMap(self.inmaps_selector.currentMap())
 
 
@@ -681,7 +713,7 @@ class MineralClassifier(DraggableTool):
         '''
     # Do nothing if path is invalid or file dialog is canceled
         ftypes = 'Mask (*.msk);;Text file (*.txt)'
-        path = CW.FileDialog(self, 'open', 'Load Mask', ftypes).get()
+        path = CW.FileDialog(self, 'open', 'Load Mask', ftypes).get_path()
         if not path:
             return
     
@@ -689,12 +721,13 @@ class MineralClassifier(DraggableTool):
         try:
             mask = Mask.load(path)     
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', str(e))
+            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', str(e))
+            return
 
     # Update GUI
         self.mask_pathlbl.setPath(path)
         self.mask_combox.clear()
-        self.setMask(mask)
+        self.set_mask(mask)
 
 
     def getMaskFromSample(self, mask_idx: int) -> None:
@@ -707,15 +740,21 @@ class MineralClassifier(DraggableTool):
             Index of the mask.
 
         '''
+    # Exit function if no valid sample is selected (safety)
+        if (curr_sample := self.inmaps_selector.currentSample()) is None:
+            return
+        
     # Exit function if an invalid index is provided
-        sample_masks = self.inmaps_selector.currentSample().masks.getChildren()
+        sample_masks = curr_sample.masks.getChildren()
         if mask_idx < 0 or mask_idx > len(sample_masks) - 1:
             return
     
     # Extract mask
-        mask_path, mask_data = sample_masks[mask_idx].get('filepath', 'data')
-        self.mask_pathlbl.setPath(mask_path)
-        self.setMask(mask_data)
+        components = sample_masks[mask_idx].getComponents()
+        mask_data, mask_path = components['data'], components['filepath']
+        if isinstance(mask_data, Mask):
+            self.mask_pathlbl.setPath(mask_path)
+            self.set_mask(mask_data)
 
 
     def getMaskFromClass(self, class_name: str) -> None:
@@ -729,21 +768,25 @@ class MineralClassifier(DraggableTool):
             Name of the choosen class.
 
         '''
+    # Attempt to match mask combobox item name with available mineral map names 
         minmap_name = self.minmap_combox.currentText()
-        items = self.minmaps_list.findItems(minmap_name, QC.Qt.MatchExactly, 0)
-        if items:
-            minmap = items[0].get('data').minmap
-            mask = Mask(minmap != class_name)
-            self.mask_pathlbl.setPath(f'{minmap_name}/{class_name}')
-            self.setMask(mask)
-        else:
-            self.minmap_combox.clear()
-            self.class_combox.clear()
-            self.removeMask()
-            CW.MsgBox(self, 'Crit', 'This mineral map is no more available.')
+        match_flag = QC.Qt.MatchFlag.MatchExactly
+        items = self.minmaps_list.findItems(minmap_name, match_flag, 0) # TODO: not ideal, find something more solid
+        if len(items) and isinstance(mmap_obj := items[0], CW.DataObject):
+            if (mmap := mmap_obj.getMineralMapData()) is not None:
+                mask = Mask(mmap.minmap != class_name)
+                self.mask_pathlbl.setPath(f'{minmap_name}/{class_name}')
+                self.set_mask(mask)
+                return
+
+    # Clear mask if no valid matching mineral map is found 
+        self.minmap_combox.clear()
+        self.class_combox.clear()
+        self.removeMask()
+        CW.MsgBox(self, 'Crit', 'This mineral map is no longer available.')
 
 
-    def setMask(self, mask: Mask) -> None:
+    def set_mask(self, mask: Mask) -> None:
         '''
         Set a mask for classification. Masks are only rendered on top of Input 
         Maps and not on top of Mineral Maps.
@@ -760,7 +803,7 @@ class MineralClassifier(DraggableTool):
 
     def removeMask(self) -> None:
         '''
-        Remove mask.
+        Remove classification mask.
 
         '''
         self._mask = None
@@ -782,7 +825,7 @@ class MineralClassifier(DraggableTool):
         filled = settings.manager.get('plots/roi_filled')
 
         for name, bbox in roimap.roilist:
-            patch = plots.RoiPatch(bbox, plots.rgb_to_float([color]), filled)
+            patch = plots.RoiPatch(bbox, color, filled)
             text = plots.RoiAnnotation(name, patch)
             self.maps_viewer.ax.add_patch(patch)
             self.maps_viewer.ax.add_artist(text)
@@ -823,25 +866,29 @@ class MineralClassifier(DraggableTool):
             self.chiscore_lbl.setText('-')
             self.dbiscore_lbl.setText('-')
             return
+
+    # Exit function if item has invalid mineral map data
+        components = item.getComponents()
+        if not isinstance(minmap := components['data'], MineralMap):
+            return
             
     # Enable confidence spinbox and slider
         self.conf_spbox.setEnabled(True)
         self.conf_slider.setEnabled(True)
 
     # Alter minmap data with the confidence threshold
-        minmap = item.get('data')
         minmap_thr = self._thresholdMineralMap(minmap)
 
     # Use item name as title
-        title = item.get('name')
+        title = components['name']
 
     # Update the legend
-        self.legend.update(minmap_thr)
+        self.legend.refresh(minmap_thr)
     
     # Update the bar plot
         lbls, mode = zip(*minmap_thr.get_labeled_mode().items())
         mode_col = [minmap_thr.get_phase_color(lbl) for lbl in lbls]
-        self.barplot.update_canvas(mode, lbls, title, mode_col)
+        self.barplot.update_canvas((mode,), lbls, mode_col, title=title)
 
     # Update clustering scores using original (non-thresholded) mineral map
         sil_avg, sil_clust, chi, dbi = minmap.get_clustering_scores()
@@ -865,21 +912,67 @@ class MineralClassifier(DraggableTool):
         self.maps_viewer.draw_discretemap(mmap, enc, col, title)
 
 
+    def currentMineralMap(self) -> CW.DataObject | None:
+        '''
+        Get the currently selected mineral map data object.
+
+        Returns
+        -------
+        DataObject or None
+            Current selected mineral map data object or None if no mineral map
+            is selected.
+
+        '''
+        item = self.minmaps_list.currentItem()
+        if isinstance(item, CW.DataObject):
+            return item
+        return None
+
+
+    def getMineralMap(self, idx: int) -> CW.DataObject | None:
+        '''
+        Get mineral map data object at index 'idx'.
+
+        Parameters
+        ----------
+        idx : int
+            Index of mineral map.
+
+        Returns
+        -------
+        CW.DataObject or None
+            Mineral map data object at given index or None if index is invalid.
+            
+        '''
+        item = self.minmaps_list.topLevelItem(idx)
+        if isinstance(item, CW.DataObject):
+            return item
+        return
+
+
     def saveMineralMap(self) -> None: 
         '''
         Save selected mineral map to file.
 
         '''
+    # Exit function if filepath is invalid
         ftype = 'Mineral map (*.mmp)'
-        path = CW.FileDialog(self, 'save', 'Save Map', ftype).get()
+        path = CW.FileDialog(self, 'save', 'Save Map', ftype).get_path()
         if not path:
             return
-        
-        item = self.minmaps_list.currentItem()
-        minmap = self._thresholdMineralMap(item.get('data'))
-  
+
+    # Exit function if no valid mineral map data object is currently selected
+        if (curr_obj := self.currentMineralMap()) is None:
+            return
+
+    # Exit function if mineral map data object has invalid mineral map data
+        if (minmap := curr_obj.getMineralMapData()) is None:
+            return
+
+    # Attempt to save the mineral map filtered by confidence threshold 
+        thresh = self._thresholdMineralMap(minmap)
         try:
-            minmap.save(path)
+            thresh.save(path)
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
 
@@ -890,12 +983,12 @@ class MineralClassifier(DraggableTool):
         maps.
 
         '''
-        item = self.minmaps_list.currentItem()
-        item_idx = self.minmaps_list.indexOfTopLevelItem(item)
+        current = self.currentMineralMap()
+        item_idx = self.minmaps_list.indexOfTopLevelItem(current)
         choice = CW.MsgBox(self, 'QuestWarn', 'Remove selected map?')
         if choice.yes():
             self.minmaps_list.takeTopLevelItem(item_idx)
-            new_displayed_item = self.minmaps_list.topLevelItem(item_idx - 1)
+            new_displayed_item = self.getMineralMap(item_idx - 1)
             self.minmaps_list.setCurrentItem(new_displayed_item)
             self.showMineralMap(new_displayed_item)
 
@@ -921,7 +1014,7 @@ class MineralClassifier(DraggableTool):
         other_wid.blockSignals(False)
 
     # Re-draw the mineral map
-        self.showMineralMap(self.minmaps_list.currentItem())
+        self.showMineralMap(self.currentMineralMap())
 
 
     def _thresholdMineralMap(self, minmap: MineralMap) -> MineralMap:
@@ -971,20 +1064,28 @@ class MineralClassifier(DraggableTool):
             RGB triplet.
 
         '''
-    # Get mineral map
-        item = self.minmaps_list.currentItem()
-        minmap = item.get('data')
+    # Do nothing if no valid mineral map data object is currently selected
+        if (curr_obj := self.currentMineralMap()) is None:
+            return
+
+    # Do nothing if mineral map data object has invalid mineral map data
+        if (minmap := curr_obj.getMineralMapData()) is None:
+            return
         
     # Update the phase color in the mineral map. However, if _ND_ color was 
     # changed, update the _nodata_color attribute instead
         class_name = legend_item.text(1)
         if class_name == '_ND_':
-             self._nodata_color = color
+            self._nodata_color = color
         else:
             minmap.set_phase_color(class_name, color)
 
-    # Re-draw mineral map, legend, bar plot and silhouette plot
-        self.showMineralMap(item)
+    # Update mineral map, legend, bar plot and silhouette plot
+        palette = self._thresholdMineralMap(minmap).palette
+        self.maps_viewer.alter_colormap(palette.values())
+        self.legend.changeItemColor(legend_item, color)
+        self.barplot.change_bar_color(class_name, color)
+        self.silscore_canvas.alter_colors(palette)
 
 
     def renameClass(self, legend_item: QW.QTreeWidgetItem, new_name: str) -> None:
@@ -1003,14 +1104,20 @@ class MineralClassifier(DraggableTool):
             New class name.
 
         '''
+    # Do nothing if no valid mineral map data object is currently selected
+        if (curr_obj := self.currentMineralMap()) is None:
+            return
+
+    # Do nothing if mineral map data object has invalid mineral map data
+        if (minmap := curr_obj.getMineralMapData()) is None:
+            return
+        
     # Rename phase in the current mineral map 
-        item = self.minmaps_list.currentItem()
-        minmap = item.get('data')
         old_name = legend_item.text(1)
         minmap.rename_phase(old_name, new_name)
     
     # Re-draw mineral map, legend, barplot and silhouette plot
-        self.showMineralMap(item)
+        self.showMineralMap(curr_obj)
 
 
     def highlightClass(self, toggled: bool, legend_item: QW.QTreeWidgetItem) -> None:
@@ -1028,20 +1135,27 @@ class MineralClassifier(DraggableTool):
             The legend item that requested to be highlighted.
 
         '''
-    # Check that a mineral map is currently displayed in the viewer
-        if self.maps_viewer.contains_discretemap():
+    # Do nothing if a mineral map is not currently displayed in the viewer
+        if not self.maps_viewer.has_discretemap():
+            return
 
-            if toggled:
-            # We need to operate on the thresholded version of the mineral map
-                item = self.minmaps_list.currentItem()
-                minmap = self._thresholdMineralMap(item.get('data'))
-                phase_id = minmap.as_id(legend_item.text(1))
-                vmin, vmax = phase_id - 0.5, phase_id + 0.5
-            else:
-                vmin, vmax = None, None
+    # Do nothing if no valid mineral map data object is currently selected
+        if (curr_obj := self.currentMineralMap()) is None:
+            return
 
-            self.maps_viewer.update_clim(vmin, vmax)
-            self.maps_viewer.draw() 
+    # Do nothing if mineral map data object has invalid mineral map data
+        if (minmap := curr_obj.getMineralMapData()) is None:
+            return
+
+    # Change phase visibility based on toggled state
+        if toggled:
+        # We need to operate on the thresholded version of the mineral map
+            thresh = self._thresholdMineralMap(minmap)
+            vmin = vmax = thresh.as_id(legend_item.text(1))
+        else:
+            vmin = vmax = None
+
+        self.maps_viewer.update_clim(vmin, vmax)
 
 
     def startClassification(self) -> None:
@@ -1051,36 +1165,43 @@ class MineralClassifier(DraggableTool):
         '''
     # Do not allow multiple classification processes at once
         if self._isBusyClassifying:
-            return CW.MsgBox(self, 'C', 'Cannot run multiple classifications.')
+            CW.MsgBox(self, 'C', 'Cannot run multiple classifications.')
+            return
         
     # Build the input maps stack
-        checked_inmaps = self.inmaps_selector.getCheckedMaps()
-        inmaps = [i.get('data') for i in checked_inmaps]
+        checked = self.inmaps_selector.getCheckedMaps()
+        inmaps = [i for c in checked if (i := c.getInputMapData()) is not None]
         mask = self._mask if self.mask_group.isChecked() else None
         input_stack = InputMapStack(inmaps, mask)
+        
+    # Check for valid stack size
+        if not len(input_stack):
+            CW.MsgBox(self, 'Crit', 'Select at least one map.')
+            return
     
     # Check for maps perfect overlapping
         if not input_stack.maps_fit():
-            return CW.MsgBox(self, 'Crit', 'Input maps do not overlap.')
+            CW.MsgBox(self, 'Crit', 'Input maps do not overlap.')
+            return
         
     # Check that mask (if present) has correct shape
         if not input_stack.mask_fit():
-            return CW.MsgBox(self, 'C', 'The selected mask has invalid shape.')
+            CW.MsgBox(self, 'C', 'The selected mask has invalid shape.')
+            return
 
     # Get the classifier and launch the classification thread
-        active_tab = self.classifier_tabwid.currentWidget()
-        csf = active_tab.getClassifier(input_stack) 
+        if (active_tab := self.classifier_tabwid.currentWidget()) is not None:
+            csf = active_tab.getClassifier(input_stack)
+            if isinstance(csf, mltools._ClassifierBase):
+                csf.thread.taskInitialized.connect(self.progbar.step)
+                csf.thread.workInterrupted.connect(self._endClassification)
+                csf.thread.workFinished.connect(self._parseClassifierResult)
 
-        if isinstance(csf, mltools._ClassifierBase):
-            csf.thread.taskInitialized.connect(self.progbar.step)
-            csf.thread.workInterrupted.connect(self._endClassification)
-            csf.thread.workFinished.connect(self._parseClassifierResult)
+                self.progbar.setRange(0, csf.classification_steps)
+                self._current_classifier = csf
+                self._isBusyClassifying = True
 
-            self.progbar.setRange(0, csf.classification_steps)
-            self._current_classifier = csf
-            self._isBusyClassifying = True
-
-            csf.startThreadedClassification()
+                csf.startThreadedClassification()
 
 
     def _parseClassifierResult(self, result: tuple, success: bool) -> None:
@@ -1096,11 +1217,11 @@ class MineralClassifier(DraggableTool):
             Whether the classification thread succeeded or not.
 
         '''
-        if success:  
+        if success and self._current_classifier is not None:  
         # Parse the classification result appropriately
             if self._current_classifier.kind == 'Unsupervised':
                 pred, prob, sil_avg, sil_clust, chi, dbi = result
-                pred = pred.astype(MineralMap._DTYPE_STR)
+                pred = pred.astype(MineralMap._DTYPE_STR, copy=False)
             else:   
                 pred, prob = result
                 sil_avg, sil_clust, chi, dbi = None, None, None, None
@@ -1175,41 +1296,53 @@ class MineralClassifier(DraggableTool):
         if success:
             CW.MsgBox(self, 'Info', 'Classification completed successfully.')
 
+    # deprecated
+    # def killReferences(self) -> None:
+    #     '''
+    #     Reimplementation of the 'killReferences' method from the parent class.
+    #     It also stops any active classification thread.
 
-    def killReferences(self) -> None:
+    #     '''
+    #     if self._isBusyClassifying:
+    #         self.stopClassification()
+    #     super().killReferences()
+
+    def is_safe_to_close(self) -> bool:
         '''
-        Reimplementation of the 'killReferences' method from the parent class.
-        It also stops any active classification thread.
+        Reimplementation of the 'is_safe_to_close' method. Changes the close
+        confirmation question if a classification thread is currently active.
+        It stops the thread if user confirms to close the tool.
+
+        Returns
+        -------
+        bool
+            Whether the user confirms to close the tool or not.
+
+        '''
+        if self._isBusyClassifying:
+            text = (
+                f'A classification process is active. Close {self.windowTitle()}'
+                ' anyway? The process will be interrupted and any unsaved data'
+                ' will be lost.'
+            )
+            msgbox = CW.MsgBox(self, 'Quest', text)
+            if close := msgbox.is_choice('Yes'):
+                self.stopClassification()
+            return close
+        
+        else:
+            return super().is_safe_to_close()
+
+
+    def force_close(self) -> None:
+        '''
+        Reimplementation of the 'force_close' method. It also stops any active
+        classification thread.
 
         '''
         if self._isBusyClassifying:
             self.stopClassification()
-        super().killReferences()
-                               
-
-    def closeEvent(self, event: QG.QCloseEvent) -> None:
-        '''
-        Reimplementation of the 'closeEvent' method. Requires exit confirm if a
-        classification thread is currently active.
-
-        Parameters
-        ----------
-        event : QCloseEvent
-            The close event.
-
-        '''
-        if self._isBusyClassifying:
-            text = 'A classification process is still active. Close anyway?'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.yes():
-                self.stopClassification()
-                self.closed.emit()
-                event.accept()
-            else:
-                event.ignore()
-
-        else:
-            super().closeEvent(event)
+        return super().force_close()
 
 
     class PreTrainedClassifierTab(QW.QWidget):
@@ -1228,7 +1361,7 @@ class MineralClassifier(DraggableTool):
             super().__init__(parent)
 
         # Set main attributes
-            self.model = None
+            self.model: mltools.EagerModel | None = None
 
         # Initialize GUI and connect its signals with slots
             self._init_ui()
@@ -1288,14 +1421,15 @@ class MineralClassifier(DraggableTool):
             '''
         # Do nothing if path is invalid or file dialog is canceled
             ftype = 'PyTorch model (*.pth)'
-            path = CW.FileDialog(self, 'open', 'Load Model', ftype).get()
+            path = CW.FileDialog(self, 'open', 'Load Model', ftype).get_path()
             if not path:
                 return
 
             try:
                 self.model = mltools.EagerModel.load(path)
             except Exception as e:
-                return CW.MsgBox(self, 'Crit', 'Incompatible model.', str(e))
+                CW.MsgBox(self, 'Crit', 'Incompatible model.', str(e))
+                return
 
             self.model_path.setPath(path)
             logpath = self.model.generate_log_path(path)
@@ -1343,7 +1477,7 @@ class MineralClassifier(DraggableTool):
             idx = self.matcher.getMatchedIndices()
             empty_rows = [n for n, i in enumerate(idx) if i == -1]
             if empty_rows:
-                missing = [self.matcher.item(r, 0).text() for r in empty_rows]
+                missing = [self.matcher.getMapName(r) for r in empty_rows]
                 text = 'One or more features have not been matched.'
                 CW.MsgBox(self, 'Crit', text, ', '.join(missing))
                 return
@@ -1380,8 +1514,8 @@ class MineralClassifier(DraggableTool):
             super().__init__(parent)
 
         # Set main attributes
-            self._algorithms = ('K-Nearest Neighbors',)
-            self._roimap = None
+            self._algorithms = ('K-Nearest Neighbors', )
+            self._roimap: RoiMap | None = None
 
         # Initialize GUI and connect its signals with slots
             self._init_ui()
@@ -1504,7 +1638,7 @@ class MineralClassifier(DraggableTool):
             '''
         # Do nothing if path is invalid or file dialog is canceled
             ftype = 'ROI maps (*.rmp)'
-            path = CW.FileDialog(self, 'open', 'Load ROI', ftype).get()
+            path = CW.FileDialog(self, 'open', 'Load ROI', ftype).get_path()
             if not path:
                 return 
             
@@ -1516,7 +1650,8 @@ class MineralClassifier(DraggableTool):
                 pbar.increase()
             except Exception as e:
                 pbar.reset()
-                return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}.', str(e))
+                CW.MsgBox(self, 'C', f'Unexpected file:\n{path}.', str(e))
+                return
 
         # Remove previous ROI map from canvas
             self.unloadRoiMap()
@@ -1554,7 +1689,7 @@ class MineralClassifier(DraggableTool):
 
             '''
             idx = self._algorithms.index(algorithm)
-            self.algm_panel.setCurrentWidget(idx)
+            self.algm_panel.setCurrentIndex(idx)
 
 
         def getClassifier(self, input_stack: InputMapStack
@@ -1619,7 +1754,7 @@ class MineralClassifier(DraggableTool):
             super().__init__(parent)
 
         # Set main attribute
-            self._algorithms = ('K-Means',)
+            self._algorithms = ('K-Means', )
 
         # Initialize GUI and connect its signals with slots
             self._init_ui()
@@ -1693,8 +1828,8 @@ class MineralClassifier(DraggableTool):
             scores_grid.addRow('Silhouette ratio', self.silscore_ratio_spbox)
             scores_grid.addRow(self.chiscore_cbox)
             scores_grid.addRow(self.dbiscore_cbox)
-            scores_group = CW.GroupArea(scores_grid, 'Clustering scores',
-                                        checkable=True, align=QC.Qt.AlignLeft)
+            scores_group = CW.GroupArea(
+                scores_grid, 'Clustering scores', checkable=True, align='left')
             scores_group.setChecked(False)
 
             left_vbox = QW.QVBoxLayout()
@@ -1739,7 +1874,7 @@ class MineralClassifier(DraggableTool):
 
             '''
             idx = self._algorithms.index(algorithm)
-            self.algm_panel.setCurrentWidget(idx)
+            self.algm_panel.setCurrentIndex(idx)
 
 
         def getClassifier(self, input_stack: InputMapStack
@@ -1787,6 +1922,55 @@ class MineralClassifier(DraggableTool):
 
 class DatasetBuilder(DraggableTool):
 
+    _elements = {
+        'Ac': 'Actinium (Z=89)',     'Ag': 'Silver (Z=47)',      
+        'Al': 'Aluminum (Z=13)',     'Ar': 'Argon (Z=18)',      
+        'As': 'Arsenic (Z=33)',      'At': 'Astatine (Z=85)',   
+        'Au': 'Gold (Z=79)',         'B': 'Boron (Z=5)',        
+        'Ba': 'Barium (Z=56)',       'Be': 'Beryllium (Z=4)',   
+        'Bi': 'Bismuth (Z=83)',      'Br': 'Bromine (Z=35)',    
+        'C': 'Carbon (Z=6)',         'Ca': 'Calcium (Z=20)',    
+        'Cd': 'Cadmium (Z=48)',      'Ce': 'Cerium (Z=58)',     
+        'Cl': 'Chlorine (Z=17)',     'Co': 'Cobalt (Z=27)',     
+        'Cr': 'Chromium (Z=24)',     'Cs': 'Cesium (Z=55)',     
+        'Cu': 'Copper (Z=29)',       'Dy': 'Dysprosium (Z=66)', 
+        'Er': 'Erbium (Z=68)',       'Eu': 'Europium (Z=63)',   
+        'F': 'Fluorine (Z=9)',       'Fe': 'Iron (Z=26)',       
+        'Fr': 'Francium (Z=87)',     'Ga': 'Gallium (Z=31)',    
+        'Gd': 'Gadolinium (Z=64)',   'Ge': 'Germanium (Z=32)',  
+        'H': 'Hydrogen (Z=1)',       'He': 'Helium (Z=2)',      
+        'Hf': 'Hafnium (Z=72)',      'Hg': 'Mercury (Z=80)',    
+        'Ho': 'Holmium (Z=67)',      'I': 'Iodine (Z=53)',      
+        'In': 'Indium (Z=49)',       'Ir': 'Iridium (Z=77)',    
+        'K': 'Potassium (Z=19)',     'Kr': 'Krypton (Z=36)',    
+        'La': 'Lanthanum (Z=57)',    'Li': 'Lithium (Z=3)',     
+        'Lu': 'Lutetium (Z=71)',     'Mg': 'Magnesium (Z=12)',  
+        'Mn': 'Manganese (Z=25)',    'Mo': 'Molybdenum (Z=42)', 
+        'N': 'Nitrogen (Z=7)',       'Na': 'Sodium (Z=11)',     
+        'Nb': 'Niobium (Z=41)',      'Nd': 'Neodymium (Z=60)',  
+        'Ne': 'Neon (Z=10)',         'Ni': 'Nickel (Z=28)',     
+        'O': 'Oxygen (Z=8)',         'Os': 'Osmium (Z=76)',     
+        'P': 'Phosphorus (Z=15)',    'Pa': 'Protactinium (Z=91)',
+        'Pb': 'Lead (Z=82)',         'Pd': 'Palladium (Z=46)',  
+        'Pm': 'Promethium (Z=61)',   'Po': 'Polonium (Z=84)',   
+        'Pr': 'Praseodymium (Z=59)', 'Pt': 'Platinum (Z=78)',   
+        'Ra': 'Radium (Z=88)',       'Rb': 'Rubidium (Z=37)',   
+        'Re': 'Rhenium (Z=75)',      'Rh': 'Rhodium (Z=45)',    
+        'Rn': 'Radon (Z=86)',        'Ru': 'Ruthenium (Z=44)',  
+        'S': 'Sulfur (Z=16)',        'Sb': 'Antimony (Z=51)',   
+        'Sc': 'Scandium (Z=21)',     'Se': 'Selenium (Z=34)',   
+        'Si': 'Silicon (Z=14)',      'Sm': 'Samarium (Z=62)',   
+        'Sn': 'Tin (Z=50)',          'Sr': 'Strontium (Z=38)',  
+        'Ta': 'Tantalum (Z=73)',     'Tb': 'Terbium (Z=65)',    
+        'Tc': 'Technetium (Z=43)',   'Te': 'Tellurium (Z=52)',  
+        'Th': 'Thorium (Z=90)',      'Ti': 'Titanium (Z=22)',   
+        'Tl': 'Thallium (Z=81)',     'Tm': 'Thulium (Z=69)',    
+        'U': 'Uranium (Z=92)',       'V': 'Vanadium (Z=23)',    
+        'W': 'Tungsten (Z=74)',      'Xe': 'Xenon (Z=54)',      
+        'Y': 'Yttrium (Z=39)',       'Yb': 'Ytterbium (Z=70)',  
+        'Zn': 'Zinc (Z=30)',         'Zr': 'Zirconium (Z=40)' 
+    }
+
     def __init__(self) -> None:
         '''
         One of the main tools of X-Min Learn, that allows the semi-automated
@@ -1800,55 +1984,7 @@ class DatasetBuilder(DraggableTool):
         self.setWindowIcon(style.getIcon('DATASET_BUILDER'))
 
     # Set main attributes
-        self.dataset = None
-        self.elements = {
-            'Ac': 'Actinium (Z=89)',     'Ag': 'Silver (Z=47)',      
-            'Al': 'Aluminum (Z=13)',     'Ar': 'Argon (Z=18)',      
-            'As': 'Arsenic (Z=33)',      'At': 'Astatine (Z=85)',   
-            'Au': 'Gold (Z=79)',         'B': 'Boron (Z=5)',        
-            'Ba': 'Barium (Z=56)',       'Be': 'Beryllium (Z=4)',   
-            'Bi': 'Bismuth (Z=83)',      'Br': 'Bromine (Z=35)',    
-            'C': 'Carbon (Z=6)',         'Ca': 'Calcium (Z=20)',    
-            'Cd': 'Cadmium (Z=48)',      'Ce': 'Cerium (Z=58)',     
-            'Cl': 'Chlorine (Z=17)',     'Co': 'Cobalt (Z=27)',     
-            'Cr': 'Chromium (Z=24)',     'Cs': 'Cesium (Z=55)',     
-            'Cu': 'Copper (Z=29)',       'Dy': 'Dysprosium (Z=66)', 
-            'Er': 'Erbium (Z=68)',       'Eu': 'Europium (Z=63)',   
-            'F': 'Fluorine (Z=9)',       'Fe': 'Iron (Z=26)',       
-            'Fr': 'Francium (Z=87)',     'Ga': 'Gallium (Z=31)',    
-            'Gd': 'Gadolinium (Z=64)',   'Ge': 'Germanium (Z=32)',  
-            'H': 'Hydrogen (Z=1)',       'He': 'Helium (Z=2)',      
-            'Hf': 'Hafnium (Z=72)',      'Hg': 'Mercury (Z=80)',    
-            'Ho': 'Holmium (Z=67)',      'I': 'Iodine (Z=53)',      
-            'In': 'Indium (Z=49)',       'Ir': 'Iridium (Z=77)',    
-            'K': 'Potassium (Z=19)',     'Kr': 'Krypton (Z=36)',    
-            'La': 'Lanthanum (Z=57)',    'Li': 'Lithium (Z=3)',     
-            'Lu': 'Lutetium (Z=71)',     'Mg': 'Magnesium (Z=12)',  
-            'Mn': 'Manganese (Z=25)',    'Mo': 'Molybdenum (Z=42)', 
-            'N': 'Nitrogen (Z=7)',       'Na': 'Sodium (Z=11)',     
-            'Nb': 'Niobium (Z=41)',      'Nd': 'Neodymium (Z=60)',  
-            'Ne': 'Neon (Z=10)',         'Ni': 'Nickel (Z=28)',     
-            'O': 'Oxygen (Z=8)',         'Os': 'Osmium (Z=76)',     
-            'P': 'Phosphorus (Z=15)',    'Pa': 'Protactinium (Z=91)',
-            'Pb': 'Lead (Z=82)',         'Pd': 'Palladium (Z=46)',  
-            'Pm': 'Promethium (Z=61)',   'Po': 'Polonium (Z=84)',   
-            'Pr': 'Praseodymium (Z=59)', 'Pt': 'Platinum (Z=78)',   
-            'Ra': 'Radium (Z=88)',       'Rb': 'Rubidium (Z=37)',   
-            'Re': 'Rhenium (Z=75)',      'Rh': 'Rhodium (Z=45)',    
-            'Rn': 'Radon (Z=86)',        'Ru': 'Ruthenium (Z=44)',  
-            'S': 'Sulfur (Z=16)',        'Sb': 'Antimony (Z=51)',   
-            'Sc': 'Scandium (Z=21)',     'Se': 'Selenium (Z=34)',   
-            'Si': 'Silicon (Z=14)',      'Sm': 'Samarium (Z=62)',   
-            'Sn': 'Tin (Z=50)',          'Sr': 'Strontium (Z=38)',  
-            'Ta': 'Tantalum (Z=73)',     'Tb': 'Terbium (Z=65)',    
-            'Tc': 'Technetium (Z=43)',   'Te': 'Tellurium (Z=52)',  
-            'Th': 'Thorium (Z=90)',      'Ti': 'Titanium (Z=22)',   
-            'Tl': 'Thallium (Z=81)',     'Tm': 'Thulium (Z=69)',    
-            'U': 'Uranium (Z=92)',       'V': 'Vanadium (Z=23)',    
-            'W': 'Tungsten (Z=74)',      'Xe': 'Xenon (Z=54)',      
-            'Y': 'Yttrium (Z=39)',       'Yb': 'Ytterbium (Z=70)',  
-            'Zn': 'Zinc (Z=30)',         'Zr': 'Zirconium (Z=40)' 
-        }
+        self._dataset: dtools.GroundTruthDataset | None = None
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -1861,10 +1997,10 @@ class DatasetBuilder(DraggableTool):
 
         '''
     # Input grid of chemical elements (Styled Buttons) [-> GroupScrollArea]
-        self.elements_btns = []
+        self.elements_btns: list[CW.StyledButton] = []
         elem_grid = QW.QGridLayout()
         n_cols = 9
-        for n, (k, v) in enumerate(self.elements.items()):
+        for n, (k, v) in enumerate(self._elements.items()):
             elem_btn = CW.StyledButton(text=k)
             elem_btn.setToolTip(v)
             elem_btn.setCheckable(True)
@@ -1897,26 +2033,29 @@ class DatasetBuilder(DraggableTool):
     # Designer progressbar (Progress Bar)
         self.designer_pbar = QW.QProgressBar()
 
+    #[Designer actions]
+    #|Expand designer's rows
+        self.expand_action = QW.QAction(
+            style.getIcon('ROW_ADD'),'Expand rows', self)
+    #|Reduce designer's rows
+        self.reduce_action = QW.QAction(
+            style.getIcon('ROW_DEL'), 'Reduce rows', self)
+    #|Remove selected rows
+        self.delrows_action = QW.QAction(
+            style.getIcon('REMOVE'), 'Remove selected rows', self)
+    #|Compile dataset (Widget Action)
+        self.compile_btn = CW.StyledButton(
+            style.getIcon('DATASET_BUILDER'), 'COMPILE')
+
     # Designer toolbar (Styled Toolbar)
         self.designer_tbar = QW.QToolBar('Designer toolbar')
         self.designer_tbar.setEnabled(False)
         self.designer_tbar.setStyleSheet(style.SS_TOOLBAR)
-
-    # Expand designer's rows (Action) [-> Designer Toolbar]
-        self.expand_action = self.designer_tbar.addAction(
-            style.getIcon('ROW_ADD'),'Expand rows')
-
-    # Reduce designer's rows (Action) [-> Designer Toolbar]
-        self.reduce_action = self.designer_tbar.addAction(
-            style.getIcon('ROW_DEL'), 'Reduce rows')
-        
-    # Remove selected rows (Action) [-> Designer Toolbar]
-        self.delrows_action = self.designer_tbar.addAction(
-            style.getIcon('REMOVE'), 'Remove selected rows')
-        
-    # Compile dataset (Widget Action) [-> Designer Toolbar]
-        self.compile_btn = CW.StyledButton(
-            style.getIcon('DATASET_BUILDER'), 'COMPILE')
+        self.designer_tbar.addActions((
+            self.expand_action,
+            self.reduce_action,
+            self.delrows_action
+        ))
         self.designer_tbar.addSeparator()
         self.designer_tbar.addWidget(self.compile_btn)
 
@@ -1937,7 +2076,7 @@ class DatasetBuilder(DraggableTool):
         self.merge_class_btn.setToolTip('Merge')
         
     # Dataset preview area (Document Browser)
-        self.preview = CW.DocumentBrowser(toolbar=False)
+        self.preview = CW.DocumentBrowser(tbar=False)
 
     # CSV decimal point selector (Decimal Point Selector)
         self.decimal_combox = CW.DecimalPointSelector()
@@ -2046,6 +2185,53 @@ class DatasetBuilder(DraggableTool):
         self.save_btn.clicked.connect(self.saveDataset)
 
 
+    @property
+    def dataset(self) -> dtools.GroundTruthDataset:
+        '''
+        Get the current ground truth dataset.
+
+        Returns
+        -------
+        dataset : dtools.GroundTruthDataset
+            Current dataset.
+
+        Raises
+        ------
+        TypeError
+            Raised if the current dataset is None.
+
+        '''
+        if (dataset := self._dataset) is None:
+            raise TypeError('Current dataset is None.')
+        return dataset
+
+
+    def set_dataset(self, dataset: dtools.GroundTruthDataset) -> None:
+        '''
+        Set the new current ground truth dataset.
+
+        Parameters
+        ----------
+        dataset : dtools.GroundTruthDataset
+            New dataset.
+
+        '''
+        self._dataset = dataset
+
+
+    def has_dataset(self) -> bool:
+        '''
+        Check if a ground truth dataset currently exists.
+
+        Returns
+        -------
+        bool
+            Whether a dataset exists or not.
+
+        '''
+        return self._dataset is not None
+
+
     def onElementButtonToggled(self, toggled: bool) -> None:
         '''
         Actions to be performed when an element button is toggled on/off.
@@ -2056,7 +2242,10 @@ class DatasetBuilder(DraggableTool):
             Toggle state of the button.
 
         '''
-        element = self.sender().text()
+    # Exit function if sender is invalid (safety)
+        if not isinstance(sender := self.sender(), CW.StyledButton):
+            return
+        element = sender.text()
 
     # Add element to input features list if button is toggled on
         if toggled:
@@ -2064,7 +2253,8 @@ class DatasetBuilder(DraggableTool):
 
     # Remove element from input features list if button is toggled off
         else:
-            item = self.feature_list.findItems(element, QC.Qt.MatchExactly)[0]
+            match_flag = QC.Qt.MatchFlag.MatchExactly
+            item = self.feature_list.findItems(element, match_flag)[0]
             row = self.feature_list.row(item)
             self.feature_list.takeItem(row)
 
@@ -2084,12 +2274,12 @@ class DatasetBuilder(DraggableTool):
             return
         
     # Do nothing if name is already present in the features list
-        if len(self.feature_list.findItems(name, QC.Qt.MatchExactly)):
+        if len(self.feature_list.findItems(name, QC.Qt.MatchFlag.MatchExactly)):
             return
 
     # If name is a valid chemical element, toggle on the linked button.
     # Otherwise, just add a new item.
-        if name in (keys := self.elements.keys()):
+        if name in (keys := self._elements.keys()):
             self.elements_btns[list(keys).index(name)].setChecked(True)
         else:
             self.feature_list.addItem(name)
@@ -2121,7 +2311,8 @@ class DatasetBuilder(DraggableTool):
         '''
     # Deny refreshing if no input feature has been added
         if not self.feature_list.count():
-            return CW.MsgBox(self, 'Crit', 'Feature list cannot be empty.')
+            CW.MsgBox(self, 'Crit', 'Feature list cannot be empty.')
+            return
         
         text = 'Refresh Dataset Designer? Any progress will be lost.'
         choice = CW.MsgBox(self, 'QuestWarn', text)
@@ -2147,13 +2338,14 @@ class DatasetBuilder(DraggableTool):
         dataset.
 
         '''
-        dataset = None
+        samples_data: list[dtools.GroundTruthDataset] = []
         nrows = self.designer.rowCount()
         nfeat = self.designer.columnCount() - 3 # -fillrow, -separator, -minmap
 
     # Deny compiling dataset if the Dataset Designer is empty
         if nrows == 0:
-            return CW.MsgBox(self, 'Crit', 'Dataset Designer is empty.')
+            CW.MsgBox(self, 'Crit', 'Dataset Designer is empty.')
+            return
 
         self.designer_pbar.setRange(0, nrows)
         for row in range(nrows): # iterate through each row (= sample)
@@ -2162,46 +2354,46 @@ class DatasetBuilder(DraggableTool):
         # Deny compiling dataset if maps are missing or invalid
             if len(inmaps) < nfeat or minmap is None:
                 self.designer_pbar.reset()
-                return CW.MsgBox(self, 'Crit', f'Invalid maps in row {row+1}.')
+                CW.MsgBox(self, 'Crit', f'Invalid maps in row {row+1}.')
+                return
             
         # Deny compiling dataset if maps have different shapes in same sample
             shapes = [map_.shape for map_ in inmaps + [minmap]]
             if len(set(shapes)) > 1:
-                common_shape = cf.most_frequent(inmaps + [minmap])
-                unfitting = [shp != common_shape for shp in shapes]
-                # Set warning status to unfitting maps in linked cell widgets
-                for n, unfit in enumerate(unfitting, start=1):
-                    if unfit:
-                        # +1 skips fill-row column, +2 skips separator too
-                        col = n + 2 if n == len(unfitting) else n + 1
-                        self.designer.cellWidget(row, col).setStatus('Warning')
+                common_shape = cf.most_frequent(shapes)
+                map_fit = [shp == common_shape for shp in shapes]
+
+                # Set warning status to loader widgets with unfitting maps
+                for n, is_fitting in enumerate(map_fit, start=1):
+                    if not is_fitting:
+                        # +1 skips separator (needed for last map: mineral map)
+                        col = n + 1 if n == len(map_fit) else n
+                        loader = self.designer.get_file_loader(row, col)
+                        if loader is not None:
+                            loader.setStatus('Warning')
+
                 # Send informative error message
                 self.designer_pbar.reset()
                 txt = (
-                    f'A total of {unfitting.count(True)} map(s) do not fit '
-                    f'the shape of sample in row {row + 1}.\nTip: They are '
-                    'indicated with a yellow line.'
+                    f'A total of {map_fit.count(False)} maps do not fit the '
+                    f'shape of sample in row {row + 1}.\n'
+                    'Tip: they are highlighted in yellow.'
                 )
-                return CW.MsgBox(self, 'Crit', txt)
+                CW.MsgBox(self, 'Crit', txt)
+                return
         
-        # Construct a new GroundTruthDataset ('gtd')
+        # Construct and store a new GroundTruthDataset
             instack = InputMapStack(inmaps)
             columns = self.designer.columns[1:-2] + ['Class']
             gtd = dtools.GroundTruthDataset.from_maps(instack, minmap, columns)
-        
-        # Merge gtd with global dataset
-            if dataset is None:
-                dataset = gtd
-            else:
-                dataset.merge(gtd)
-
+            samples_data.append(gtd)
             self.designer_pbar.setValue(row + 1)
-        
-    # Remove all rows of data with the protected '_ND_' class
-        dataset.remove_where(-1, ('_ND_', ))
+
+    # Create a single dataset and remove data with the protected '_ND_' class
+        self.set_dataset(dtools.GroundTruthDataset.from_existent(samples_data))
+        self.dataset.remove_where(-1, ('_ND_', ))
 
     # Conclude dataset compilation operations
-        self.dataset = dataset
         self.updateUniqueClasses()
         self.updatePreview()
         self.designer_pbar.reset()
@@ -2213,8 +2405,10 @@ class DatasetBuilder(DraggableTool):
         Update the list of unique dataset classes in the dataset refiner list.
 
         '''
-        self.refine_list.clear()
-        self.refine_list.addItems(self.dataset.column_unique(-1))
+        if self.has_dataset():
+            self.refine_list.clear()
+            unique_classes = [str(c) for c in self.dataset.column_unique(-1)]
+            self.refine_list.addItems(unique_classes)
 
 
     def updatePreview(self) -> None:
@@ -2222,11 +2416,12 @@ class DatasetBuilder(DraggableTool):
         Update the dataset preview.
 
         '''
-        prev = repr(self.dataset.dataframe)
-        class_count = self.dataset.column_count(-1)
-        cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
-        txt = f'DATAFRAME PREVIEW\n\n{prev}\n\n\nPER-CLASS DATA COUNT\n\n{cnt}'
-        self.preview.setText(txt)
+        if self.has_dataset():
+            df = repr((dataset := self.dataset).dataframe)
+            class_count = dataset.column_count(-1)
+            cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
+            t = f'DATAFRAME PREVIEW\n\n{df}\n\n\nPER-CLASS DATA COUNT\n\n{cnt}'
+            self.preview.setText(t)
 
 
     def renameClass(self) -> None:
@@ -2234,16 +2429,17 @@ class DatasetBuilder(DraggableTool):
         Rename a class in the dataset.
 
         '''
-    # Do nothing if no classes are selected
+    # Exit function if no classes are selected
         selected = self.refine_list.selectedItems()
-        if len(selected) == 0:
+        if (n_selected := len(selected)) == 0:
             return
         
     # Deny renaming if more than one class is selected
-        elif len(selected) > 1:
-            return CW.MsgBox(self, 'Warn', 'Rename one class at a time.')
+        elif n_selected > 1:
+            CW.MsgBox(self, 'Warn', 'Rename one class at a time.')
+            return
     
-    # Do nothing if the dialog is canceled or the class is not renamed
+    # Exit function if the dialog is canceled or the class is not renamed
         old_name = selected[0].text()
         label = 'Rename class (max. 8 ASCII characters):'
         name, ok = QW.QInputDialog.getText(self, self.windowTitle(), label,
@@ -2253,19 +2449,22 @@ class DatasetBuilder(DraggableTool):
         
     # Deny renaming to protected '_ND_' class
         if name == '_ND_':
-            return CW.MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+            CW.MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+            return
         
     # Deny renaming if the name already exists
-        if name in self.dataset.column_unique(-1):
-            return CW.MsgBox(self, 'Crit', f'{name} is already taken.')
+        if name in (dataset := self.dataset).column_unique(-1):
+            CW.MsgBox(self, 'Crit', f'{name} is already taken.')
+            return
 
     # Deny renaming if the new name is not an ASCII <= 8 characters string
         if not 0 < len(name) <= 8 or not name.isascii():
-            return CW.MsgBox(self, 'Crit', 'Invalid name.')
+            CW.MsgBox(self, 'Crit', 'Invalid name.')
+            return
 
-    # If we are here, the name is valid. Conclude renaming operations
+    # If we are here, the new name is valid: conclude renaming operations
         pbar = CW.PopUpProgBar(self, 2, 'Editing dataset')
-        self.dataset.rename_target(old_name, name)
+        dataset.rename_target(old_name, name)
         pbar.increase()
         self.updateUniqueClasses()
         self.updatePreview()
@@ -2277,13 +2476,12 @@ class DatasetBuilder(DraggableTool):
         Remove rows of data with the selected classes from the dataset.
 
         '''
-    # Do nothing if no data is selected
-        selected = self.refine_list.selectedItems()
-        if not len(selected):
+    # Exit function if no data is selected
+        if not len(selected := self.refine_list.selectedItems()):
             return
 
-        choice = CW.MsgBox(self, 'Quest', 'Remove selected classes?')
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'Quest', 'Remove selected classes?')
+        if msgbox.is_choice('Yes'):
             targets = [item.text() for item in selected]
             pbar = CW.PopUpProgBar(self, 2, 'Editing dataset')
             self.dataset.remove_where(-1, targets)
@@ -2298,16 +2496,17 @@ class DatasetBuilder(DraggableTool):
         Unify two or more classes in the dataset under a new name.
 
         '''
-    # Do nothing if no classes are selected
+    # Exit function if no classes are selected
         selected = self.refine_list.selectedItems()
-        if len(selected) == 0:
+        if (n_selected := len(selected)) == 0:
             return
         
-    # Deny merging if less than two classes are selected
-        if len(selected) < 2:
-            return CW.MsgBox(self, 'Warn', 'Select at least two classes.')
+    # Deny merging if only one class is selected
+        if n_selected == 1:
+            CW.MsgBox(self, 'Warn', 'Select at least two classes.')
+            return
         
-    # Do nothing if the dialog is canceled
+    # Exit function if the dialog is canceled
         targets = [item.text() for item in selected]
         text = f'Merge {targets} in a new class (max. 8 ASCII characters):'
         name, ok = QW.QInputDialog.getText(self, self.windowTitle(), text)
@@ -2316,19 +2515,23 @@ class DatasetBuilder(DraggableTool):
         
     # Deny renaming to protected '_ND_' class
         if name == '_ND_':
-            return CW.MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+            CW.MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+            return
     
     # Deny renaming if the name already exists (excluding selected classes)
-        if name not in targets and name in self.dataset.column_unique(-1):
-            return CW.MsgBox(self, 'Crit', f'{name} is already taken.')
+        dataset = self.dataset
+        if name not in targets and name in dataset.column_unique(-1):
+            CW.MsgBox(self, 'Crit', f'{name} is already taken.')
+            return
 
     # Deny renaming if the new name is not an ASCII <= 8 characters string
         if not 0 < len(name) <= 8 and not name.isascii():
-            return CW.MsgBox(self, 'Crit', 'Invalid name.')
+            CW.MsgBox(self, 'Crit', 'Invalid name.')
+            return
     
     # If we are here, the name is valid. Conclude merging operations
         pbar = CW.PopUpProgBar(self, 2, 'Editing dataset')
-        self.dataset.merge_targets(targets, name)
+        dataset.merge_targets(targets, name)
         pbar.increase()
         self.updateUniqueClasses()
         self.updatePreview()
@@ -2341,12 +2544,13 @@ class DatasetBuilder(DraggableTool):
 
         '''
     # Deny saving dataset if no dataset is compiled
-        if self.dataset is None:
-            return CW.MsgBox(self, 'Crit', 'No dataset compiled.')
+        if not self.has_dataset():
+            CW.MsgBox(self, 'Crit', 'No dataset compiled.')
+            return
         
-    # Do nothing if outpath is invalid or file dialog is canceled
+    # Exit function if outpath is invalid or file dialog is canceled
         ftype = 'CSV (*.csv)'
-        path = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get()
+        path = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get_path()
         if not path:
             return
 
@@ -2362,6 +2566,35 @@ class DatasetBuilder(DraggableTool):
 
 class ModelLearner(DraggableTool):
 
+    # Balancing strategies
+    BalancingStrategyName = Literal[
+        'Current',
+        'Min',
+        'Max',
+        'Mean',
+        'Median',
+        'Custom value',
+        'Custom multi-value'
+    ]
+    _balancing_strategies = get_args(BalancingStrategyName)
+
+    # Available over-sampling and under-sampling algorithms
+    _os_list = (
+        'None',
+        'SMOTE',
+        'BorderlineSMOTE',
+        'ADASYN'
+    )
+    _us_list = (
+        'None',
+        'RandUS',
+        'NearMiss',
+        'TomekLinks',
+        'ENN-all', 
+        'ENN-mode',
+        'NCR'
+    )
+
     def __init__(self) -> None:
         '''
         One of the main tools of X-Min Learn, that allows the developing of
@@ -2376,34 +2609,11 @@ class ModelLearner(DraggableTool):
 
     # Set main attributes
         # Ground-truth dataset
-        self.dataset = None
+        self._dataset: dtools.GroundTruthDataset | None = None
         self.dataset_reader = dtools.CsvChunkReader(QC.QLocale().decimalPoint())
 
-        # Available over-sampling and under-sampling algorithms
-        self.os_list = ('None', 'SMOTE', 'BorderlineSMOTE', 'ADASYN')
-        self.us_list = (
-            'None',
-            'RandUS',
-            'NearMiss',
-            'TomekLinks',
-            'ENN-all', 
-            'ENN-mode',
-            'NCR'
-        )
-        
-        # Balancing strategy list
-        self.balancing_strategies = (
-            'Current',
-            'Min',
-            'Max',
-            'Mean',
-            'Median',
-            'Custom value',
-            'Custom multi-value'
-        )
-
         # Train set balancing operation tracker
-        self.balancing_info = []
+        self.balancing_info: list[dtools.BalancingInfo] = []
 
         # External threads
         self.balancing_thread = threads.BalancingThread()
@@ -2412,9 +2622,9 @@ class ModelLearner(DraggableTool):
         self.learning_thread.setObjectName('Learning')
 
         # Machine learning model, network architecture and optimizer
-        self.model = None 
-        self.network = None 
-        self.optimizer = None 
+        self._model: mltools.EagerModel | None = None 
+        self.network: mltools.NeuralNetwork | None = None 
+        self.optimizer: mltools.Optimizer | None = None
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -2448,7 +2658,7 @@ class ModelLearner(DraggableTool):
             full_display=False, placeholder='No dataset loaded')
 
     # Loaded dataset preview area (Document Browser)
-        self.dataset_preview = CW.DocumentBrowser(toolbar=False)
+        self.dataset_preview = CW.DocumentBrowser(tbar=False)
 
     # Ground truth dataset group (Collapsible Area)
         dataset_grid = QW.QGridLayout()
@@ -2518,7 +2728,7 @@ class ModelLearner(DraggableTool):
 
     # Batch size input (editable Styled Combo Box)
         combox_tooltip = 'A Batch Size of 0 means a single batch'
-        default_batch_sizes = map(lambda n: str(2 ** n), range(5, 13))
+        default_batch_sizes = [str(2 ** n) for n in range(5, 13)]
         self.batch_combox = CW.StyledComboBox(tooltip=combox_tooltip)
         self.batch_combox.addItem('0')
         self.batch_combox.addItems(default_batch_sizes)
@@ -2645,13 +2855,13 @@ class ModelLearner(DraggableTool):
 
     # Train, Validation and Test sets PieChart (Pie Canvas)
         self.subsets_pie = plots.PieCanvas(wheel_pan=False, wheel_zoom=False)
-        self.subsets_pie.fig.patch.set(
-            facecolor=style.CASPER_LIGHT, edgecolor=style.BLACK_PEARL, lw=2)
+        self.subsets_pie.fig.set_facecolor(style.CASPER_LIGHT)
         self.subsets_pie.setMinimumSize(200, 200)
 
     # Train, Validation & Test sets barchart (Bar Canvas)
         self.subsets_barplot = plots.BarCanvas(
             wheel_pan=False, wheel_zoom=False)
+        self.subsets_barplot.fig.set_facecolor(style.CASPER_LIGHT)
         self.subsets_barplot.setMinimumSize(200, 300)
 
     # Train set class visualizer (Styled List Widget)
@@ -2683,9 +2893,9 @@ class ModelLearner(DraggableTool):
         counters_grid.setContentsMargins(20, 5, 0, 0)
         counters_grid.setHorizontalSpacing(20)
         counters_grid.setVerticalSpacing(5)
-        counters_grid.addWidget(QW.QLabel('Train'), 0, 0, QC.Qt.AlignHCenter)
-        counters_grid.addWidget(QW.QLabel('Validation'), 0, 1, QC.Qt.AlignHCenter)
-        counters_grid.addWidget(QW.QLabel('Test'), 0, 2, QC.Qt.AlignHCenter)
+        counters_grid.addWidget(QW.QLabel('Train'), 0, 0, style.A_HCENTER)
+        counters_grid.addWidget(QW.QLabel('Validation'), 0, 1, style.A_HCENTER)
+        counters_grid.addWidget(QW.QLabel('Test'), 0, 2, style.A_HCENTER)
         counters_grid.addWidget(self.train_class_list, 1, 0)
         counters_grid.addWidget(self.valid_class_list, 1, 1)
         counters_grid.addWidget(self.test_class_list, 1, 2)
@@ -2726,13 +2936,13 @@ class ModelLearner(DraggableTool):
     # Oversampling strategy warning icon (Label)
         os_warn = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.os_warn_icon = QW.QLabel()
-        self.os_warn_icon.setPixmap(os_warn.scaled(16, 16, QC.Qt.KeepAspectRatio))
+        self.os_warn_icon.setPixmap(os_warn.scaled(16, 16, style.ARM_KEEP))
         self.os_warn_icon.setToolTip('Sample count may differ from requested')
         self.os_warn_icon.hide()
 
     # Oversampling algorithm selector (Styled Combo Box)
         self.os_combox = CW.StyledComboBox()
-        self.os_combox.addItems(self.os_list)
+        self.os_combox.addItems(self._os_list)
 
     # Oversampling K-neighbours selector (Styled Spin Box)
         kn_tip = 'Nearest neighbours to construct synthetic samples'
@@ -2749,13 +2959,13 @@ class ModelLearner(DraggableTool):
     # Undersampling strategy warning icon (Label)
         us_warn = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.us_warn_icon = QW.QLabel()
-        self.us_warn_icon.setPixmap(us_warn.scaled(16, 16, QC.Qt.KeepAspectRatio))
+        self.us_warn_icon.setPixmap(us_warn.scaled(16, 16, style.ARM_KEEP))
         self.us_warn_icon.setToolTip('Sample count may differ from requested')
         self.us_warn_icon.hide()
 
     # Undersampling algorithm selector (Styled Combo Box)
         self.us_combox = CW.StyledComboBox()
-        self.us_combox.addItems(self.us_list)
+        self.us_combox.addItems(self._us_list)
 
     # Undersampling N-neighbours selector (Styled Spin Box)
         self.n_neigh_spbox = CW.StyledSpinBox()
@@ -2764,7 +2974,7 @@ class ModelLearner(DraggableTool):
 
     # Strategy selector (Styled Combo Box)
         self.strategy_combox = CW.StyledComboBox()
-        self.strategy_combox.addItems(self.balancing_strategies)
+        self.strategy_combox.addItems(self._balancing_strategies)
 
     # Strategy value (Line Edit)
         self.strategy_value = QW.QLineEdit()
@@ -2786,13 +2996,13 @@ class ModelLearner(DraggableTool):
         self.balancing_multicore_cbox.setChecked(False)
 
     # Balancing preview table (Styled Table)
-        headers = ('Class', 'Original', 'Current', 'After balancing')
         self.balancing_table = CW.StyledTable(0, 4)
-        # ResizeModes: 0=Interactive, 1=Stretch, 2=Fixed, 3=ResizeToContent
-        self.balancing_table.horizontalHeader().setSectionResizeMode(3)
-        self.balancing_table.horizontalHeader().setStretchLastSection(True)
-        self.balancing_table.verticalHeader().setSectionResizeMode(3)
-        self.balancing_table.setHorizontalHeaderLabels(headers)
+        header_resize_mode = style.HRM_RESIZETOCONTENTS
+        self.balancing_table.h_header.setSectionResizeMode(header_resize_mode)
+        self.balancing_table.h_header.setStretchLastSection(True)
+        self.balancing_table.v_header.setSectionResizeMode(header_resize_mode)
+        h_headers_labels = ('Class', 'Original', 'Current', 'After balancing')
+        self.balancing_table.setHorizontalHeaderLabels(h_headers_labels)
 
     # Start balancing button (Styled Button)
         self.start_balancing_btn = CW.StyledButton(
@@ -2816,20 +3026,20 @@ class ModelLearner(DraggableTool):
     # Balancing group (Group Area)
         balancing_grid = QW.QGridLayout()
         balancing_grid.setSpacing(10)
-        balancing_grid.addWidget(self.balancing_help_btn, 0, 0, QC.Qt.AlignLeft)
+        balancing_grid.addWidget(self.balancing_help_btn, 0, 0, style.A_LEFT)
         balancing_grid.addWidget(QW.QLabel('Over-Sampling'), 1, 0, 1, 2)
-        balancing_grid.addWidget(self.os_warn_icon, 1, 2, QC.Qt.AlignRight)
+        balancing_grid.addWidget(self.os_warn_icon, 1, 2, style.A_RIGHT)
         balancing_grid.addWidget(CW.LineSeparator(), 2, 0, 1, 3)
         balancing_grid.addWidget(self.os_combox, 3, 0)
-        balancing_grid.addWidget(QW.QLabel('K neigh.'), 3, 1, QC.Qt.AlignRight)
+        balancing_grid.addWidget(QW.QLabel('K neigh.'), 3, 1, style.A_RIGHT)
         balancing_grid.addWidget(self.k_neigh_spbox, 3, 2)
-        balancing_grid.addWidget(QW.QLabel('M neigh.'), 4, 1, QC.Qt.AlignRight)
+        balancing_grid.addWidget(QW.QLabel('M neigh.'), 4, 1, style.A_RIGHT)
         balancing_grid.addWidget(self.m_neigh_spbox, 4, 2)
         balancing_grid.addWidget(QW.QLabel('Under-Sampling'), 6, 0, 1, 2)
-        balancing_grid.addWidget(self.us_warn_icon, 6, 2, QC.Qt.AlignRight)
+        balancing_grid.addWidget(self.us_warn_icon, 6, 2, style.A_RIGHT)
         balancing_grid.addWidget(CW.LineSeparator(), 7, 0, 1, 3)
         balancing_grid.addWidget(self.us_combox, 8, 0)
-        balancing_grid.addWidget(QW.QLabel('N neigh.'), 8, 1, QC.Qt.AlignRight)
+        balancing_grid.addWidget(QW.QLabel('N neigh.'), 8, 1, style.A_RIGHT)
         balancing_grid.addWidget(self.n_neigh_spbox, 8, 2)
         balancing_grid.addWidget(QW.QLabel('Strategy'), 10, 0, 1, 3)
         balancing_grid.addWidget(CW.LineSeparator(), 11, 0, 1, 3)
@@ -2847,8 +3057,8 @@ class ModelLearner(DraggableTool):
         balancing_grid.addWidget(self.balancing_table, 0, 4, -1, 1)
         balancing_grid.setColumnStretch(3, -1)
 
-        self.balancing_group = CW.GroupArea(balancing_grid, checkable=True,
-                                            title='Balance train set')
+        self.balancing_group = CW.GroupArea(
+            balancing_grid, checkable=True, title='Balance train set')
         self.balancing_group.setChecked(False)
         self.balancing_group.setEnabled(False)
 
@@ -2857,9 +3067,14 @@ class ModelLearner(DraggableTool):
 #  -------------------------------------------------------------------------  #
 
     # Loss curves canvas (Curve Canvas)
-        self.loss_plot = plots.CurveCanvas('Loss plot', 'Epochs', 'Loss', 
-                                           layout='tight', wheel_pan=False,
-                                           wheel_zoom=False)
+        self.loss_plot = plots.CurveCanvas(
+            'Loss plot',
+            'Epochs',
+            'Loss', 
+            layout='tight',
+            wheel_pan=False,
+            wheel_zoom=False
+        )
         self.loss_plot.setMinimumSize(500, 400)
 
     # Loss curves Navigation Toolbar (Navigation Toolbar)
@@ -2916,9 +3131,9 @@ class ModelLearner(DraggableTool):
 
         learn_plot_tabwid = CW.StyledTabWidget()
         learn_plot_tabwid.setTabBarExpanding()
-        learn_plot_tabwid.addTab(
+        learn_plot_tabwid.wrap_tab(
             loss_grid, style.getIcon('LOSS'), 'LOSS PLOT')
-        learn_plot_tabwid.addTab(
+        learn_plot_tabwid.wrap_tab(
             accuracy_grid, style.getIcon('ACCURACY'), 'ACCURACY PLOT')
         learn_group = CW.GroupArea(learn_plot_tabwid, 'Learning progression')
 
@@ -2935,6 +3150,7 @@ class ModelLearner(DraggableTool):
         self.train_cm_navtbar = plots.NavTbar(
             self.train_confmat, self, coords=False)
         self.train_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.train_cm_navtbar.fixHomeAction()
 
     # Annotation as percentage action [--> Train CM Navigation ToolBar]
         self.train_cm_perc_action = QW.QAction(
@@ -2957,6 +3173,7 @@ class ModelLearner(DraggableTool):
         self.valid_cm_navtbar = plots.NavTbar(
             self.valid_confmat, self, coords=False)
         self.valid_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.valid_cm_navtbar.fixHomeAction()
 
     # Annotation as percentage action [--> Validation CM Navigation Toolbar]
         self.valid_cm_perc_action = QW.QAction(
@@ -2979,6 +3196,7 @@ class ModelLearner(DraggableTool):
         self.test_cm_navtbar = plots.NavTbar(
             self.test_confmat, self, coords=False)
         self.test_cm_navtbar.removeToolByIndex([3, 4, 8, 9])
+        self.test_cm_navtbar.fixHomeAction()
 
     # Annotation as percentage action [--> Test CM Navigation Toolbar]
         self.test_cm_perc_action = QW.QAction(
@@ -3032,11 +3250,11 @@ class ModelLearner(DraggableTool):
 
         confmat_tabwid = CW.StyledTabWidget()
         confmat_tabwid.setTabBarExpanding()
-        confmat_tabwid.addTab(
+        confmat_tabwid.wrap_tab(
             tr_cm_grid, style.getIcon('TRAIN_SET'), 'TRAIN SET')
-        confmat_tabwid.addTab(
+        confmat_tabwid.wrap_tab(
             vd_cm_grid, style.getIcon('VALIDATION_SET'), 'VALIDATION SET')
-        confmat_tabwid.addTab(
+        confmat_tabwid.wrap_tab(
             ts_cm_grid, style.getIcon('TEST_SET'), 'TEST SET')
         confmat_group = CW.GroupArea(confmat_tabwid, 'Model evaluation')
 
@@ -3139,18 +3357,17 @@ class ModelLearner(DraggableTool):
         self.test_class_list.itemClicked.connect(self.countClassInstances)
 
     # Balancing info help button links to imbalanced learn official website
-        link = 'https://imbalanced-learn.org/stable/user_guide.html#user-guide'
-        self.balancing_help_btn.clicked.connect(lambda: webbrowser.open(link))
+        self.balancing_help_btn.clicked.connect(self.on_balancing_help_clicked)
 
-    # Show/hide OS warning icon based on selected OS algorithm
+    # Show/hide over-sampling warning icon based on selected OS algorithm
         self.os_combox.currentTextChanged.connect(
             lambda t: self.os_warn_icon.setHidden(t != 'ADASYN'))
 
     # Enable m-neighbors spinbox only when OS algorithm is BorderlineSMOTE
         self.os_combox.currentTextChanged.connect(
-            lambda t: self.m_neigh_spbox.setEnabled(t=='BorderlineSMOTE'))
+            lambda t: self.m_neigh_spbox.setEnabled(t == 'BorderlineSMOTE'))
     
-    # Show/hide US warning icon based on selected US algorithm
+    # Show/hide under-sampling warning icon based on selected US algorithm
         us_no_warn = ('None', 'RandUS', 'NearMiss')
         self.us_combox.currentTextChanged.connect(
             lambda t: self.us_warn_icon.setHidden(t in us_no_warn))
@@ -3183,8 +3400,102 @@ class ModelLearner(DraggableTool):
     # Toggle on/off percentages values on confusion matrices
         self.train_cm_perc_action.toggled.connect(self.toggleConfMatPercent) 
         self.valid_cm_perc_action.toggled.connect(self.toggleConfMatPercent) 
-        self.test_cm_perc_action.toggled.connect(self.toggleConfMatPercent) 
-        
+        self.test_cm_perc_action.toggled.connect(self.toggleConfMatPercent)
+
+
+    @property
+    def dataset(self) -> dtools.GroundTruthDataset:
+        '''
+        Get the currently loaded ground truth dataset.
+
+        Returns
+        -------
+        dataset : dtools.GroundTruthDataset
+            Current dataset.
+
+        Raises
+        ------
+        TypeError
+            Raised if the current dataset is None.
+
+        '''
+        if (dataset := self._dataset) is None:
+            raise TypeError('Current dataset is None.')
+        return dataset
+
+
+    def set_dataset(self, dataset: dtools.GroundTruthDataset) -> None:
+        '''
+        Set a new ground truth dataset.
+
+        Parameters
+        ----------
+        dataset : dtools.GroundTruthDataset
+            New dataset.
+
+        '''
+        self._dataset = dataset
+
+
+    def has_dataset(self) -> bool:
+        '''
+        Check if a ground truth dataset is currently loaded.
+
+        Returns
+        -------
+        bool
+            Whether a dataset exists or not.
+
+        '''
+        return self._dataset is not None
+
+
+    @property
+    def model(self) -> mltools.EagerModel:
+        '''
+        Get the current machine learning model.
+
+        Returns
+        -------
+        model : mltools.EagerModel
+            Current model.
+
+        Raises
+        ------
+        TypeError
+            Raised if the current model is None.
+
+        '''
+        if (model := self._model) is None:
+            raise TypeError('Current model is None.')
+        return model
+
+
+    def set_model(self, model: mltools.EagerModel) -> None:
+        '''
+        Set a new machine learning model.
+
+        Parameters
+        ----------
+        model : mltools.EagerModel
+            New model.
+
+        '''
+        self._model = model
+
+
+    def has_model(self) -> bool:
+        '''
+        Check if a machine learning model currently exists.
+
+        Returns
+        -------
+        bool
+            Whether a model exists or not.
+
+        '''
+        return self._model is not None
+
 
     def _reset(self) -> None:
         '''
@@ -3196,7 +3507,7 @@ class ModelLearner(DraggableTool):
         self.dataset.reset()
     
     # Reset model 
-        self.model = None 
+        self._model = None 
 
     # Remove parent model
         self.removeParentModel()
@@ -3247,6 +3558,16 @@ class ModelLearner(DraggableTool):
                 return (True, thread.objectName())
         else:
             return (False, None)
+
+
+    def on_balancing_help_clicked(self) -> None:
+        '''
+        Actions to perform when the balancing help button is clicked.
+
+        '''
+        # Open official imbalanced-learn user guide
+        link = 'https://imbalanced-learn.org/stable/user_guide.html#user-guide'
+        webbrowser.open(link)
         
 
     def onSeedChanged(self, old_seed: int, new_seed: int) -> None:
@@ -3271,10 +3592,11 @@ class ModelLearner(DraggableTool):
             self.seed_generator.seed_input.setText(str(old_seed))
             self.seed_generator.blockSignals(False)
             text = f'Cannot change seed while a {thr_name} Session is active'
-            return CW.MsgBox(self, 'Crit', text)
+            CW.MsgBox(self, 'Crit', text)
+            return
     
     # Ask confirmation if a dataset was already processed
-        if self.dataset and self.dataset.are_subsets_split():
+        if self.has_dataset() and self.dataset.are_subsets_split():
             text = 'Current progress will be lost if seed is changed. Confirm?'
             choice = CW.MsgBox(self, 'QuestWarn', text)
             if choice.no():
@@ -3296,16 +3618,17 @@ class ModelLearner(DraggableTool):
         thr_active, thr_name = self._threadRunning()
         if thr_active:
             text = f'Cannot load dataset while a {thr_name} Session is active'
-            return CW.MsgBox(self, 'Crit', text)
+            CW.MsgBox(self, 'Crit', text)
+            return
     
     # Do nothing if path is invalid or the dialog is canceled
         ftype = 'CSV (*.csv)'
-        path = CW.FileDialog(self, 'open', 'Load Dataset', ftype).get()
+        path = CW.FileDialog(self, 'open', 'Load Dataset', ftype).get_path()
         if not path:
             return
     
     # Ask confirmation if a dataset was already processed
-        if self.dataset:
+        if self.has_dataset():
             text = 'Load a new dataset? Current progress will be lost.'
             choice = CW.MsgBox(self, 'QuestWarn', text)
             if choice.no():
@@ -3348,7 +3671,7 @@ class ModelLearner(DraggableTool):
             # Compile ground truth dataset
                 dataframe = self.dataset_reader.combine_chunks(result)
                 path = self.dataset_path_lbl.fullpath
-                self.dataset = dtools.GroundTruthDataset(dataframe, path)
+                self.set_dataset(dtools.GroundTruthDataset(dataframe, path))
             # Update dataset preview
                 head1, head2 = 'DATAFRAME PREVIEW', '\nPER-CLASS DATA COUNT'
                 class_count = self.dataset.column_count(-1)
@@ -3358,14 +3681,19 @@ class ModelLearner(DraggableTool):
             # Enable "Split dataset" and "Load previous model" buttons
                 self.load_pmodel_btn.setEnabled(True)
                 self.split_dataset_btn.setEnabled(True)
+                return
 
             except Exception as e:
-                self.dataset_path_lbl.clearPath()
-                CW.MsgBox(self, 'Crit', 'Loading dataset failed.', str(e))
+                err_txt = str(e)
 
         else:
-            self.dataset_path_lbl.clearPath()
-            CW.MsgBox(self, 'Crit', 'Loading dataset failed.', str(result[0]))
+            err_txt = str(result[0])
+
+        # If we are here, either the thread or the dataset compilation failed
+        self._dataset = None
+        self.dataset_preview.clear()
+        self.dataset_path_lbl.clearPath()
+        CW.MsgBox(self, 'Crit', 'Loading dataset failed.', err_txt)
 
 
     def _fixSubsetsRatios(self, new_value: int) -> None:
@@ -3413,34 +3741,35 @@ class ModelLearner(DraggableTool):
         thr_active, thr_name = self._threadRunning()
         if thr_active:
             text = f'Cannot split dataset while a {thr_name} Session is active.'
-            return CW.MsgBox(self, 'Crit', text)
+            CW.MsgBox(self, 'Crit', text)
+            return
 
     # Ask for overwriting previous balancing results
         if self.balancing_info:
             text = 'Any existent balancing result will be discarded. Continue?'
-            choice = CW.MsgBox(self, 'Quest', text)
-            if choice.no(): 
+            msgbox = CW.MsgBox(self, 'Quest', text)
+            if not msgbox.is_choice('Yes'):
                 return
             
     # Reset balancing info
         self.balancing_info.clear()
 
     # Reset dataset properties if split was already performed
-        if self.dataset.are_subsets_split():
-            self.dataset.reset()
+        if (dataset := self.dataset).are_subsets_split():
+            dataset.reset()
 
     # Split features [X] from targets [Y] expressed as labels
         pbar = CW.PopUpProgBar(self, 4, 'Splitting dataset')
         try:
             x_dtype, y_dtype = InputMap._DTYPE, MineralMap._DTYPE_STR
-            self.dataset.split_features_targets(xtype=x_dtype, ytype=y_dtype)
+            dataset.split_features_targets(xtype=x_dtype, ytype=y_dtype)
             pbar.increase()
 
     # Update encoder. Inherit from parent model encoder if present.    
             parent_enc = {}
             if (pmodel_path := self.pmodel_path.fullpath) != '':
                 parent_enc = mltools.EagerModel.load(pmodel_path).encoder
-            self.dataset.update_encoder(parent_enc)
+            dataset.update_encoder(parent_enc)
             pbar.increase()
 
     # Split dataset into train, validation and test sets
@@ -3448,12 +3777,13 @@ class ModelLearner(DraggableTool):
             vd_ratio = self.valid_ratio_spbox.value() / 100
             ts_ratio = self.test_ratio_spbox.value() / 100
             seed = self.seed_generator.seed
-            self.dataset.split_subsets(tr_ratio, vd_ratio, ts_ratio, seed) 
+            dataset.split_subsets(tr_ratio, vd_ratio, ts_ratio, seed) 
             pbar.increase()
 
         except Exception as e:
             pbar.reset()
-            return CW.MsgBox(self, 'Crit', 'Unexpected data type', str(e))
+            CW.MsgBox(self, 'Crit', 'Unexpected data type', str(e))
+            return
 
     # Update GUI elements
         for subset in ('Train', 'Validation', 'Test'):
@@ -3468,39 +3798,38 @@ class ModelLearner(DraggableTool):
         pbar.increase()
 
 
-    def updateSubsetCounterWidget(self, subset: str) -> None:
+    def updateSubsetCounterWidget(
+        self,
+        subset: Literal['Train', 'Validation', 'Test']
+    ) -> None:
         '''
         Update list widget of a subset class counter.
 
         Parameters
         ----------
-        subset : str
-            Name of the subset. Must be one of ('Train', 'Validation', 'Test').
+        subset : Literal['Train', 'Validation', 'Test']
+            Name of the subset.
 
         '''
-        if subset == 'Train':
-            tr_classes, tr_counts = zip(*self.dataset.train_counter.items())
-            self.train_class_list.clear()
-            self.train_class_list.addItems(sorted(tr_classes))
-            self.train_curr_count_lbl.setText('')
-            self.train_tot_count_lbl.setText(f'Tot = {sum(tr_counts)}')
-        
-        elif subset == 'Validation':
-            vd_classes, vd_counts = zip(*self.dataset.valid_counter.items())
-            self.valid_class_list.clear()
-            self.valid_class_list.addItems(sorted(vd_classes))
-            self.valid_curr_count_lbl.setText('')
-            self.valid_tot_count_lbl.setText(f'Tot = {sum(vd_counts)}')
-
-        elif subset == 'Test':
-            ts_classes, ts_counts = zip(*self.dataset.test_counter.items())
-            self.test_class_list.clear()
-            self.test_class_list.addItems(sorted(ts_classes))
-            self.test_curr_count_lbl.setText('')
-            self.test_tot_count_lbl.setText(f'Tot = {sum(ts_counts)}')
-
-        else: 
-            return
+        match subset:
+            case 'Train':
+                classes, counts = zip(*self.dataset.train_counter.items())
+                self.train_class_list.clear()
+                self.train_class_list.addItems(sorted(classes))
+                self.train_curr_count_lbl.setText('')
+                self.train_tot_count_lbl.setText(f'Tot = {sum(counts)}')
+            case 'Validation':
+                classes, counts = zip(*self.dataset.valid_counter.items())
+                self.valid_class_list.clear()
+                self.valid_class_list.addItems(sorted(classes))
+                self.valid_curr_count_lbl.setText('')
+                self.valid_tot_count_lbl.setText(f'Tot = {sum(counts)}')
+            case 'Test':
+                classes, counts = zip(*self.dataset.test_counter.items())
+                self.test_class_list.clear()
+                self.test_class_list.addItems(sorted(classes))
+                self.test_curr_count_lbl.setText('')
+                self.test_tot_count_lbl.setText(f'Tot = {sum(counts)}')
 
 
     def updateSubsetsPlots(self) -> None:
@@ -3517,9 +3846,10 @@ class ModelLearner(DraggableTool):
         self.subsets_pie.update_canvas((tr, vd, ts), labels=lbls)
 
     # Update Bar chart
-        bar_data = [list(cnt.values()) for cnt in self.dataset.counters()]
-        tickslbl = list(self.dataset.encoder.keys())
-        self.subsets_barplot.update_canvas(bar_data, tickslbl, multibars=True)
+        dataset = self.dataset
+        bar_data = [list(cnt.values()) for cnt in dataset.counters()]
+        tickslbl = dataset.encoder.keys()
+        self.subsets_barplot.update_canvas(bar_data, tickslbl)
 
 
     def countClassInstances(self, item: QW.QListWidgetItem) -> None:
@@ -3533,22 +3863,19 @@ class ModelLearner(DraggableTool):
             Subset list's item containing the class name as text.
 
         '''
-        subset = self.sender()
-
-        if subset == self.train_class_list:
-            counter = self.dataset.train_counter
-            label = self.train_curr_count_lbl
-
-        elif subset == self.valid_class_list:
-            counter = self.dataset.valid_counter
-            label = self.valid_curr_count_lbl
-
-        elif subset == self.test_class_list:
-            counter = self.dataset.test_counter
-            label = self.test_curr_count_lbl
-
-        else: 
-            return
+        # Get counter and label based on target subset (sender)
+        match self.sender():
+            case self.train_class_list:
+                counter = self.dataset.train_counter
+                label = self.train_curr_count_lbl
+            case self.valid_class_list:
+                counter = self.dataset.valid_counter
+                label = self.valid_curr_count_lbl
+            case self.test_class_list:
+                counter = self.dataset.test_counter
+                label = self.test_curr_count_lbl
+            case _:
+                return
 
         count = counter[item.text()]
         label.setText(f'{item.text()} = {count}')
@@ -3560,9 +3887,9 @@ class ModelLearner(DraggableTool):
         and test subsets.
 
         '''
-    # Exit if dataset is not split (safety only, should be impossible) or not 
-    # balanced 
-        if not self.dataset.are_subsets_split() or not self.balancing_info:
+    # Exit if dataset is not split (safety, should be impossible) or not balanced
+        dataset = self.dataset
+        if not dataset.are_subsets_split() or not self.balancing_info:
             return
         
     # Ask for user confirm
@@ -3572,11 +3899,11 @@ class ModelLearner(DraggableTool):
             return
         
     # Discard balancing results
-        self.dataset.discard_balancing()
+        dataset.discard_balancing()
         self.balancing_info.clear()
 
     # Set ratios of subsets spin-boxes to original values 
-        train_ratio, valid_ratio, test_ratio = self.dataset.orig_subsets_ratios
+        train_ratio, valid_ratio, test_ratio = dataset.orig_subsets_ratios
         self.train_ratio_spbox.setValue(round(train_ratio * 100))
         self.valid_ratio_spbox.setValue(round(valid_ratio * 100))
         self.test_ratio_spbox.setValue(round(test_ratio * 100))
@@ -3615,15 +3942,19 @@ class ModelLearner(DraggableTool):
                 f'Cannot start a new Balancing Session while a {thr_name} '
                 'Session is active.'
             )
-            return CW.MsgBox(self, 'Crit', text)
+            CW.MsgBox(self, 'Crit', text)
+            return
         
-    # Get cell (widgets) data from balancing table 
+    # Get cell (widgets) data from balancing table
+        dataset = self.dataset
         classes = [c.text() for c in self.getBalancingTableCellsByColumn(0)]
-        values = [cw.value() for cw in self.getBalancingTableCellsByColumn(3)]
-        ratios = [cw.ratio(1) for cw in self.getBalancingTableCellsByColumn(3)]
+        classes_ids = [dataset.encoder.get(c, -1) for c in classes]
+        line_edits = self.getBalancingTableCellsByColumn(3)
+        values = [l.value() for l in line_edits]
+        ratios = [l.ratio(1) for l in line_edits]
 
     # Get over-sampling and under-sampling parameters
-        strategy = dict(zip(classes, values))
+        strategy: dtools.BalancingStrategy = dict(zip(classes_ids, values))
         ovs = self.os_combox.currentText()
         uds = self.us_combox.currentText()
         seed = self.seed_generator.seed
@@ -3633,43 +3964,43 @@ class ModelLearner(DraggableTool):
         njobs = (-1) ** self.balancing_multicore_cbox.isChecked()
 
     # Ask for user confirm
-        i = []
+        w: list[str] = [] # list of warnings
         if ovs == 'None':
             ovs = None
-            i.append('Over-Sampling not selected. Increased classes ignored.')
+            w.append('Over-Sampling not selected. Increased classes ignored.')
         elif max(ratios) > 5:
-            i.append((
+            w.append((
                 'High after-balancing value(s) detected (>500 %). Aggressive '
                 'over-sampling can cause model overfitting!'
             ))
 
         if uds == 'None':
             uds = None
-            i.append('Under-Sampling not selected. Decreased classes ignored.')
+            w.append('Under-Sampling not selected. Decreased classes ignored.')
         elif min(ratios) < 0.2:
-            i.append((
+            w.append((
                 'Low after-balancing value(s) detected (<20 %). Aggressive '
                 'under-sampling can cause information loss!'
             ))
 
-        icon = QW.QMessageBox.Warning if i else QW.QMessageBox.Question
-        note = '\n\n'.join(i) if i else 'No additional info.'
+        icon = QW.QMessageBox.Icon.Warning if w else QW.QMessageBox.Icon.Question
+        note = '\n\n'.join(w) if w else 'No additional info.'
         text = (
-            f'You have {len(i)} warning(s). Click "Show Details" for more info.'
+            f'You have {len(w)} warning(s). Click "Show Details" for more info.'
             '\n\nLaunch Balancing Session?'
         )
-        choice = CW.MsgBox(self, 'Quest', text, note, icon=icon)
+        msgbox = CW.MsgBox(self, 'Quest', text, note, icon=icon)
         
     # Run the balancing session
-        if choice.yes():
+        if msgbox.is_choice('Yes'):
             self.canc_balancing_btn.setEnabled(False)
             self.balancing_pbar.reset()
             self.balancing_pbar.setUndetermined()
 
-            f1 = self.dataset.parse_balancing_strategy
-            f2 = self.dataset.oversample
-            f3 = self.dataset.undersample
-            f4 = self.dataset.shuffle
+            f1 = dataset.parse_balancing_strategy
+            f2 = dataset.oversample
+            f3 = dataset.undersample
+            f4 = dataset.shuffle
             pipeline = (f1, f2, f3, f4)
             params = (strategy, seed, ovs, uds, kos, mos, nus, njobs)
 
@@ -3697,11 +4028,11 @@ class ModelLearner(DraggableTool):
         if success:
         # Parse the result if balancing operations succeded
             x_bal, y_bal, info = result
-            self.dataset.apply_balancing(x_bal, y_bal)
+            (dataset := self.dataset).apply_balancing(x_bal, y_bal)
 
         # Update train, validation and test sets ratios spin boxes
             self.balancing_pbar.step('Updating subsets')
-            tr_ratio, vd_ratio, ts_ratio = self.dataset.current_subsets_ratios()
+            tr_ratio, vd_ratio, ts_ratio = dataset.current_subsets_ratios()
             self.train_ratio_spbox.setValue(round(tr_ratio * 100))
             self.valid_ratio_spbox.setValue(round(vd_ratio * 100))
             self.test_ratio_spbox.setValue(round(ts_ratio * 100))
@@ -3763,7 +4094,8 @@ class ModelLearner(DraggableTool):
 
         '''
     # Get train set data and set the appropriate number of rows in the table
-        names, curr_counts = zip(*self.dataset.train_counter.items())
+        dataset = self.dataset
+        names, curr_counts = zip(*dataset.train_counter.items())
         n_rows = len(names)
         self.balancing_table.setRowCount(n_rows)
 
@@ -3772,14 +4104,15 @@ class ModelLearner(DraggableTool):
             name = names[row]
             i0 = QW.QTableWidgetItem(name)
         # 2nd col item: original class count before any balancing operation
-            orig_count = self.dataset.orig_train_counter[name]
+            orig_count = dataset.orig_train_counter[name]
             i1 = QW.QTableWidgetItem(str(orig_count)) 
         # 3rd col item: current class count 
             curr_count = curr_counts[row]
             i2 = QW.QTableWidgetItem(str(curr_count))
         # Set such items as not editable (only selectable and enabled)
+            flags = QC.Qt.ItemFlag.ItemIsSelectable | QC.Qt.ItemFlag.ItemIsEnabled
             for col, i in enumerate((i0, i1, i2)):
-                i.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsEnabled)
+                i.setFlags(QC.Qt.ItemFlag(flags))
                 self.balancing_table.setItem(row, col, i)
         # 4th col item: expected class count after next balancing operation.
         # This item is a PercentLineEdit connected with a function that sets 
@@ -3806,27 +4139,53 @@ class ModelLearner(DraggableTool):
         self.strategy_percent.setText('100')
 
 
-    def getBalancingTableCellsByColumn(self, column: int) -> None:
+    @overload # when 'col' is 0, 1 or 2 
+    def getBalancingTableCellsByColumn(
+        self, col: Literal[0, 1, 2]) -> list[QW.QTableWidgetItem]: ...
+
+    @overload # when 'col' is 3 
+    def getBalancingTableCellsByColumn(
+        self, col: Literal[3]) -> list[CW.PercentLineEdit]: ...
+
+    def getBalancingTableCellsByColumn(
+        self,
+        col: Literal[0, 1, 2, 3]
+    ) -> list[QW.QTableWidgetItem] | list[CW.PercentLineEdit]:
         '''
         Convenient method to get all cells in a given column of the balancing
         table. 
 
         Parameters
         ----------
-        column : int
+        col : Literal[0, 1, 2, 3]
             Column index.
 
+        Returns
+        -------
+        list[QW.QTableWidgetItem] | list[CW.PercentLineEdit]
+            List of cells (or cell widgets) in the given column. The type of 
+            the elements in the list can be 'PercentLineEdit' for column 3, or
+            'QTableWidgetItem' for columns 0, 1 and 2.
+        
+        Raises
+        ------
+        ValueError
+            Raised if 'col' is an invalid column index.
+
         '''
-        rrange = range(self.balancing_table.rowCount())
-    # "After Balancing" column
-        if column == 3:
-            return [self.balancing_table.cellWidget(r, column) for r in rrange]
-    # All other columns
-        else:
-            return [self.balancing_table.item(r, column) for r in rrange]
+        rows = range(self.balancing_table.rowCount())
+        match col:
+            case 0 | 1 | 2: # "Class", "Original" and "Current" columns 
+                items = [self.balancing_table.item(r, col) for r in rows]
+            case 3: # "After Balancing" column
+                items = [self.balancing_table.cellWidget(r, col) for r in rows]
+            case _:
+                raise ValueError(f'Invalid column index: {col}.')
+
+        return [i for i in items if i is not None]
 
 
-    def parseStrategy(self, strategy: str) -> None:
+    def parseStrategy(self, strategy: BalancingStrategyName) -> None:
         '''
         Apply different visual modification to the widgets of the balancing
         group depending on the strategy that has been selected. This is mainly
@@ -3834,49 +4193,34 @@ class ModelLearner(DraggableTool):
 
         Parameters
         ----------
-        strategy : str
+        strategy : BalancingStrategyName
             Selected balancing strategy.
 
         '''
-    # Set the strategy percent to 100 % if strategy is 'Current'
-        if strategy == 'Current':
-            self.strategy_percent.setText('100')
-            self.strategy_value.clear()
-
-    # Set the strategy value to minimum counter value if strategy is 'Min'
-        elif strategy == 'Min':
-            n = min(self.dataset.train_counter.values())
-            self.strategy_value.setText(str(n))
-            self.strategy_percent.clear()
-
-    # Set the strategy value to maximum counter value if strategy is 'Max'
-        elif strategy == 'Max':
-            n = max(self.dataset.train_counter.values())
-            self.strategy_value.setText(str(n))
-            self.strategy_percent.clear()
-
-    # Set the strategy value to average counter value if strategy is 'Mean'
-        elif strategy == 'Mean':
-            n = np.mean(list(self.dataset.train_counter.values()))
-            self.strategy_value.setText(str(round(n)))
-            self.strategy_percent.clear()
-
-    # Set the strategy value to median counter value if strategy is 'Median'
-        elif strategy == 'Median':
-            n = np.median(list(self.dataset.train_counter.values()))
-            self.strategy_value.setText(str(round(n)))
-            self.strategy_percent.clear()
-        
-    # Clear out strategy percent if strategy is 'Custom value'
-        elif strategy == 'Custom value':
-            self.strategy_percent.clear()
-    
-    # Clear out strategy value if strategy is 'Custom multi-value'
-        elif strategy == 'Custom multi-value':
-            self.strategy_value.clear()
-
-        else:
-            return
+        match strategy:
+            case 'Current': # Set the strategy percent to 100 %
+                self.strategy_percent.setText('100')
+                self.strategy_value.clear()
+            case 'Min': # Set the strategy value to the minimum counter value
+                n = min(self.dataset.train_counter.values())
+                self.strategy_value.setText(str(n))
+                self.strategy_percent.clear()
+            case 'Max': # Set the strategy value to the maximum counter value
+                n = max(self.dataset.train_counter.values())
+                self.strategy_value.setText(str(n))
+                self.strategy_percent.clear()
+            case 'Mean': # Set the strategy value to the average counter value
+                n = np.mean(list(self.dataset.train_counter.values()))
+                self.strategy_value.setText(str(round(n)))
+                self.strategy_percent.clear()
+            case 'Median': # Set the strategy value to the median counter value
+                n = np.median(list(self.dataset.train_counter.values()))
+                self.strategy_value.setText(str(round(n)))
+                self.strategy_percent.clear()
+            case 'Custom value': # Clear out strategy percent
+                self.strategy_percent.clear()
+            case 'Custom multi-value': # Clear out strategy value
+                self.strategy_value.clear()
         
 
     def fillAfterBalancingColumn(self, value: str | None) -> None:
@@ -3887,19 +4231,27 @@ class ModelLearner(DraggableTool):
         Parameters
         ----------
         value : str or None
-            The balancing strategy value or percentage. If None this method 
-            does nothing.
+            The balancing strategy value or percentage as a string. If None or 
+            a non-numeric string is passed, this method does nothing.
 
         '''
-        if not value:
+    # Exit function if an invalid value is passed 
+        if value is None or not value.isnumeric():
             return
-    # Determine how to fill column based on which widget is the sender
-        if self.sender() == self.strategy_value:
-            for row in range(self.balancing_table.rowCount()):
-                self.balancing_table.cellWidget(row, 3).setValue(int(value))
-        else:
-            for row in range(self.balancing_table.rowCount()):
-                self.balancing_table.cellWidget(row, 3).setPercent(int(value))
+
+    # Get all percent line edit widgets (table cell widgets)
+        cell_widgets = self.getBalancingTableCellsByColumn(3)
+
+    # Determine how to fill cell widgets based on the sender
+        match self.sender():
+            case self.strategy_value:
+                for c in cell_widgets:
+                    c.setValue(int(value))
+            case self.strategy_percent:
+                for c in cell_widgets:
+                    c.setPercent(int(value))
+            case _:
+                return
 
 
     def loadParentModel(self) -> None:
@@ -3912,16 +4264,17 @@ class ModelLearner(DraggableTool):
         thr_active, thr_name = self._threadRunning()
         if thr_active:
             text = f'Cannot load model while a {thr_name} Session is active'
-            return CW.MsgBox(self, 'Crit', text)
+            CW.MsgBox(self, 'Crit', text)
+            return
 
     # Do nothing if path is invalid or file dialog is canceled
         ftype = 'PyTorch model (*.pth)'
-        path = CW.FileDialog(self, 'open', 'Load Model', ftype).get()
+        path = CW.FileDialog(self, 'open', 'Load Model', ftype).get_path()
         if not path:
             return
 
     # Ask confirmation if a dataset was already processed
-        if self.dataset.are_subsets_split():
+        if (dataset := self.dataset).are_subsets_split():
             text = 'Current progress will be lost if model is loaded. Confirm?'
             choice = CW.MsgBox(self, 'QuestWarn', text)
             if choice.no():
@@ -3937,12 +4290,12 @@ class ModelLearner(DraggableTool):
             pbar.increase()
 
         # Check if parent model shares the same features of loaded dataset
-            if pmodel.features != self.dataset.columns_names()[:-1]:
+            if pmodel.features != dataset.columns_names()[:-1]:
                 err = 'Model and loaded dataset have incompatible features.'
                 raise ValueError(err)
             
         # Check if parent model shares the same targets of loaded dataset
-            if pmodel.targets != self.dataset.column_unique(-1):
+            if pmodel.targets != dataset.column_unique(-1):
                 err = 'Model and loaded dataset have incompatible target classes.'
                 raise ValueError(err)
             pbar.increase()
@@ -3950,15 +4303,15 @@ class ModelLearner(DraggableTool):
         # Show parent model preview. Ask for rebuilding missing model log file.
             if not os.path.exists(logpath := pmodel.generate_log_path(path)):
                 quest_text = 'Unable to find model log file. Rebuild it?'
-                choice = CW.MsgBox(self, 'Quest', quest_text)
+                choice = CW.MsgBox(pbar, 'Quest', quest_text)
                 if choice.yes():
                     ext_log = settings.manager.get('data/extended_model_log')
-                    self.model.save_log(logpath, extended=ext_log)
+                    pmodel.save_log(logpath, extended=ext_log)
             self.pmodel_preview.setDoc(logpath) # Raises no error if missing
             pbar.increase()
 
         # Update GUI
-            lr, wd, mtm, _ = pmodel.hyperparameters
+            lr, wd, mtm, _, _ = pmodel.hyperparameters
             poly_degree = pmodel.poly_degree
             self.pmodel_path.setPath(path)
             self.seed_generator.seed_input.setText(str(pmodel.seed))
@@ -4049,6 +4402,10 @@ class ModelLearner(DraggableTool):
         external thread.
 
         '''
+    # Exit function if dataset has an invalid filepath (safety)
+        if (dataset := self.dataset).filepath is None:
+            return
+
     # Prevent starting a new learning session when a thread is active
         thr_active, thr_name = self._threadRunning()
         if thr_active:
@@ -4056,16 +4413,18 @@ class ModelLearner(DraggableTool):
                 f'Cannot start a new Learning Session while a {thr_name} '
                 'Session is active.'
             )
-            return CW.MsgBox(self, 'Crit', text)
+            CW.MsgBox(self, 'Crit', text)
+            return
         
     # Check that subsets contain at least one instance of each target class
-        tr_cls = {k for k, v in self.dataset.train_counter.items() if v}
-        vd_cls = {k for k, v in self.dataset.valid_counter.items() if v}
-        ts_cls = {k for k, v in self.dataset.test_counter.items() if v}
+        tr_cls = {k for k, v in dataset.train_counter.items() if v}
+        vd_cls = {k for k, v in dataset.valid_counter.items() if v}
+        ts_cls = {k for k, v in dataset.test_counter.items() if v}
 
         if xor := ((tr_cls ^ vd_cls) | (tr_cls ^ ts_cls) | (vd_cls ^ ts_cls)): 
             err = 'Some classes have 0 instances in one or more subsets.'
-            return CW.MsgBox(self, 'Crit', err, ', '.join(xor))
+            CW.MsgBox(self, 'Crit', err, ', '.join(xor))
+            return
 
     # Update GUI
         self.learning_pbar.setRange(0, 4)
@@ -4090,48 +4449,46 @@ class ModelLearner(DraggableTool):
         uprate = int(self.plots_update_rate.text())
         device = 'cuda' if self.cuda_cbox.isChecked() else 'cpu'
 
-    # If a parent model is provided, update only some of its variables
+    # If parent model exists, update some of its variables
         if parent_path:
-            self.model = mltools.EagerModel.load(parent_path)
-            var_dict = self.model.variables
+            self.set_model(mltools.EagerModel.load(parent_path))
+            var_dict = (model := self.model).variables
             var_dict['optimizer'] = optim_name
             var_dict['device'] = device
             var_dict['parent_model_path'] = parent_path
-            var_dict['dataset_path'] = self.dataset.filepath
-            var_dict['tvt_ratios'] = self.dataset.orig_subsets_ratios
+            var_dict['dataset_path'] = dataset.filepath
+            var_dict['tvt_ratios'] = dataset.orig_subsets_ratios
             var_dict['balancing_info'] = self.balancing_info
             var_dict['learning_rate'] = lr
             var_dict['weight_decay'] = wd
             var_dict['momentum'] = mtm
             var_dict['batch_size'] = batch_size
 
-    # If a parent model is not provided, initialize a new model from scratch
+    # If parent model does not exist, initialize a new empty one from scratch
         else:
-            self.model = mltools.EagerModel.initialize_empty()
-            var_dict = self.model.variables
+            self.set_model(mltools.EagerModel.initialize_empty())
+            var_dict = (model := self.model).variables
             var_dict['algorithm'] = algm_name
             var_dict['optimizer'] = optim_name
-            var_dict['input_features'] = self.dataset.columns_names()[:-1]
-            var_dict['class_encoder'] = self.dataset.encoder
+            var_dict['input_features'] = dataset.columns_names()[:-1]
+            var_dict['class_encoder'] = dataset.encoder
             var_dict['device'] = device
             var_dict['seed'] = self.seed_generator.seed
             var_dict['parent_model_path'] = parent_path
-            var_dict['dataset_path'] = self.dataset.filepath
-            var_dict['tvt_ratios'] = self.dataset.orig_subsets_ratios
+            var_dict['dataset_path'] = dataset.filepath
+            var_dict['tvt_ratios'] = dataset.orig_subsets_ratios
             var_dict['balancing_info'] = self.balancing_info
             var_dict['polynomial_degree'] = poly_deg
             var_dict['learning_rate'] = lr
             var_dict['weight_decay'] = wd
             var_dict['momentum'] = mtm
             var_dict['batch_size'] = batch_size
-            var_dict['accuracy_list'] = ([], [])
-            var_dict['loss_list'] = ([], [])
-       
+
         self.learning_pbar.setValue(1)
 
     # Map features from linear to polynomial (get original data if degree=1)
-        x_train, x_valid = self.dataset.x_train, self.dataset.x_valid
-        degree = self.model.poly_degree
+        x_train, x_valid = dataset.x_train, dataset.x_valid
+        degree = model.poly_degree
         x_train = mltools.map_polinomial_features(x_train, degree)
         x_valid = mltools.map_polinomial_features(x_valid, degree)
 
@@ -4139,38 +4496,34 @@ class ModelLearner(DraggableTool):
 
     # Convert train and validation features and targets to torch Tensors
         x_train = mltools.array2tensor(x_train, 'float32')
-        y_train = mltools.array2tensor(self.dataset.y_train, 'uint8')
+        y_train = mltools.array2tensor(dataset.y_train, 'uint8')
         x_valid = mltools.array2tensor(x_valid, 'float32')
-        y_valid = mltools.array2tensor(self.dataset.y_valid, 'uint8')
+        y_valid = mltools.array2tensor(dataset.y_valid, 'uint8')
 
-    # Normalize feature data. If standards exist in model variables it means
-    # that they are derived from a parent model and therefore they must not be
-    # changed. Otherwise, a new model is being constructed and standards must
-    # be calculated.
-        if standards := var_dict['standards']:
-            x_mean, x_stdev = standards
-            x_train_norm = mltools.norm_data(x_train, x_mean, x_stdev,
-                                             return_standards=False)
+    # Normalize feature data using parent standards or by calculating new ones
+        x_mean, x_stdev = var_dict['standards'] # empty tensors if model is new
+        if x_mean.size(dim=0) > 0 and x_stdev.size(dim=0) > 0:
+            x_train_norm, _ = mltools.norm_data(x_train, x_mean, x_stdev)
         else:
-            x_train_norm, x_mean, x_stdev = mltools.norm_data(x_train)
+            x_train_norm, (x_mean, x_stdev) = mltools.norm_data(x_train)
             var_dict['standards'] = (x_mean, x_stdev)
 
-        x_valid_norm = mltools.norm_data(x_valid, x_mean, x_stdev,
-                                         return_standards=False)
+        x_valid_norm, _ = mltools.norm_data(x_valid, x_mean, x_stdev)
         
         self.learning_pbar.setValue(3)
 
     # Prepare network and optimizer. If a parent model is provided, load its 
     # network and optimizer state dicts
-        self.network = self.model.get_network_architecture()
-        self.network.to(device)
-        self.optimizer = self.model.get_optimizer(self.network)
-        var_dict['loss_function'] = self.network._loss
+        network = model.get_network_architecture()
+        network.to(device)
+        optimizer = model.get_optimizer(network)
+        var_dict['loss_function'] = network._loss_name
 
-        if parent_model_state_dict := var_dict['model_state_dict']:
-            self.network.load_state_dict(parent_model_state_dict)
-        if parent_optimizer_state_dict := var_dict['optimizer_state_dict']:
-            self.optimizer.load_state_dict(parent_optimizer_state_dict)
+
+        if len(parent_model_state_dict := var_dict['model_state_dict']):
+            network.load_state_dict(parent_model_state_dict)
+        if len(parent_optimizer_state_dict := var_dict['optimizer_state_dict']):
+            optimizer.load_state_dict(parent_optimizer_state_dict)
 
         self.learning_pbar.setValue(4)
 
@@ -4195,28 +4548,33 @@ class ModelLearner(DraggableTool):
             plot.clear_canvas()
 
     # Start the learning thread
-        if batch_size:
+        if batch_size > 0:
             self.learning_thread.set_task(
-                lambda: self.network.batch_learn(
+                lambda: network.batch_learn(
                     mltools.DataLoader(x_train_norm, y_train, batch_size, workers),
                     mltools.DataLoader(x_valid_norm, y_valid, batch_size, workers),
-                    self.optimizer,
+                    optimizer,
                     device
                 )
             )
         else:
             self.learning_thread.set_task(
-                lambda: self.network.learn(
+                lambda: network.learn(
                     x_train_norm, 
                     y_train, x_valid_norm, 
                     y_valid, 
-                    self.optimizer, 
+                    optimizer, 
                     device
                 )                
             )
 
         self.learning_thread.set_params(e_min, e_max, uprate, *loss_lists, *acc_lists)
         self.learning_thread.start()
+
+    # Store network and optimizer attributes (TODO improve by making "network" 
+    # a stored attribute of EagerModel class)
+        self.network = network
+        self.optimizer = optimizer
 
 
     def _parseLearningResult(self, result: tuple, success: bool) -> None:
@@ -4236,48 +4594,45 @@ class ModelLearner(DraggableTool):
         self.learning_pbar.reset()
         
     # Predict full train and validation sets if learning session succeded
-        if success: 
+        if success and self.network is not None and self.optimizer is not None: 
             tr_loss_list, vd_loss_list, tr_acc_list, vd_acc_list = result
             self.learning_pbar.setRange(0, 2)
             self.learning_pbar.setTextVisible(False)
 
-            d = self.model.poly_degree
-            x_mean, x_stdev = self.model.variables['standards']
-            device = self.model.variables['device']
-            x_train = mltools.map_polinomial_features(self.dataset.x_train, d)
-            x_valid = mltools.map_polinomial_features(self.dataset.x_valid, d)
+            dataset = self.dataset
+            var_dict = (model := self.model).variables
+            d = var_dict['polynomial_degree']
+            x_mean, x_stdev = var_dict['standards']
+            device = var_dict['device']
+            x_train = mltools.map_polinomial_features(dataset.x_train, d)
+            x_valid = mltools.map_polinomial_features(dataset.x_valid, d)
             x_train = mltools.array2tensor(x_train, 'float32')
             x_valid = mltools.array2tensor(x_valid, 'float32')
-            x_train = mltools.norm_data(x_train, x_mean, x_stdev, False)
-            x_valid = mltools.norm_data(x_valid, x_mean, x_stdev, False)
+            x_train, _ = mltools.norm_data(x_train, x_mean, x_stdev)
+            x_valid, _ = mltools.norm_data(x_valid, x_mean, x_stdev)
             train_pred = self.network.predict(x_train.to(device))[1].cpu()
             valid_pred = self.network.predict(x_valid.to(device))[1].cpu()
 
         # Update train and validation F1 scores
-            #                  macro  |  weighted
-            # F1 train                |
-            # F1 validation           |
-            # F1 test                 |
-            f1_scores = np.empty((3, 2))
-            for n, avg in enumerate(('macro', 'weighted')):
-                tr_args = (self.dataset.y_train, train_pred, avg)
-                vd_args = (self.dataset.y_valid, valid_pred, avg)
-                f1_tr = f1_scores[0, n] = mltools.f1_score(*tr_args)
-                f1_vd = f1_scores[1, n] = mltools.f1_score(*vd_args)
-                self.updateScoreLabel('Train', f'F1_{avg}', f1_tr)
-                self.updateScoreLabel('Validation', f'F1_{avg}', f1_vd)
+            f1m_tr = mltools.f1_score(dataset.y_train, train_pred, 'macro')
+            f1m_vd = mltools.f1_score(dataset.y_valid, valid_pred, 'macro')
+            f1w_tr = mltools.f1_score(dataset.y_train, train_pred, 'weighted')
+            f1w_vd = mltools.f1_score(dataset.y_valid, valid_pred, 'weighted')
+            self.updateScoreLabel('Train', 'F1_macro', f1m_tr)
+            self.updateScoreLabel('Validation', 'F1_macro', f1m_vd)
+            self.updateScoreLabel('Train', 'F1_weighted', f1w_tr)
+            self.updateScoreLabel('Validation', 'F1_weighted', f1w_vd)
             self.learning_pbar.setValue(1)
 
-        # Complete populating model variables
-            var_dict = self.model.variables
+        # Populate variables (accuracy and f1 scores of test set are placeholders)
             var_dict['epochs'] = len(tr_loss_list)
-            var_dict['optimizer_state_dict'] = self.optimizer.state_dict()
-            var_dict['model_state_dict'] = self.network.state_dict()
+            var_dict['accuracy'] = (tr_acc_list[-1], vd_acc_list[-1], 0.)
+            var_dict['loss'] = (tr_loss_list[-1], vd_loss_list[-1], None)
+            var_dict['f1_scores'] = ((f1m_tr, f1m_vd, 0.), (f1w_tr, f1w_vd, 0.))
             var_dict['accuracy_list'] = (tr_acc_list, vd_acc_list)
             var_dict['loss_list'] = (tr_loss_list, vd_loss_list)
-            var_dict['accuracy'] = [tr_acc_list[-1], vd_acc_list[-1], None]
-            var_dict['loss'] = [tr_loss_list[-1], vd_loss_list[-1], None]
-            var_dict['f1_scores'] = f1_scores
+            var_dict['optimizer_state_dict'] = self.optimizer.state_dict()
+            var_dict['model_state_dict'] = self.network.state_dict()
 
         # Update Confusion Matrices
             self.updateConfusionMatrix('Train', train_pred)
@@ -4300,15 +4655,19 @@ class ModelLearner(DraggableTool):
         self.save_model_btn.setEnabled(False)
 
 
-    def _drawLearningScores(self, scores: tuple[float, float, float, float]) -> None:
+    def _drawLearningScores(
+        self,
+        scores: tuple[list[float], list[float], list[float], list[float]]
+    ) -> None:
         '''
         Update loss and accuracy curves, as well as score labels.
 
         Parameters
         ----------
-        scores : tuple[float, float, float, float]
+        scores : tuple[list[float], list[float], list[float], list[float]]
             A tuple containing loss and accuracy scores for both train and
-            validation sets, in the order: (tr_loss, vd_loss, tr_acc, vd_acc).
+            validation sets, in the order: train loss, validation loss, train
+            accuracy, validation accuracy.
 
 
         '''
@@ -4325,18 +4684,23 @@ class ModelLearner(DraggableTool):
         self.updateScoreLabel('Validation', 'accuracy', vd_acc[-1])
 
 
-    def updateLearningCurve(self, plot: str, y_train: list, y_valid: list) -> None:
+    def updateLearningCurve(
+        self, 
+        plot: Literal['accuracy', 'loss'],
+        y_train: Sequence[float | int],
+        y_valid: Sequence[float | int]
+    ) -> None:
         '''
         Update loss or accuracy plot.
 
         Parameters
         ----------
-        plot : str
-            Plot to update. Must be 'loss' or 'accuracy'.
-        y_train : list
-            Loss/accuracy values for train set.
-        y_valid : list
-            Loss/accuracy values for validation set.
+        plot : Literal['accuracy', 'loss']
+            Type of scores to update.
+        y_train : Sequence[float | int]
+            Loss or accuracy values for train set.
+        y_valid : Sequence[float | int]
+            Loss or accuracy values for validation set.
 
         Raises
         ------
@@ -4353,43 +4717,50 @@ class ModelLearner(DraggableTool):
                 raise ValueError(f'Invalid "plot" argument: {plot}.')
         
         x_data = range(len(y_train))
-        curves = [(x_data, y_train), (x_data, y_valid)]  
+        curves = [(x_data, y_train), (x_data, y_valid)]
         canvas.update_canvas(curves, [f'Train {plot}', f'Validation {plot}'])
 
 
-    def updateConfusionMatrix(self, subset: str, preds: np.ndarray) -> None:
+    def updateConfusionMatrix(
+        self,
+        subset: Literal['Train', 'Validation', 'Test'],
+        preds: mltools.TensorLike | None
+    ) -> None:
         '''
         Populate confusion matrix of 'subset' with predicted classes data.
 
         Parameters
         ----------
-        subset : str
-            Name of the subset. Must be one of ('Train', 'Validation', 'Test').
-        preds : numpy ndarray
-            Array of predicted classes.
+        subset : Literal['Train', 'Validation', 'Test']
+            Name of the subset.
+        preds : TensorLike | None
+            Predicted classes.
 
         '''
+        # Exit function if predictions are invalid (safety)
+        if preds is None:
+            return
+
+        dataset = self.dataset
         match subset:
             case 'Train':
-                true = self.dataset.y_train
+                true = dataset.y_train
                 perc = self.train_cm_perc_action.isChecked()
                 canvas = self.train_confmat
             case 'Validation':
-                true = self.dataset.y_valid
+                true = dataset.y_valid
                 perc = self.valid_cm_perc_action.isChecked()
                 canvas = self.valid_confmat
             case 'Test':
-                true = self.dataset.y_test
+                true = dataset.y_test
                 perc = self.test_cm_perc_action.isChecked()
                 canvas = self.test_confmat
             case _:
                 return
 
-        if preds is not None:
-            lbls, ids = zip(*self.dataset.encoder.items())
-            confmat = mltools.confusion_matrix(true, preds, ids)
-            canvas.update_canvas(confmat, perc)
-            canvas.set_ticks(lbls)
+        lbls, ids = zip(*dataset.encoder.items())
+        confmat = mltools.confusion_matrix(true, preds, ids)
+        canvas.update_canvas(confmat, lbls, perc)
 
 
     def toggleConfMatPercent(self, toggled: bool) -> None:
@@ -4406,18 +4777,13 @@ class ModelLearner(DraggableTool):
     # Determine the matrix canvas from the action that called this method
         match self.sender():
             case self.train_cm_perc_action:
-                canvas = self.train_confmat
+                self.train_confmat.annotate(toggled)
             case self.valid_cm_perc_action:
-                canvas = self.valid_confmat
+                self.valid_confmat.annotate(toggled)
             case self.test_cm_perc_action:
-                canvas = self.test_confmat
+                self.test_confmat.annotate(toggled)
             case _:
                 return # safety
-
-        if canvas.matplot:
-            canvas.remove_annotations()
-            canvas.annotate(toggled)
-            canvas.draw_idle()
 
 
     def testModel(self) -> None:
@@ -4425,9 +4791,8 @@ class ModelLearner(DraggableTool):
         Test the trained model on test set.
 
         '''
-    # Fixing potential bug were save model button is active when it should not (? - legacy fix, test)
-        if self.model is None:
-            self.save_model_btn.setEnabled(False)
+    # Exit function if network is invalid (safety)
+        if self.network is None:
             return
 
     # Ask for user confirmation
@@ -4435,32 +4800,37 @@ class ModelLearner(DraggableTool):
             'Once tested, this model should not be further trained on the '
             'same train set. Proceed?'
         ) 
-        choice = CW.MsgBox(self, 'QuestWarn', text)
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'QuestWarn', text)
+        if msgbox.is_choice('Yes'):
             self.learning_pbar.setRange(0, 4)
 
         # Predict targets on test set
-            d = self.model.poly_degree
-            device = self.model.variables['device']
-            x_mean, x_stdev = self.model.variables['standards']
+            dataset = self.dataset
+            var_dict = self.model.variables
+            d = var_dict['polynomial_degree']
+            device = var_dict['device']
+            x_mean, x_stdev = var_dict['standards']
 
-            x_test = mltools.map_polinomial_features(self.dataset.x_test, d)
+            x_test = mltools.map_polinomial_features(dataset.x_test, d)
             x_test = mltools.array2tensor(x_test, 'float32')
-            x_test = mltools.norm_data(x_test, x_mean, x_stdev, False)
+            x_test, _ = mltools.norm_data(x_test, x_mean, x_stdev)
             test_pred = self.network.predict(x_test.to(device))[1].cpu()
             self.learning_pbar.setValue(1)
 
-        # Compute test accuracy
-            test_acc = mltools.accuracy_score(self.dataset.y_test, test_pred)
-            self.model.variables['accuracy'][2] = test_acc
+        # Compute and store test accuracy
+            test_acc = mltools.accuracy_score(dataset.y_test, test_pred)
+            train_acc, valid_acc, _ = var_dict['accuracy']
+            var_dict['accuracy'] = (train_acc, valid_acc, test_acc)
             self.updateScoreLabel('Test', 'accuracy', test_acc)
             self.learning_pbar.setValue(2)
 
-        # Compute test F1 scores 
-            for n, avg in enumerate(('macro', 'weighted')):
-                f1_ts = mltools.f1_score(self.dataset.y_test, test_pred, avg)
-                self.updateScoreLabel('Test', f'F1_{avg}', f1_ts)
-                self.model.variables['f1_scores'][2, n] = f1_ts
+        # Compute and store test F1 scores
+            f1m_ts = mltools.f1_score(dataset.y_test, test_pred, 'macro')
+            f1w_ts = mltools.f1_score(dataset.y_test, test_pred, 'weighted')
+            self.updateScoreLabel('Test', 'F1_macro', f1m_ts)
+            self.updateScoreLabel('Test', 'F1_weighted', f1w_ts)
+            ((m_tr, m_vd, _), (w_tr, w_vd, _)) = var_dict['f1_scores']
+            var_dict['f1_scores'] = ((m_tr, m_vd, f1m_ts), (w_tr, w_vd, f1w_ts))
             self.learning_pbar.setValue(3)
 
         # Update test Confusion Matrix 
@@ -4481,61 +4851,85 @@ class ModelLearner(DraggableTool):
 
         '''
         ftype = 'PyTorch model (*.pth)'
-        path = CW.FileDialog(self, 'save', 'Save Model', ftype).get()
+        path = CW.FileDialog(self, 'save', 'Save Model', ftype).get_path()
         if not path:
             return
         
         try:
-            log_path = self.model.generate_log_path(path)
+            log_path = (model := self.model).generate_log_path(path)
             extended_log = settings.manager.get('data/extended_model_log')
-            self.model.save(path, log_path, extended_log)
+            model.save(path, log_path, extended_log)
             CW.MsgBox(self, 'Info', 'Model saved successfully.')
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save model.', str(e))
 
+    # deprecated
+    # def killReferences(self) -> None:
+    #     '''
+    #     Reimplementation of the 'killReferences' method from the parent class.
+    #     It also stops any active balancing or learning thread.
 
-    def killReferences(self) -> None:
+    #     '''
+    #     running, _ = self._threadRunning()
+    #     if running:
+    #         self.stopBalancingSession()
+    #         self.stopLearningSession()
+    #     super().killReferences()
+
+    def is_safe_to_close(self) -> bool:
         '''
-        Reimplementation of the 'killReferences' method from the parent class.
-        It also stops any active balancing or learning thread.
+        Reimplementation of the 'is_safe_to_close' method. Changes the close
+        confirmation question if a learning thread or a balancing thread is 
+        currently active. It stops the thread if user confirms to close the
+        tool.
 
-        '''
-        running, _ = self._threadRunning()
-        if running:
-            self.stopBalancingSession()
-            self.stopLearningSession()
-        super().killReferences()
-                
-
-    def closeEvent(self, event: QG.QCloseEvent) -> None:
-        '''
-        Reimplementation of the 'closeEvent' method. Requires exit confirm if a
-        learning thread or a balancing thread is currently active.
-
-        Parameters
-        ----------
-        event : QCloseEvent
-            The close event.
+        Returns
+        -------
+        bool
+            Whether the user confirms to close the tool or not.
 
         '''
         thr_active, thr_name = self._threadRunning()
         if thr_active:
-            text = f'A {thr_name} Session is still active. Close anyway?'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.yes():
+            text = (
+                f'A {thr_name} Session is active. Close {self.windowTitle()}'
+                ' anyway? The process will be interrupted and any unsaved data'
+                ' will be lost.'
+            )
+            msgbox = CW.MsgBox(self, 'Quest', text)
+            if close := msgbox.is_choice('Yes'):
                 self.stopBalancingSession()
                 self.stopLearningSession()
-                self.closed.emit()
-                event.accept()
-            else:
-                event.ignore()
+            return close
 
         else:
-            super().closeEvent(event)
+            return super().is_safe_to_close()
+
+
+    def force_close(self) -> None:
+        '''
+        Reimplementation of the 'force_close' method. It also stops any active
+        balancing or learning thread.
+
+        '''
+        thr_active, _ = self._threadRunning()
+        if thr_active:
+            self.stopBalancingSession()
+            self.stopLearningSession()
+        return super().force_close()
 
 
 
 class PhaseRefiner(DraggableTool):
+
+    # Advanced refiner properties
+    _morph_algorithms = get_args(iatools.BinaryMorphologyAlgorithms)
+    _variance_colors = (
+        (0, 0, 0),       # 0 -> background preserved
+        (255, 0, 0),     # 1 -> phase removed
+        (0, 255, 0),     # 2 -> phase added
+        (255, 255, 255)  # 3 -> phase preserved
+    )
     
     def __init__(self) -> None:
         '''
@@ -4551,21 +4945,12 @@ class PhaseRefiner(DraggableTool):
 
     # Set main attributes
         self._refiner_mode = 0 # Basic: 0, Advanced: 1'
-        self.minmap = None
-        self._minmap_backup = None
+        self._minmap: MineralMap | None = None
+        self._minmap_backup: MineralMap | None = None
 
     # Set attributes for advanced refiner
-        self._phase = None
-        self._roi_extents = None
-        self._variance_colors = [
-            (0, 0, 0),       # 0 -> background preserved
-            (255, 0, 0),     # 1 -> phase removed
-            (0, 255, 0),     # 2 -> phase added
-            (255, 255, 255)  # 3 -> phase preserved
-        ]
-        self._morph_algorithms = (
-
-        )
+        self._phase: str | None = None
+        self._roi_extents: tuple[int, int, int, int] | None = None
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -4648,19 +5033,12 @@ class PhaseRefiner(DraggableTool):
 
     # Algorithm selection (Styled Combo Box) [-> Advanced Refiner]
         self.algm_combox = CW.StyledComboBox()
-        self.algm_combox.addItems((
-            'Erosion + Reconstruction',
-            'Opening',
-            'Closing',
-            'Erosion', 
-            'Dilation',
-            'Fill Holes'
-        ))
+        self.algm_combox.addItems(self._morph_algorithms)
 
     # Algorithm warning icon (Label) [-> Advanced Refiner]
         warn_icon = QG.QPixmap(str(style.ICONS.get('WARNING')))
         self.algm_warn = QW.QLabel()
-        self.algm_warn.setPixmap(warn_icon.scaled(16, 16, QC.Qt.KeepAspectRatio))
+        self.algm_warn.setPixmap(warn_icon.scaled(16, 16, style.ARM_KEEP))
         self.algm_warn.setToolTip('The selected algorithm ignore ROIs')
         self.algm_warn.hide()
 
@@ -4677,7 +5055,7 @@ class PhaseRefiner(DraggableTool):
     
     # [Basic Refiner] settings group (Group Area)
         basic_settings_grid = QW.QGridLayout()
-        basic_settings_grid.setAlignment(QC.Qt.AlignTop)
+        basic_settings_grid.setAlignment(style.A_TOP)
         basic_settings_grid.setVerticalSpacing(10)
         basic_settings_grid.addWidget(QW.QLabel('NoData class'), 0, 0, 1, 1)
         basic_settings_grid.addWidget(self.nd_combox, 0, 1, 1, 1)
@@ -4690,7 +5068,7 @@ class PhaseRefiner(DraggableTool):
 
     # [Advanced Refiner] settings group (Group Area)
         advan_settings_grid = QW.QGridLayout()
-        advan_settings_grid.setAlignment(QC.Qt.AlignTop)
+        advan_settings_grid.setAlignment(style.A_TOP)
         advan_settings_grid.setVerticalSpacing(10)
         advan_settings_grid.addWidget(QW.QLabel('Algorithm'), 0, 0, 1, 1)
         advan_settings_grid.addWidget(self.algm_warn, 0, 1, 1, 1)
@@ -4715,7 +5093,8 @@ class PhaseRefiner(DraggableTool):
 
     # Legend group (Group Area)
         self.legend = CW.Legend()
-        self.legend.setSelectionMode(QW.QAbstractItemView.SingleSelection)
+        selection_mode = QW.QAbstractItemView.SelectionMode.SingleSelection
+        self.legend.setSelectionMode(selection_mode)
         legend_group = CW.GroupArea(self.legend, 'Legend')
 
 #  -------------------------------------------------------------------------  #
@@ -4770,7 +5149,7 @@ class PhaseRefiner(DraggableTool):
 
     # Navigation toolbar of the original map mode barplot (Navigation Toolbar)
         self.orig_barplot_navtbar = plots.NavTbar.barCanvasDefault(
-            self.orig_barplot, self, orient=QC.Qt.Vertical)
+            self.orig_barplot, self, orient=style.O_VERTICAL)
 
     # Current map mode barplot (Bar Canvas)
         self.curr_barplot = plots.BarCanvas(wheel_pan=False, wheel_zoom=False)
@@ -4778,7 +5157,7 @@ class PhaseRefiner(DraggableTool):
 
     # Navigation toolbar of the current map mode barplot (Navigation Toolbar)
         self.curr_barplot_navtbar = plots.NavTbar.barCanvasDefault(
-            self.curr_barplot, self, orient=QC.Qt.Vertical)
+            self.curr_barplot, self, orient=style.O_VERTICAL)
 
     # Basic Refiner rendering group
         basic_refiner_grid = QW.QGridLayout()
@@ -4830,7 +5209,7 @@ class PhaseRefiner(DraggableTool):
 
     # ROI selector widget (Rectangle Selector)
         self.roi_sel = plots.RectSel(
-            self.prev_canvas_advan.ax, self.onRoiDrawn)
+            self.prev_canvas_advan.ax, self.onRoiDrawn, btns=[1])
 
     # Original phase info (Group Area)
         orig_info_name = QW.QLabel()
@@ -4875,12 +5254,10 @@ class PhaseRefiner(DraggableTool):
         prev_info_grid.setColumnStretch(1, 1)
         prev_info_grid.setColumnStretch(2, 1)
         prev_info_grid.addLayout(prev_info_form, 0, 0, -1, 1)
-        prev_info_grid.addWidget(prev_info_icon, 0, 1, 1, -1, 
-                                 QC.Qt.AlignHCenter | QC.Qt.AlignTop)
-        prev_info_grid.addWidget(prev_info_added, 1, 1, 1, 1, 
-                                 QC.Qt.AlignHCenter | QC.Qt.AlignTop)
-        prev_info_grid.addWidget(prev_info_removed, 1, 2, 1, 1, 
-                                 QC.Qt.AlignHCenter | QC.Qt.AlignTop)
+        align = QC.Qt.AlignmentFlag(style.A_HCENTER | style.A_TOP)
+        prev_info_grid.addWidget(prev_info_icon, 0, 1, 1, -1, align)
+        prev_info_grid.addWidget(prev_info_added, 1, 1, 1, 1, align)
+        prev_info_grid.addWidget(prev_info_removed, 1, 2, 1, 1, align)
 
         prev_info_group = CW.GroupArea(prev_info_grid, 'Preview')
 
@@ -4921,14 +5298,14 @@ class PhaseRefiner(DraggableTool):
 
     # Right panel layout
         self.mode_tabwid = CW.StyledTabWidget()
-        self.mode_tabwid.addTab(
+        basic_idx = self.mode_tabwid.wrap_tab(
             basic_refiner_grid, style.getIcon('CUBE'), 'BASIC MODE')
-        self.mode_tabwid.addTab(
+        advan_idx = self.mode_tabwid.wrap_tab(
             advan_refiner_grid, style.getIcon('GEAR'), 'ADVANCED MODE')
         basic_tip = 'Quick and simple refinement with mode filter'
         advan_tip = 'Class-wise advanced refinement with multiple binary filters'
-        self.mode_tabwid.tabBar().setTabToolTip(0, basic_tip)
-        self.mode_tabwid.tabBar().setTabToolTip(1, advan_tip)
+        self.mode_tabwid.setTabToolTip(basic_idx, basic_tip)
+        self.mode_tabwid.setTabToolTip(advan_idx, advan_tip)
         right_scroll = CW.GroupScrollArea(self.mode_tabwid)
 
     # Main layout
@@ -4981,6 +5358,87 @@ class PhaseRefiner(DraggableTool):
         self.apply_btn.clicked.connect(self.applyRefinement)
         self.cancel_btn.clicked.connect(self.resetMap)
         self.save_btn.clicked.connect(self.saveMap)
+
+
+    @property
+    def minmap(self) -> MineralMap:
+        '''
+        Get the current mineral map.
+
+        Returns
+        -------
+        minmap : MineralMap
+            Current mineral map.
+
+        Raises
+        ------
+        TypeError
+            Raised if the current mineral map is None.
+
+        '''
+        if (minmap := self._minmap) is None:
+            raise TypeError('Mineral map is None.')
+        return minmap
+
+
+    def set_minmap(self, minmap: MineralMap) -> None:
+        '''
+        Set the current mineral map.
+
+        Parameters
+        ----------
+        minmap : MineralMap
+            New mineral map.
+        
+        '''
+        self._minmap = minmap
+
+
+    def has_minmap(self) -> bool:
+        '''
+        Check if a mineral map is currently selected.
+
+        Returns
+        -------
+        bool
+            Whether a mineral map is currently selected or not.
+
+        '''
+        return self._minmap is not None
+
+
+    @property
+    def minmap_backup(self) -> MineralMap:
+        '''
+        Get the current mineral map backup.
+
+        Returns
+        -------
+        backup : MineralMap
+            Current mineral map backup.
+
+        Raises
+        ------
+        TypeError
+            Raised if the current mineral map backup is None.
+
+        '''
+        if (backup := self._minmap_backup) is None:
+            raise TypeError('Mineral map backup is None')
+        return backup
+
+
+    def set_minmap_backup(self, minmap: MineralMap) -> None:
+        '''
+        Set the current mineral map backup.
+
+        Parameters
+        ----------
+        minmap : MineralMap
+            New mineral map backup.
+        
+        '''
+        self._minmap_backup = minmap
         
         
     def onMapSelected(self) -> None:
@@ -4990,18 +5448,18 @@ class PhaseRefiner(DraggableTool):
         '''
     # Exit function if selection is invalid
         selected = self.minmap_selector.currentMap()
-        if selected is None:
+        if selected is None or (mmap := selected.getMineralMapData()) is None:
             return
         
-    # Ask for user confirm
-        elif self.minmap is not None:
+    # Ask for user confirm if a mineral map is currently selected
+        if self.has_minmap():
             text = 'Change map? Unsaved edits on current map will be lost.'
             choice = CW.MsgBox(self, 'QuestWarn', text)
             if choice.no():
                 return
     
     # Change current mineral map with the one selected
-        self.changeCurrentMap(selected.get('data'))
+        self.changeCurrentMap(mmap)
   
 
     def changeCurrentMap(self, minmap: MineralMap) -> None:
@@ -5015,13 +5473,13 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Reset refiner attributes
-        self.minmap = minmap.copy()
-        self._minmap_backup = minmap.copy()
+        self.set_minmap(minmap.copy())
+        self.set_minmap_backup(minmap.copy())
         self._phase = None
     
     # Update widgets
         self.selected_map_lbl.setPath(minmap.filepath)
-        self.legend.update(minmap)
+        self.legend.refresh(minmap)
         self.nd_combox.clear()
 
     # Render refiner widgets
@@ -5047,7 +5505,11 @@ class PhaseRefiner(DraggableTool):
             self.renderAdvanced()
 
 
-    def changePhaseColor(self, legend_item: QW.QTreeWidgetItem, color: tuple) -> None:
+    def changePhaseColor(
+        self,
+        legend_item: QW.QTreeWidgetItem,
+        color: tuple[int, int, int]
+    ) -> None:
         '''
         Alter the displayed color of a mineral phase. This method propagates
         the changes to the current map, the backup map, the basic refiner 
@@ -5059,23 +5521,30 @@ class PhaseRefiner(DraggableTool):
         ----------
         legend_item : QW.QTreeWidgetItem
             The legend item that requested the color change.
-        color : tuple
+        color : tuple[int, int, int]
             RGB triplet.
 
         '''
-    # Update the phase color in current and backup mineral maps
-        phase = legend_item.text(1)
-        if self._minmap_backup.has_phase(phase):
-            self._minmap_backup.set_phase_color(phase, color)
-        if self.minmap.has_phase(phase):
-            self.minmap.set_phase_color(phase, color)
-
-    # Update the item color in the legend
+        # Update the item color in the legend
         self.legend.changeItemColor(legend_item, color)
 
-    # Render only basic refiner widgets
-        if self._refiner_mode == 0:
-            self.renderBasic()
+        # Update phase color in current and backup maps and in basic widgets
+        is_basic_mode = self._refiner_mode == 0
+        phase = legend_item.text(1)
+
+        if self.minmap_backup.has_phase(phase):
+            self.minmap_backup.set_phase_color(phase, color)
+            if is_basic_mode:
+                colorlist_bkp = self.minmap_backup.palette.values()
+                self.orig_canvas_basic.alter_colormap(colorlist_bkp)
+                self.orig_barplot.change_bar_color(phase, color)
+
+        if self.minmap.has_phase(phase):
+            self.minmap.set_phase_color(phase, color)
+            if is_basic_mode:
+                colorlist = self.minmap.palette.values()
+                self.curr_canvas_basic.alter_colormap(colorlist)
+                self.curr_barplot.change_bar_color(phase, color)
 
 
     def renamePhase(self, legend_item: QW.QTreeWidgetItem, new_name: str) -> None:
@@ -5093,15 +5562,15 @@ class PhaseRefiner(DraggableTool):
         new_name : str
             New class name.
 
-        '''       
+        '''
     # Renamed phase is also the currently selected phase, so the current phase
     # attribute must be updated to avoid errors.
         self._phase = new_name
 
     # Rename phase in original and current mineral maps
         old_name = legend_item.text(1)
-        if self._minmap_backup.has_phase(old_name):
-            self._minmap_backup.rename_phase(old_name, new_name)
+        if self.minmap_backup.has_phase(old_name):
+            self.minmap_backup.rename_phase(old_name, new_name)
         if self.minmap.has_phase(old_name):
             self.minmap.rename_phase(old_name, new_name)
 
@@ -5130,7 +5599,7 @@ class PhaseRefiner(DraggableTool):
             The legend item that requested to be highlighted.
 
         '''
-    # Do nothing if in advanced mode
+    # Exit function if in advanced mode
         if self._refiner_mode == 1:
             return
 
@@ -5139,27 +5608,23 @@ class PhaseRefiner(DraggableTool):
 
         # Compute current mineral map clims
             if self.minmap.has_phase(phase):
-                phase_id = self.minmap.as_id(phase)
-                vmin, vmax = phase_id - 0.5, phase_id + 0.5
+                vmin = vmax = self.minmap.as_id(phase)
             else:
-                vmin, vmax = 0, 0
+                vmin = vmax = -1 # shows empty canvas
         
         # Compute original mineral map clims
-            if self._minmap_backup.has_phase(phase):
-                phase_id_bkp = self._minmap_backup.as_id(phase)
-                vmin_bkp, vmax_bkp = phase_id_bkp - 0.5, phase_id_bkp + 0.5
+            if self.minmap_backup.has_phase(phase):
+                vmin_bkp = vmax_bkp = self.minmap_backup.as_id(phase)
             else:
-                vmin_bkp, vmax_bkp = 0, 0
+                vmin_bkp = vmax_bkp = -1 # shows empty canvas
 
         else:
-            vmin, vmax = None, None
-            vmin_bkp, vmax_bkp = None, None
+            vmin = vmax = None
+            vmin_bkp = vmax_bkp = None
 
     # Update clims and render plots
         self.orig_canvas_basic.update_clim(vmin_bkp, vmax_bkp)
         self.curr_canvas_basic.update_clim(vmin, vmax)
-        self.orig_canvas_basic.draw_idle()
-        self.curr_canvas_basic.draw_idle()
 
 
     def updateLegendAmounts(self) -> None:
@@ -5173,11 +5638,12 @@ class PhaseRefiner(DraggableTool):
         '''
         prec = self.legend.precision
         for idx in range(self.legend.topLevelItemCount()):
-            item = self.legend.topLevelItem(idx)
-            phase = item.text(1)
+            if (item := self.legend.topLevelItem(idx)) is None:
+                continue
 
         # If a phase was completely removed from the currently edited mineral
         # map, just set its amount to 0.
+            phase = item.text(1)
             if self.minmap.has_phase(phase):
                 amount = round(self.minmap.get_phase_amount(phase), prec)
             else:
@@ -5259,22 +5725,22 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Clear widgets if no mineral map is currently selected
-        if self.minmap is None:
+        if not self.has_minmap():
             return self.clearView()
     
     # Update maps canvases
-        mmap_enc_bkp, enc_bkp, col_bkp = self._minmap_backup.get_plot_data()
+        mmap_enc_bkp, enc_bkp, col_bkp = self.minmap_backup.get_plot_data()
         mmap_enc, enc, col = self.minmap.get_plot_data()
         self.orig_canvas_basic.draw_discretemap(mmap_enc_bkp, enc_bkp, col_bkp)
         self.curr_canvas_basic.draw_discretemap(mmap_enc, enc, col)
 
     # Update bar plots
-        lbl_bkp, mod_bkp = zip(*self._minmap_backup.get_labeled_mode().items())
-        bar_col_bkp = [self._minmap_backup.get_phase_color(l) for l in lbl_bkp]
+        lbl_bkp, mod_bkp = zip(*self.minmap_backup.get_labeled_mode().items())
+        bar_col_bkp = [self.minmap_backup.get_phase_color(l) for l in lbl_bkp]
         lbl, mod = zip(*self.minmap.get_labeled_mode().items())
         bar_col = [self.minmap.get_phase_color(l) for l in lbl]
-        self.orig_barplot.update_canvas(mod_bkp, lbl_bkp, colors=bar_col_bkp)
-        self.curr_barplot.update_canvas(mod, lbl, colors=bar_col)
+        self.orig_barplot.update_canvas((mod_bkp,), lbl_bkp, bar_col_bkp)
+        self.curr_barplot.update_canvas((mod,), lbl, bar_col)
         
     
     def renderAdvanced(self) -> None:
@@ -5284,7 +5750,7 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Clear widgets if no mineral map or mineral phase is currently selected
-        if self.minmap is None or self._phase is None:
+        if not self.has_minmap() or self._phase is None:
             return self.clearView()
         
     # Update current phase map canvas
@@ -5303,7 +5769,7 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Do nothing if no mineral map or mineral phase is currently selected
-        if self.minmap is None or self._phase is None:
+        if not self.has_minmap() or self._phase is None:
             return
         
     # Compute refinement operations
@@ -5318,16 +5784,16 @@ class PhaseRefiner(DraggableTool):
             2: f'Added {self._phase}',
             3: self._phase
         }
-        self.prev_canvas_advan.draw_discretemap(variance_map, encoder,
-                                                self._variance_colors, '')
+        self.prev_canvas_advan.draw_discretemap(
+            variance_map, encoder, self._variance_colors, '')
 
     # Compute original phase info
         orig_pixels = np.count_nonzero((
-            self._minmap_backup.minmap == self._phase))
+            self.minmap_backup.minmap == self._phase))
         if orig_pixels == 0:
             orig_amount = 0.0
         else:
-            orig_amount = self._minmap_backup.get_phase_amount(self._phase)
+            orig_amount = self.minmap_backup.get_phase_amount(self._phase)
 
     # Compute current phase info
         curr_pixels = np.count_nonzero(current_map)
@@ -5347,7 +5813,7 @@ class PhaseRefiner(DraggableTool):
         else:
             icon = str(style.ICONS.get('CARET_DOUBLE_YELLOW'))
 
-        prev_pixmap = QG.QPixmap(icon).scaled(48, 48, QC.Qt.KeepAspectRatio)
+        prev_pixmap = QG.QPixmap(icon).scaled(48, 48, style.ARM_KEEP)
         prev_added = np.count_nonzero(variance_map == 2)
         prev_removed = np.count_nonzero(variance_map == 1)
 
@@ -5406,7 +5872,6 @@ class PhaseRefiner(DraggableTool):
         Wrapper method to apply basic or advanced refinement operations.
 
         '''
-
     # Basic refinement operations
         if self._refiner_mode == 0:
             self.refineBasic()
@@ -5456,7 +5921,7 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Get variance map from the advanced preview to compute phase masks
-        preview = self.prev_canvas_advan.get_map()
+        preview = self.prev_canvas_advan.get_unmasked_array()
         removed_pixels_mask = preview == 1
         added_pixels_mask = preview == 2
     
@@ -5519,7 +5984,7 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Construct kernel structure
-        kern_shape = self.kern_shape_btns.getChecked().objectName()
+        kern_shape = self.kern_shape_btns.get_checked().objectName()
         kern_size = self.kern_size_spbox.value()
         kernel = iatools.construct_kernel_filter(kern_shape, kern_size)
 
@@ -5555,12 +6020,12 @@ class PhaseRefiner(DraggableTool):
         '''
 
     # Construct kernel structure
-        kern_shape = self.kern_shape_btns.getChecked().objectName()
+        kern_shape = self.kern_shape_btns.get_checked().objectName()
         kern_size = self.kern_size_spbox.value()
         kernel = iatools.construct_kernel_filter(kern_shape, kern_size)
         
     # Get ROI mask if required ('Fill Holes' always ignores the ROI)
-        algm = self.algm_combox.currentText()
+        algm = cast(iatools.BinaryMorphologyAlgorithms, self.algm_combox.currentText())
         roi = self.constructRoiMask() if algm != 'Fill Holes' else None
         if self.invert_roi_cbox.isChecked() and roi is not None:
             roi = np.invert(roi)
@@ -5656,7 +6121,8 @@ class PhaseRefiner(DraggableTool):
             return
     
     # Update the ROI extents attribute and the advanced preview
-        self._roi_extents = self.roi_sel.fixed_extents(self.minmap.shape)
+        rows, cols = self.minmap.shape
+        self._roi_extents = self.roi_sel.fixed_extents((rows, cols))
         self.updateAdvancedPreview()
     
 
@@ -5693,7 +6159,7 @@ class PhaseRefiner(DraggableTool):
             return
 
     # Wherever the phase is present (original or current map), reset to original
-        orig_minmap = self._minmap_backup.minmap
+        orig_minmap = self.minmap_backup.minmap
         curr_minmap = self.minmap.minmap
         mask = (orig_minmap == self._phase) | (curr_minmap == self._phase)
         restored = np.where(mask, orig_minmap, curr_minmap)
@@ -5701,7 +6167,7 @@ class PhaseRefiner(DraggableTool):
     
     # Also restore the original probability map values, since those are altered
     # when phases are refined (see 'alter_probmap' argument of 'edit_minmap'). 
-        self.minmap.probmap[mask] = self._minmap_backup.probmap[mask]
+        self.minmap.probmap[mask] = self.minmap_backup.probmap[mask]
 
     # Render advanced refiner widgets
         self.renderAdvanced()
@@ -5716,7 +6182,7 @@ class PhaseRefiner(DraggableTool):
 
         '''
     # Do nothing if the current mineral map has not been edited
-        if self.minmap == self._minmap_backup:
+        if self.minmap == self.minmap_backup:
             return
     
     # Ask for user confirm
@@ -5725,7 +6191,7 @@ class PhaseRefiner(DraggableTool):
             return
     
     # Reset map and render refiner widgets
-        self.minmap = self._minmap_backup.copy()
+        self.set_minmap(self.minmap_backup.copy())
         if self._refiner_mode == 0:
             self.renderBasic()
         else:
@@ -5739,7 +6205,7 @@ class PhaseRefiner(DraggableTool):
         '''
     # Ask for output path
         ftype = 'Mineral map (*.mmp)'
-        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get_path()
         if not outpath:
             return
         
@@ -5750,15 +6216,17 @@ class PhaseRefiner(DraggableTool):
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
 
+    # deprecated
+    # def killReferences(self) -> None:
+    #     '''
+    #     Reimplementation of the 'killReferences' method from the parent class.
+    #     It also deletes the ROI selector, thus disconnecting its signals.
 
-    def killReferences(self) -> None:
-        '''
-        Reimplementation of the 'killReferences' method from the parent class.
-        It also deletes the ROI selector, thus disconnecting its signals.
+    #     '''
+    #     del self.roi_sel
+    #     super().killReferences()
 
-        '''
-        del self.roi_sel
-        super().killReferences()
+    
 
 
 
@@ -5777,7 +6245,7 @@ class DataViewer(QW.QWidget):
         self.setWindowIcon(style.getIcon('DATA_VIEWER'))
 
     # Set main attributes
-        self._displayed = None
+        self._displayed: CW.DataObject | None = None
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()

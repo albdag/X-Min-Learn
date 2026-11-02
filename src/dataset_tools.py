@@ -4,16 +4,33 @@ Created on Wed Oct 23 09:21:45 2024
 
 @author: albdag
 """
-import imblearn.over_sampling as OS
-import imblearn.under_sampling as US
+
+from collections.abc import Hashable, Iterable, Sequence
+from typing import Any, Literal, TypedDict, overload
+
+from imblearn import over_sampling, under_sampling
 import pandas as pd
 import numpy as np
-from numpy.typing import DTypeLike
+import numpy.typing as npt
 
 from _base import InputMapStack, MineralMap
 import convenient_functions as cf
 import threads
 
+# Balancing strategy dict = {class_ID : value}
+type BalancingStrategy = int | dict[int, int] | Literal['Min', 'Max', 'Mean', 'Median']
+# Verbose balancing strategy dict = {class_lbl : "<old_count> -> <new_count>"}
+type BalancingStrategyVerbose = dict[str, str]
+BalancingInfo = TypedDict('BalancingInfo', {
+    'Strategy': BalancingStrategyVerbose,
+    'Over-sampling algorithm': str | None,
+    'Under-sampling algorithm': str | None,
+    'K-neighbours': int,
+    'M-neighbours': int,
+    'N-neighbours': int,
+    'Seed': int,
+    'New TVT ratios': tuple[float, float, float] # train, validation, test
+})
 
 class GroundTruthDataset():
 
@@ -34,23 +51,28 @@ class GroundTruthDataset():
         self.dataframe = dataframe
 
     # X features and Y targets (as labels) and their encoder -> dict(lbl: id)
-        self.features, self.targets = None, None
-        self.encoder = {}
+        self.features: npt.NDArray[Any] = np.array([])
+        self.targets: npt.NDArray[Any] = np.array([])
+        self.encoder: dict[str, int] = {}
 
     # Original data, untouched by possible balancing operations on train set
-        self.orig_subsets_ratios = (None, None, None)
-        self.orig_x_train = None
-        self.orig_y_train = None
-        self.orig_train_counter = {}
+        self.orig_subsets_ratios: tuple[float, float, float] = (0., 0., 0.)
+        self.orig_x_train: npt.NDArray[Any] = np.array([])
+        self.orig_y_train: npt.NDArray[Any] = np.array([])
+        self.orig_train_counter: dict[str, int] = {}
 
     # Current X features and Y targets (as IDs) split into subsets
-        self.x_train, self.x_valid, self.x_test = None, None, None
-        self.y_train, self.y_valid, self.y_test = None, None, None
+        self.x_train: npt.NDArray[Any] = np.array([])
+        self.x_valid: npt.NDArray[Any] = np.array([])
+        self.x_test: npt.NDArray[Any] = np.array([])
+        self.y_train: npt.NDArray[Any] = np.array([])
+        self.y_valid: npt.NDArray[Any] = np.array([])
+        self.y_test: npt.NDArray[Any] = np.array([])
 
     # Current subsets counters -> dict(target_labels: count)
-        self.train_counter = {}
-        self.valid_counter = {}
-        self.test_counter = {}
+        self.train_counter: dict[str, int] = {}
+        self.valid_counter: dict[str, int] = {}
+        self.test_counter: dict[str, int] = {}
 
 
     def __len__(self) -> int:
@@ -108,7 +130,7 @@ class GroundTruthDataset():
             
         else:
             eng = 'python' if sep is None else 'c'
-            dataframe = pd.read_csv(filepath, sep=sep, decimals=dec, engine=eng)
+            dataframe = pd.read_csv(filepath, sep=sep, decimal=dec, engine=eng)
 
         return cls(dataframe, filepath)
     
@@ -118,7 +140,7 @@ class GroundTruthDataset():
         cls,
         input_stack: InputMapStack,
         mineral_map: MineralMap,
-        columns: str
+        columns: list[str]
     ) -> 'GroundTruthDataset':
         '''
         Create new dataset from InputMapStack and MineralMap data.
@@ -129,8 +151,8 @@ class GroundTruthDataset():
             Input maps stack for dataset features.
         mineral_map : MineralMap
             Mineral map for dataset targets.
-        columns : str
-            Name of dataset's columns.
+        columns : list[str]
+            Dataset's column names.
 
         Returns
         -------
@@ -146,12 +168,60 @@ class GroundTruthDataset():
     # Return a new ground truth dataset
         dataframe = pd.DataFrame(data=data, columns=columns)
         return cls(dataframe)
-        
+
+
+    @classmethod
+    def from_existent(
+        cls,
+        datasets: Iterable['GroundTruthDataset']
+    ) -> 'GroundTruthDataset':
+        '''
+        Create a new dataset by merging existent datasets. All datasets must 
+        share the same column names.
+
+        Parameters
+        ----------
+        datasets : Iterable[GroundTruthDataset]
+            Datasets to be merged together.
+
+        Returns
+        -------
+        GroundTruthDataset
+            A new ground truth dataset.
+
+        Raises
+        ------
+        TypeError
+            Raised if any of 'datasets' is not a GroundTruthDataset.
+        ValueError
+            Raised if the datasets have different column names.
+
+        '''
+        dataframes: list[pd.DataFrame] = []
+        column_names: set[str] = set() # comma-separated names (e.g. 'c1,c2,c3')
+
+        for d in datasets:
+            # Check for valid object type
+            if not isinstance(d, GroundTruthDataset):
+                raise TypeError(f'Cannot merge with object of type {type(d)}.')
+            
+            # Check for same column names
+            column_names.add(','.join(sorted(d.columns_names())))
+            if len(column_names) > 1:
+                raise ValueError(f'Datasets have different columns.')
+
+            # Append dataframe to list
+            dataframes.append(d.dataframe)
+            
+        # Return a new ground truth dataset
+        merged_dataframe = pd.concat(dataframes, ignore_index=True)
+        return cls(merged_dataframe)
+
 
     def sub_sample(
         self,
         idx: int,
-        filters: list[float | int | str] | tuple[float | int | str, ...]
+        filters: Sequence[float | int | str]
     ) -> 'GroundTruthDataset':
         '''
         Return a sub-sampled version of this dataset by selecting only the
@@ -161,8 +231,8 @@ class GroundTruthDataset():
         ----------
         idx : int
             Index of the column where the filtering is applied. 
-        filters : list[float | int | str] or tuple[float | int | str, ...]
-            List of filters.
+        filters : Sequence[float | int | str]
+            Sequence of filter values.
 
         Returns
         -------
@@ -199,12 +269,12 @@ class GroundTruthDataset():
             raise TypeError(f'Cannot merge with object of type {type(other)}')
     
     # Check for same column names
-        if sorted(self.dataframe.columns) != sorted(other.dataframe.columns):
+        if sorted(self.columns_names()) != sorted(other.columns_names()):
             raise ValueError(f'Cannot merge datasets with different columns')
     
     # Merge dataframes and update dataset
-        df = pd.concat([self.dataframe, other.dataframe], ignore_index=True)
-        self.dataframe = df
+        dataframes = [self.dataframe, other.dataframe]
+        self.dataframe = pd.concat(dataframes, ignore_index=True)
         self.reset()
 
 
@@ -251,11 +321,7 @@ class GroundTruthDataset():
         self.reset()
 
 
-    def remove_where(
-            self,
-            idx: int,
-            filters: list[float | int | str] | tuple[float | int | str, ...]
-        ) -> None:
+    def remove_where(self, idx: int, filters: Iterable[float | int | str]) -> None:
         '''
         Remove instances whose values in the column at index 'idx' are in 
         'filters'. Warning: after removing rows, the dataset attributes will
@@ -280,14 +346,19 @@ class GroundTruthDataset():
         Reset dataset derived attributes.
 
         '''
-        self.features, self.targets = None, None
+        self.features = np.array([])
+        self.targets = np.array([])
         self.encoder.clear()
-        self.orig_subsets_ratios = (None, None, None)
-        self.orig_x_train = None
-        self.orig_y_train = None
+        self.orig_subsets_ratios = (0., 0., 0.)
+        self.orig_x_train = np.array([])
+        self.orig_y_train = np.array([])
         self.orig_train_counter.clear()
-        self.x_train, self.x_valid, self.x_test = None, None, None
-        self.y_train, self.y_valid, self.y_test = None, None, None
+        self.x_train = np.array([])
+        self.x_valid = np.array([])
+        self.x_test = np.array([])
+        self.y_train = np.array([])
+        self.y_valid = np.array([])
+        self.y_test = np.array([])
         self.train_counter.clear()
         self.valid_counter.clear()
         self.test_counter.clear()
@@ -352,15 +423,15 @@ class GroundTruthDataset():
             Whether dataset has been split.
 
         '''
-        return any(self.orig_subsets_ratios)
+        return sum(self.orig_subsets_ratios) > 0
 
 
     def split_features_targets(
         self,
         split_idx: int = -1,
-        xtype: DTypeLike = 'int32',
-        ytype: DTypeLike = 'U8',
-        spliton: str = 'columns'
+        xtype: npt.DTypeLike = 'int32',
+        ytype: npt.DTypeLike = 'U8',
+        spliton: Literal['columns', 'rows'] = 'columns'
     ) -> tuple[np.ndarray, np.ndarray]:
         '''
         Split X features from Y targets.
@@ -373,9 +444,8 @@ class GroundTruthDataset():
             X features dtype. The default is 'int32'.
         ytype : numpy DTypeLike, optional
             Y targets dtype. The default is 'U8'.
-        spliton : str, optional
-            If 'columns', split dataset along columns; if 'rows', split dataset
-            along rows. The default is 'columns'.
+        spliton : Literal['columns', 'rows'], optional
+            Split dataset along 'columns' or 'rows'. The default is 'columns'.
 
         Returns
         -------
@@ -400,8 +470,8 @@ class GroundTruthDataset():
             case _:
                 raise ValueError(f'Invalid "spliton" argument: {spliton}')
 
-        self.features = dataset[:, :split_idx].astype(xtype)
-        self.targets = dataset[:, split_idx].astype(ytype)
+        self.features = dataset[:, :split_idx].astype(xtype, copy=False)
+        self.targets = dataset[:, split_idx].astype(ytype, copy=False)
         return self.features, self.targets
     
 
@@ -422,7 +492,7 @@ class GroundTruthDataset():
             Raised if features and targets have not been split yet.
 
         '''
-        if self.targets is None:
+        if not self.features.size or not self.targets.size:
             raise ValueError('Features and targets are not split yet.')
         
         self.encoder = parent_encoder if parent_encoder is not None else {}
@@ -431,7 +501,7 @@ class GroundTruthDataset():
                 self.encoder[u] = len(self.encoder)
 
 
-    def split_subsets(
+    def split_subsets( # TODO check that ratios sum up to 1 (?)
         self,
         train_ratio: float,
         valid_ratio: float, 
@@ -447,11 +517,11 @@ class GroundTruthDataset():
         Parameters
         ----------
         train_ratio : float
-            Percentage of data to be included in training set.
+            Percentage of data to be included in training set (range [0, 1]).
         validation_ratio : float
-            Percentage of data to be included in validation set. 
+            Percentage of data to be included in validation set (range [0, 1]). 
         test_ratio : float
-            Percentage of data to be included in test set.
+            Percentage of data to be included in test set (range [0, 1]).
         seed : int, optional
             Random seed for reproducibility. The default is None.
         axis : int, optional
@@ -470,7 +540,7 @@ class GroundTruthDataset():
             Raised if the encoder has not been populated yet.
 
         '''
-        if not self.encoder:
+        if not len(self.encoder):
             raise ValueError('Dataset encoder is empty.')
         
     # Store the current ratios as the original subsets ratios
@@ -567,18 +637,44 @@ class GroundTruthDataset():
             raise ValueError('Dataset is not split in subsets.')
         
         for lbl, id in self.encoder.items():
-            self.train_counter[lbl] = np.count_nonzero(self.y_train==id)
-            self.valid_counter[lbl] = np.count_nonzero(self.y_valid==id)
-            self.test_counter[lbl] = np.count_nonzero(self.y_test==id)
+            self.train_counter[lbl] = np.count_nonzero(self.y_train == id)
+            self.valid_counter[lbl] = np.count_nonzero(self.y_valid == id)
+            self.test_counter[lbl] = np.count_nonzero(self.y_test == id)
 
+
+    @overload # when 'verbose' is explicitly False (default)
+    def parse_balancing_strategy(
+        self,
+        strategy: BalancingStrategy,
+        verbose: Literal[False] = False
+    ) -> tuple[dict[int, int], dict[int, int]]: ...
+
+    @overload # when 'verbose' is explicitly True
+    def parse_balancing_strategy(
+        self,
+        strategy: BalancingStrategy,
+        verbose: Literal[True]
+    ) -> tuple[dict[int, int], dict[int, int], BalancingStrategyVerbose]: ...
+
+    @overload # when 'verbose' is a boolean variable
+    def parse_balancing_strategy(
+        self,
+        strategy: BalancingStrategy,
+        verbose: bool
+    ) -> tuple[
+        dict[int, int], dict[int, int]
+        ] | tuple[
+        dict[int, int], dict[int, int], BalancingStrategyVerbose
+        ]: ...
 
     def parse_balancing_strategy(
         self,
-        strategy: int | str | dict[int, int],
+        strategy: BalancingStrategy,
         verbose: bool = False
     ) -> tuple[
-            dict[int, int], dict[int, int]
-            | dict[int, int], dict[int, int], dict[int, str]
+        dict[int, int], dict[int, int]
+        ] | tuple[
+        dict[int, int], dict[int, int], BalancingStrategyVerbose
         ]:
         '''
         Build over-sampling and under-sampling strategies based on the provided
@@ -589,7 +685,7 @@ class GroundTruthDataset():
 
         Parameters
         ----------
-        strategy : int or str or dict[int, int]
+        strategy : BalancingStrategy
             Overall balancing strategy. It can be:
                 - int: all classes will be resampled to this specific value.
                 - str: a predefined function: ['Min', 'Max', 'Mean', 'Median'].
@@ -604,9 +700,8 @@ class GroundTruthDataset():
             Over-sampling strategy -> {class_ID: requested amount}.
         us_strat : dict[int, int]
             Under-sampling strategy -> {class_ID: requested amount}.
-        info : dict[int, str], optional
-            Strategy info dictionary -> {class_ID: "old_amount -> new_amount"}.
-            Returned if 'verbose' is True.
+        strategy_info : BalancingStrategyVerbose, optional
+            Strategy info dictionary. Returned if 'verbose' is True.
 
         Raises
         ------
@@ -617,6 +712,9 @@ class GroundTruthDataset():
             'Mean', 'Median').
         TypeError
             Raised if 'strategy' is not a valid type (not int, str or dict).
+        KeyError
+            Raised if 'strategy' is a dict, but it does not contain all train
+            class IDs.
 
         '''
         if not self.are_subsets_split():
@@ -641,7 +739,9 @@ class GroundTruthDataset():
                 raise ValueError(f'Invalid strategy: {strategy}')
 
         elif type(strategy) == dict:
-            num = list(strategy.values())
+            # Raises KeyError if any of the class IDs in 'unq' is missing from
+            # 'strategy' dict keys
+            num = [strategy[u] for u in unq]
 
         else:
             raise TypeError(f'Invalid type for strategy: {type(strategy)}')
@@ -656,11 +756,58 @@ class GroundTruthDataset():
 
     # If verbose is True, also return a class by class strategy info dictionary
         if verbose:
-            info = dict(zip(unq, [f'{c} -> {n}' for c, n in zip(cnt, num)]))
-            return os_strat, us_strat, info
+            unq_labels = [str(cf.get_dictkey(self.encoder, u)) for u in unq]
+            strategy_verbose = [f'{c} -> {n}' for c, n in zip(cnt, num)]
+            strategy_info = dict(zip(unq_labels, strategy_verbose))
+            return (os_strat, us_strat, strategy_info)
         else:
-            return os_strat, us_strat
-        
+            return (os_strat, us_strat)
+
+
+    @overload # when 'verbose' is explicitly False (default)
+    def oversample(
+        self,
+        os_strat: dict[int, int],
+        algorithm: str | None,
+        seed: int,
+        k_neigh: int, 
+        m_neigh: int,
+        x: npt.NDArray[Any] | None,
+        y: npt.NDArray[Any] | None,
+        verbose: Literal[False] = False
+    ) -> tuple[npt.NDArray[Any], npt.NDArray[Any]]: ...
+
+    @overload # when 'verbose' is explicitly True
+    def oversample(
+        self,
+        os_strat: dict[int, int],
+        algorithm: str | None,
+        seed: int,
+        k_neigh: int, 
+        m_neigh: int,
+        x: npt.NDArray[Any] | None,
+        y: npt.NDArray[Any] | None,
+        verbose: Literal[True]
+    ) -> tuple[
+        npt.NDArray[Any], npt.NDArray[Any], tuple[str | None, int, int, int]
+        ]: ...
+
+    @overload # when 'verbose' is a boolean variable
+    def oversample(
+        self,
+        os_strat: dict[int, int],
+        algorithm: str | None,
+        seed: int,
+        k_neigh: int, 
+        m_neigh: int,
+        x: npt.NDArray[Any] | None,
+        y: npt.NDArray[Any] | None,
+        verbose: bool
+    ) -> tuple[
+        npt.NDArray[Any], npt.NDArray[Any]
+        ] | tuple[
+        npt.NDArray[Any], npt.NDArray[Any], tuple[str | None, int, int, int]
+        ]: ...
 
     def oversample(
         self,
@@ -669,19 +816,20 @@ class GroundTruthDataset():
         seed: int,
         k_neigh: int = 5, 
         m_neigh: int = 10,
-        x: np.ndarray | None = None,
-        y: np.ndarray | None = None,
+        x: npt.NDArray[Any] | None = None,
+        y: npt.NDArray[Any] | None = None,
         verbose: bool = False
     ) -> tuple[
-            np.ndarray, np.ndarray
-            | np.ndarray, np.ndarray, tuple[str | None, int, int, int]
+        npt.NDArray[Any], npt.NDArray[Any]
+        ] | tuple[
+        npt.NDArray[Any], npt.NDArray[Any], tuple[str | None, int, int, int]
         ]:
         '''
         Apply over-sampling balancing operations.
 
         Parameters
         ----------
-        os_strat : dict
+        os_strat : dict[int, int]
             Over-sampling strategy. See 'parse_balancing_strategy' method.
         algorithm : str or None
             Over-sampling algorithm. Must be one of 'SMOTE', 'BorderlineSMOTE',
@@ -696,21 +844,21 @@ class GroundTruthDataset():
             Number of neighbours to be used to determine if a minority sample 
             is in "danger". Only used for 'BorderlineSMOTE' and 'SVMSMOTE' 
             algorithms. The default is 10.
-        x : numpy ndarray or None, optional
+        x : NDArray[Any] | None, optional
             Features array. If None, the train subset features will be used.
             The default is None.
-        y : numpy ndarray or None, optional
+        y : NDArray[Any] | None, optional
             Targets array. If None, the train subset targets will be used. The
             default is None.
         verbose : bool, optional
-            If True, alos return a tuple containing info on the parameters used
+            If True, also return a tuple containing info on the parameters used
             for the computation. The default is False.
 
         Returns
         -------
-        x_bal : numpy ndarray
+        x_bal : NDArray[Any]
             Over-sampled features array.
-        y_bal : numpy ndarray
+        y_bal : NDArray[Any]
             Over-sampled targets array.
         info : tuple[str or None, int, int, int], optional
             Parameters info tuple: ('algorithm', 'seed', 'k_neigh', 'm-neigh').
@@ -728,28 +876,28 @@ class GroundTruthDataset():
             case None:
                 ovs = None
             case 'SMOTE':
-                ovs = OS.SMOTE(
-                    sampling_strategy = os_strat,
+                ovs = over_sampling.SMOTE(
+                    sampling_strategy = os_strat, # pyright: ignore[reportArgumentType]
                     random_state = seed,
                     k_neighbors = k_neigh
                 )
             case 'BorderlineSMOTE':
-                ovs = OS.BorderlineSMOTE(
-                    sampling_strategy = os_strat,
+                ovs = over_sampling.BorderlineSMOTE(
+                    sampling_strategy = os_strat, # pyright: ignore[reportArgumentType]
                     random_state = seed,
                     k_neighbors = k_neigh,
                     m_neighbors = m_neigh
                 )
             case 'SVMSMOTE':
-                ovs = OS.SVMSMOTE(
-                    sampling_strategy = os_strat,
+                ovs = over_sampling.SVMSMOTE(
+                    sampling_strategy = os_strat, # pyright: ignore[reportArgumentType]
                     random_state = seed,
                     k_neighbors = k_neigh,
                     m_neighbors = m_neigh
                 )
             case 'ADASYN':
-                ovs = OS.ADASYN(
-                    sampling_strategy = os_strat,
+                ovs = over_sampling.ADASYN(
+                    sampling_strategy = os_strat, # pyright: ignore[reportArgumentType]
                     random_state = seed,
                     n_neighbors = k_neigh
                 )
@@ -762,7 +910,7 @@ class GroundTruthDataset():
         x = self.x_train if x is None else x
         y = self.y_train if y is None else y
         if ovs:
-            x_bal, y_bal = ovs.fit_resample(x, y)
+            x_bal, y_bal = [np.asarray(a) for a in ovs.fit_resample(x, y)]
         else:
             x_bal, y_bal = x, y
 
@@ -774,6 +922,51 @@ class GroundTruthDataset():
             return x_bal, y_bal
         
 
+    @overload # when 'verbose' is explicitly False (default)
+    def undersample(
+        self,
+        us_strat: dict[int, int],
+        algorithm: str | None,
+        seed: int,
+        n_neigh: int,
+        njobs: int,
+        x: npt.NDArray[Any] | None,
+        y: npt.NDArray[Any] | None,
+        verbose: Literal[False] = False
+    ) -> tuple[npt.NDArray[Any], npt.NDArray[Any]]: ...
+
+    @overload # when 'verbose' is explicitly True
+    def undersample(
+        self,
+        us_strat: dict[int, int],
+        algorithm: str | None,
+        seed: int,
+        n_neigh: int,
+        njobs: int,
+        x: npt.NDArray[Any] | None,
+        y: npt.NDArray[Any] | None,
+        verbose: Literal[True]
+    ) -> tuple[
+        npt.NDArray[Any], npt.NDArray[Any], tuple[str | None, int, int, int]
+        ]: ...
+
+    @overload # when 'verbose' is a boolean variable
+    def undersample(
+        self,
+        us_strat: dict[int, int],
+        algorithm: str | None,
+        seed: int,
+        n_neigh: int,
+        njobs: int,
+        x: npt.NDArray[Any] | None,
+        y: npt.NDArray[Any] | None,
+        verbose: bool
+    ) -> tuple[
+        npt.NDArray[Any], npt.NDArray[Any]
+        ] | tuple[
+        npt.NDArray[Any], npt.NDArray[Any], tuple[str | None, int, int, int]
+        ]: ...
+
     def undersample(
         self,
         us_strat: dict[int, int],
@@ -781,12 +974,13 @@ class GroundTruthDataset():
         seed: int,
         n_neigh: int = 3, 
         njobs: int = 1,
-        x: np.ndarray | None = None, 
-        y: np.ndarray | None = None,
+        x: npt.NDArray[Any] | None = None, 
+        y: npt.NDArray[Any] | None = None,
         verbose: bool = False
     ) -> tuple[
-            np.ndarray, np.ndarray
-            | np.ndarray, np.ndarray, tuple[str | None, int, int, int]
+        npt.NDArray[Any], npt.NDArray[Any]
+        ] | tuple[
+        npt.NDArray[Any], npt.NDArray[Any], tuple[str | None, int, int, int]
         ]:
         '''
         Apply under-sampling balancing operations.
@@ -840,36 +1034,36 @@ class GroundTruthDataset():
             case None:
                 uds = None
             case 'RandUS':
-                uds = US.RandomUnderSampler(
-                    sampling_strategy = us_strat,
+                uds = under_sampling.RandomUnderSampler(
+                    sampling_strategy = us_strat, # pyright: ignore[reportArgumentType]
                     random_state = seed
                 )
             case 'NearMiss':
-                uds = US.NearMiss(
-                    sampling_strategy = us_strat,
+                uds = under_sampling.NearMiss(
+                    sampling_strategy = us_strat, # pyright: ignore[reportArgumentType]
                     n_neighbors = n_neigh,
                     n_jobs = njobs
                 )
             case 'ClusterCentroids':
-                uds = US.ClusterCentroids(
-                    sampling_strategy = us_strat,
+                uds = under_sampling.ClusterCentroids(
+                    sampling_strategy = us_strat, # pyright: ignore[reportArgumentType]
                     random_state = seed
                 )
             case 'TomekLinks':
-                uds = US.TomekLinks(
-                    sampling_strategy = list(us_strat.keys()),
+                uds = under_sampling.TomekLinks(
+                    sampling_strategy = list(us_strat.keys()), # pyright: ignore[reportArgumentType]
                     n_jobs = njobs
                 )
             case 'ENN-all' | 'ENN-mode':
-                uds = US.EditedNearestNeighbours(
-                    sampling_strategy = list(us_strat.keys()),
+                uds = under_sampling.EditedNearestNeighbours(
+                    sampling_strategy = list(us_strat.keys()), # pyright: ignore[reportArgumentType]
                     n_neighbors = n_neigh,
                     kind_sel = algorithm.split('-')[-1],
                     n_jobs = njobs
                 )
             case 'NCR':
-                uds = US.NeighbourhoodCleaningRule(
-                    sampling_strategy = list(us_strat.keys()),
+                uds = under_sampling.NeighbourhoodCleaningRule(
+                    sampling_strategy = list(us_strat.keys()), # pyright: ignore[reportArgumentType]
                     n_neighbors = n_neigh,
                     n_jobs = njobs
                 )
@@ -883,7 +1077,7 @@ class GroundTruthDataset():
         x = self.x_train if x is None else x
         y = self.y_train if y is None else y
         if uds:
-            x_bal, y_bal = uds.fit_resample(x, y)
+            x_bal, y_bal = [np.asarray(a) for a in uds.fit_resample(x, y)]
         else:
             x_bal, y_bal = x, y
 
@@ -945,7 +1139,7 @@ class GroundTruthDataset():
 
     def balance_trainset(
         self,
-        strategy: int | str | dict[int, int],
+        strategy: BalancingStrategy,
         seed: int, 
         osa: str | None = None,
         usa: str | None = None,
@@ -960,7 +1154,7 @@ class GroundTruthDataset():
 
         Parameters
         ----------
-        strategy : int or str or dict[int, int]
+        strategy : BalancingStrategy
             Overall balancing strategy. See 'parse_balancing_strategy' method.
         seed : int
             Random seed for reproducible results.
@@ -989,7 +1183,6 @@ class GroundTruthDataset():
             all available processessors are used. The default is 1.
 
         '''
-
     # Get balancing parameters
         x_train, y_train = self.x_train, self.y_train
         os_strat, us_strat = self.parse_balancing_strategy(strategy)
@@ -1076,7 +1269,7 @@ class GroundTruthDataset():
         return sorted(self.dataframe.iloc[:, idx].unique().tolist())
     
 
-    def column_count(self, idx: int) -> dict[float | int | str, int]:
+    def column_count(self, idx: int) -> dict[Hashable, int]:
         '''
         Return a dictionary containing counts of unique values of column at 
         index 'idx'. The dictionary is sorted by order of occurrence, so that 
@@ -1103,7 +1296,7 @@ class CsvChunkReader():
         self,
         dec: str,
         sep: str | None = None,
-        chunksize: int = 2**20//8
+        chunksize: int = 2 ** 20 // 8
     ) -> None:
         '''
         Ready to use class for reading large CSV files in chunks for better
@@ -1117,7 +1310,7 @@ class CsvChunkReader():
             CSV separator character. If None, it is inferred. The default is 
             None.
         chunksize : int, optional
-            Dimension of the reading batch. The default is 2**20//8.
+            Dimension of the reading batch. The default is 2 ** 20 // 8.
 
         '''
     # Set main attributes
@@ -1252,10 +1445,10 @@ class CsvChunkReader():
         self.thread.set_task(
             lambda: pd.read_csv(
                 filepath,
-                decimal = self.dec,
-                sep = self.sep,
-                engine = 'python',
-                chunksize = self.chunksize
+                decimal=self.dec,
+                sep=self.sep,
+                engine='python',
+                chunksize=self.chunksize
             )
         )
         self.thread.run()

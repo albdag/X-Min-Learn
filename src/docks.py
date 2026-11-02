@@ -5,8 +5,10 @@ Created on Tue Mar  26 11:25:14 2024
 @author: albdag
 """
 
+from collections.abc import Collection
 import json
 import os
+from typing import cast
 
 from PyQt5.QtCore import pyqtSignal, QMimeData, QPoint, Qt
 from PyQt5.QtGui import QColor, QIcon, QPixmap
@@ -15,6 +17,7 @@ from PyQt5 import QtWidgets as QW
 import numpy as np
 
 from _base import *
+import config_schemas
 import convenient_functions as cf
 import custom_widgets as CW
 import image_analysis_tools as iatools
@@ -22,8 +25,6 @@ import dialogs
 import plots
 import settings
 import style
-
-DataManagerWidgetItem = CW.DataGroup | CW.DataSubGroup | CW.DataObject
 
 
 class Pane(QW.QDockWidget):
@@ -59,7 +60,10 @@ class Pane(QW.QDockWidget):
     
     # Set widget properties
         self.setWindowTitle(title)
-        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea(
+            Qt.DockWidgetArea.LeftDockWidgetArea
+            | Qt.DockWidgetArea.RightDockWidgetArea
+        ))
     
     # Set main attributes
         self.title = title
@@ -89,46 +93,59 @@ class Pane(QW.QDockWidget):
             The widget of the pane.
 
         '''
-        widget = super().widget()
+        widget: CW.GroupScrollArea | QW.QWidget = super().widget()
         if isinstance(widget, CW.GroupScrollArea):
             return widget.wrappedObject()
-        else:
-            return widget
+        return widget
 
 
 
+type DataManagerWidgetItem = CW.DataGroup | CW.DataSubGroup | CW.DataObject
 class DataManager(QW.QTreeWidget):
 
-    updateSceneRequested = pyqtSignal(object)
     clearSceneRequested = pyqtSignal()
+    updateSceneRequested = pyqtSignal(object)
+    dataModified = pyqtSignal()
     rgbaChannelSet = pyqtSignal(str)
+    
     PALETTE_MIMETYPE = 'application/x-palette+json'
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
         A widget for loading, accessing and managing input and output data.
         
+        Parameters
+        ----------
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if the header initialization fails.
 
         '''
         super().__init__(parent)
 
-    # Set some properties of the manager and its headers
-        self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
+    # Set main properties of the manager
+        self.setSelectionMode(QW.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setColumnCount(2)
-        self.header().setSectionResizeMode(QW.QHeaderView.ResizeToContents)
+
+    # Set header properties
+        if (header := self.header()) is None:
+            raise RuntimeError("Failed to initialize header.")
+        header.setSectionResizeMode(QW.QHeaderView.ResizeMode.ResizeToContents)
         self.setHeaderHidden(True)
 
     # Disable default editing; item editing is forced via 'onEdit' method
-        self.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
+        self.setEditTriggers(QW.QAbstractItemView.EditTrigger.NoEditTriggers)
 
     # Enable custom context menu
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
     # Set custom scrollbars
-        self.setHorizontalScrollBar(CW.StyledScrollBar(Qt.Horizontal))
-        self.setVerticalScrollBar(CW.StyledScrollBar(Qt.Vertical))
+        self.setHorizontalScrollBar(CW.StyledScrollBar(style.O_HORIZONTAL))
+        self.setVerticalScrollBar(CW.StyledScrollBar(style.O_VERTICAL))
 
     # Set the style-sheet 
         self.setStyleSheet(style.SS_DATAMANAGER)
@@ -149,6 +166,11 @@ class DataManager(QW.QTreeWidget):
         self.itemDoubleClicked.connect(self.onEdit)
         self.customContextMenuRequested.connect(self.showContextMenu)
 
+    # Forward model signals to dataModified signal
+        if (model := self.model()) is not None:
+            model.dataChanged.connect(self.dataModified)
+            model.rowsRemoved.connect(self.dataModified)
+
 
     def onEdit(self, item: DataManagerWidgetItem, col: int = 0) -> None:
         '''
@@ -160,8 +182,9 @@ class DataManager(QW.QTreeWidget):
         item : DataGroup, DataSubGroup or DataObject
             The item that requests editing.
         col : int, optional
-            The column where edits are requested. If different than 0, editing
-            will be forced to be on first column anyway. The default is 0.
+            The column where edits are requested. This parameter is unused: if
+            different than 0, editing will still be forced to be on the first 
+            column. The default is 0.
 
         '''
         if isinstance(item, (CW.DataGroup, CW.DataObject)):
@@ -179,206 +202,246 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Define a menu (Menu)
-        menu = QW.QMenu()
+        menu = QW.QMenu(self)
         menu.setStyleSheet(style.SS_MENU)
 
     # Get the item that is clicked at 'point' and the group it belongs to
-        item = self.itemAt(point)
+        item = cast(DataManagerWidgetItem | None, self.itemAt(point))
         group = self.getItemParentGroup(item)
 
-    # CONTEXT MENU ON VOID ('point' is not on an item)
-        if item is None:
+    #(A) CONTEXT MENU ON VOID =================================================
+        if item is None or group is None: #'point' is not on a valid item
 
-        # Add new group
-            menu.addAction(
-                style.getIcon('CIRCLE_ADD'), 'New sample', self.addGroup)
-        
-        # Separator
+        # Only allow adding a new group or clearing all groups
+            menu.addAction(style.getIcon('CIRCLE_ADD'), 'New sample', self.addGroup)
             menu.addSeparator()
+            menu.addAction(style.getIcon('REMOVE'), 'Remove all', self.clearAll)
 
-        # Clear all
-            menu.addAction(
-                style.getIcon('REMOVE'), 'Remove all', self.clearAll)
-
-    # CONTEXT MENU ON GROUP
+    #(B) CONTEXT MENU ON GROUP ================================================
         elif isinstance(item, CW.DataGroup):
 
-        # Load data sub-menu
-            load_submenu = menu.addMenu(style.getIcon('IMPORT'), 'Import...')
-        # - Input maps
-            load_submenu.addAction(style.getIcon('STACK'), 'Input maps', 
-                                   lambda: self.loadData(item.inmaps))
-        # - Mineral maps
-            load_submenu.addAction(style.getIcon('MINERAL'), 'Mineral maps',
-                                   lambda: self.loadData(item.minmaps))
-        # - Masks
-            load_submenu.addAction(style.getIcon('MASK'), 'Masks',
-                                   lambda: self.loadData(item.masks))
-            
-        # Separator
+        #--------------------------[ Group Actions ]---------------------------
+        #|Load input maps
+            load_imap = QW.QAction(style.getIcon('STACK'), 'Input maps', menu)
+            load_imap.triggered.connect(lambda: self.loadData(item.inmaps))
+        #|Load mineral maps
+            load_mmap = QW.QAction(style.getIcon('MINERAL'), 'Mineral maps', menu)
+            load_mmap.triggered.connect(lambda: self.loadData(item.minmaps))
+        #|Load masks
+            load_mask = QW.QAction(style.getIcon('MASK'), 'Masks', menu)
+            load_mask.triggered.connect(lambda: self.loadData(item.masks))
+        #|Rename group
+            rename_group = QW.QAction(style.getIcon('RENAME'), 'Rename', menu)
+            rename_group.triggered.connect(lambda: self.onEdit(item))
+        #|Clear selected groups
+            clear_group = QW.QAction(style.getIcon('CLEAR'), 'Clear', menu)
+            clear_group.triggered.connect(self.clearSelectedGroups)
+        #|Delete selected groups
+            delete_group = QW.QAction(style.getIcon('REMOVE'), 'Remove', menu)
+            delete_group.triggered.connect(self.delSelectedGroups)
+
+        #--------------------------[ Group Submenus ]--------------------------
+        #|Import data
+            import_submenu = QW.QMenu('Import...', menu)
+            import_submenu.setIcon(style.getIcon('IMPORT'))
+            import_submenu.addActions((load_imap, load_mmap, load_mask))
+
+        #--------------------------[ Populate Menu ]---------------------------
+            menu.addMenu(import_submenu)
             menu.addSeparator()
+            menu.addActions((rename_group, clear_group, delete_group))
 
-        # Rename group
-            menu.addAction(
-                style.getIcon('RENAME'), 'Rename', lambda: self.onEdit(item))
-
-        # Clear selected groups
-            menu.addAction(
-                style.getIcon('CLEAR'), 'Clear', self.clearSelectedGroups)
-
-        # Delete selected groups
-            menu.addAction(
-                style.getIcon('REMOVE'), 'Remove', self.delSelectedGroups)
-
-    # CONTEXT MENU ON SUBGROUP
+    #(C) CONTEXT MENU ON SUBGROUP =============================================
         elif isinstance(item, CW.DataSubGroup):
 
-        # Load data
-            menu.addAction(
-                style.getIcon('IMPORT'), 'Import', lambda: self.loadData(item))
-        
-        # Separator
-            menu.addSeparator()
+        #-------------------------[ Subgroup Actions ]-------------------------
+        #|Load data
+            load_data = QW.QAction(style.getIcon('IMPORT'), 'Import', menu)
+            load_data.triggered.connect(lambda: self.loadData(item))
+        #|Clear selected subgroups
+            clear_subgroup = QW.QAction(style.getIcon('CLEAR'), 'Clear', menu)
+            clear_subgroup.triggered.connect(self.clearSelectedSubgroups)
 
-        # Specific actions for MASKS subgroup
+        #--------------------------[ Populate Menu ]---------------------------
+            menu.addAction(load_data)
+            menu.addSeparator()
+            menu.addAction(clear_subgroup)
+
+        #---------------[ Special Additions For MASKS Subgroup ]---------------
             if item.name == 'Masks':
-
-            # Check all masks
-                chk_mask = menu.addAction('Check all')
-                chk_mask.triggered.connect(lambda: self.checkMasks(1, group))
+            #[Mask Subgroup Actions]
+            #|Check all masks
+                chk_mask = QW.QAction('Check all', menu)
                 chk_mask.setEnabled(not item.isEmpty())
-
-            # Uncheck all masks
-                unchk_mask = menu.addAction('Uncheck all')
-                unchk_mask.triggered.connect(lambda: self.checkMasks(0, group))
+                chk_mask.triggered.connect(lambda: self.checkMasks(True, group))
+            #|Uncheck all masks
+                unchk_mask = QW.QAction('Uncheck all', menu)
                 unchk_mask.setEnabled(not item.isEmpty())
-
-            # Separator
+                unchk_mask.triggered.connect(lambda: self.checkMasks(False, group))
+                
+            #[Add To Menu]
                 menu.addSeparator()
+                menu.addActions((chk_mask, unchk_mask))
 
-        # Clear subgroup
-            menu.addAction(
-                style.getIcon('CLEAR'), 'Clear', self.clearSelectedSubgroups)
-
-    # CONTEXT MENU ON DATA OBJECTS
+    #(D) CONTEXT MENU ON DATA OBJECTS =========================================
         elif isinstance(item, CW.DataObject):
+            item_data = (components := item.getComponents())['data']
 
-        # Rename item
-            menu.addAction(
-                style.getIcon('RENAME'), 'Rename', lambda: self.onEdit(item))
-
-        # Delete item
-            menu.addAction(
-                style.getIcon('REMOVE'), 'Remove', self.delData)
-
-        # Separator
-            menu.addSeparator()
-
-        # Move item up
-            menu.addAction(style.getIcon('ARROW_UP'), 'Move up',
-                           lambda: self.moveItemUp(item))
-            
-        # Move item down
-            menu.addAction(style.getIcon('ARROW_DOWN'), 'Move down',
-                           lambda: self.moveItemDown(item))
-
-        # Move item to group sub-menu
-            move_submenu = menu.addMenu('Move to sample...')
+        #-----------------------[ Data Object Actions ]------------------------
+        #|Rename item
+            rename_item = QW.QAction(style.getIcon('RENAME'), 'Rename', menu)
+            rename_item.triggered.connect(lambda: self.onEdit(item))
+        #|Delete item
+            delete_item = QW.QAction(style.getIcon('REMOVE'), 'Remove', menu)
+            delete_item.triggered.connect(self.delData)
+        #|Move item up
+            move_up = QW.QAction(style.getIcon('ARROW_UP'), 'Move up', menu)
+            move_up.triggered.connect(lambda: self.moveItemUp(item))
+        #|Move item down
+            move_down = QW.QAction(style.getIcon('ARROW_DOWN'), 'Move down', menu)
+            move_down.triggered.connect(lambda: self.moveItemDown(item))
+        #|Move item to (data-driven list of actions)
+            move_to_actions: list[QW.QAction] = []
             for g in self.getAllGroups():
-                if g != group:
-                    move_submenu.addAction(
-                        g.name, lambda g=g: self.moveItemTo(item, g))
-            move_submenu.setEnabled(len(move_submenu.actions()))
-                    
-        # Separator
-            menu.addSeparator()
-
-        # Correct data source
-            fix_source = menu.addAction(style.getIcon('FIX'), 'Fix source')
+                act = QW.QAction(g.name, menu)
+                act.setEnabled(g != group)
+                act.triggered.connect(lambda _, g=g: self.moveItemTo(item, g))
+                move_to_actions.append(act)
+        #|Fix item's data source
+            fix_source = QW.QAction(style.getIcon('FIX'), 'Fix source', menu)
+            fix_source.setEnabled(components['not_found'])
             fix_source.triggered.connect(lambda: self.fixDataSource(item))
-            fix_source.setEnabled(item.get('not_found'))
+        #|Refresh item's data source
+            refresh = QW.QAction(style.getIcon('REFRESH'), 'Refresh source', menu)
+            refresh.triggered.connect(self.refreshDataSource)
+        #|Save item
+            save = QW.QAction(style.getIcon('SAVE'), 'Save', menu)
+            save.setEnabled(item_data is not None)
+            save.triggered.connect(lambda: self.saveData(item))
+        #|Save item as...
+            save_as = QW.QAction(style.getIcon('SAVE_AS'), 'Save As...', menu)
+            save_as.setEnabled(item_data is not None)
+            save_as.triggered.connect(lambda: self.saveData(item, False))
 
-        # Refresh data source
-            menu.addAction(style.getIcon('REFRESH'), 'Refresh source',
-                           self.refreshDataSource)
+        #----------------------[ Data Object Subgroups ]-----------------------
+        #|Move to sample...
+            move_submenu = QW.QMenu('Move to sample...', menu)
+            move_submenu.addActions(move_to_actions)
 
-        # Save
-            menu.addAction(style.getIcon('SAVE'), 'Save',
-                           lambda: self.saveData(item))
-
-        # Save As
-            menu.addAction(style.getIcon('SAVE_AS'), 'Save As...',
-                           lambda: self.saveData(item, False))
-
-        # Separator
+        #--------------------------[ Populate Menu ]---------------------------
+            menu.addActions((rename_item, delete_item))
             menu.addSeparator()
+            menu.addActions((move_up, move_down))
+            menu.addMenu(move_submenu)
+            menu.addSeparator()
+            menu.addActions((fix_source, refresh, save, save_as))
 
-        # Specific actions when item holds INPUT MAPS
-            if item.holdsInputMap():
-
-            # Invert Map
-                menu.addAction(
-                    style.getIcon('INVERT'), 'Invert', self.invertInputMap)
-
-            # RGBA sub-menu
-                rgba_submenu = menu.addMenu('Set as RGBA channel...')
-                rgba_submenu.setIcon(style.getIcon('RGBA'))
+        #---------------[ Special Additions For INPUT MAP Item ]---------------
+            if isinstance(item_data, InputMap):
+            #[Input Map Item Actions]
+            #|Invert input map
+                invert_imap = QW.QAction(style.getIcon('INVERT'), 'Invert', menu)
+                invert_imap.triggered.connect(self.invertInputMap)
+            #|Set RGBA channels (list of actions)
+                rgba_actions: list[QW.QAction] = []
                 for c in ('R', 'G', 'B', 'A'):
-                    rgba_submenu.addAction(
-                        f'{c} channel', lambda c=c: self.rgbaChannelSet.emit(c))
+                    act = QW.QAction(f'{c} channel', menu)
+                    act.triggered.connect(lambda _, c=c: self.rgbaChannelSet.emit(c))
+                    rgba_actions.append(act)
 
-        # Specific actions when item holds MINERAL MAPS
-            elif item.holdsMineralMap():
+            #[Input Map Item Submenus]
+            #|Set as RGBA channel
+                rgba_submenu = QW.QMenu('Set as RGBA channel...', menu)
+                rgba_submenu.setIcon(style.getIcon('RGBA'))
+                rgba_submenu.addActions(rgba_actions)
 
-            # Palette sub-menu
-                palette_submenu = menu.addMenu('Palette')
-                palette_submenu.setIcon(style.getIcon('PALETTE'))
-            # - Randomize palette
-                palette_submenu.addAction(
-                    style.getIcon('RANDOMIZE_COLOR'), 'Randomize',
-                    lambda: self.randomizePalette(item))
-            # - Separator
-                palette_submenu.addSeparator()
-            # - Copy palette
-                palette_submenu.addAction(
-                    style.getIcon('COPY'), 'Copy', 
+            #[Add To Menu]
+                menu.addSeparator()
+                menu.addAction(invert_imap)
+                menu.addMenu(rgba_submenu)
+
+        #--------------[ Special Additions For MINERAL MAP Item ]--------------
+            elif isinstance(item_data, MineralMap):
+            #[Mineral Map Item Actions]
+            #|Randomize palette
+                randpal = QW.QAction(
+                    style.getIcon('RANDOMIZE_COLOR'), 'Randomize', menu)
+                randpal.triggered.connect(lambda: self.randomizePalette(item))
+            #|Copy palette
+                copypal = QW.QAction(style.getIcon('COPY'), 'Copy')
+                copypal.triggered.connect(
                     lambda: self.copyPaletteToClipboard(item))
-            # - Paste palette
-                paste_palette = palette_submenu.addAction(
-                    style.getIcon('PASTE'), 'Paste')
-                paste_palette.triggered.connect(
+            #|Paste palette
+                pastepal = QW.QAction(style.getIcon('PASTE'), 'Paste', menu)
+                pastepal.triggered.connect(
                     lambda: self.pastePaletteFromClipboard(item))
-                paste_palette.setEnabled(
-                    QW.qApp.clipboard().mimeData().hasFormat(
-                        self.PALETTE_MIMETYPE))
+            #|Export array
+                export = QW.QAction(style.getIcon('EXPORT'), 'Export map', menu)
+                export.triggered.connect(lambda: self.exportMineralMap(item))
 
-            # Export Array
-                menu.addAction(style.getIcon('EXPORT'), 'Export map',
-                               lambda: self.exportMineralMap(item))
+            #[Mineral Map Item Submenus]
+            #|Palette
+                palette_submenu = QW.QMenu('Palette', menu)
+                palette_submenu.setIcon(style.getIcon('PALETTE'))
+                palette_submenu.addActions((randpal, copypal, pastepal))
 
-        # Specific actions when item holds MASKS
-            elif item.holdsMask():
+            #[Add To Menu]
+                menu.addSeparator()
+                menu.addMenu(palette_submenu)
+                menu.addAction(export)
 
-            # Invert mask
-                menu.addAction(
-                    style.getIcon('INVERT'), 'Invert', self.invertMask)
+        #-----------------[ Special Additions For MASK Item ]------------------
+            elif isinstance(item_data, Mask):
+            #[Mask Item Actions]
+            #|Invert mask
+                invert_mask = QW.QAction(style.getIcon('INVERT'), 'Invert', menu)
+                invert_mask.triggered.connect(self.invertMask)
+            #|Merge masks with intersection
+                intersect = QW.QAction('Intersection', menu)
+                intersect.triggered.connect(lambda: self.mergeMasks(group, 'I'))
+            #|Merge masks with union
+                union = QW.QAction('Union', menu)
+                union.triggered.connect(lambda: self.mergeMasks(group, 'U'))
 
-            # Merge masks sub-menu
-                mergemask_submenu = menu.addMenu('Merge')
-                mergemask_submenu.setIcon(style.getIcon('MERGE'))
-                mergemask_submenu.addAction(
-                    'Intersection', lambda: self.mergeMasks(group, 'I'))
-                mergemask_submenu.addAction(
-                    'Union', lambda: self.mergeMasks(group, 'U'))
+            #[Mask Item Submenus]
+            #|Merge masks
+                merge_submenu = QW.QMenu('Merge', menu)
+                merge_submenu.addActions((intersect, union))
 
-        # add specific actions when item holds point data
+            #[Add To Menu]
+                menu.addSeparator()
+                menu.addAction(invert_mask)
+                menu.addMenu(merge_submenu)
 
-    # Do nothing if item is invalid (safety)
-        else: 
+        #--------------[ Special Additions For POINT DATA Item ]---------------
+        #TODO
+
+    #(E) SAFETY FALLBACK ======================================================
+        else:
             return
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(self.mapToGlobal(point))
+
+
+    def get_group(self, idx: int) -> CW.DataGroup | None:
+        '''
+        Get the group at index 'idx'.
+
+        Parameters
+        ----------
+        idx : int
+            The index of the group to be retrieved.
+
+        Returns
+        -------
+        DataGroup or None
+            The group at index 'idx' or None if 'idx' is invalid.
+
+        '''
+        if isinstance(item := self.topLevelItem(idx), CW.DataGroup):
+            return item
+        return None
 
 
     def getAllGroups(self) -> list[CW.DataGroup]:
@@ -392,17 +455,19 @@ class DataManager(QW.QTreeWidget):
 
         '''
         count = self.topLevelItemCount()
-        groups = [self.topLevelItem(idx) for idx in range(count)]
+        items = [self.topLevelItem(idx) for idx in range(count)]
+        groups = [i for i in items if isinstance(i, CW.DataGroup)]
         return groups
 
 
-    def getItemParentGroup(self, item: DataManagerWidgetItem) -> CW.DataGroup | None:
+    def getItemParentGroup(
+        self, item: DataManagerWidgetItem | None) -> CW.DataGroup | None:
         '''
         Get the item's group.
 
         Parameters
         ----------
-        item : DataObject, DataSubGroup or DataGroup
+        item : DataObject, DataSubGroup or DataGroup or None
             The item whose group needs to be retrieved.
 
         Returns
@@ -510,15 +575,35 @@ class DataManager(QW.QTreeWidget):
         '''
     # If name is None, rename the group as 'New Sample' + progressive ID
         if name is None:
-            unnamed_groups = self.findItems('New Sample', Qt.MatchContains)
+            unnamed = self.findItems('New Sample', Qt.MatchFlag.MatchContains)
             name = 'New Sample'
-            if (n := len(unnamed_groups)): 
+            if (n := len(unnamed)): 
                 name += f' ({n})'
     
     # Add a new DataGroup as a top level item of the Data Manager
         new_group = CW.DataGroup(name)
         self.addTopLevelItem(new_group)
         return new_group
+
+
+    def take_group(self, idx: int) -> CW.DataGroup | None:
+        '''
+        Remove the group at index 'idx' and return it.
+
+        Parameters
+        ----------
+        idx : int
+            The index of the group to be removed.
+
+        Returns
+        -------
+        DataGroup or None
+            The removed group or None if 'idx' is invalid.
+
+        '''
+        if isinstance(item := self.takeTopLevelItem(idx), CW.DataGroup):
+            return item
+        return None 
         
 
     def delSelectedGroups(self) -> None:
@@ -531,11 +616,10 @@ class DataManager(QW.QTreeWidget):
         if choice.no():
             return
 
-    # After removing the group we also clear it to prevent a bug where the 
-    # currently displayed object, if was owned by the group, still points at it 
+    # Delete groups and clear their data to destroy possible broken references
         for idx in sorted(self.getSelectedGroupsIndexes(), reverse=True):
-            group = self.takeTopLevelItem(idx)
-            group.clear()
+            if (group := self.take_group(idx)) is not None:
+                group.clear()
         self.refreshView()
 
 
@@ -550,7 +634,8 @@ class DataManager(QW.QTreeWidget):
             return
 
         for idx in self.getSelectedGroupsIndexes():
-            self.topLevelItem(idx).clear()
+            if (group := self.get_group(idx)) is not None:
+                group.clear()
         self.refreshView()
 
     
@@ -571,13 +656,14 @@ class DataManager(QW.QTreeWidget):
         src_group = self.getItemParentGroup(item)
         if src_group is None or src_group == dst_group:
             return
-        
-    # Delete data from the source subgroup
-        src_subgr = item.subgroup()
-        src_subgr.delChild(item)
 
-    # Append data to destination subgroup
+    # Do nothing if the source subgroup is invalid (safety)
+        if (src_subgr := item.subgroup()) is None:
+            return
+        
+    # Delete data from source subgroup and append it to destination subgroup 
         dtype = src_subgr.datatype
+        src_subgr.delChild(item)
         dst_subgr = [s for s in dst_group.subgroups if s.datatype == dtype][0]
         dst_subgr.addChild(item)
 
@@ -600,13 +686,13 @@ class DataManager(QW.QTreeWidget):
             Item to be moved.
 
         '''
-    # Do nothing if the group is invalid
-        group = self.getItemParentGroup(item)
-        if group is None:
+    # Do nothing if the group or the subgroup are invalid
+        subgr = item.subgroup()
+        if self.getItemParentGroup(item) is None or subgr is None:
             return
     
     # Move item within its subgroup
-        item.subgroup().moveChildUp(item)
+        subgr.moveChildUp(item)
 
     # Force viewing the moved item to provide better feedback
         self.setCurrentItem(item)
@@ -623,13 +709,13 @@ class DataManager(QW.QTreeWidget):
             Item to be moved.
 
         '''
-    # Do nothing if the group is invalid
-        group = self.getItemParentGroup(item)
-        if group is None:
+    # Do nothing if the group or the subgroup are invalid
+        subgr = item.subgroup()
+        if self.getItemParentGroup(item) is None or subgr is None:
             return
     
     # Move item within its subgroup
-        item.subgroup().moveChildDown(item)
+        subgr.moveChildDown(item)
 
     # Force viewing the moved item to provide better feedback
         self.setCurrentItem(item)
@@ -654,7 +740,8 @@ class DataManager(QW.QTreeWidget):
 
     # Check for unfitting maps shapes within the samples
         for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
-            self.topLevelItem(idx).setShapeWarnings()
+            if (group := self.get_group(idx)) is not None:
+                group.setShapeWarnings()
 
         self.refreshView()
 
@@ -673,11 +760,13 @@ class DataManager(QW.QTreeWidget):
         items = self.getSelectedDataObjects()
         groups = [self.getItemParentGroup(i) for i in items]
         for i in reversed(items):
-            i.subgroup().delChild(i)
+            if (subgr := i.subgroup()) is not None:
+                subgr.delChild(i)
 
     # Check for unfitting maps shapes within the samples
         for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
-            self.topLevelItem(idx).setShapeWarnings()
+            if (group := self.get_group(idx)) is not None:
+                group.setShapeWarnings()
 
         self.refreshView()
 
@@ -685,7 +774,7 @@ class DataManager(QW.QTreeWidget):
     def loadData(
         self,
         subgroup: CW.DataSubGroup,
-        paths: list[str] | None = None
+        paths: Collection[str] | None = None
     ) -> None:
         '''
         Load data objects to a subgroup. This is a wrapper loading method that 
@@ -695,28 +784,26 @@ class DataManager(QW.QTreeWidget):
         ----------
         subgroup : DataSubGroup
             The subgroup to be populated with data.
-        paths : list[str] or None, optional
-            A list of filepaths to data. If None, user will be prompt to load
-            them from disk. The default is None.
+        paths : Collection[str] or None, optional
+            A collection of filepaths to data. If None, user will be prompt to
+            load them from disk. The default is None.
 
         '''
-        group = subgroup.group()
-        name = subgroup.name
-
-        if name == 'Input Maps':
-            self.loadInputMaps(group, paths)
-
-        elif name == 'Mineral Maps':
-            self.loadMineralMaps(group, paths)
-
-        elif name == 'Masks':
-            self.loadMasks(group, paths)
-
-        # elif name == 'Point Analysis': TODO
-        #     pass
-
-        else: 
+    # Do nothing if group is invalid (safety)
+        if (group := subgroup.group()) is None:
             return
+
+    # Call the dedicated load method based on the subgroup 
+        match subgroup.name:
+            case 'Input Maps':
+                self.loadInputMaps(group, paths)
+            case 'Mineral Maps':
+                self.loadMineralMaps(group, paths)
+            case 'Masks':
+                self.loadMasks(group, paths)
+            # case 'Point Analysis' TODO
+            case _: # safety
+                return  
         
     # Check for unfitting maps shapes
         group.setShapeWarnings()
@@ -735,22 +822,26 @@ class DataManager(QW.QTreeWidget):
             choose a new path. The default is True.
 
         '''
-        item_data, path = item.get('data', 'filepath')
+    # Do nothing if item data is invalid (safety)
+        components = item.getComponents()
+        item_data, path = components['data'], components['filepath']
+        if item_data is None:
+            return
 
     # Select filepath if overwrite is not requested (= saveAs), path is None or
     # path is invalid (moved, renamed, deleted)
         if not overwrite or path is None or not item.filepathValid():
-            if item.holdsInputMap():
+            if isinstance(item_data, InputMap):
                 filext = 'Compressed ASCII map (*.gz);;ASCII map (*.txt)'
-            elif item.holdsMineralMap():
+            elif isinstance(item_data, MineralMap):
                 filext = 'Mineral maps (*.mmp)'
-            elif item.holdsMask():
+            elif isinstance(item_data, Mask):
                 filext = 'Mask (*.msk)'
             # add PointAnalysis
             else: 
                 return # safety
 
-            path = CW.FileDialog(self, 'save', 'Save Map', filext).get()
+            path = CW.FileDialog(self, 'save', 'Save Map', filext).get_path()
             if not path:
                 return
     
@@ -770,8 +861,9 @@ class DataManager(QW.QTreeWidget):
             item.setEdited(False)
             
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', 'Failed to save file.', str(e))
-        
+            CW.MsgBox(self, 'Crit', 'Failed to save file.', str(e))
+            return
+
         finally:
             self.refreshView()
     
@@ -786,13 +878,14 @@ class DataManager(QW.QTreeWidget):
             List of edited Data Objects.
 
         '''
-        return [o for o in self.getAllDataObjects() if o.get('is_edited')]
+        all_obj = self.getAllDataObjects()
+        return [o for o in all_obj if o.getComponents()['is_edited']]
 
 
     def loadInputMaps(
         self,
         group: CW.DataGroup,
-        paths: list[str] | None = None
+        paths: Collection[str] | None = None
     ) -> None:
         '''
         Specialized loading method to load input maps to a group.
@@ -801,15 +894,15 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list[str] or None, optional
-            A list of filepaths to data. If None, user will be prompt to load
-            them from disk. The default is None.
+        paths : Collection[str] or None, optional
+            A collection of filepaths to data. If None, user will be prompt to
+            load them from disk. The default is None.
 
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             ftypes = 'ASCII maps (*.txt *.gz)'
-            paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get()
+            paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get_paths()
             if not paths:
                 return
 
@@ -846,7 +939,7 @@ class DataManager(QW.QTreeWidget):
     def loadMineralMaps(
         self,
         group: CW.DataGroup,
-        paths: list[str] | None = None
+        paths: Collection[str] | None = None
     ) -> None:
         '''
         Specialized loading method to load mineral maps to a group.
@@ -855,15 +948,15 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list[str] or None, optional
-            A list of filepaths to data. If None, user will be prompt to load
-            them from disk. The default is None.
+        paths : Collection[str] or None, optional
+            A collection of filepaths to data. If None, user will be prompt to
+            load them from disk. The default is None.
 
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             ftypes = 'Mineral maps (*.mmp);;ASCII maps (*.txt *.gz)'
-            paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get()
+            paths = CW.FileDialog(self, 'open', 'Load Maps', ftypes, True).get_paths()
             if not paths:
                 return
     
@@ -912,7 +1005,7 @@ class DataManager(QW.QTreeWidget):
     def loadMasks(
         self,
         group: CW.DataGroup,
-        paths: list[str] | None = None
+        paths: Collection[str] | None = None
     ) -> None:
         '''
         Specialized loading method to load masks to a group.
@@ -921,15 +1014,15 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that will contain the data.
-        paths : list[str] or None, optional
-            A list of filepaths to data. If None, user will be prompt to load
-            them from disk. The default is None.
+        paths : Collection[str] or None, optional
+            A collection of filepaths to data. If None, user will be prompt to
+            load them from disk. The default is None.
 
         '''
     # Do nothing if paths are invalid or file dialog is canceled
         if paths is None:
             ft = 'Masks (*.msk);;Text file (*.txt)'
-            paths = CW.FileDialog(self, 'open', 'Load Masks', ft, True).get()
+            paths = CW.FileDialog(self, 'open', 'Load Masks', ft, True).get_paths()
             if not paths:
                 return
     
@@ -968,14 +1061,13 @@ class DataManager(QW.QTreeWidget):
         Invert the selected input maps.
 
         '''
-    # Get all the selected Input Maps items
-        items = [i for i in self.getSelectedDataObjects() if i.holdsInputMap()]
-
-    # Invert the input map arrays held in each item
+    # Invert the input map array held in each selected and valid item
+        items = self.getSelectedDataObjects()
         pbar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
-            i.get('data').invert()
-            i.setEdited(True)
+            if (inmap := i.getInputMapData()) is not None:
+                inmap.invert()
+                i.setEdited(True)
             pbar.setValue(n)
 
         self.refreshView()
@@ -986,20 +1078,20 @@ class DataManager(QW.QTreeWidget):
         Invert the selected masks.
 
         '''
-    # Get all the selected Masks items
-        items = [i for i in self.getSelectedDataObjects() if i.holdsMask()]
-
-    # Invert the mask arrays held in each item
+    # Invert the mask array held in each selected and valid item
+        items = self.getSelectedDataObjects()
         pbar = CW.PopUpProgBar(self, len(items), 'Inverting data')
         for n, i in enumerate(items, start=1):
-            i.get('data').invert()
-            i.setEdited(True)
+            if (mask := i.getMaskData()) is not None:
+                mask.invert()
+                i.setEdited(True)
             pbar.setValue(n)
 
         self.refreshView()
 
 
-    def mergeMasks(self, group: CW.DataGroup, mode: str) -> None:
+    def mergeMasks(
+            self, group: CW.DataGroup, mode: iatools.BinaryMergeModes) -> None:
         '''
         Merge the selected masks into a new Mask object and add it to the
         group.
@@ -1008,7 +1100,7 @@ class DataManager(QW.QTreeWidget):
         ----------
         group : DataGroup
             The group that holds the mask data.
-        mode : str
+        mode : BinaryMergeModes
             How to merge the masks. See 'getCompositeMask' method for more 
             details.
 
@@ -1055,21 +1147,22 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Exit function if item does not contain mineral map data (safety)
-        if not item.holdsMineralMap(): 
+        if (minmap := item.getMineralMapData()) is None: 
             return
     
     # Try converting the palette to JSON bytes data
-        colors = list(item.get('data').palette.values())
+        colors = list(minmap.palette.values())
         try:
             data = json.dumps(colors).encode('utf-8')
         except TypeError as e:
-            return CW.MsgBox(self, 'Crit', 'Invalid palette data', str(e))
+            CW.MsgBox(self, 'Crit', 'Invalid palette data', str(e))
+            return
 
     # Set JSON data as MIME data for the clipboard
         mimedata = QMimeData()
         mimedata.setData(self.PALETTE_MIMETYPE, data)
-        clipboard = QW.qApp.clipboard()
-        clipboard.setMimeData(mimedata)
+        if (clipboard := QW.qApp.clipboard()) is not None:
+            clipboard.setMimeData(mimedata)
 
 
     def pastePaletteFromClipboard(self, item: CW.DataObject) -> None:
@@ -1083,12 +1176,16 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Exit function if item does not contain mineral map data (safety)
-        if not item.holdsMineralMap(): 
+        if (minmap := item.getMineralMapData()) is None: 
+            return
+
+    # Exit function if app fails to retrieve the clipboard (safety)
+        if (clipboard := QW.qApp.clipboard()) is None:
             return
         
     # Exit function if clipboard does not contain palette data (safety)
-        mimedata = QW.qApp.clipboard().mimeData()
-        if not mimedata.hasFormat(self.PALETTE_MIMETYPE):
+        mimedata = clipboard.mimeData()
+        if mimedata is None or not mimedata.hasFormat(self.PALETTE_MIMETYPE):
             return
     
     # Try loading the palette data as list of RGB tuples from the clipboard
@@ -1096,11 +1193,10 @@ class DataManager(QW.QTreeWidget):
             data = mimedata.data(self.PALETTE_MIMETYPE).data().decode('utf-8')
             colors = [tuple(rgb) for rgb in json.loads(data)]
         except json.JSONDecodeError as e:
-            text = 'Invalid palette data in clipboard'
-            return CW.MsgBox(self, 'Crit', text, str(e))
+            CW.MsgBox(self, 'Crit', 'Invalid palette data in clipboard', str(e))
+            return
     
     # Set the palette to the mineral map and mark it as edited
-        minmap = item.get('data')
         minmap.set_palette(colors)
         item.setEdited(True)
         self.refreshView()
@@ -1117,11 +1213,10 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Exit function if item does not contain mineral map data (safety)
-        if not item.holdsMineralMap(): 
+        if (minmap := item.getMineralMapData()) is None: 
             return
         
     # Randomize the mineral map's palette and mark it as edited
-        minmap = item.get('data')
         minmap.set_palette(minmap.rand_colorlist())
         item.setEdited(True)
         self.refreshView()
@@ -1140,7 +1235,7 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Exit function if item does not contain mineral map data (safety)
-        if not item.holdsMineralMap(): 
+        if (minmap := item.getMineralMapData()) is None: 
             return
 
     # Ask for user confirm
@@ -1157,20 +1252,19 @@ class DataManager(QW.QTreeWidget):
         
     # Do nothing if the outpath is invalid or the file dialog is canceled
         ftype = 'ASCII file (*.txt)'
-        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get_path()
         if not outpath:
             return
         
     # Save the mineral map to disk
-        mmap = item.get('data')
-        np.savetxt(outpath, mmap.minmap_encoded, fmt='%d')
+        np.savetxt(outpath, minmap.minmap_encoded, fmt='%d')
 
     # Also save the encoder if user requests it
         if choice.cboxChecked():
             encoder_path = cf.extend_filename(outpath, '_transDict')
-            rows, cols = mmap.shape
+            rows, cols = minmap.shape
             with open(encoder_path, 'w') as ep:
-                for id_, lbl in mmap.encoder.items():
+                for id_, lbl in minmap.encoder.items():
                     ep.write(f'{id_} :\t{lbl}\n')
             # Include number of rows and columns
                 ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
@@ -1189,10 +1283,13 @@ class DataManager(QW.QTreeWidget):
             Item to be repaired.
 
         '''
+    # Exit function if item has no valid subgroup or group (safety)
+        if (subgr := item.subgroup()) is None or (group := subgr.group()) is None:
+            return
+
     # Identify correct item data type by looking at its subgroup, because item
     # can contain None data if they failed to be loaded
-        subgroup = item.subgroup()
-        match subgroup.name:
+        match subgr.name:
             case 'Input Maps':
                 ftype = 'ASCII maps (*.txt *.gz)'
             case 'Mineral Maps':
@@ -1203,15 +1300,15 @@ class DataManager(QW.QTreeWidget):
                 return
     
     # Do nothing if path is invalid or file dialog is canceled
-        path = CW.FileDialog(self, 'open', 'Fix Source', ftype).get()
+        path = CW.FileDialog(self, 'open', 'Fix Source', ftype).get_path()
         if not path:
             return
     
     # Fix item file source and data
         try:
         # Setting object data also sets its filepath to data.filepath
-            if item.get('data') is None:
-                item.setObjectData(subgroup.datatype.load(path))
+            if item.getComponents()['data'] is None:
+                item.setObjectData(subgr.datatype.load(path))
         # Setting object path also changes its data to the data stored in path
             else:
                 item.setFilepath(path)
@@ -1221,21 +1318,25 @@ class DataManager(QW.QTreeWidget):
             item.setEdited(False)
             
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', f'Unexpected file: {path}', str(e))
+            CW.MsgBox(self, 'Crit', f'Unexpected file: {path}', str(e))
+            return
 
     # Try fixing data objects in the same group that are also "not found" by 
     # checking all the files in the same root folder of the loaded file
         root_fld = os.path.dirname(path)
         available_files = os.listdir(root_fld)
-        group = self.getItemParentGroup(item)
         for obj in group.getAllDataObjects():
-        # Skip object if has not the 'not_found' status
-            if not obj.get('not_found'): 
+        # Skip invalid/unsuitable objects
+            components = obj.getComponents()
+            if (not components['not_found']
+                or (obj_path := components['filepath']) is None
+                or (obj_subgr := obj.subgroup()) is None
+            ): 
                 continue
-        # Get object info; if object is "not_found", its path shouldn't be None
-            obj_data, obj_path = obj.get('data', 'filepath')
+        # Get object info
+            obj_data = components['data']
             obj_fname = cf.path2filename(obj_path)
-            obj_type = obj.subgroup().datatype
+            obj_type = obj_subgr.datatype
        
             for f in available_files:
             # Skip files with invalid extensions or unfitting filename
@@ -1275,15 +1376,16 @@ class DataManager(QW.QTreeWidget):
         pbar = CW.PopUpProgBar(self, len(items), 'Reloading data')
         errors = []
         for n, i in enumerate(items, start=1):
+            comps = i.getComponents()
+            data, path, name = comps['data'], comps['filepath'], comps['name']
             try:
-                data, path, name = i.get('data', 'filepath', 'name')
                 # None path indicates unsaved data and cannot be refreshed
                 if path is None: 
                     continue
                 path_exists = os.path.exists(path)
                 i.setNotFound(not path_exists)
-                if path_exists:
-                    data = i.subgroup().datatype if data is None else data
+                if path_exists and (subgr := i.subgroup()) is not None:
+                    data = subgr.datatype if data is None else data
                     i.setObjectData(data.load(path))
                     i.setEdited(False)
 
@@ -1295,7 +1397,9 @@ class DataManager(QW.QTreeWidget):
 
     # Check for unfitting maps shapes within the samples and refresh view
         for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
-            self.topLevelItem(idx).setShapeWarnings()
+            if (group := self.get_group(idx)) is not None:
+                group.setShapeWarnings()
+
         self.refreshView()
 
     # Send detailed error message if any file failed to be refreshed
@@ -1305,23 +1409,22 @@ class DataManager(QW.QTreeWidget):
             CW.MsgBox(self, 'Crit', text, dtext)
 
 
-    def viewData(self, item: DataManagerWidgetItem) -> None:
+    def viewData(self, item: DataManagerWidgetItem | None) -> None:
         '''
         Send signal for displaying the item's data.
 
         Parameters
         ----------
-        item : DataObject, DataSubGroup or DataGroup
+        item : DataManagerWidgetItem | None
             The data object to be displayed.
 
         '''
-    # Update the scene if item is a valid object
-        if isinstance(item, (CW.DataObject, CW.DataSubGroup, CW.DataGroup)):
-            self.updateSceneRequested.emit(item)
-
-    # Clear the entire scene if the item is not valid
+    # Request to clear the scene if the item is not valid
+        if item is None:
+            self.clearSceneRequested.emit()
+    # Request to update the scene if item is a valid object
         else:
-            self.clearView()
+            self.updateSceneRequested.emit(item)
 
 
     def refreshView(self) -> None:
@@ -1329,15 +1432,8 @@ class DataManager(QW.QTreeWidget):
         Request a re-rendering of the currently displayed item.
 
         '''
-        self.viewData(self.currentItem())
-
-
-    def clearView(self) -> None:
-        '''
-        Send singal for clearing the view.
-
-        '''
-        self.clearSceneRequested.emit()
+        item = cast(DataManagerWidgetItem | None, self.currentItem())
+        self.viewData(item)
 
 
     def clearAll(self) -> None:
@@ -1348,7 +1444,7 @@ class DataManager(QW.QTreeWidget):
         choice = CW.MsgBox(self, 'Quest', 'Remove all samples?')
         if choice.yes():
             self.clear()
-            self.clearView()
+            self.clearSceneRequested.emit()
 
     
     def resetConfig(self) -> None:
@@ -1356,49 +1452,57 @@ class DataManager(QW.QTreeWidget):
         Reset the Data Manager to its default state and configuration.
 
         '''
-        self.clear()
+        self.loadConfig(config_schemas.DATAMANAGER_DEFAULT_CONFIG)
             
 
-    def getConfig(self) -> dict:
+    def getConfig(self) -> config_schemas.DataManagerConfig:
         '''
         Take a snapshot of the current state and configuration of the Data
         Manager.
 
         Returns
         -------
-        dict
-            Current state and configuration.
+        config : DataManagerConfig
+            Current state and configuration of Data Manager.
 
         '''
-        config = {}
+        config: config_schemas.DataManagerConfig = {}
         for group in self.getAllGroups():
-            config[group.name] = {}
-
+        # Initialize config schema for group
+            config[group.name] = {
+                'Input Maps': [],
+                'Mineral Maps': [],
+                'Masks': []
+            }
+        # Populate each subgroup with corresponding data
             for subgr in group.subgroups:
+                attributes = ['name', 'filepath']
                 if subgr.name == 'Masks':
-                    attributes = ('name', 'filepath', 'checked')
-                else:
-                    attributes = ('name', 'filepath')
+                    attributes.append('checkstate')
 
-                data = []
+                data: list[config_schemas.DataObjectSchema] = []
                 for obj in subgr.getChildren():
-                    # Don't save data objects with null filepath
-                    if (components := obj.get(*attributes))[1] is not None:
-                        data.append(components)
+                # Get required data object components
+                    components = obj.getComponents()
+                    to_save = tuple(components[a] for a in attributes)
+                # Don't save data objects with null filepath
+                    if to_save[1] is not None:
+                        data.append(to_save)
+
                 config[group.name][subgr.name] = data
         
         return config
 
 
-    def loadConfig(self, config: dict) -> None:
+    def loadConfig(self, config: config_schemas.DataManagerConfig) -> None:
         '''
         Set the state and configuration of the Data Manager to those provided
         in 'config'.
 
         Parameters
         ----------
-        config : dict
-            Reference state and configuration.
+        config : DataManagerConfig
+            Stored state and configuration of Data Manager.
 
         '''
     # Clear out the manager from previous data
@@ -1474,7 +1578,8 @@ class HistogramViewer(QW.QWidget):
         self.canvas.setMinimumSize(300, 200)
 
     # HeatMap Scaler widget
-        self.scaler = plots.HeatmapScaler(self.canvas.ax, self.onSpanSelect)
+        self.scaler = plots.HeatmapScaler(
+            self.canvas.ax, self.onSpanSelect, btns=[1])
 
     # Navigation Toolbar
         self.navtbar = plots.NavTbar.histCanvasDefault(self.canvas, self)
@@ -1484,13 +1589,13 @@ class HistogramViewer(QW.QWidget):
         self.scaler_tbar.setStyleSheet(style.SS_TOOLBAR)
 
     # Toggle scaler action [-> Heatmap scaler toolbar]
-        self.scaler_action = self.scaler_tbar.addAction(
-            style.getIcon('RANGE'), 'Enable scaler')
+        self.scaler_action = QW.QAction(
+            style.getIcon('RANGE'), 'Enable scaler', self)
         self.scaler_action.setCheckable(True)
     
     # Extract mask action [-> Heatmap scaler toolbar]
-        self.mask_action = self.scaler_tbar.addAction(
-            style.getIcon('ADD_MASK'), 'Extract mask')
+        self.mask_action = QW.QAction(
+            style.getIcon('ADD_MASK'), 'Extract mask', self)
         self.mask_action.setEnabled(False)
 
     # Min and Max scaler values input widgets [-> Heatmap scaler toolbar]
@@ -1506,21 +1611,24 @@ class HistogramViewer(QW.QWidget):
 
     # Range warning icon [-> Heatmap scaler toolbar]
         warn_pixmap = QPixmap(str(style.ICONS.get('WARNING')))
-        warn_lbl = QW.QLabel()
-        warn_lbl.setPixmap(warn_pixmap.scaled(20, 20, Qt.KeepAspectRatio))
-        warn_lbl.setSizePolicy(QW.QSizePolicy.Maximum, QW.QSizePolicy.Maximum)
-        warn_lbl.setToolTip('Lower limit cannot be greater than upper limit.')
+        warn_lbl = QW.QLabel(self.scaler_tbar)
+        warn_lbl.setPixmap(warn_pixmap.scaled(20, 20, style.ARM_KEEP))
+        warn_lbl.setSizePolicy(style.SP_MAXIMUM, style.SP_MAXIMUM)
+        warn_lbl.setToolTip('Lower limit is bigger than upper limit.')
+        self.warn_icon = QW.QWidgetAction(self)
+        self.warn_icon.setDefaultWidget(warn_lbl)
+        self.warn_icon.setVisible(False)
     
-    # Add widgets to Heatmap scaler toolbar
+    # Add actions and widgets to Heatmap scaler toolbar
+        self.scaler_tbar.addAction(self.scaler_action)
+        self.scaler_tbar.addAction(self.mask_action)
         self.scaler_tbar.addWidget(self.scaler_vmin)
-        self.scaler_tbar.addWidget(self.scaler_vmax) 
-        self.warn_icon = self.scaler_tbar.addWidget(warn_lbl)
-        self.warn_icon.setVisible(False) 
+        self.scaler_tbar.addWidget(self.scaler_vmax)
+        self.scaler_tbar.addAction(self.warn_icon)
 
     # Bin slider widget
-        self.bin_slider = QW.QSlider(Qt.Horizontal)
-        self.bin_slider.setSizePolicy(QW.QSizePolicy.MinimumExpanding,
-                                      QW.QSizePolicy.Fixed)
+        self.bin_slider = QW.QSlider(style.O_HORIZONTAL)
+        self.bin_slider.setSizePolicy(style.SP_MINIMUMEXPANDING, style.SP_FIXED)
         self.bin_slider.setMinimum(5)
         self.bin_slider.setMaximum(100)
         self.bin_slider.setSingleStep(5)
@@ -1669,13 +1777,12 @@ class HistogramViewer(QW.QWidget):
         '''
     # Set vmin and vmax to None if one of them lies outside the map data range
         if vmin is not None and vmax is not None:
-            array = self.maps_canvas.image.get_array()
-            if vmin >= array.max() or vmax <= array.min():
+            array = self.maps_canvas.get_array()
+            if array is None or vmin >= array.max() or vmax <= array.min():
                 vmin, vmax = None, None
 
-    # Update clims and redraw canvas
+    # Update clims
         self.maps_canvas.update_clim(vmin, vmax)
-        self.maps_canvas.draw()
 
 
     def updateScalerExtents(self, update_span: bool = True) -> None:
@@ -1737,7 +1844,7 @@ class HistogramViewer(QW.QWidget):
 
         '''
         self.bin_slider.setToolTip(f'Bins = {value}')
-        self.canvas.set_nbins(value)
+        self.canvas.set_bins(value)
 
 
     def extractMaskFromScaler(self) -> None:
@@ -1746,19 +1853,17 @@ class HistogramViewer(QW.QWidget):
         it to file.
 
         '''
-    # Do nothing if no map is displayed in the maps canvas
-        if self.maps_canvas.is_empty():
+    # Do nothing if no map is displayed in the maps canvas (array invalid)
+        arr, legacy_mask = self.maps_canvas.get_unmasked_array(return_mask=True)
+        if arr is None:
             return
     
     # Get histogram scaler extents
         vmin, vmax = self.scaler.extents
         vmin, vmax = round(vmin), round(vmax)
 
-    # Extract the displayed array and its current mask (legacy mask)
-        array, legacy_mask = self.maps_canvas.get_map(return_mask=True)
-
     # If the legacy mask exists, merge it with the new mask
-        mask_array = np.logical_or(array < vmin, array > vmax)
+        mask_array = np.logical_or(arr < vmin, arr > vmax)
         if legacy_mask is not None:
             mode = settings.manager.get('data/mask_merging_rule')
             mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
@@ -1766,13 +1871,14 @@ class HistogramViewer(QW.QWidget):
 
     # Save mask file
         ftype = 'Mask (*.msk)'
-        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get_path()
         if not outpath:
             return
         try:
             mask.save(outpath)
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            return
             
 
     def resetConfig(self) -> None:
@@ -1780,64 +1886,60 @@ class HistogramViewer(QW.QWidget):
         Reset the Histogram Viewer to its default state and configuration.
 
         '''
-
-    # Reset navigation toolbar actions
-        self.navtbar.showToolbarAction().setChecked(True)
-        self.navtbar.setVisible(True)
-        self.navtbar.log_action.setChecked(True)
-        self.navtbar.mode = self.navtbar.mode.NONE 
-        self.navtbar._update_buttons_checked()
-
-    # Reset scaler and scaler toolbar actions
-        self.scaler_action.setChecked(False)
-        self.scaler_vmin.setValue(0)
-        self.scaler_vmax.setValue(0)
-        self.scaler.extents = (0, 0)
-
-    # Reset number of bins
-        self.bin_slider.setSliderPosition(50)
-        self.setHistBins(50)
+        self.loadConfig(config_schemas.HISTOGRAM_DEFAULT_CONFIG)
 
 
-    def getConfig(self) -> dict:
+    def getConfig(self) -> config_schemas.HistogramViewerConfig:
         '''
         Take a snapshot of the current state and configuration of the Histogram
         Viewer.
 
         Returns
         -------
-        dict
-            Current state and configuration.
+        config : HistogramViewerConfig
+            Current state and configuration of Histogram Viewer.
 
         '''
-        config = {key: {} for key in ('Canvas', 'NavTbar', 'Scaler')}
-
-        config['Canvas']['Logscale'] = self.canvas.log
-        config['Canvas']['Bins'] = self.canvas.nbins
-
-        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
-        config['NavTbar']['ActiveMode'] = self.navtbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
-
-        config['Scaler']['Enabled'] = self.scaler_action.isChecked()
-        config['Scaler']['Extents'] = [round(e) for e in self.scaler.extents]
-
+        config: config_schemas.HistogramViewerConfig = {
+            'Canvas': {
+                'Logscale': self.canvas.get_logscale(),
+                'Bins': self.canvas.get_bins()
+            },
+            'NavTbar': {
+                'Visible': self.navtbar.showToolbarAction().isChecked(),
+                'ActiveMode': self.navtbar.mode.value
+            },
+            'Scaler': {
+                'Enabled': self.scaler_action.isChecked(),
+                'Extents': (
+                    round(self.scaler.extents[0]), 
+                    round(self.scaler.extents[1])
+                )
+            }
+        }
         return config
-    
 
-    def loadConfig(self, config: dict) -> None:
+
+    def loadConfig(self, config: config_schemas.HistogramViewerConfig) -> None:
         '''
         Set the state and configuration of the Histogram Viewer to those 
         provided in 'config'.
 
         Parameters
         ----------
-        config : dict
-            Reference state and configuration.
+        config : HistogramViewerConfig
+            Stored state and configuration of Histogram Viewer.
 
         '''
+    # Extract configs
+        logscale = config['Canvas']['Logscale']
+        nbins = config['Canvas']['Bins']
+        show_ntbar = config['NavTbar']['Visible']
+        ntbar_mode = config['NavTbar']['ActiveMode']
+        scaler_enabled = config['Scaler']['Enabled']
+        vmin, vmax = config['Scaler']['Extents']
+
     # Update navigation toolbar actions
-        logscale, nbins = config['Canvas'].values()
-        show_ntbar, ntbar_mode = config['NavTbar'].values()
         self.navtbar.showToolbarAction().setChecked(show_ntbar)
         self.navtbar.setVisible(show_ntbar)
         self.navtbar.log_action.setChecked(logscale)
@@ -1845,7 +1947,6 @@ class HistogramViewer(QW.QWidget):
         self.navtbar._update_buttons_checked()
 
     # Update scaler and scaler toolbar actions
-        scaler_enabled, (vmin, vmax) = config['Scaler'].values()
         self.scaler_action.setChecked(scaler_enabled)
         self.scaler_vmin.setValue(vmin)
         self.scaler_vmax.setValue(vmax)
@@ -1854,7 +1955,7 @@ class HistogramViewer(QW.QWidget):
     # Update number of bins
         self.bin_slider.setSliderPosition(nbins)
         self.setHistBins(nbins)
-        
+
 
 
 class ModeViewer(CW.StyledTabWidget):
@@ -1882,7 +1983,7 @@ class ModeViewer(CW.StyledTabWidget):
         super().__init__(parent=parent)
 
     # Set principal attributes
-        self._current_data_object = None
+        self._current_data_object: CW.DataObject | None = None
         self.map_canvas = map_canvas
 
     # Initialize GUI and connect its signals with slots
@@ -1913,10 +2014,12 @@ class ModeViewer(CW.StyledTabWidget):
         plot_vbox.addWidget(self.canvas)
 
     # Add tabs to the Mode Viewer
-        self.addTab(self.legend, style.getIcon('LEGEND'), title=None, tight=True)
-        self.addTab(plot_vbox, style.getIcon('PLOT'), title=None, tight=True)
-        self.setTabToolTip(0, 'Legend')
-        self.setTabToolTip(1, 'Bar plot')
+        legend_idx = self.wrap_tab(
+            self.legend, style.getIcon('LEGEND'), title=None, tight=True)
+        plot_idx = self.wrap_tab(
+            plot_vbox, style.getIcon('PLOT'), title=None, tight=True)
+        self.setTabToolTip(legend_idx, 'Legend')
+        self.setTabToolTip(plot_idx, 'Bar plot')
 
 
     def _connect_slots(self) -> None:
@@ -1966,11 +2069,27 @@ class ModeViewer(CW.StyledTabWidget):
         '''
         title = self.canvas.ax.get_title() if title == '' else title
         mode_lbl, mode = zip(*minmap.get_labeled_mode().items())
-        mode_col = (minmap.get_phase_color(lbl) for lbl in mode_lbl)
-        self.canvas.update_canvas(mode, mode_lbl, title, mode_col)
+        mode_col = [minmap.get_phase_color(lbl) for lbl in mode_lbl]
+        self.canvas.update_canvas((mode,), mode_lbl, mode_col, title=title)
 
 
-    def update(self, data_object: CW.DataObject, title: str = '') -> None:
+    def get_current_minmap(self) -> MineralMap | None:
+        '''
+        Get the mineral map held by the currently displayed data object.
+
+        Returns
+        -------
+        minmap : MineralMap or None
+            The mineral map of the currently displayed data object or None if
+            no valid mineral map is found.
+
+        '''
+        if self._current_data_object is None:
+            return
+        return self._current_data_object.getMineralMapData()
+
+
+    def update_viewer(self, data_object: CW.DataObject, title: str = '') -> None:
         '''
         Update all components of the ModeViewer.
 
@@ -1982,16 +2101,18 @@ class ModeViewer(CW.StyledTabWidget):
             The title of the mode bar plot. The default is ''.
 
         '''
+    # Do nothing if data object has no valid mineral map data (safety)
+        if (minmap := data_object.getMineralMapData()) is None:
+            return
+        
     # Set current data object
-        if not data_object.holdsMineralMap(): return # safety
         self._current_data_object = data_object
 
     # Update the mode canvas
-        minmap = data_object.get('data')
         self._update_mode_canvas(minmap, title)
 
     # Update the legend
-        self.legend.update(minmap)
+        self.legend.refresh(minmap)
 
 
     def clearAll(self) -> None:
@@ -2024,8 +2145,12 @@ class ModeViewer(CW.StyledTabWidget):
             RGB triplet. If empty, a random color is generated.
 
         '''
-    # Extract mineral map data
-        minmap = self._current_data_object.get('data')
+    # Do nothing if current data object is invalid or contains invalid mineral
+    # map data (safety)
+        if self._current_data_object is None:
+            return
+        if (minmap := self._current_data_object.getMineralMapData()) is None:
+            return
 
     # Apply the color change to mineral map (if color is empty, randomize it)
         if not len(color):
@@ -2034,8 +2159,8 @@ class ModeViewer(CW.StyledTabWidget):
         minmap.set_phase_color(phase_name, color)
 
     # Update the map canvas colormap, the mode canvas and the legend
-        self.map_canvas.alter_cmap(minmap.palette.values())
-        self._update_mode_canvas(minmap)
+        self.map_canvas.alter_colormap(minmap.palette.values())
+        self.canvas.change_bar_color(phase_name, color)
         self.legend.changeItemColor(item, color)
 
     # Set the current data object as edited
@@ -2057,8 +2182,14 @@ class ModeViewer(CW.StyledTabWidget):
             New class name.
 
         '''
+    # Do nothing if current data object is invalid or contains invalid mineral
+    # map data (safety)
+        if self._current_data_object is None:
+            return
+        if (minmap := self._current_data_object.getMineralMapData()) is None:
+            return
+
     # Rename the phase in the mineral map
-        minmap = self._current_data_object.get('data')
         old_name = item.text(1)
         minmap.rename_phase(old_name, new_name)
             
@@ -2085,8 +2216,14 @@ class ModeViewer(CW.StyledTabWidget):
             New name for the merged class.
 
         '''
+    # Do nothing if current data object is invalid or contains invalid mineral
+    # map data (safety)
+        if self._current_data_object is None:
+            return
+        if (minmap := self._current_data_object.getMineralMapData()) is None:
+            return
+        
     # Merge phases in the mineral map
-        minmap = self._current_data_object.get('data')
         minmap.merge_phases(classes, new_name)
 
     # Request update scene
@@ -2111,15 +2248,17 @@ class ModeViewer(CW.StyledTabWidget):
             The legend item that requested to be highlighted.
 
         '''
+    # Do nothing if current mineral map is invalid (safety)
+        if (minmap := self.get_current_minmap()) is None:
+            return
+
+    # Change phase visibility based on toggled state
         if toggled:
-            minmap = self._current_data_object.get('data')
-            phase_id = minmap.as_id(item.text(1))
-            vmin, vmax = phase_id - 0.5, phase_id + 0.5
+            vmin = vmax = minmap.as_id(item.text(1))
         else:
-            vmin, vmax = None, None
+            vmin = vmax = None
 
         self.map_canvas.update_clim(vmin, vmax)
-        self.map_canvas.draw()
 
 
     def onMaskExtracted(self, classes: list[str]) -> None:
@@ -2132,12 +2271,15 @@ class ModeViewer(CW.StyledTabWidget):
             Selected mineral classes.
 
         '''
+    # Do nothing if current mineral map is invalid (safety)
+        if (minmap := self.get_current_minmap()) is None:
+            return
+        
     # Extract the mask
-        minmap = self._current_data_object.get('data')
         mask = ~np.isin(minmap.minmap, classes)
 
     # If a legacy mask exists, merge it with the new mask
-        _, legacy_mask = self.map_canvas.get_map(return_mask=True)
+        _, legacy_mask = self.map_canvas.get_unmasked_array(return_mask=True)
         if legacy_mask is not None:
             mode = settings.manager.get('data/mask_merging_rule')
             mask = iatools.binary_merge([mask, legacy_mask], mode)
@@ -2147,13 +2289,14 @@ class ModeViewer(CW.StyledTabWidget):
 
     # Save mask file
         ftype = 'Mask (*.msk)'
-        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get_path()
         if not outpath:
             return
         try:
             mask.save(outpath)
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            return
             
 
     def resetConfig(self) -> None:
@@ -2161,40 +2304,42 @@ class ModeViewer(CW.StyledTabWidget):
         Reset the Mode Viewer to its default state and configuration.
 
         '''
-        self.navtbar.showToolbarAction().setChecked(True)
-        self.navtbar.setVisible(True)
-        self.navtbar.lbl_action.setChecked(False)
+        self.loadConfig(config_schemas.MODE_DEFAULT_CONFIG)
 
 
-    def getConfig(self) -> dict:
+    def getConfig(self) -> config_schemas.ModeViewerConfig:
         '''
         Take a snapshot of the current state and configuration of the Mode
         Viewer.
 
         Returns
         -------
-        dict
-            Current state and configuration.
+        config : ModeViewerConfig 
+            Current state and configuration of the Mode Viewer.
 
         '''
-        config = {'NavTbar': {}}
-        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
-        config['NavTbar']['Labelize'] = self.navtbar.lbl_action.isChecked()
+        config: config_schemas.ModeViewerConfig = {
+            'NavTbar': {
+                'Visible': self.navtbar.showToolbarAction().isChecked(),
+                'Labelize': self.navtbar.lbl_action.isChecked()
+            }
+        }
         return config
     
 
-    def loadConfig(self, config: dict) -> None:
+    def loadConfig(self, config: config_schemas.ModeViewerConfig) -> None:
         '''
         Set the state and configuration of the Mode Viewer to those provided in
         'config'.
 
         Parameters
         ----------
-        config : dict
-            Reference state and configuration.
+        config : ModeViewerConfig
+            Stored state and configuration of Mode Viewer.
 
         '''
-        show_ntbar, labelize = config['NavTbar'].values()
+        show_ntbar = config['NavTbar']['Visible']
+        labelize = config['NavTbar']['Labelize']
         self.navtbar.showToolbarAction().setChecked(show_ntbar)
         self.navtbar.setVisible(show_ntbar)
         self.navtbar.lbl_action.setChecked(labelize)
@@ -2204,6 +2349,8 @@ class ModeViewer(CW.StyledTabWidget):
 class RoiEditor(QW.QWidget):
 
     rectangleSelectorUpdated = pyqtSignal()
+    autoroiSamplesRequested = pyqtSignal()
+    roiDataAltered = pyqtSignal()
 
     def __init__(
         self,
@@ -2225,12 +2372,12 @@ class RoiEditor(QW.QWidget):
 
     # Define main attributes
         self.canvas = maps_canvas
-        self.current_selection = None
-        self.current_roimap = None
-        self.patches = []
+        self.current_selection: tuple[int, int, int, int] | None = None
+        self._current_roimap: RoiMap | None = None
+        self.patches: list[tuple[plots.RoiAnnotation, plots.RoiPatch]] = []
 
     # ROI selector widget 
-        self.rect_sel = plots.RectSel(self.canvas.ax, self.onRectSelect)
+        self.rect_sel = plots.RectSel(self.canvas.ax, self.onRectSelect, btns=[1])
 
     # Load ROIs visual properties
         hex_roi_color = settings.manager.get('plots/roi_color')
@@ -2250,61 +2397,75 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Toolbar
-        self.toolbar = QW.QToolBar('ROI toolbar')
+        self.toolbar = QW.QToolBar('ROI toolbar', self)
         self.toolbar.setStyleSheet(style.SS_TOOLBAR)
-
-    # Load ROI map [-> Toolbar Action]
-        self.load_action = self.toolbar.addAction(
-            style.getIcon('IMPORT'), 'Import ROI map')
-
-    # Save ROI map [-> Toolbar Action]
-        self.save_action = self.toolbar.addAction(
-            style.getIcon('SAVE'), 'Save ROI map')
-
-    # Save ROI map as... [-> Toolbar Action]
-        self.saveas_action = self.toolbar.addAction(
-            style.getIcon('SAVE_AS'), 'Save ROI map as')
         
-    # Auto detect ROI [-> Toolbar Action]
-        self.autoroi_action = self.toolbar.addAction(
-            style.getIcon('ROI_SEARCH'), 'Auto detect ROI')
-        
-    # Auto detect ROI dialog
-        self.autoroi_dial = dialogs.AutoRoiDetector()
-
-    # Toggle ROI selection [-> Toolbar Action]
-        self.draw_action = self.toolbar.addAction(
-            style.getIcon('ROI'), 'Draw ROI')
+    #[Define Toolbar Actions]
+    #|Load ROI map
+        self.load_action = QW.QAction(
+            style.getIcon('IMPORT'), 'Import ROI map', self)
+    #|Save ROI map
+        self.save_action = QW.QAction(
+            style.getIcon('SAVE'), 'Save ROI map', self)
+    #|Save ROI map as... 
+        self.saveas_action = QW.QAction(
+            style.getIcon('SAVE_AS'), 'Save ROI map as', self)
+    #|Auto detect ROI
+        self.autoroi_action = QW.QAction(
+            style.getIcon('ROI_SEARCH'), 'Auto detect ROI', self)
+    #|Toggle ROI selection
+        self.draw_action = QW.QAction(
+            style.getIcon('ROI'), 'Draw ROI', self)
         self.draw_action.setCheckable(True)
-
-    # Add ROI [-> Toolbar Action]
-        self.addroi_action = self.toolbar.addAction(
-            style.getIcon('ADD_ROI'), 'Add ROI')
+    #|Add ROI
+        self.addroi_action = QW.QAction(
+            style.getIcon('ADD_ROI'), 'Add ROI', self)
         self.addroi_action.setEnabled(False)
-
-    # Extract mask [-> Toolbar Action]
-        self.extr_mask_action = self.toolbar.addAction(
-            style.getIcon('ADD_MASK'), 'Extract selection mask')
+    #|Extract mask
+        self.extr_mask_action = QW.QAction(
+            style.getIcon('ADD_MASK'), 'Extract selection mask', self)
         self.extr_mask_action.setEnabled(False)
-
-    # ROI visual preferences [-> Toolbar Menu-Action]
-        pref_menu = QW.QMenu()
-        pref_menu.setStyleSheet(style.SS_MENU)
-    # - Set ROI outline color action
-        self.roicolor_action = pref_menu.addAction('Color...')
-    # - Set ROI outline selection color action 
-        self.roiselcolor_action = pref_menu.addAction('Selection color...')
-    # - Toggle filled ROI color action 
-        self.roifilled_action = pref_menu.addAction('Filled')
+    #|Set ROI outline color
+        self.roicolor_action = QW.QAction('Color...', self)
+    #|Set ROI outline selection color
+        self.roiselcolor_action = QW.QAction('Selection color...', self)
+    #|Toggle filled ROI color 
+        self.roifilled_action = QW.QAction('Filled', self)
         self.roifilled_action.setCheckable(True)
         self.roifilled_action.setChecked(self.roi_filled)
-    # - Add menu-action to toolbar
-        self.pref_action = QW.QAction(style.getIcon('GEAR'), 'ROI settings')
-        self.pref_action.setMenu(pref_menu)
-        self.toolbar.addAction(self.pref_action)
 
-    # Insert separator into the toolbar
-        self.toolbar.insertSeparator(self.autoroi_action)
+    #[Define Toolbar Menu-Actions]
+    #|ROI visual preferences 
+        pref_menu = QW.QMenu(self.toolbar)
+        pref_menu.setStyleSheet(style.SS_MENU)
+        pref_menu.addActions((
+            self.roicolor_action,
+            self.roiselcolor_action,
+            self.roifilled_action
+        ))
+        self.pref_action = QW.QAction(
+            style.getIcon('GEAR'), 'ROI settings', self) 
+        self.pref_action.setMenu(pref_menu)
+
+    # Populate toolbar
+        self.toolbar = QW.QToolBar('ROI toolbar', self)
+        self.toolbar.setStyleSheet(style.SS_TOOLBAR)
+        self.toolbar.addActions((
+            self.load_action,
+            self.save_action,
+            self.saveas_action
+        ))
+        self.toolbar.addSeparator()
+        self.toolbar.addActions((
+            self.autoroi_action,
+            self.draw_action,
+            self.addroi_action,
+            self.extr_mask_action,
+            self.pref_action
+        ))
+
+    # Auto detect ROI dialog
+        self.autoroi_dial = dialogs.AutoRoiDetector()
 
     # Loaded ROI map path (Path Label)
         self.mappath = CW.PathLabel(full_display=False)
@@ -2320,11 +2481,12 @@ class RoiEditor(QW.QWidget):
 
     # Roi table
         self.table = CW.StyledTable(0, 2)
-        self.table.setSelectionBehavior(QW.QAbstractItemView.SelectRows)
+        selection_behaviour = QW.QAbstractItemView.SelectionBehavior.SelectRows
+        self.table.setSelectionBehavior(selection_behaviour)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.setHorizontalHeaderLabels(['Class', 'Pixel Count'])
-        self.table.horizontalHeader().setSectionResizeMode(1) # Stretch
-        self.table.verticalHeader().setSectionResizeMode(3) # ResizeToContent
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.h_header.setSectionResizeMode(style.HRM_STRETCH)
+        self.table.v_header.setSectionResizeMode(style.HRM_RESIZETOCONTENTS)        
 
     # Bar plot canvas
         self.barCanvas = plots.BarCanvas(
@@ -2343,12 +2505,12 @@ class RoiEditor(QW.QWidget):
 
     # ROI visualizer (Styled Tab Widget -> [ROI table | bar plot])
         roi_visualizer = CW.StyledTabWidget()
-        roi_visualizer.addTab(
+        table_idx = roi_visualizer.wrap_tab(
             self.table, style.getIcon('TABLE'), title=None, tight=True)
-        roi_visualizer.addTab(
+        plot_idx = roi_visualizer.wrap_tab(
             barplot_vbox, style.getIcon('PLOT'), title=None, tight=True)
-        roi_visualizer.setTabToolTip(0, 'Table')
-        roi_visualizer.setTabToolTip(1, 'Bar plot')
+        roi_visualizer.setTabToolTip(table_idx, 'Table')
+        roi_visualizer.setTabToolTip(plot_idx, 'Bar plot')
 
     # Adjust Layout
         main_layout = QW.QGridLayout()
@@ -2377,10 +2539,12 @@ class RoiEditor(QW.QWidget):
     # Launch ROI detector dialog
         self.autoroi_action.triggered.connect(self.autoroi_dial.show)
 
-    # Connect ROI detector dialog signals
-        self.autoroi_dial.requestRoiMap.connect(
-            lambda: self.autoroi_dial.set_current_roimap(self.current_roimap))
-        self.autoroi_dial.drawingRequested.connect(self.addAutoRoi)
+    # Manage ROI detector dialog signals
+        self.autoroi_dial.roiDrawingRequested.connect(self.addAutoRoi)
+        self.autoroi_dial.roimapUpdateRequested.connect(
+            self.on_autoroi_roimap_requested)
+        self.autoroi_dial.sampleUpdateRequested.connect(
+            self.autoroiSamplesRequested)
 
     # Toggle on/off the Rectangle Selector
         self.draw_action.toggled.connect(self.toggleRectSelect)
@@ -2402,17 +2566,64 @@ class RoiEditor(QW.QWidget):
     # Remove loaded ROI map
         self.unload_btn.clicked.connect(self.unloadRoiMap)
 
-    # Connect table signals (ROI selected & ROI name edited)
+    # Manage table signals
         self.table.itemSelectionChanged.connect(self.updatePatchSelection)
         self.table.itemChanged.connect(self.onRoiNameEdited)
-
-    # Show custom context menu when right-clicking on the table
-        self.table.customContextMenuRequested.connect(
-            self.showTableContextMenu)
+        self.table.customContextMenuRequested.connect(self.showTableContextMenu)
+        if (model := self.table.model()) is not None:
+            model.dataChanged.connect(self.roiDataAltered)
+            model.rowsRemoved.connect(self.roiDataAltered)
 
     # Show custom context menu when right-clicking on the bar canvas
         self.barCanvas.customContextMenuRequested.connect(
             self.showCanvasContextMenu)
+
+
+    @property
+    def current_roimap(self) -> RoiMap:
+        '''
+        Get the current ROI map.
+
+        Returns
+        -------
+        roimap : RoiMap
+            Current ROI map.
+
+        Raises
+        ------
+        TypeError
+            Raised if current ROI map is None.
+
+        '''
+        if (roimap := self._current_roimap) is None:
+            raise TypeError('Current ROI map is None.')
+        return roimap
+
+
+    def set_current_roimap(self, roimap: RoiMap):
+        '''
+        Set a new current ROI map.
+
+        Parameters
+        ----------
+        roimap : RoiMap
+            New ROI map.
+
+        '''
+        self._current_roimap = roimap
+
+
+    def has_roimap(self) -> bool:
+        '''
+        Check if a ROI map is currently set.
+
+        Returns
+        -------
+        bool
+            Whether a ROI map is set or not.
+
+        '''
+        return self._current_roimap is not None
 
 
     @property
@@ -2443,9 +2654,19 @@ class RoiEditor(QW.QWidget):
             Filepath to current ROI map.
 
         '''
-        if self.current_roimap is None:
+        if not self.has_roimap():
             return None
         return self.current_roimap.filepath
+
+
+    def on_autoroi_roimap_requested(self) -> None:
+        '''
+        Actions to perform when AutoROI dialog request a ROI map update.
+
+        '''
+        roimap = None if not self.has_roimap() else self.current_roimap
+        self.autoroi_dial.set_current_roimap(roimap)
+
 
 
     def _redraw(self) -> None:
@@ -2464,12 +2685,12 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Clear the canvas if the RoiMap is None or empty
-        if not self.current_roimap or not self.current_roimap.class_count:
+        if not self.has_roimap() or not (cc := self.current_roimap.class_count):
             self.barCanvas.clear_canvas()
     # Otherwise update the canvas
         else:
-            names, counts = zip(*self.current_roimap.class_count.items())
-            self.barCanvas.update_canvas(counts, names, 'ROIs Counter')
+            names, counts = zip(*cc.items())
+            self.barCanvas.update_canvas((counts,), names, title='ROIs Counter')
 
 
     def showTableContextMenu(self, point: QPoint) -> None:
@@ -2486,7 +2707,7 @@ class RoiEditor(QW.QWidget):
         if self.table.itemAt(point) is None: 
             return
 
-        menu = QW.QMenu()
+        menu = QW.QMenu(self.table)
         menu.setStyleSheet(style.SS_MENU)
 
     # Extract mask from selected ROIs
@@ -2536,34 +2757,37 @@ class RoiEditor(QW.QWidget):
             Mouse release event.
 
         '''
-        image = self.canvas.image
-        if image is not None:
+    # Save in memory the current selection
+        if (array := self.canvas.get_array()) is not None:
+            rows, col = array.shape
+            self.current_selection = self.rect_sel.fixed_extents((rows, col))
 
-        # Save in memory the current selection
-            map_shape = image.get_array().shape
-            self.current_selection = self.rect_sel.fixed_extents(map_shape)
-
-        # Send the signal to inform that the selector has been updated
-            self.rectangleSelectorUpdated.emit()
+    # Send the signal to inform that the selector has been updated
+        self.rectangleSelectorUpdated.emit()
 
 
-    def selectRoi(self, event: plots.mpl_backend_bases.PickEvent) -> None:
+    def selectRoi(self, event: plots.mpl_backend_bases.Event) -> None:
         '''
         Callback function for picking events that can be triggered when the
         rectangle selector is active.
 
         Parameters
         ----------
-        event : Matplotlib PickEvent
-            The picking event triggered by left-clicking on a ROI patch.
+        event : Matplotlib Event
+            The picking event triggered by clicking on a ROI patch.
 
         '''
-        if event.mouseevent.button == 1: # left mouse button
+        # Ignore event if not a PickEvent
+        if not isinstance(event, plots.mpl_backend_bases.PickEvent):
+            return
+
+        # Only process left mouse click
+        if event.mouseevent.button == 1:
             patch = event.artist
             _, patches = zip(*self.patches)
 
-        # Select the patch in the table. This will therefore trigger the
-        # UpdatePatchSelection slot
+        # Select the patch in the table. This will therefore trigger the signal
+        # "updatePatchSelection"
             if patch in patches:
                 idx = patches.index(patch)
                 self.table.selectRow(idx)
@@ -2610,7 +2834,8 @@ class RoiEditor(QW.QWidget):
         selected = self.selectedTableIndices
         for idx, (_, patch) in enumerate(self.patches):
             col = self.roi_selcolor if idx in selected else self.roi_color
-            patch.set(color=plots.rgb_to_float([col]), lw=2+2*(idx in selected))
+            (mpl_col,) = plots.rgb_to_float((col,))
+            patch.set(color=mpl_col, linewidth=2 + 2 * (idx in selected))
         self._redraw()
 
 
@@ -2625,10 +2850,9 @@ class RoiEditor(QW.QWidget):
             The table item that was edited.
 
         '''
+    # Update the ROI map
         idx = item.row()
         name = item.text()
-
-    # Update the ROI map
         self.current_roimap.rename_roi(idx, name)
 
     # Update the patch
@@ -2639,7 +2863,7 @@ class RoiEditor(QW.QWidget):
         self._redraw()
 
 
-    def addPatchToCanvas(self, name: str, bbox: tuple | list) -> None:
+    def addPatchToCanvas(self, name: str, bbox: tuple[float, float, int, int]) -> None:
         '''
         Add a new ROI to canvas as a new patch and its linked annotation. 
         Warning: this method does not redraw the canvas.
@@ -2648,14 +2872,13 @@ class RoiEditor(QW.QWidget):
         ----------
         name : str
             The name of the ROI, displayed as annotation.
-        bbox : tuple or list
+        bbox : tuple[float, float, int, int]
             The bounding box of the ROI -> (x0, y0, width, height) where x0, y0
             are the coordinates of the top-left corner.
 
         '''
     # Display the rectangle in canvas
-        color = plots.rgb_to_float([self.roi_color])
-        patch = plots.RoiPatch(bbox, color, self.roi_filled)
+        patch = plots.RoiPatch(bbox, self.roi_color, self.roi_filled)
         patch.set_picker(True)
         self.canvas.ax.add_patch(patch)
 
@@ -2708,7 +2931,7 @@ class RoiEditor(QW.QWidget):
     def getColorFromDialog(
         self,
         old_color: tuple[int, int, int]
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int] | None:
         '''
         Show a dialog to interactively select a color.
 
@@ -2719,15 +2942,14 @@ class RoiEditor(QW.QWidget):
 
         Returns
         -------
-        rgb : tuple[int, int, int]
-            Selected color as RGB triplet.
+        tuple[int, int, int] or None
+            Selected color as RGB triplet or None if selected color is invalid.
 
         '''
-        rgb = False
         col = QW.QColorDialog.getColor(QColor(*old_color), self)
         if col.isValid():
-            rgb = tuple(col.getRgb()[:-1])
-        return rgb
+            return (col.red(), col.green(), col.blue())
+        return None
 
 
     def setRoiColor(self) -> None:
@@ -2736,7 +2958,7 @@ class RoiEditor(QW.QWidget):
 
         '''
         rgb = self.getColorFromDialog(self.roi_color)
-        if rgb:
+        if rgb is not None:
             settings.manager.set('plots/roi_color', iatools.rgb2hex(rgb))
             self.roi_color = rgb
             self.updatePatchSelection()
@@ -2748,7 +2970,7 @@ class RoiEditor(QW.QWidget):
 
         '''
         rgb = self.getColorFromDialog(self.roi_selcolor)
-        if rgb:
+        if rgb is not None:
             settings.manager.set('plots/roi_selcolor', iatools.rgb2hex(rgb))
             self.roi_selcolor = rgb
             self.updatePatchSelection()
@@ -2770,40 +2992,6 @@ class RoiEditor(QW.QWidget):
         for _, patch in self.patches:
             patch.set_fill(filled)
         self._redraw()
-
-
-    def addAutoRoi(self, auto_roimap: RoiMap) -> None:
-        '''
-        Populate the current ROI map with the auto-traced ROIs that are stored
-        in 'auto_roimap'. This should only be called when the "ROI detector"
-        dialog is closed.
-
-        Parameters
-        ----------
-        auto_roimap : RoiMap
-            ROI map whose ROIs have been traced automatically.
-
-        '''
-    # Create a new ROI map if there was no existent ROI map
-        if self.current_roimap is None:
-            self.mappath.setPath('*Unsaved ROI map')
-            self.current_roimap = auto_roimap
-    
-    # Otherwise add the new ROIs to the current ROI map
-        else:
-            # We can save some time by switching off safe mode. We are already
-            # sure that the new ROIs do NOT overlap with the current ones.
-            self.current_roimap.overwrite_roimap(auto_roimap, safe=False)
-
-    # Add new ROIs to table and canvas
-        for name, bbox in auto_roimap.roilist:
-            area = auto_roimap.bbox_area(bbox)
-            self.addRoiToTable(name, area)
-            self.addPatchToCanvas(name, bbox)
-    
-    # Refresh view
-        self.updateBarPlot()
-        self._redraw()
         
 
     def addRoi(self) -> None:
@@ -2812,21 +3000,19 @@ class RoiEditor(QW.QWidget):
         currently selected rectangle. This method also redraws the canvas.
 
         '''
-    # Exit function if canvas is empty
-        image = self.canvas.image
-        if image is None: 
+    # Exit function if canvas is empty (invalid map array)
+        if (map_array := self.canvas.get_array()) is None: 
             return
 
     # Get ROI bbox. Exit function if bbox is invalid (= None)
-        map_array = image.get_array()
-        map_shape = map_array.shape
-        bbox = self.rect_sel.fixed_rect_bbox(map_shape)
+        rows, cols = map_shape = map_array.shape
+        bbox = self.rect_sel.fixed_rect_bbox((rows, cols))
         if bbox is None: 
             return
 
     # If no ROI map is loaded, then create a new one.
-        if self.current_roimap is None:
-            self.current_roimap = RoiMap.from_shape(map_shape)
+        if not self.has_roimap():
+            self.set_current_roimap(RoiMap.from_shape((rows, cols)))
             self.mappath.setPath('*Unsaved ROI map')
 
     # Send a warning if a ROI map is loaded and has different shape of the map
@@ -2843,8 +3029,9 @@ class RoiEditor(QW.QWidget):
                 return
 
     # Prevent drawing overlapping ROIs
-        if self.current_roimap.bbox_overlaps(bbox):
-            return CW.MsgBox(self, 'Crit', 'ROIs cannot overlap.')
+        if (roimap := self.current_roimap).bbox_overlaps(bbox):
+            CW.MsgBox(self, 'Crit', 'ROIs cannot overlap.')
+            return
 
     # Show the dialog to type the ROI name
         text = 'Type name (max 8 ASCII characters)'
@@ -2852,9 +3039,9 @@ class RoiEditor(QW.QWidget):
 
     # Proceed only if the new name is an ASCII <= 8 characters string
         if ok and 0 < len(name) < 9 and name.isascii():
-            area = self.current_roimap.bbox_area(bbox)
+            area = roimap.bbox_area(bbox)
         # Add to roimap
-            self.current_roimap.add_roi(name, bbox)
+            roimap.add_roi(name, bbox)
         # Add to table
             self.addRoiToTable(name, area)
         # Add to patches list and canvas
@@ -2879,7 +3066,8 @@ class RoiEditor(QW.QWidget):
     # Define a new table entry (2 TableWidgetItems, one for each table column)
         i0 = QW.QTableWidgetItem(name)
         i1 = QW.QTableWidgetItem(str(pixel_count))
-        i1.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled) # not editable
+        f = Qt.ItemFlag(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        i1.setFlags(f) # make item not editable
 
     # Append new row to the table
         new_row = self.table.rowCount()
@@ -2915,21 +3103,19 @@ class RoiEditor(QW.QWidget):
         Extract and save a mask from current selection.
 
         '''
-    # Exit function if image is empty
-        if self.canvas.is_empty(): 
+    # Exit function if image is empty (invalid array)
+        array, legacy_mask = self.canvas.get_unmasked_array(return_mask=True)
+        if array is None: 
             return
 
-    # Extract the displayed array shape and its current mask (legacy mask)
-        array, legacy_mask = self.canvas.get_map(return_mask=True)
-        shape = array.shape
-
     # Exit function if there is no valid selection
-        extents = self.rect_sel.fixed_extents(shape, fmt='xy') # x0,x1, y0,y1
+        rows, cols = array.shape
+        extents = self.rect_sel.fixed_extents((rows, cols), fmt='xy') # x0,x1, y0,y1
         if extents is None: 
             return
 
     # Initialize a new Mask of 1's and invert it to draw 'holes' using extents
-        mask = Mask.from_shape(shape, fillwith=1)
+        mask = Mask.from_shape((rows, cols), fillwith=1)
         mask.invert_region(extents)
 
     # If the legacy mask exists, merge it with the new mask
@@ -2939,13 +3125,13 @@ class RoiEditor(QW.QWidget):
 
     # Save mask file
         ftype = 'Mask (*.msk)'
-        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get_path()
         if not outpath:
             return
         try:
             mask.save(outpath)
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def extractMaskFromRois(self) -> None:
@@ -2953,38 +3139,37 @@ class RoiEditor(QW.QWidget):
         Extract and save a mask from selected ROIs.
 
         '''
-    # Do nothing if no ROI is selected
-        selected = self.selectedTableIndices
-        if not len(selected): 
+    # Exit function if no ROI is selected
+        if not len(selected := self.selectedTableIndices): 
             return
 
     # Initialize a new Mask of 1's with the shape of the current ROI map
-        shape = self.current_roimap.shape
-        mask = Mask.from_shape(shape, fillwith=1)
+        roimap = self.current_roimap
+        rows, cols = shape = roimap.shape
+        mask = Mask.from_shape((rows, cols), fillwith=1)
 
     # Use the extents of the selected ROIs to draw 'holes' (0's) on the mask
         for idx in selected:
-            roi_bbox = self.current_roimap.roilist[idx][1]
-            extents = self.current_roimap.bbox_to_extents(roi_bbox)
+            roi_bbox = roimap.roilist[idx][1]
+            extents = roimap.bbox_to_extents(roi_bbox)
             mask.invert_region(extents)
 
     # If there is a loaded image that has the same shape of the current ROI map
     # and it has a legacy mask, merge it with the new mask
-        if not self.canvas.is_empty():
-            array, legacy_mask = self.canvas.get_map(return_mask=True)
-            if array.shape == shape and legacy_mask is not None:
-                mode = settings.manager.get('data/mask_merging_rule')
-                mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
+        arr, legacy_mask = self.canvas.get_unmasked_array(return_mask=True)
+        if arr is not None and arr.shape == shape and legacy_mask is not None:
+            mode = settings.manager.get('data/mask_merging_rule')
+            mask.mask = iatools.binary_merge([mask.mask, legacy_mask], mode)
 
     # Save mask file
         ftype = 'Mask (*.msk)'
-        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get_path()
         if not outpath:
             return
         try:
             mask.save(outpath)
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
 
 
     def removeRoi(self) -> None:
@@ -2992,18 +3177,18 @@ class RoiEditor(QW.QWidget):
         Wrapper method to easily remove selected ROIs. This method requires a
         user confirm. This method also redraws the canvas.
 
-        '''
+        '''        
     # Exit function if no ROI is selected
-        selected = self.selectedTableIndices
-        if not len(selected): 
+        if not len(selected := self.selectedTableIndices): 
             return
 
     # Ask for user confirmation
+        roimap = self.current_roimap
         choice = CW.MsgBox(self, 'Quest', 'Remove selected ROI?')
         if choice.yes():
             for row in sorted(selected, reverse=True):
-            # Remove from roimap
-                self.current_roimap.del_roi(row)
+            # Remove from ROI map
+                roimap.del_roi(row)
             # Remove from table
                 self.table.removeRow(row)
             # Remove from patches list and canvas
@@ -3019,7 +3204,7 @@ class RoiEditor(QW.QWidget):
         from the canvas. Warning: this method does not redraw the canvas.
 
         '''
-        self.current_roimap = None
+        self._current_roimap = None
         self.mappath.clearPath()
         self.table.setRowCount(0)
 
@@ -3042,7 +3227,7 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Show a warning if a ROI map was already loaded
-        if self.current_roimap is not None:
+        if self.has_roimap():
             warn_text = (
                 'Loading a new ROI map will discard any unsaved changes made '
                 'to the current ROI map. Proceed anyway?'
@@ -3056,7 +3241,7 @@ class RoiEditor(QW.QWidget):
         # Do nothing if filepath is invalid or the file dialog is canceled
         if path is None:
             ftype = 'ROI maps (*.rmp)'
-            path = CW.FileDialog(self, 'open', 'Load ROI', ftype).get()
+            path = CW.FileDialog(self, 'open', 'Load ROI', ftype).get_path()
             if not path:
                 return
         
@@ -3067,16 +3252,17 @@ class RoiEditor(QW.QWidget):
 
     # Load new ROI map
         try:
-            self.current_roimap = RoiMap.load(path)
+            self.set_current_roimap(RoiMap.load(path))
             self.mappath.setPath(path)
             pbar.increase()
         except Exception as e:
             pbar.reset()
-            return CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', str(e))
+            CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', str(e))
+            return
 
     # Populate the canvas and the ROIs table with the loaded ROIs
-        for name, bbox in self.current_roimap.roilist:
-            area = self.current_roimap.bbox_area(bbox)
+        for name, bbox in (roimap := self.current_roimap).roilist:
+            area = roimap.bbox_area(bbox)
             self.addRoiToTable(name, area)
             self.addPatchToCanvas(name, bbox)
         pbar.increase()
@@ -3094,8 +3280,8 @@ class RoiEditor(QW.QWidget):
         unsaved data. This method also redraws the canvas.
 
         '''
-    # Do nothing if no ROI map is loaded
-        if self.current_roimap is None:
+    # Exit function if no ROI map is loaded
+        if not self.has_roimap():
             return
     
     # Ask for user confirmation
@@ -3125,7 +3311,7 @@ class RoiEditor(QW.QWidget):
 
         '''
     # Exit function if the current ROI map does not exist
-        if self.current_roimap is None: 
+        if not self.has_roimap(): 
             return
 
     # Save ROI map to a new file if it was requested (save_as = True) and/or
@@ -3135,7 +3321,7 @@ class RoiEditor(QW.QWidget):
             outpath = path
         else:
             ftype = 'ROI maps (*.rmp)'
-            outpath = CW.FileDialog(self, 'save', 'Save ROI', ftype).get()
+            outpath = CW.FileDialog(self, 'save', 'Save ROI', ftype).get_path()
             if not outpath:
                 return
  
@@ -3157,7 +3343,7 @@ class RoiEditor(QW.QWidget):
 
         '''
     # If no ROI map is loaded, it cannot be unsaved
-        if self.current_roimap is None:
+        if not self.has_roimap():
             return False
     
     # If current ROI map has no valid filepath, it is unsaved
@@ -3172,71 +3358,115 @@ class RoiEditor(QW.QWidget):
 
     # Check if saved ROI map data differs from current ROI map data
         return saved_roimap != self.current_roimap
-            
+
+
+    def updateDetectorSamplesList(self, samples: list[CW.DataGroup]) -> None:
+        '''
+        Update the list of available samples within the "ROI detector" dialog.
+        This method is called by the main window, by accessing sample data from
+        the Data Manager.
+
+        Parameters
+        ----------
+        samples : list[CW.DataGroup]
+            List of available samples.
+
+        '''
+        self.autoroi_dial.maps_selector.updateCombox(samples)
+
+
+    def addAutoRoi(self, auto_roimap: RoiMap) -> None:
+        '''
+        Populate the current ROI map with the auto-traced ROIs that are stored
+        in 'auto_roimap'. This should only be called when the "ROI detector"
+        dialog is closed.
+
+        Parameters
+        ----------
+        auto_roimap : RoiMap
+            ROI map whose ROIs have been traced automatically.
+
+        '''
+    # Create a new ROI map if there was no existent ROI map
+        if not self.has_roimap():
+            self.mappath.setPath('*Unsaved ROI map')
+            self.set_current_roimap(auto_roimap)
+    
+    # Otherwise add the new ROIs to the current ROI map
+        else:
+            # We can save some time by switching off safe mode. We are already
+            # sure that the new ROIs do NOT overlap with the current ones.
+            self.current_roimap.overwrite_roimap(auto_roimap, safe=False)
+
+    # Add new ROIs to table and canvas
+        for name, bbox in auto_roimap.roilist:
+            area = auto_roimap.bbox_area(bbox)
+            self.addRoiToTable(name, area)
+            self.addPatchToCanvas(name, bbox)
+    
+    # Refresh view
+        self.updateBarPlot()
+        self._redraw()
+
 
     def resetConfig(self) -> None:
         '''
         Reset the ROI Editor to its default state and configuration.
 
         '''
-    # Reset ROI rectangle selector
-        self.current_selection = None
-        self.rect_sel.extents = (0., 0., 0., 0.)
-        self.draw_action.setChecked(False)
-        self.rect_sel.set_active(False)
-        self.rect_sel.set_visible(False)
-    
-    # Reset ROI map (patches and table)
-        self.removeCurrentRoiMap()
-        self.hideroi_btn.setChecked(False)
-        self._redraw()
-
-    # Reset bar plot and its navigation toolbar
-        self.barCanvas.clear_canvas()
-        self.navtbar.showToolbarAction().setChecked(True)
-        self.navtbar.setVisible(True)
-        self.navtbar.lbl_action.setChecked(False)
+        self.loadConfig(config_schemas.ROIEDITOR_DEFAULT_CONFIG)
 
 
-    def getConfig(self) -> dict:
+    def getConfig(self) -> config_schemas.RoiEditorConfig:
         '''
         Take a snapshot of the current state and configuration of the ROI 
         Editor.
 
         Returns
         -------
-        dict
-            Current state and configuration.
+        config : RoiEditorConfig
+            Current state and configuration of ROI Editor.
 
         '''
-        config = {key: {} for key in ('Selector', 'RoiMap', 'NavTbar')}
-
-        config['Selector']['Extents'] = self.rect_sel.extents
-        config['Selector']['FixedExtents'] = self.current_selection
-        config['Selector']['Active'] = self.rect_sel.active
-        
-        config['RoiMap']['Path'] = self.currentRoiMapPath
-        config['RoiMap']['Visible'] = not self.hideroi_btn.isChecked()
-
-        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
-        config['NavTbar']['Labelize'] = self.navtbar.lbl_action.isChecked()
-
+        config: config_schemas.RoiEditorConfig = {
+            'Selector': {
+                'Extents': self.rect_sel.extents,
+                'FixedExtents': self.current_selection,
+                'Active': self.rect_sel.active
+            },
+            'RoiMap': {
+                'Path': self.currentRoiMapPath,
+                'Visible': not self.hideroi_btn.isChecked()
+            },
+            'NavTbar': {
+                'Visible': self.navtbar.showToolbarAction().isChecked(),
+                'Labelize': self.navtbar.lbl_action.isChecked()
+            }
+        }
         return config
 
 
-    def loadConfig(self, config: dict) -> None:
+    def loadConfig(self, config: config_schemas.RoiEditorConfig) -> None:
         '''
         Set the state and configuration of the ROI Editor to those provided in
         'config'.
 
         Parameters
         ----------
-        config : dict
-            Reference state and configuration.
+        config : RoiEditorConfig
+            Stored state and configuration of ROI Editor.
 
         '''
+    # Extract configs
+        extents = config['Selector']['Extents']
+        fixed_extents = config['Selector']['FixedExtents']
+        selector_active = config['Selector']['Active']
+        roimap_path = config['RoiMap']['Path']
+        roimap_visible = config['RoiMap']['Visible']
+        show_ntbar = config['NavTbar']['Visible']
+        labelize = config['NavTbar']['Labelize']
+
     # Update ROI selector (requires ImageCanvas' extents to be updated first)
-        extents, fixed_extents, selector_active = config['Selector'].values()
         self.rect_sel.extents = extents
         self.current_selection = fixed_extents
         self.draw_action.setChecked(selector_active)
@@ -3245,16 +3475,15 @@ class RoiEditor(QW.QWidget):
 
     # Update ROI map and linked table and bar plot
         self.removeCurrentRoiMap()
-        self.hideroi_btn.setChecked(not config['RoiMap']['Visible'])
+        self.hideroi_btn.setChecked(not roimap_visible)
 
-        if (roimap_path := config['RoiMap']['Path']) is not None:
-            self.loadRoiMap(roimap_path) # this also updates canvas and barplot
-        else:
+        if roimap_path is None:
             self.barCanvas.clear_canvas()        
             self._redraw()
+        else:
+            self.loadRoiMap(roimap_path) # this also updates canvas and barplot
 
     # Update bar plot navigation toolbar
-        show_ntbar, labelize = config['NavTbar'].values()
         self.navtbar.showToolbarAction().setChecked(show_ntbar)
         self.navtbar.setVisible(show_ntbar)
         self.navtbar.lbl_action.setChecked(labelize)
@@ -3310,13 +3539,13 @@ class ProbabilityMapViewer(QW.QWidget):
         self.rangeTbar.setStyleSheet(style.SS_TOOLBAR)
 
     # Toggle range selection [-> View Range Toolbar]
-        self.toggle_range_action = self.rangeTbar.addAction(
-            style.getIcon('RANGE'), 'Set range')
+        self.toggle_range_action = QW.QAction(
+            style.getIcon('RANGE'), 'Set range', self)
         self.toggle_range_action.setCheckable(True)
 
     # Extract mask from range [-> View Range Toolbar]
-        self.mask_action = self.rangeTbar.addAction(
-            style.getIcon('ADD_MASK'), 'Extract mask')
+        self.mask_action = QW.QAction(
+            style.getIcon('ADD_MASK'), 'Extract mask', self)
         self.mask_action.setEnabled(False)
 
     # Range values inputs [-> View Range Toolbar]
@@ -3334,16 +3563,20 @@ class ProbabilityMapViewer(QW.QWidget):
 
     # Range warning icon [-> Heatmap scaler toolbar]
         warn_pixmap = QPixmap(str(style.ICONS.get('WARNING')))
-        warn_lbl = QW.QLabel()
-        warn_lbl.setPixmap(warn_pixmap.scaled(20, 20, Qt.KeepAspectRatio))
-        warn_lbl.setSizePolicy(QW.QSizePolicy.Maximum, QW.QSizePolicy.Maximum)
-        warn_lbl.setToolTip('Lower limit cannot be >= than upper limit.')
+        warn_lbl = QW.QLabel(self.rangeTbar)
+        warn_lbl.setPixmap(warn_pixmap.scaled(20, 20, style.ARM_KEEP))
+        warn_lbl.setSizePolicy(style.SP_MAXIMUM, style.SP_MAXIMUM)
+        warn_lbl.setToolTip('Lower limit is bigger or equal to upper limit.')
+        self.warn_icon = QW.QWidgetAction(self)
+        self.warn_icon.setDefaultWidget(warn_lbl)
+        self.warn_icon.setVisible(False)
 
-    # Add widgets to View Range Toolbar
+    # Add actions and widgets to View Range Toolbar
+        self.rangeTbar.addAction(self.toggle_range_action)
+        self.rangeTbar.addAction(self.mask_action)
         self.rangeTbar.addWidget(self.min_input)
         self.rangeTbar.addWidget(self.max_input)
-        self.warn_icon = self.rangeTbar.addWidget(warn_lbl)
-        self.warn_icon.setVisible(False)
+        self.rangeTbar.addAction(self.warn_icon)
 
     # Adjust layout
         main_layout = QW.QVBoxLayout()
@@ -3411,7 +3644,6 @@ class ProbabilityMapViewer(QW.QWidget):
             self.updateViewRange()
         else:
             self.canvas.update_clim()
-            self.canvas.draw()
 
 
     def onViewRangeChanged(self) -> None:
@@ -3438,7 +3670,6 @@ class ProbabilityMapViewer(QW.QWidget):
         vmin, vmax = self.min_input.value(), self.max_input.value()
         if vmin < vmax:
             self.canvas.update_clim(vmin, vmax)
-            self.canvas.draw()
             self.warn_icon.setVisible(False)
         else:
             self.warn_icon.setVisible(True)
@@ -3449,21 +3680,18 @@ class ProbabilityMapViewer(QW.QWidget):
         Extract mask from current view range.
 
         '''
-    # Exit function if no probability map is displayed
-        if self.canvas.is_empty():
+    # Exit function if no probability map is displayed (array invalid)
+        if (pmap_array := self.canvas.get_unmasked_array()) is None:
             return
     
     # Get the range values from the view range toolbar widgets
         vmin, vmax = self.min_input.value(), self.max_input.value()
         
-    # Get the probability map array
-        array = self.canvas.get_map()
-        
     # Extract the current mask (legacy mask)
-        _, legacy_mask = self.maps_canvas.get_map(return_mask=True)
+        _, legacy_mask = self.maps_canvas.get_unmasked_array(return_mask=True)
 
     # If the legacy mask exists, merge it with the new mask
-        mask_array = np.logical_or(array < vmin, array > vmax)
+        mask_array = np.logical_or(pmap_array < vmin, pmap_array > vmax)
         if legacy_mask is not None:
             mode = settings.manager.get('data/mask_merging_rule')
             mask_array = iatools.binary_merge([mask_array, legacy_mask], mode)
@@ -3471,7 +3699,7 @@ class ProbabilityMapViewer(QW.QWidget):
 
     # Save mask file
         ftype = 'Mask (*.msk)'
-        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Mask', ftype).get_path()
         if not outpath:
             return
         try:
@@ -3485,65 +3713,61 @@ class ProbabilityMapViewer(QW.QWidget):
         Reset the Probability Map Viewer to its default state and configuration.
 
         '''
-    # Reset navigation toolbar actions
-        self.navtbar.showToolbarAction().setChecked(True)
-        self.navtbar.setVisible(True)
-        self.navtbar.mode = self.navtbar.mode.NONE 
-        self.navtbar._update_buttons_checked()
-
-    # Reset view range toolbar actions
-        self.toggle_range_action.setChecked(False)
-        self.min_input.setValue(0.0)
-        self.max_input.setValue(1.0)
+        self.loadConfig(config_schemas.PROBABILITY_DEFAULT_CONFIG)
 
 
-    def getConfig(self) -> dict:
+    def getConfig(self) -> config_schemas.ProbabilityViewerConfig:
         '''
         Take a snapshot of the current state and configuration of the 
         Probability Map Viewer.
 
         Returns
         -------
-        dict
-            Current state and configuration.
+        config : ProbabilityViewerConfig
+            Current state and configuration of Probability Map Viewer.
 
         '''
-        config = {key: {} for key in ('NavTbar', 'ViewRange')}
-
-        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
-        config['NavTbar']['ActiveMode'] = self.navtbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
-
-        config['ViewRange']['Enabled'] = self.toggle_range_action.isChecked()
-        config['ViewRange']['Range'] = [
-            self.min_input.value(), self.max_input.value()]
-
+        config: config_schemas.ProbabilityViewerConfig = {
+            'NavTbar': {
+                'Visible': self.navtbar.showToolbarAction().isChecked(),
+                'ActiveMode': self.navtbar.mode.value
+            },
+            'ViewRange': {
+                'Enabled': self.toggle_range_action.isChecked(),
+                'Range': (self.min_input.value(), self.max_input.value())
+            }
+        }
         return config
     
 
-    def loadConfig(self, config: dict) -> None:
+    def loadConfig(self, config: config_schemas.ProbabilityViewerConfig) -> None:
         '''
         Set the state and configuration of the Probability Map Viewer to those
         provided in 'config'.
 
         Parameters
         ----------
-        config : dict
-            Reference state and configuration.
+        config : ProbabilityViewerConfig
+            Stored state and configuration of Probability Map Viewer.
 
         '''
+    # Extract configs
+        show_ntbar = config['NavTbar']['Visible']
+        ntbar_mode = config['NavTbar']['ActiveMode']
+        view_range_enabled = config['ViewRange']['Enabled']
+        vmin, vmax = config['ViewRange']['Range']
+
     # Update navigation toolbar actions
-        show_ntbar, ntbar_mode = config['NavTbar'].values()
         self.navtbar.showToolbarAction().setChecked(show_ntbar)
         self.navtbar.setVisible(show_ntbar)
         self.navtbar.mode = type(self.navtbar.mode)(ntbar_mode)
         self.navtbar._update_buttons_checked()
 
     # Update view range toolbar actions
-        view_range_enabled, (vmin, vmax) = config['ViewRange'].values()
         self.toggle_range_action.setChecked(view_range_enabled)
         self.min_input.setValue(vmin)
         self.max_input.setValue(vmax)
-            
+
 
 
 class RgbaCompositeMapViewer(QW.QWidget):
@@ -3587,7 +3811,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
         for col, lbl in enumerate(self.rgba_lbls):
             channel_name = QW.QLabel(self.channels[col])
-            channel_name.setAlignment(Qt.AlignHCenter)
+            channel_name.setAlignment(style.A_HCENTER)
             channels_layout.addWidget(channel_name, 0, col)
             channels_layout.addWidget(lbl, 1, col)
 
@@ -3623,15 +3847,18 @@ class RgbaCompositeMapViewer(QW.QWidget):
         menu = self.canvas.get_navigation_context_menu(self.navtbar)
         menu.addSeparator()
 
-    # Clear channel sub-menu
-        clear_submenu = menu.addMenu('Clear channel...')
-    # - Clear each individual channel
+    # Define the "Clear channel" sub-menu
+        clear_submenu = QW.QMenu('Clear channel...', menu)
+        menu.addMenu(clear_submenu)
+
+    #[Populate sub-menu]
+    #|Clear each individual channel
         for c in self.channels:
             clear_submenu.addAction(
                 f'{c} channel', lambda c=c: self.clearChannel(c))
-    # - Separator
+    #|Separator
         clear_submenu.addSeparator()
-    # - Clear all channels
+    #|Clear all channels
         clear_submenu.addAction('Clear all', self.clearAllChannels)
 
     # Show the menu in the same spot where the user triggered the event
@@ -3648,21 +3875,20 @@ class RgbaCompositeMapViewer(QW.QWidget):
             Channel to be cleared. Valid strings are 'R', 'G', 'B', 'A'.
 
         '''
-    # Do nothing if canvas is empty
-        if self.canvas.is_empty():
+    # Do nothing if canvas is empty (invalid RGBA map array)
+        if (rgba_map_array := self.canvas.get_array()) is None:
             return
         
     # Default "empty" values for each RGBA channel are: R=0, B=0, G=0, A=1
-        rgba_map = self.canvas.image.get_array()
         idx = self.channels.index(channel)
-        rgba_map[:, :, idx] = 1 if idx == 3 else 0
+        rgba_map_array[:, :, idx] = 1 if idx == 3 else 0
         self.rgba_lbls[idx].clearPath()
 
     # If no loaded channel is left, clear the canvas; otherwise redraw it
         if all(map(lambda lbl: lbl.fullpath == '', self.rgba_lbls)):
             self.canvas.clear_canvas()
         else:
-            self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
+            self.canvas.draw_heatmap(rgba_map_array, 'RGBA composite map')
         
     # Emit signal
         self.rgbaModified.emit()
@@ -3702,23 +3928,22 @@ class RgbaCompositeMapViewer(QW.QWidget):
         if channel not in self.channels:
             return
 
-    # Get the current rgba map or build a new one
-        if self.canvas.is_empty():
-            rgba_map = np.zeros((*inmap.shape, 4))
-            rgba_map[:, :, 3] = 1   # invert A channel (opacity)
-        else:
-            rgba_map = self.canvas.image.get_array()
+    # Get the current rgba map array or build a new one
+        if (rgba_map_array := self.canvas.get_array()) is None:
+            rgba_map_array = np.zeros((*inmap.shape, 4))
+            rgba_map_array[:, :, 3] = 1   # invert A channel (opacity)
 
     # Exit function if the Input Map shape does not fit the RGBA map shape
-        if inmap.shape != rgba_map.shape[:2]:
+        if inmap.shape != rgba_map_array.shape[:2]:
             err_txt = 'This map does not fit within the current RGBA map.'
-            return CW.MsgBox(self, 'Crit', err_txt)
+            CW.MsgBox(self, 'Crit', err_txt)
+            return
 
     # Update the channel with the new data and update the plot
         idx = self.channels.index(channel)
         data = inmap.map
-        rgba_map[:, :, idx] = np.round(data/data.max(), 2)
-        self.canvas.draw_heatmap(rgba_map, 'RGBA composite map')
+        rgba_map_array[:, :, idx] = np.round(data/data.max(), 2)
+        self.canvas.draw_heatmap(rgba_map_array, 'RGBA composite map')
 
     # Update the channel path label
         self.rgba_lbls[idx].setPath(inmap.filepath)
@@ -3732,51 +3957,49 @@ class RgbaCompositeMapViewer(QW.QWidget):
         Reset RGBA Composite Map Viewer to its default state and configuration.
 
         '''
-    # Reset navigation toolbar actions
-        self.navtbar.showToolbarAction().setChecked(True)
-        self.navtbar.setVisible(True)
-        self.navtbar.mode = self.navtbar.mode.NONE 
-        self.navtbar._update_buttons_checked()
-
-    # Clear all channels
-        self.clearAllChannels()
+        self.loadConfig(config_schemas.RGBA_VIEWER_CONFIG)
 
 
-    def getConfig(self) -> dict:
+    def getConfig(self) -> config_schemas.RgbaViewerConfig:
         '''
         Take a snapshot of the current state and configuration of the RGBA
         Composite Map Viewer.
 
         Returns
         -------
-        dict
-            Current state and configuration.
+        config : RgbaViewerConfig
+            Current state and configuration of RGBA Composite Map Viewer.
 
         '''
-        config = {key: {} for key in ('NavTbar', 'Channels')}
-
-        config['NavTbar']['Visible'] = self.navtbar.showToolbarAction().isChecked()
-        config['NavTbar']['ActiveMode'] = self.navtbar.mode.value # can be '', 'pan/zoom' or 'zoom rect'
-
-        for ch, lbl in zip(self.channels, self.rgba_lbls):
-            config['Channels'][ch] = lbl.fullpath
-
+        config: config_schemas.RgbaViewerConfig = {
+            'NavTbar': {
+                'Visible': self.navtbar.showToolbarAction().isChecked(),
+                'ActiveMode': self.navtbar.mode.value
+            },
+            'Channels': {
+                'R': self.rgba_lbls[0].fullpath,
+                'G': self.rgba_lbls[1].fullpath,
+                'B': self.rgba_lbls[2].fullpath,
+                'A': self.rgba_lbls[3].fullpath
+            }
+        }
         return config
-    
 
-    def loadConfig(self, config: dict) -> None:
+
+    def loadConfig(self, config: config_schemas.RgbaViewerConfig) -> None:
         '''
         Set the state and configuration of the RGBA Composite Map Viewer to 
         those provided in 'config'.
 
         Parameters
         ----------
-        config : dict
-            Reference state and configuration.
+        config : RgbaViewerConfig
+            Stored state and configuration of RGBA Composite Map Viewer.
 
         '''
     # Update navigation toolbar actions
-        show_ntbar, ntbar_mode = config['NavTbar'].values()
+        show_ntbar = config['NavTbar']['Visible']
+        ntbar_mode = config['NavTbar']['ActiveMode']
         self.navtbar.showToolbarAction().setChecked(show_ntbar)
         self.navtbar.setVisible(show_ntbar)
         self.navtbar.mode = type(self.navtbar.mode)(ntbar_mode)
@@ -3784,7 +4007,8 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Update R, G, B, A channels
         self.clearAllChannels()
-        for ch, path in config['Channels'].items():
+        for ch in self.channels:
+            path = config['Channels'][ch]
             if os.path.exists(path):
                 try:
                     self.setChannel(ch, InputMap.load(path))

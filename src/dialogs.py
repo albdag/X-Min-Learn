@@ -4,7 +4,9 @@ Created on Tue May  14 15:03:45 2024
 
 @author: albdag
 """
+
 import os
+from typing import Literal
 
 from PyQt5.QtCore import pyqtSignal, QLocale, QPoint, QSize, Qt
 from PyQt5.QtGui import QColor, QIcon, QPixmap
@@ -20,14 +22,17 @@ import image_analysis_tools as iatools
 import plots
 import settings
 import style
-import threads
+from threads import NpvThread, RoiDetectionThread
 
 
 class AutoRoiDetector(QW.QDialog):
 
-    requestRoiMap = pyqtSignal()
-    drawingRequested = pyqtSignal(RoiMap)
+    roiDrawingRequested = pyqtSignal(RoiMap)
+    roimapUpdateRequested = pyqtSignal()
+    sampleUpdateRequested = pyqtSignal()
+
     npv_encoder = {'Pure': np.max, 'Simple': np.median, 'Smooth': np.mean}
+    _roi_col = {'new': (255, 0, 0), 'old': (0, 0, 0)}
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -48,15 +53,15 @@ class AutoRoiDetector(QW.QDialog):
         self.resize(1280, 720)
         self.setWindowTitle('ROI detector')
         self.setWindowIcon(style.getIcon('ROI_SEARCH'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
 
     # Set main attributes
-        self._current_roimap = None
-        self._auto_roimap = None
-        self._patches = []
-        self._active_thread = None
-        self.npv_thread = threads.NpvThread()
-        self.roi_detect_thread = threads.RoiDetectionThread()
+        self._current_roimap: RoiMap | None = None
+        self._auto_roimap: RoiMap | None = None
+        self._patches: list[plots.RoiPatch] = []
+        self._active_thread: NpvThread | RoiDetectionThread | None = None
+        self.npv_thread = NpvThread()
+        self.roi_detect_thread = RoiDetectionThread()
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -86,14 +91,14 @@ class AutoRoiDetector(QW.QDialog):
         self.distance_spbox.setToolTip('Minimum distance between ROI')
 
     # NPV function types (QButtonLayout)
-        self.npv_btns = CW.RadioBtnLayout(('Pure', 'Simple', 'Smooth'))
+        self.npv_btns = CW.RadioBtnLayout(['Pure', 'Simple', 'Smooth'])
         tooltips = (
             'Use max function to penalize noisy pixels',
             'Use median function to ignore outliers',
             'Use mean function to smoothen noise'
         )
-        for n, t in enumerate(tooltips):
-            self.npv_btns.button(n).setToolTip(t)
+        for btn, tip in zip(self.npv_btns.buttons(), tooltips):
+            btn.setToolTip(tip)
 
     # NPV canvas (ImageCanvas)
         self.canvas = plots.ImageCanvas()
@@ -157,10 +162,11 @@ class AutoRoiDetector(QW.QDialog):
     # Canvas right-click context menu
         self.canvas.customContextMenuRequested.connect(self.showContextMenu)    
 
-    # Enable search btn and update parameters when input maps list is populated
-        self.maps_selector.mapsListUpdated.connect(
-            lambda: self.search_btn.setEnabled(True))
-        self.maps_selector.mapsListUpdated.connect(self.update_params_range)
+    # Forward sample updates request signal from maps selector 
+        self.maps_selector.sampleUpdateRequested.connect(self.sampleUpdateRequested)
+
+    # Enable search btn and update parameters when input maps list is updated
+        self.maps_selector.mapsListUpdated.connect(self.onMapsListUpdated)
 
     # Fix even size values
         self.size_spbox.valueChanged.connect(self.fix_even_size)
@@ -205,14 +211,14 @@ class AutoRoiDetector(QW.QDialog):
             self.size_spbox.setValue(size - 1)
 
 
-    def set_current_roimap(self, roimap: RoiMap) -> None:
+    def set_current_roimap(self, roimap: RoiMap | None) -> None:
         '''
         Set the current roimap. This method is especially useful when called by
         the parent widget (i.e., the ROI Editor pane).
 
         Parameters
         ----------
-        roimap : RoiMap
+        roimap : RoiMap or None
             New current ROI map.
 
         '''
@@ -229,18 +235,27 @@ class AutoRoiDetector(QW.QDialog):
             patch.remove()
 
 
-    def update_params_range(self) -> None:
+    def onMapsListUpdated(self) -> None:
         '''
-        Change maximum selectable ROI size and ROI distance based on the shape
-        of the input maps.
+        Actions to be performed when input maps list is updated.
 
         '''
-    # Get the shape of the first map in the list. If maps have different shapes
-    # the dialog will later abort the computation anyway.
-        shp = self.maps_selector.maps_list.topLevelItem(0).get('data').shape
+    # Disable search button if maps list is not populated and exit function
+        is_populated = self.maps_selector.mapsCount() > 0
+        self.search_btn.setEnabled(is_populated)
+        if not is_populated:
+            return
 
-    # Set the maximum selectable ROI distance and ROI size based on shape
-        max_dist = min(shp) // 10
+    # Ensure the data of the first map in the list is valid (safety)
+        if (data_obj := self.maps_selector.getMap(0)) is None:
+            return
+        if (data := data_obj.getComponents()['data']) is None:
+            return
+
+    # Use the shape of the first map to update the max values of parameters.
+    # If maps have different shapes the dialog will later abort the computation
+    # anyway.
+        max_dist = min(data.shape) // 10
         max_size = max_dist if not max_dist % 2 else max_dist - 1 # must be ODD
         self.distance_spbox.setMaximum(max_dist)
         self.size_spbox.setMaximum(max_size)
@@ -254,33 +269,46 @@ class AutoRoiDetector(QW.QDialog):
         '''
     # Exit function if a thread is currentlty active
         if self._active_thread is not None:
-            return CW.MsgBox(self, 'Crit', 'A detection process is active.')
+            CW.MsgBox(self, 'Crit', 'A detection process is active.')
+            return
 
     # Disable OK button
         self.ok_btn.setEnabled(False)
 
     # Get user's parameters
         size = self.size_spbox.value()
-        npv_func = self.npv_encoder[self.npv_btns.getChecked().text()]
+        npv_func = self.npv_encoder[self.npv_btns.get_checked().text()]
         
-    # Get input map data
+    # Exit function if no maps are selected
         checked_maps = self.maps_selector.getCheckedMaps()
         if not len(checked_maps):
-            return CW.MsgBox(self, 'Crit', 'Select at least one map.')
-        inmaps, names = zip(*[i.get('data', 'name') for i in checked_maps])
+            CW.MsgBox(self, 'Crit', 'Select at least one map.')
+            return
+
+    # Get selected maps data
+        inmaps: list[InputMap] = []
+        names: list[str] = []
+        components = [i.getComponents() for i in checked_maps]
+        for comp in components:
+            if isinstance(data := comp['data'], InputMap):
+                inmaps.append(data)
+                names.append(comp['name'])
         input_stack = InputMapStack(inmaps)
 
-    # Check that input maps share the same shape
-        if not input_stack.maps_fit():
-            return CW.MsgBox(self, 'C', 'Selected maps have different shapes.')
+    # Check that input maps have compatible shapes
+        if (maps_shape := input_stack.maps_shape) is None:
+            CW.MsgBox(self, 'C', 'Selected maps have different shapes.')
+            return
         
     # Get current ROI map and check its shape
-        self.requestRoiMap.emit()
+        self.roimapUpdateRequested.emit()
+        
         if self._current_roimap is None:
-            self._current_roimap = RoiMap.from_shape(input_stack.maps_shape)
-        elif self._current_roimap.shape != input_stack.maps_shape:
+            self._current_roimap = RoiMap.from_shape(maps_shape)
+        elif self._current_roimap.shape != maps_shape:
             t = 'Loaded ROI map and selected input maps have different shapes.'
-            return CW.MsgBox(self, 'Crit', t)
+            CW.MsgBox(self, 'Crit', t)
+            return
 
     # Launch the NPV thread
         self.progbar.setMaximum(len(inmaps))
@@ -305,7 +333,7 @@ class AutoRoiDetector(QW.QDialog):
         '''
         if success:
         # Display the npv map in canvas and clear old ROI patches and legend
-            npv_map, = thread_result
+            (npv_map,) = thread_result
             self._clear_roi_patches()
             self.canvas.figure.legends.clear()
             title = 'Cumulative Neighborhood Pixel Variance (NPV) map'
@@ -315,7 +343,7 @@ class AutoRoiDetector(QW.QDialog):
             self.launch_roi_detection(npv_map)
 
         else:
-            e, = thread_result
+            (e,) = thread_result
             CW.MsgBox(self, 'Crit', 'NPV calculation failed.', str(e))
             self._end_threaded_session()
 
@@ -333,6 +361,10 @@ class AutoRoiDetector(QW.QDialog):
             The cumulative Neighborhood Pixel Variance map.
 
         '''
+    # Ensure previous npv thread has set the current ROI map (safety)
+        if (roimap := self._current_roimap) is None:
+            return
+
     # Get other parameters
         n_roi = self.nroi_spbox.value()
         size = self.size_spbox.value()
@@ -342,12 +374,15 @@ class AutoRoiDetector(QW.QDialog):
         self.progbar.reset()
         self.progbar.setMaximum(n_roi)
         self._active_thread = self.roi_detect_thread
-        self.roi_detect_thread.set_params(n_roi, size, dist, npv_map, 
-                                            self._current_roimap)
+        self.roi_detect_thread.set_params(n_roi, size, dist, npv_map, roimap)
         self.roi_detect_thread.start()
 
 
-    def _parse_roi_detection(self, thread_result: tuple, success: bool) -> None:
+    def _parse_roi_detection(
+        self, 
+        thread_result: tuple[RoiMap] | tuple[Exception], 
+        success: bool
+    ) -> None:
         '''
         Parse the result of the ROI detection thread. If the identification was
         successfull, this method displays the identified ROIs in canvas and
@@ -355,24 +390,25 @@ class AutoRoiDetector(QW.QDialog):
 
         Parameters
         ----------
-        thread_result : tuple
+        thread_result : tuple[RoiMap] or tuple[Exception]
             The ROI detection thread result.
         success : bool
             Whether the ROI detection thread succeeded or not.
 
         '''
-        if success:
+        result = thread_result[0]
+        if success and isinstance(result, RoiMap):
         # Display existent ROIs in black
-            for _, bbox in self._current_roimap.roilist:
-                patch = plots.RoiPatch(bbox, 'black', filled=False)
-                patch.set_label('Existent ROI')
-                self.canvas.ax.add_patch(patch)
-                self._patches.append(patch)
+            if self._current_roimap is not None:
+                for _, bbox in self._current_roimap.roilist:
+                    patch = plots.RoiPatch(bbox, self._roi_col['old'], filled=False)
+                    patch.set_label('Existent ROI')
+                    self.canvas.ax.add_patch(patch)
+                    self._patches.append(patch)
 
         # Display new auto detected ROIs in red
-            auto_roimap, = thread_result
-            for _, bbox in auto_roimap.roilist:
-                patch = plots.RoiPatch(bbox, 'red', filled=False)
+            for _, bbox in result.roilist:
+                patch = plots.RoiPatch(bbox, self._roi_col['new'], filled=False)
                 patch.set_label('Auto detected ROI')
                 self.canvas.ax.add_patch(patch)
                 self._patches.append(patch)
@@ -385,33 +421,16 @@ class AutoRoiDetector(QW.QDialog):
             self.canvas.draw()
 
         # Save the auto detected roimap
-            self._auto_roimap = auto_roimap
+            self._auto_roimap = result
 
-        else:
-            e, = thread_result
-            CW.MsgBox(self, 'Crit', 'ROI detection failed.', str(e))
+        elif not success and isinstance(result, Exception):
+            CW.MsgBox(self, 'Crit', 'ROI detection failed.', str(result))
+
+        else: # safety
+            pass
             
     # End the threaded session anyway
-        self._end_threaded_session()    
-
-
-    def interrupt_thread(self) -> bool:
-        '''
-        Stop an external thread.
-
-        Returns
-        -------
-        bool
-            Whether the stop event is confirmed by user or not.
-
-        '''
-        choice = CW.MsgBox(self, 'Quest', 'Interrupt automatic ROI detection?')
-        if choice.yes():
-            self._active_thread.requestInterruption()
-            self._end_threaded_session()
-            return True
-        else:
-            return False
+        self._end_threaded_session()
 
 
     def _end_threaded_session(self) -> None:
@@ -431,20 +450,25 @@ class AutoRoiDetector(QW.QDialog):
 
         '''
         if self._auto_roimap is not None:
-            self.drawingRequested.emit(self._auto_roimap)
+            self.roiDrawingRequested.emit(self._auto_roimap)
         super().accept()
 
 
     def reject(self) -> None:
         '''
-        Reimplementation of the dialog's 'reject' method. If thread is active,
+        Reimplementation of the dialog's "reject" method. If thread is active,
         it requests user to confirm its interruption.
 
-        '''           
-        if self._active_thread is not None and not self.interrupt_thread():
-            return
+        '''
+        if self._active_thread is not None:
+            msgbox = CW.MsgBox(self, 'Q', 'Interrupt automatic ROI detection?')
+            if msgbox.is_choice('Yes'):
+                self._active_thread.requestInterruption()
+                self._end_threaded_session()
+            else:
+                return
         super().reject()
-        
+
 
     def show(self) -> None:
         '''
@@ -485,11 +509,11 @@ class MergeDatasets(QW.QDialog):
         self.resize(600, 850)
         self.setWindowTitle('Merge Datasets')
         self.setWindowIcon(style.getIcon('GEAR'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # Set main attribute
-        self.merged_dataset = None
+        self.merged_dataset: dtools.GroundTruthDataset | None = None
 
     # Initialize GUI and connect its signals with slots 
         self._init_ui()
@@ -515,7 +539,7 @@ class MergeDatasets(QW.QDialog):
 
     # Input datasets preview area (Document Browser)
         ph1 = 'Click on any dataset filepath to show its preview here'
-        self.input_info = CW.DocumentBrowser(toolbar=False, placeholder=ph1)
+        self.input_info = CW.DocumentBrowser(tbar=False, placeholder=ph1)
 
     # Number of dataset preview rows (Styled Spinbox)
         self.nrows_spbox = CW.StyledSpinBox(10, 1000, 10)
@@ -535,7 +559,7 @@ class MergeDatasets(QW.QDialog):
 
     # Merged dataset preview area (Document Browser)
         ph2 = 'A preview of the merged dataset will be displayed here'
-        self.merged_info = CW.DocumentBrowser(toolbar=False, placeholder=ph2)
+        self.merged_info = CW.DocumentBrowser(tbar=False, placeholder=ph2)
 
     # Progress bar (Progress Bar)
         self.progbar = QW.QProgressBar()
@@ -610,7 +634,7 @@ class MergeDatasets(QW.QDialog):
      
     # Add datasets paths to list but skip those that had already been added
         for p in paths:
-            if len(self.in_path_list.findItems(p, Qt.MatchExactly)): 
+            if len(self.in_path_list.findItems(p, Qt.MatchFlag.MatchExactly)): 
                 continue
             else:
                 self.in_path_list.addItem(p)
@@ -658,6 +682,9 @@ class MergeDatasets(QW.QDialog):
         Show a preview of the output merged dataset.
 
         '''
+        if self.merged_dataset is None:
+            return
+        
         prev = repr(self.merged_dataset.dataframe)
         class_count = self.merged_dataset.column_count(-1)
         cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
@@ -674,27 +701,31 @@ class MergeDatasets(QW.QDialog):
         '''
     # Check for at least two imported datasets
         if self.in_path_list.count() < 2:
-            return CW.MsgBox(self, 'Crit', 'Import at least two datasets.')
+            CW.MsgBox(self, 'Crit', 'Import at least two datasets.')
+            return
         
     # Check that all paths do still exist
         paths = [item.text() for item in self.in_path_list.getItems()]
         if not all([os.path.exists(p) for p in paths]):
             err_msg = 'Some datasets have been deleted, moved or renamed.'
-            return CW.MsgBox(self, 'Crit', err_msg)
+            CW.MsgBox(self, 'Crit', err_msg)
+            return
         
     # Merge datasets one at the time to build the final merged dataset. The 
     # first path in the list is the starting dataset ('paths.pop(0)')
-        dec = self.in_csv_decimal.currentText()
         self.progbar.setRange(0, len(paths))
-        self.progbar.setValue(1)
+        dec = self.in_csv_decimal.currentText()
         merged = dtools.GroundTruthDataset.load(paths.pop(0), dec, chunks=True)
+        self.progbar.setValue(1)
+
         for n, p in enumerate(paths, start=2):
             try:
                 self.progbar.setValue(n)
                 merged.merge(dtools.GroundTruthDataset.load(p, dec, chunks=True))
             except ValueError:
                 self.progbar.reset()
-                return CW.MsgBox(self, 'Crit', 'Datasets columns do not fit.')
+                CW.MsgBox(self, 'Crit', 'Datasets columns do not fit.')
+                return
 
         self.progbar.reset()
 
@@ -709,9 +740,13 @@ class MergeDatasets(QW.QDialog):
         Save merged datasets to file.
 
         '''
+    # Exit function if merged dataset is invalid (safety)
+        if self.merged_dataset is None:
+            return
+        
     # Exit function if outpath is invalid or file dialog is canceled
         ftype = 'CSV (*.csv)'
-        outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get_path()
         if not outpath:
             return
 
@@ -745,13 +780,13 @@ class SubSampleDataset(QW.QDialog):
         self.resize(600, 850)
         self.setWindowTitle('Sub-sample Dataset')
         self.setWindowIcon(style.getIcon('GEAR'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # Define main attributes
         self.reader = dtools.CsvChunkReader(QLocale().decimalPoint())
-        self.original_dataset = None
-        self.subsampled_dataset = None
+        self.original_dataset: dtools.GroundTruthDataset | None = None
+        self.subsampled_dataset: dtools.GroundTruthDataset | None = None
 
     # Initialize GUI and connect its signals with slots 
         self._init_ui()
@@ -775,8 +810,7 @@ class SubSampleDataset(QW.QDialog):
 
     # Imported dataset preview area (Document Browser)
         ph1 = 'A preview of the original dataset will be displayed here'
-        self.in_dataset_info = CW.DocumentBrowser(
-            toolbar=False, placeholder=ph1)
+        self.in_dataset_info = CW.DocumentBrowser(tbar=False, placeholder=ph1)
 
     # Class selector (Twin Styled List Widgets)
         self.original_classes = CW.StyledListWidget()
@@ -784,7 +818,7 @@ class SubSampleDataset(QW.QDialog):
         for wid in (self.original_classes, self.subsampled_classes):
             wid.setAcceptDrops(True)
             wid.setDragEnabled(True)
-            wid.setDefaultDropAction(Qt.MoveAction)
+            wid.setDefaultDropAction(Qt.DropAction.MoveAction)
             wid.setSortingEnabled(True)
 
     # Hint icon (Label)
@@ -811,8 +845,7 @@ class SubSampleDataset(QW.QDialog):
 
     # Sub-sampled dataset preview area (Document Browser)
         ph2 = 'A preview of the sub-sampled dataset will be displayed here'
-        self.out_dataset_info = CW.DocumentBrowser(
-            toolbar=False, placeholder=ph2)
+        self.out_dataset_info = CW.DocumentBrowser(tbar=False, placeholder=ph2)
 
     # Progress bar (ProgressBar)
         self.progbar = QW.QProgressBar()
@@ -832,12 +865,12 @@ class SubSampleDataset(QW.QDialog):
     # Twin lists grid (Grid Layout)
         twin_grid = QW.QGridLayout()
         twin_grid.setSpacing(5)
-        twin_grid.addWidget(QW.QLabel('EXCLUDED'), 0, 0, Qt.AlignHCenter)
-        twin_grid.addWidget(QW.QLabel('INCLUDED'), 0, 2, Qt.AlignHCenter)
+        twin_grid.addWidget(QW.QLabel('EXCLUDED'), 0, 0, style.A_HCENTER)
+        twin_grid.addWidget(QW.QLabel('INCLUDED'), 0, 2, style.A_HCENTER)
         twin_grid.addWidget(self.original_classes, 1, 0)
         twin_grid.addWidget(hint_icon, 1, 1)
         twin_grid.addWidget(self.subsampled_classes, 1, 2)
-        twin_grid.addWidget(self.counter_lbl, 2, 0, 1, -1, Qt.AlignHCenter)
+        twin_grid.addWidget(self.counter_lbl, 2, 0, 1, -1, style.A_HCENTER)
 
 
     # Export group (Group Area)
@@ -906,7 +939,7 @@ class SubSampleDataset(QW.QDialog):
         '''
     # Do nothing if path is invalid or file dialog is canceled
         ftype = 'CSV (*.csv)'
-        path = CW.FileDialog(self, 'open', 'Load Dataset', ftype).get()
+        path = CW.FileDialog(self, 'open', 'Load Dataset', ftype).get_path()
         if not path:
             return
 
@@ -952,7 +985,8 @@ class SubSampleDataset(QW.QDialog):
         # Split dataset features from targets and update widgets
             try:
                 self.original_dataset.split_features_targets(split_idx=-1)
-                targets = self.original_dataset.column_unique(-1)
+                self.original_dataset.update_encoder()
+                targets = self.original_dataset.encoder.keys()
                 self.original_classes.addItems(targets)
                 self.progbar.setValue(3)
             except Exception as e:
@@ -969,7 +1003,7 @@ class SubSampleDataset(QW.QDialog):
             CW.MsgBox(self, 'Crit', 'Dataset loading failed.', str(result[0]))
             
 
-    def showDatasetPreview(self, dataset: str) -> None:
+    def showDatasetPreview(self, dataset: Literal['original', 'sub-sampled']) -> None:
         '''
         Show a preview of the provided 'dataset'.
 
@@ -977,7 +1011,7 @@ class SubSampleDataset(QW.QDialog):
         ----------
         dataset : str
             Which dataset's preview should be displayed. Can be 'original' or
-            'sub-sampled'
+            'sub-sampled'.
 
         Raises
         -------
@@ -995,6 +1029,10 @@ class SubSampleDataset(QW.QDialog):
                 wid = self.out_dataset_info
             case _:
                 raise ValueError(f'Invalid "dataset" argument: {dataset}')
+
+    # Make sure choosen dataset is valid (safety)
+        if ds is None:
+            return 
     
     # Build and show the preview
         prev = repr(ds.dataframe)
@@ -1028,17 +1066,20 @@ class SubSampleDataset(QW.QDialog):
         '''
     # Deny sub-sampling if no original dataset is imported
         if self.original_dataset is None:
-            return CW.MsgBox(self, 'Crit', 'Import a dataset first.')
+            CW.MsgBox(self, 'Crit', 'Import a dataset first.')
+            return
         
     # Deny sub-sampling if no classes are selected
         count = self.subsampled_classes.count()
         if count == 0:
-            return CW.MsgBox(self, 'Crit', 'Include at least one class.')
+            CW.MsgBox(self, 'Crit', 'Include at least one class.')
+            return
         
     # Get selected class labels
         self.progbar.setRange(0, 3)
         self.progbar.setValue(1)
-        labels = [self.subsampled_classes.item(i).text() for i in range(count)]
+        items = [self.subsampled_classes.item(row) for row in range(count)]
+        labels = [i.text() for i in items if i is not None]
 
     # Sub sample dataset
         self.progbar.setValue(2)
@@ -1060,11 +1101,12 @@ class SubSampleDataset(QW.QDialog):
     # Exit function if sub-sampled dataset is invalid (safety)
         if self.subsampled_dataset is None:
             self.save_btn.setEnabled(False)
-            return CW.MsgBox(self, 'Crit', 'Sub-sample the dataset first.')
+            CW.MsgBox(self, 'Crit', 'Sub-sample the dataset first.')
+            return
         
     # Exit function if outpath is invalid or file dialog is canceled
         ftype = 'CSV (*.csv)'
-        outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Dataset', ftype).get_path()
         if not outpath:
             return
 
@@ -1103,8 +1145,8 @@ class ImageToInputMap(QW.QDialog):
         self.resize(1280, 720)
         self.setWindowTitle('Image To Input Map')
         self.setWindowIcon(style.getIcon('GEAR'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # Set main attribute
         self.preview_size = QSize(128, 128)
@@ -1191,16 +1233,16 @@ class ImageToInputMap(QW.QDialog):
         self.progbar.setRange(0, len(paths))
         for n, p in enumerate(paths, start=1):
             self.progbar.setValue(n)
-            if len(self.img_list.findItems(p, Qt.MatchExactly)): 
+            if len(self.img_list.findItems(p, Qt.MatchFlag.MatchExactly)): 
                 continue
             try:
                 # TIFF file previews may spam warnings on the console (BUG)
-                transforms = (Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                pixmap = QPixmap(p).scaled(self.preview_size, *transforms)
+                pixmap = QPixmap(p).scaled(self.preview_size, style.ARM_KEEP)
                 self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
             except Exception as e:
                 self.progbar.reset()
-                return CW.MsgBox(self, 'C', 'File import failed.', str(e))
+                CW.MsgBox(self, 'C', 'File import failed.', str(e))
+                return
 
         self.progbar.reset()
 
@@ -1213,24 +1255,25 @@ class ImageToInputMap(QW.QDialog):
     # Deny conversion if no image is loaded
         img_count = self.img_list.count()
         if not img_count:
-            return CW.MsgBox(self, 'Crit', 'No image loaded.')
+            CW.MsgBox(self, 'Crit', 'No image loaded.')
+            return
 
     # Do nothing if directory is invalid or the direcotry dialog is canceled
-        outdir = CW.FileDialog(self, 'S', 'Output Folder', multifile=True).get()
+        outdir = CW.FileDialog(self, 'S', 'Output Folder', multifile=True).get_path()
         if not outdir:
             return
     
     # Try converting images to Input Maps and saving them
-        errors_log = []
+        errors_log: list[tuple[str, Exception]] = []
         ext = str(self.map_ext_combox.currentText())
         self.progbar.setRange(0, img_count)
 
         for n, i in enumerate(self.img_list.getItems(), start=1):
+            path = i.text()
+            fname = cf.path2filename(path) + ext
+            self.progbar.setValue(n)
+
             try:
-                path = i.text()
-                fname = cf.path2filename(path) + ext
-                self.progbar.setValue(n)
-            
             # Convert image to array
                 array = iatools.image2array(path, InputMap._DTYPE)
 
@@ -1253,15 +1296,19 @@ class ImageToInputMap(QW.QDialog):
     # Send message box with success confirm or error warnings
         if len(errors_log):
             fpaths, err = zip(*errors_log)
-            return CW.MsgBox(self, 'Warn', f'Failed conversions:\n\n{fpaths}',
-                             '\n'.join(str(e) for e in err)) 
+            dtext = '\n'.join(str(e) for e in err)
+            CW.MsgBox(self, 'Warn', f'Failed conversions:\n\n{fpaths}', dtext)
+            return
 
         else:
-            return CW.MsgBox(self, 'Info', 'Images successfully converted.')
+            CW.MsgBox(self, 'Info', 'Images successfully converted.')
+            return
         
 
 
 class ImageToMineralMap(QW.QDialog):
+
+    _max_classes = 32768 # (2**16)/2 (can be more)
 
     def __init__(self, parent: QW.QWidget | None = None):
         '''
@@ -1279,12 +1326,12 @@ class ImageToMineralMap(QW.QDialog):
         self.resize(1280, 720)
         self.setWindowTitle('Image To Mineral Map')
         self.setWindowIcon(style.getIcon('GEAR'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # Set main attribute
-        self.image_array = None
-        self.minmap = None
+        self.image_array: np.ndarray | None = None
+        self.minmap: MineralMap | None = None
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -1395,7 +1442,7 @@ class ImageToMineralMap(QW.QDialog):
         '''
     # Do nothing if image path is invalid or file dialog is canceled 
         ft = 'TIF (*.tif *.tiff);;BMP (*.bmp);;PNG (*.png);;JPEG (*.jpg *.jpeg)'
-        path = CW.FileDialog(self, 'open', 'Load Image', ft).get()
+        path = CW.FileDialog(self, 'open', 'Load Image', ft).get_path()
         if not path:
             return
 
@@ -1414,7 +1461,8 @@ class ImageToMineralMap(QW.QDialog):
         '''
     # Deny conversion if no image is loaded
         if self.image_array is None:
-            return CW.MsgBox(self, 'Crit', 'No image loaaded.')
+            CW.MsgBox(self, 'Crit', 'No image loaaded.')
+            return
         
     # Get image array shape
         array = self.image_array.copy()
@@ -1436,7 +1484,8 @@ class ImageToMineralMap(QW.QDialog):
 
     # Deny conversion if loaded image has 2 or more than 4 channels (possible?)
         elif chan == 2 or chan > 4:
-            return CW.MsgBox(self, 'Crit', 'This image cannot be converted.')
+            CW.MsgBox(self, 'Crit', 'This image cannot be converted.')
+            return
         
     # Get unique RGB values. Use color delta to reduce color variance.
         delta = self.delta_spbox.value()
@@ -1444,10 +1493,10 @@ class ImageToMineralMap(QW.QDialog):
         array = array.reshape(-1, 3)
         unique = np.unique(array, axis=0)
 
-    # Deny conversion for more than (2**16)/2 = 32768 classes (can be more)
-        n_classes = len(unique)
-        if n_classes > 32768:
-            return CW.MsgBox(self, 'Crit', 'Too many classes found.')
+    # Deny conversion if classes exceed maximum amount 
+        if (n_classes := len(unique)) > self._max_classes:
+            CW.MsgBox(self, 'Crit', 'Too many classes found.')
+            return
 
     # Build a flattened minmap
         self.progbar.setRange(0, n_classes)
@@ -1466,7 +1515,7 @@ class ImageToMineralMap(QW.QDialog):
         title = self.path_lbl.text()
         mmap_enc, encoder, colors = self.minmap.get_plot_data()
         self.canvas.draw_discretemap(mmap_enc, encoder, colors, title)
-        self.legend.update(self.minmap)
+        self.legend.refresh(self.minmap)
 
     # Enable the save button
         self.save_btn.setEnabled(True)
@@ -1480,9 +1529,13 @@ class ImageToMineralMap(QW.QDialog):
         Save mineral map to file.
 
         '''
+    # Do nothing if the mineral map is invalid (safety)
+        if self.minmap is None:
+            return
+
     # Do nothing if output path is invalid or file dialog is canceled
         ftype = 'Mineral map (*.mmp)'
-        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get()
+        outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get_path()
         if not outpath:
             return
     
@@ -1518,7 +1571,7 @@ class ImageToMineralMap(QW.QDialog):
         self.minmap.set_phase_color(class_name, color)
     
     # Update canvas and legend
-        self.canvas.alter_cmap(self.minmap.palette.values())
+        self.canvas.alter_colormap(self.minmap.palette.values())
         self.legend.changeItemColor(legend_item, color)
 
 
@@ -1577,13 +1630,11 @@ class ImageToMineralMap(QW.QDialog):
             return
 
         if toggled:
-            phase_id = self.minmap.as_id(legend_item.text(1))
-            vmin, vmax = phase_id - 0.5, phase_id + 0.5
+            vmin = vmax = self.minmap.as_id(legend_item.text(1))
         else:
-            vmin, vmax = None, None
+            vmin = vmax = None
 
-        self.canvas.update_clim(vmin, vmax)
-        self.canvas.draw_idle() 
+        self.canvas.update_clim(vmin, vmax) 
 
 
 
@@ -1606,11 +1657,11 @@ class DummyMapsBuilder(QW.QDialog):
         self.resize(1280, 720)
         self.setWindowTitle('Dummy Maps Builder')
         self.setWindowIcon(style.getIcon('GEAR'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # Set main attribute
-        self.dummy_map = None
+        self.dummy_map: np.ndarray | None = None
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -1754,10 +1805,11 @@ class DummyMapsBuilder(QW.QDialog):
     # Deny saving if no map is generated
         if self.dummy_map is None:
             CW.MsgBox(self, 'Crit', 'No map generated.')
+            return
         
     # Do nothing if output path is invalid or file dialog is canceled
         ftypes = 'Compressed ASCII file (*.gz);;ASCII file (*.txt)'
-        path = CW.FileDialog(self, 'save', 'Save Map', ftypes).get()
+        path = CW.FileDialog(self, 'save', 'Save Map', ftypes).get_path()
         if not path:
             return
     
@@ -1788,8 +1840,8 @@ class Preferences(QW.QDialog):
         self.resize(420, 580)
         self.setWindowTitle('Preferences')
         self.setWindowIcon(style.getIcon('WRENCH'))
-        self.setAttribute(Qt.WA_QuitOnClose, False)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
         self.readSettings()
 
@@ -1838,10 +1890,12 @@ class Preferences(QW.QDialog):
 #                           PLOT STYLE SETTINGS
 #  -------------------------------------------------------------------------  #
     # ROI color (Styled Button)
-        self.roi_col_btn = CW.StyledButton(CW.ColorIcon(self._roi_col))
+        self.roi_col_btn = CW.StyledButton(
+            CW.ColorIcon(self._roi_col), self._roi_col)
         
     # ROI selection color (Styled Button)
-        self.roi_selcol_btn = CW.StyledButton(CW.ColorIcon(self._roi_selcol))
+        self.roi_selcol_btn = CW.StyledButton(
+            CW.ColorIcon(self._roi_selcol), self._roi_selcol)
 
     # ROI filled (Check Box)
         self.roi_filled_cbox = QW.QCheckBox('Filled')
@@ -1876,8 +1930,8 @@ class Preferences(QW.QDialog):
         tip2 = 'Show pixels only if visible through all masks'
         self.mask_merge_btns = CW.RadioBtnLayout(btns, default=idx, orient='h')
         self.mask_merge_btns.setSpacing(5)
-        self.mask_merge_btns.button(0).setToolTip(tip1)
-        self.mask_merge_btns.button(1).setToolTip(tip2)
+        for btn, tip in zip(self.mask_merge_btns.buttons(), (tip1, tip2)):
+            btn.setToolTip(tip)
 
     # Phase count warning (Styled Spin Box)
         self.phase_count_spbox = CW.StyledSpinBox(15, 100)
@@ -1938,9 +1992,9 @@ class Preferences(QW.QDialog):
     # Main widget (Styled Tab Widget)
         tabwid = CW.StyledTabWidget()
         tabwid.setTabBarExpanding()
-        tabwid.addTab(gui_scroll, title='Interface')
-        tabwid.addTab(plots_scroll, title='Plot Style')
-        tabwid.addTab(data_scroll, title='Data')
+        tabwid.wrap_tab(gui_scroll, title='Interface')
+        tabwid.wrap_tab(plots_scroll, title='Plot Style')
+        tabwid.wrap_tab(data_scroll, title='Data')
 
     # Dialog buttons layout
         btns_hbox = QW.QHBoxLayout()
@@ -1996,9 +2050,17 @@ class Preferences(QW.QDialog):
 
     # Dialog buttons signals
         self.ok_btn.clicked.connect(lambda: self.saveEdits(exit=True))
-        self.cancel_btn.clicked.connect(self.close)
+        self.cancel_btn.clicked.connect(self.on_cancel)
         self.apply_btn.clicked.connect(self.saveEdits)
         self.default_btn.clicked.connect(self.resetToDefault)
+
+
+    def on_cancel(self) -> None:
+        '''
+        Actions to perform when the Cancel button is pressed.
+
+        '''
+        self.close()
 
 
     def readSettings(self) -> None:
@@ -2042,16 +2104,23 @@ class Preferences(QW.QDialog):
         Set a new ROI (selection) color.
 
         '''
-    # Get the current color as HEX string
-        btn = self.sender()
-        curr = self._roi_col if btn == self.roi_col_btn else self._roi_selcol
+    # Get the current color (HEX string)
+        match btn := self.sender():
+            case self.roi_col_btn:
+                attr_name = '_roi_col'
+            case self.roi_selcol_btn:
+                attr_name = '_roi_selcol'
+            case _: # safety
+                return
 
     # Set new current color if new color is valid
-        new = QW.QColorDialog.getColor(QColor(curr), self)
+        current: str = getattr(self, attr_name)
+        new = QW.QColorDialog.getColor(QColor(current), self)
         if new.isValid():
-            hex = new.name(QColor.HexRgb)
-            curr = hex
-            btn.setIcon(CW.ColorIcon(hex))
+            new_hex = new.name(QColor.NameFormat.HexRgb)
+            btn.setIcon(CW.ColorIcon(new_hex))
+            btn.setText(new_hex)
+            setattr(self, attr_name, new_hex)
 
 
     def changeMaskMergeRule(self, selected_id: int) -> None:
@@ -2064,8 +2133,9 @@ class Preferences(QW.QDialog):
             Id of the selected radio button.
 
         '''
-        rule = self.mask_merge_btns.button(selected_id).text().lower()
-        self._mask_merge_type = rule
+        if (btn := self.mask_merge_btns.button(selected_id)) is not None:
+            rule = btn.text().lower()
+            self._mask_merge_type = rule
 
 
     def setAppFontSize(self) -> None:

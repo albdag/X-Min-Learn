@@ -5,20 +5,26 @@ Created on Mon Jan 23 09:14:45 2023
 @author: albdag
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable, Sequence
+from functools import partial
+from typing import Any, Literal, overload
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QCursor, QResizeEvent
 from PyQt5.QtWidgets import QAction, QMenu, QSizePolicy, QWidget, QWidgetAction
 
 import numpy as np
+import numpy.typing as npt
 
 from matplotlib.axes import Axes
-from matplotlib.backends import backend_qtagg
+from matplotlib.backends import backend_qt, backend_qtagg
 from matplotlib.collections import PolyCollection
+from matplotlib.colorbar import Colorbar
+from matplotlib.container import BarContainer
 from matplotlib.figure import Figure
+from matplotlib.image import AxesImage
 from matplotlib.patches import Rectangle
-from matplotlib.text import Annotation
+from matplotlib.text import Annotation, Text
 from matplotlib import backend_bases as mpl_backend_bases
 from matplotlib import colormaps as mpl_colormaps
 from matplotlib import colors as mpl_colors
@@ -31,13 +37,13 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import settings
 import style
 
-# mpl.use('Qt5Agg')
-
+# mpl.use('Qt5Agg') 'pdf', 'pgf', 'ps', 'svg' add to pyinstaller hooks (https://pyinstaller.org/en/v5.0/hooks-config.html#matplotlib-hook-options)
+type MplColor = tuple[float, float, float] | float | str
 
 class PanHandler(panhandler):
 
-    _pressCursor = QCursor(Qt.SizeAllCursor)
-    _releaseCursor = QCursor(Qt.ArrowCursor)
+    _pressCursor = QCursor(Qt.CursorShape.SizeAllCursor)
+    _releaseCursor = QCursor(Qt.CursorShape.ArrowCursor)
 
     def __init__(self, fig: Figure, button: int = 2) -> None:
         '''
@@ -110,12 +116,18 @@ class PanHandler(panhandler):
 
 class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
+    _figure_kwargs = {
+        'facecolor': style.IVORY,
+        'edgecolor': style.BLACK_PEARL,
+        'linewidth': 1
+    }
+    _ax_facecolor = style.BLACK_PEARL
     _title_pad = 5
 
     def __init__(
         self,
         size: tuple[float, float] = (6.4, 4.8),
-        layout: str = 'none',
+        layout: Literal['constrained', 'compressed', 'tight'] | None = None,
         wheel_zoom: bool = True,
         wheel_pan: bool = True,
         init_blank: bool = True
@@ -127,9 +139,8 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         ----------
         size : tuple[float, float], optional
             Width and height (in inches) of canvas. The default is (6.4, 4.8).
-        layout : str, optional
-            Layout engine of the figure. One of ['constrained', 'compressed', 
-            'tight' and 'none']. The default is 'none'.
+        layout : Literal['constrained', 'compressed', 'tight'] | None, optional
+            Layout engine of the figure. The default is 'none'.
         wheel_zoom : bool, optional
             Whether or not allow zooming with mouse wheel. The default is True.
         wheel_pan : bool, optional
@@ -140,15 +151,8 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
         '''
     # Define the figure and the ax of the matplotlib canvas
-        self.fig = Figure(
-            figsize=size,
-            facecolor=style.IVORY, 
-            edgecolor=style.BLACK_PEARL,
-            linewidth=2, 
-            layout=layout
-        )
-        self.ax = self.fig.add_subplot(111, facecolor=style.BLACK_PEARL)
-        self.ax.patch.set(edgecolor=style.SAN_MARINO, linewidth=3)
+        self.fig = Figure(size, layout=layout, **self._figure_kwargs)
+        self.ax = self.fig.add_subplot(111, facecolor=self._ax_facecolor)
         
     # Initialize blank ax if required
         if init_blank:
@@ -169,25 +173,37 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             self._id_pan = PanHandler(self.fig)
 
     # Enable custom context menu request (when right-clicking on canvas)
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
 
-    def has_toolbar(self) -> bool:
+    def set_padded_title(self, title: str) -> None:
         '''
-        Check if canvas has a linked navigation toolbar.
+        Convenient function to set ax title with default title pad. Child
+        classes can overwrite default title pad, by changing '_title_pad'
+        class attribute.
 
-        Returns
-        -------
-        bool
-            Whether the canvas has a toolbar.
+        Parameters
+        ----------
+        title : str
+            New ax title.
 
         '''
-        return hasattr(self, "toolbar") and self.toolbar is not None
+        self.ax.set_title(title, pad=self._title_pad)
 
 
-    def clear_canvas(self, deep_clear: bool = False) -> None:
+    def update_toolbar(self) -> None:
         '''
-        Generic canvas clearing actions. To be reimplemented in each subclass.
+        Update the navigation toolbar stack associated with the canvas, if
+        existent.
+
+        '''
+        if hasattr(self, "toolbar") and self.toolbar is not None:
+            self.toolbar.update()
+
+
+    def _clear_canvas(self, deep_clear: bool = False) -> None:
+        '''
+        Generic canvas clearing actions.
 
         Parameters
         ----------
@@ -203,15 +219,13 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
         self.ax.axis('off')
 
     # Reset the navigation toolbar stack to fix unwanted glitches with clims 
-        if self.has_toolbar():
-            self.toolbar.update()
+        self.update_toolbar()
 
 
     def mouseMoveEvent(self, event: mpl_backend_bases.MouseEvent) -> None:
         '''
         Set focus on the canvas widget when mouse hovering. Necessary to detect
-        the key attribute of the mouse wheel zoom event. See 'wheel_zoom' 
-        method for further details.
+        the key attribute of the mouse wheel zoom event.
 
         Parameters
         ----------
@@ -240,7 +254,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             A menu populated with actions.
 
         '''
-        menu = QMenu()
+        menu = QMenu(self)
         menu.setStyleSheet(style.SS_MENU)
 
     # Get Navigation Toolbar true actions (exclude QWidgetActions, like coords)
@@ -271,8 +285,8 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             Toggle on/off sharing. The default is True.
 
         '''
-        shared_x = self.ax._shared_axes['x']
-        shared_y = self.ax._shared_axes['y']
+        shared_x = self.ax._shared_axes['x'] # pyright: ignore[reportAttributeAccessIssue]
+        shared_y = self.ax._shared_axes['y'] # pyright: ignore[reportAttributeAccessIssue]
     # For older version of Matplotlib
         # shared_x = self.ax._shared_x_axes
         # shared_y = self.ax._shared_y_axes
@@ -285,23 +299,21 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             shared_y.remove(ax)
 
 
-
-    def update_canvas(self) -> None:
+    def _update_canvas(self) -> None:
         '''
-        Generic canvas update actions. To be reimplemented in each subclass.
+        Generic canvas update actions.
 
         '''
     # Show the axis (borders and ticks)
         self.ax.axis('on')
 
     # Reset the navigation toolbar stack to fix unwanted glitches with clims 
-        if self.has_toolbar():
-            self.toolbar.update()
+        self.update_toolbar()
 
 
     # Inspired by https://gist.github.com/tacaswell/3144287
     # and https://github.com/mpl-extensions
-    def wheelZoomHandler(self, base_scale: float = 1.5) -> None:
+    def wheelZoomHandler(self, base_scale: float = 1.5) -> Callable[[], None]:
         '''
         Wheel zoom factory.
 
@@ -312,14 +324,14 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
         '''
 
-        def zoom(event: mpl_backend_bases.MouseEvent) -> Callable:
+        def zoom(event: mpl_backend_bases.MouseEvent) -> None:
             '''
-            Apply zoom to canvas after mouse wheel event.
+            Apply zoom to canvas after mouse wheel scroll event.
 
             Parameters
             ----------
-            event : Matplotlib MouseEvent
-                The mouse wheel event.
+            event : Matplotlib Event
+                Matplotlib's mouse scroll event.
 
             '''
 
@@ -335,7 +347,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             if xdata is None or ydata is None: return
 
         # Reduce the scale when pressing Ctrl key (accurate zoom)
-            scale = 1.1 if 'ctrl' in event.modifiers else base_scale
+            scale = 1.1 if event.key and 'control' in event.key else base_scale
 
         # Set zoom in or out
             if event.button == 'down':
@@ -346,16 +358,20 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
                 scale_factor = 1
 
         # Set new limits
-            self.ax.set_xlim([xdata - (xdata-cur_xlim[0]) / scale_factor,
-                              xdata + (cur_xlim[1]-xdata) / scale_factor])
-            self.ax.set_ylim([ydata - (ydata-cur_ylim[0]) / scale_factor,
-                              ydata + (cur_ylim[1]-ydata) / scale_factor])
+            self.ax.set_xlim((
+                xdata - (xdata - cur_xlim[0]) / scale_factor,
+                xdata + (cur_xlim[1] - xdata) / scale_factor
+            ))
+            self.ax.set_ylim((
+                ydata - (ydata - cur_ylim[0]) / scale_factor,
+                ydata + (cur_ylim[1] - ydata) / scale_factor
+            ))
 
         # Redraw the canvas
             self.draw_idle()
 
     # Attach the callback
-        cid = self.mpl_connect("scroll_event", zoom)
+        cid = self.mpl_connect("scroll_event", zoom) # pyright: ignore[reportArgumentType]
 
     # Return the disconnect callback function
         return lambda id_=cid: self.mpl_disconnect(id_)
@@ -395,16 +411,30 @@ class ImageCanvas(_CanvasBase):
         self.ax.format_coord = lambda x, y: f'X : {round(x)}, Y : {round(y)}'
 
     # Define the main attributes of the canvas
-        self.is_binary = binary
-        self.image = None
-        self.scaled_clim = None
+        self._is_binary = binary
+        self._image: AxesImage | None = None
+        self.scaled_clim = None # scaled clims are currently unused
 
     # Initialize the colormap
-        self.cmap = None
+        self._cmap: mpl_colors.Colormap | None = None
 
     # Initialize the colorbar
-        self.has_cbar = cbar
-        self.cbar, self.cax = None, None
+        self._has_colorbar = cbar
+        self._cbar: Colorbar | None = None
+
+    # Define the colors of out-of-range and masked values for colormaps
+        self._bad = {
+            'Linear': mpl_colors.to_rgb(style.IVORY),
+            'Discrete': mpl_colors.to_rgb(style.IVORY)
+        }
+        self._over = {
+            'Linear': mpl_colors.to_rgb('0.2'),
+            'Discrete': mpl_colors.to_rgb(style.IVORY)
+        }
+        self._under = {
+            'Linear': mpl_colors.to_rgb('0.5'),
+            'Discrete': mpl_colors.to_rgb(style.IVORY)
+        }
 
 
     def is_empty(self) -> bool:
@@ -417,81 +447,152 @@ class ImageCanvas(_CanvasBase):
             Whether or not the canvas is empty.
 
         '''
-        return self.image is None
+        return self._image is None
 
 
-    def set_cbar(self) -> None:
+    def _set_linear_colormap(
+        self, name: str = 'Spectral_r') -> mpl_colors.LinearSegmentedColormap:
         '''
-        Set the colorbar ax.
-
-        '''
-        divider = make_axes_locatable(self.ax)
-        self.cax = divider.append_axes("right", size="5%", pad=0.1)
-        # consider using mappable as matplotlib.cm.ScalarMappable instead of self.image
-        # From Matplotlib docs: "Note that one can create a ScalarMappable 
-        #"on-the-fly" to generate colorbars not attached to a previously drawn
-        # artist, e.g.: 
-        #fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)"
-        self.cbar = self.fig.colorbar(self.image, cax=self.cax, extend='both')
-
-
-    def set_heatmap_cmap(self, cmap_name: str = 'Spectral_r') -> None:
-        '''
-        Set a colormap suited to display a heatmap.
+        Set and return a linear segmented colormap suited to display a heatmap.
 
         Parameters
         ----------
-        cmap_name : str, optional
-            Matplotlib colormap name. The default is 'Spectral_r'.
+        name : str, optional
+            Matplotlib linear colormap name. The default is 'Spectral_r'.
+
+        Returns
+        -------
+        Colormap
+            New linear colormap. 
 
         '''
-    # Set colormap
-        self.cmap = mpl_colormaps['binary_r' if self.is_binary else cmap_name]
+    # Ensure requested colormap is a LinearSegmentedColormap
+        self._cmap = mpl_colormaps['binary_r' if self._is_binary else name]
+        if not isinstance(self._cmap, mpl_colors.LinearSegmentedColormap):
+            self._cmap = None
+            raise ValueError(f'{name} is not a valid heatmap colormap name.')
 
-    # Set outliers as grayed-out
-        self.cmap.set_over('0.2')
-        self.cmap.set_under('0.5')
+    # Set colors for outliers and masked data
+        self._cmap.set_over(self._over['Linear'])
+        self._cmap.set_under(self._under['Linear'])
+        self._cmap.set_bad(self._bad['Linear'])
+        
+        return self._cmap
 
-    # Set masked data as ivory
-        self.cmap.set_bad(style.IVORY)
 
-
-    def set_discretemap_cmap(
+    def _set_discrete_colormap(
         self,
         colors: Iterable[tuple[int, int, int]],
+        data: np.ndarray,
         name: str = 'CustomCmap'
-    ) -> None:
+    ) -> mpl_colors.ListedColormap:
         '''
-        Set a colormap suited to display a discrete map.
+        Set and return a discrete colormap suited to display a discrete map.
 
         Parameters
         ----------
         colors : Iterable[tuple[int, int, int]]
             Iterable of RGB triplets.
+        data : np.ndarray | None
+            Image map data as numerical class IDs.
         name : str, optional
             Colormap name. The default is 'CustomCmap'.
 
+        Returns
+        -------
+        ListedColormap
+            New descrete colormap.
+
         '''
     # Convert colorlist RGB triplets to float RGB values
-        floatRGBA = rgb_to_float(colors)
+        float_rgb = rgb_to_float(colors)
 
-    # # Filter the colorlist if the map data is masked (required as bug fix)
-    #     if self.contains_masked_data():
-    #         data, mask = self.get_map(return_mask=True)
-    #         floatRGBA = [floatRGBA[u] for u in np.unique((data[~mask]))]
+    # Set colors of masked classes as "bad" (required for colorbar rendering)
+        bad = self._bad['Discrete']
+        if np.ma.is_masked(data) and self._has_colorbar:
+            unq = np.unique(np.ma.compressed(data)) # unmasked class IDs
+            float_rgb = [x if i in unq else bad for i, x in enumerate(float_rgb)]
 
     # Set colormap
-        self.cmap = mpl_colors.ListedColormap(floatRGBA, name=name)
+        self._cmap = mpl_colors.ListedColormap(float_rgb, name=name)
 
-    # Set outliers as ivory
-        self.cmap.set_over(style.IVORY)
-        self.cmap.set_under(style.IVORY)
+    # Set colors for outliers and masked data
+        self._cmap.set_over(self._over['Discrete'])
+        self._cmap.set_under(self._under['Discrete'])
+        self._cmap.set_bad(bad)
 
-    # Set masked data as ivory
-        self.cmap.set_bad(style.IVORY)
+        return self._cmap
 
-    
-    def set_boundary_norm(self, n_colors: int) -> mpl_colors.BoundaryNorm:
+
+    def alter_colormap(
+            self, color_arg: str | Iterable[tuple[int, int, int]]) -> None:
+        '''
+        Change the current colormap.
+
+        Parameters
+        ----------
+        color_arg : str or Iterable[tuple[int, int, int]]
+            If string, it must be a valid matplotlib colormap name, and the
+            resulting colormap will be suited to display a heatmap. If an
+            Iterable of RGB triplets, the colormap will be suited to display a
+            discrete map.
+
+        Raises
+        ------
+        ValueError
+            Raised if 'color_arg' is not a string nor an iterable.
+
+        '''
+        # Exit function if the canvas is empty
+        if self._image is None: 
+            return
+
+        # Set a linear colormap assuming a valid colormap name
+        if isinstance(color_arg, str):
+            cmap = self._set_linear_colormap(color_arg)
+
+        # Set a discrete colormap assuming iterable of RGB triplets
+        elif isinstance(color_arg, Iterable):
+            if (data := self._image.get_array()) is None:
+                return
+            cmap = self._set_discrete_colormap(color_arg, data)
+
+        # Safety fallback
+        else:
+            raise ValueError(f'{color_arg} is not a valid argument.')
+
+        # Set the new colormap and render it
+        self._image.set_cmap(cmap)
+        self.draw_idle()
+
+
+    def has_discretemap(self) -> bool:
+        '''
+        Check if the canvas is currently displaying a discrete map.
+
+        Returns
+        -------
+        bool
+            Whether the currently displayed data is a discrete map.
+
+        '''
+        return isinstance(self._cmap, mpl_colors.ListedColormap)
+
+
+    def has_heatmap(self) -> bool:
+        '''
+        Check if the canvas is currently displaying a heatmap.
+
+        Returns
+        -------
+        bool
+            Whether the currently displayed data is a heatmap.
+
+        '''
+        return isinstance(self._cmap, mpl_colors.LinearSegmentedColormap)
+
+
+    def get_boundary_norm(self, n_colors: int) -> mpl_colors.BoundaryNorm:
         '''
         Return boundary norms based on the given amount of colors. Useful to 
         properly set a colormap for a discrete map.
@@ -512,82 +613,64 @@ class ImageCanvas(_CanvasBase):
         return norm
 
 
-    def alter_cmap(self, color_arg: str | Iterable[tuple[int, int, int]]) -> None:
+    def _clear_colorbar(self) -> None:
         '''
-        Change the current colormap.
+        Cleanly remove any trace of previously drawn colorbars.
+
+        '''
+        if self._cbar is not None:
+            cax = self._cbar.ax
+            cax.clear()
+            self.fig.delaxes(cax)
+            self._cbar = None
+
+
+    def _set_colorbar(self) -> Colorbar | None:
+        '''
+        Set and return a colorbar based on current map image.
+
+        Returns
+        -------
+        Colorbar | None
+            The new colorbar or None, if the current image is empty. 
+        
+        '''
+        # Always clear previously drawn colorbars to avoid memory leaks 
+        if self._cbar is not None:
+            self._clear_colorbar()
+
+        if self._image is None:
+            return None
+
+        # Re-create the colorbar and its ax from scratch (best to avoid mpl 
+        # glitches with qt backends)
+        divider = make_axes_locatable(self.ax)
+        cax = divider.append_axes("right", size=0.4, pad=0.15)
+        # consider using mappable as matplotlib.cm.ScalarMappable instead
+        # of self._image. From Matplotlib docs: "Note that one can create a
+        # ScalarMappable 'on-the-fly' to generate colorbars not attached to
+        # a previously drawn artist, e.g.:
+        # fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)"
+        self._cbar = self.fig.colorbar(self._image, cax=cax, extend='both')
+        return self._cbar
+
+
+    def _toggle_colorbar(self, toggled: bool) -> None:
+        '''
+        Enable or disable the colorbar. Requires canvas redraw to view changes.
 
         Parameters
         ----------
-        color_arg : str or Iterable[tuple[int, int, int]]
-            If string, it must be a valid matplotlib colormap name, and the
-            resulting colormap will be suited to display a heatmap. If an
-            Iterable of RGB triplets, the colormap will be suited to display a
-            discrete map.
-
-        Raises
-        ------
-        ValueError
-            Raised if 'color_arg' is not a string nor an iterable.
+        toggled : bool
+            Whether the colorbar should be enabled or not.
 
         '''
-    # Exit function if the canvas is empty
-        if self.is_empty(): 
-            return
-
-    # If color_arg is a string, set a heatmap cmap. If it is a list of RGB 
-    # triplets, set a discrete cmap. If neither of those, raise a ValueError.
-        if isinstance(color_arg, str):
-            self.set_heatmap_cmap(color_arg)
-        elif isinstance(color_arg, Iterable):
-            self.set_discretemap_cmap(color_arg)
+        if toggled:
+            cbar = self._set_colorbar()
+            if cbar is not None:
+                cbar.ax.set_visible(True)
         else:
-            raise ValueError(f'{color_arg} is not a valid argument.')
-
-    # Set the new colormap and render it
-        self.image.set_cmap(self.cmap)
-        self.draw_idle()
-
-
-    def contains_masked_data(self) -> bool:
-        '''
-        Check if the canvas is displaying masked data.
-
-        Returns
-        -------
-        bool
-            Whether the displayed data is masked.
-
-        '''
-        if self.is_empty():
-            return False
-        else:
-            return np.ma.is_masked(self.image.get_array())
-
-
-    def contains_discretemap(self) -> bool:
-        '''
-        Check if the canvas is currently displaying a discrete map.
-
-        Returns
-        -------
-        bool
-            Whether the currently displayed data is a discrete map.
-
-        '''
-        return isinstance(self.cmap, mpl_colors.ListedColormap)
-
-
-    def contains_heatmap(self) -> bool:
-        '''
-        Check if the canvas is currently displaying a heatmap.
-
-        Returns
-        -------
-        bool
-            Whether the currently displayed data is a heatmap.
-
-        '''
-        return isinstance(self.cmap, mpl_colors.LinearSegmentedColormap)
+            self._clear_colorbar()
 
 
     def scale_clim(self, toggled: bool, arrays: list[np.ndarray] | None = None) -> None:
@@ -641,53 +724,58 @@ class ImageCanvas(_CanvasBase):
             Upper limit. The default is None.
 
         '''
-    # Do nothing if canvas is empty
-        if self.is_empty():
+        # Exit function if canvas is empty
+        if self._image is None:
+            return
+        
+        # Replace invalid clims with unmasked min/max values from image array
+        if vmin is None or vmax is None:
+            if (array := self._image.get_array()) is None:
+                return
+            vmin, vmax = float(np.nanmin(array)), float(np.nanmax(array))
+
+        # Set clims and norm of discrete maps to avoid glitches with boundaries
+        # (fixes visual bugs with class highlighting in legend)
+        if self.has_discretemap():
+            # Always refresh norm using full cmap palette before setting clims 
+            norm = self.get_boundary_norm(self._image.get_cmap().N)
+            self._image.set_norm(norm)
+            self._image.set_clim(vmin - 0.5, vmax + 0.5)
+
+        # Clims and norm of heatmaps are simpler and will sync automatically
+        elif self.has_heatmap():
+            self._image.set_clim(vmin, vmax)
+
+        # Safety fallback
+        else:
             return
 
-    # We use the vmin, vmax args if provided
-        if vmin is not None and vmax is not None:
-            self.image.set_clim(vmin, vmax)
-        # Set colorbar clim. Fixes a bug with item highlight of legends 
-            if self.contains_discretemap() and self.cbar is not None:
-                self.cbar.mappable.set_clim(vmin, vmax)
-
-    # Otherwise we use the current image clims (reset clims)
-        else:
-            array = self.image.get_array()
-            vmin, vmax = np.nanmin(array), np.nanmax(array)
-            self.image.set_clim(vmin, vmax)
-        # Re-apply boundary norm if image is a discrete map
-            if self.contains_discretemap():
-                norm = self.set_boundary_norm(int(vmax + 1))
-                self.image.set_norm(norm)
-
-    # Reset the navigation toolbar stack to fix unwanted glitches with clims 
-        if self.has_toolbar:
-            self.toolbar.update()
+        # Reset the navigation toolbar stack to fix glitches with clims 
+        self.update_toolbar()
+        self.draw_idle()
 
 
     def clear_canvas(self) -> None:
         '''
-        Clear out certain elements of the canvas and resets their properties.
+        Clear out and reset the properties of the map-related artists in the 
+        canvas.
 
         '''
-        if not self.is_empty():
+        if self._image is not None:
 
-        # Call the parent method to run generic cleaning actions
-            super().clear_canvas()
+        # Run generic shallow cleaning actions
+            self._clear_canvas()
 
-        # ??? Reset the image and its colormap
-            self.image.remove()
-            self.image, self.cmap = None, None
+        # Remove the image and its colormap
+            self._image.remove()
+            self._image = None
+            self._cmap = None
 
-        # Reset the colorbar and its ax
-            self.cbar = None
-            if self.cax is not None:
-                self.cax.set_visible(False)
+        # Remove the colorbar
+            self._clear_colorbar()
 
         # Remove the title
-            self.ax.set_title('')
+            self.set_padded_title('')
 
         # Render the canvas
             self.draw_idle()
@@ -703,8 +791,8 @@ class ImageCanvas(_CanvasBase):
             Enable/disable data picking.
 
         '''
-        if not self.is_empty():
-            self.image.set_picker(True if enabled else None)
+        if self._image is not None:
+            self._image.set_picker(True if enabled else None)
             # self.draw_idle()
 
 
@@ -714,27 +802,26 @@ class ImageCanvas(_CanvasBase):
         the Navigation Toolbar.
 
         '''
-    # Do nothing if canvas is empty
-        if self.is_empty():
+    # Exit function if canvas is empty
+        if self._image is None:
             return
-        
-        data = self.image.get_array()
-        extents = (-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5)
-    
+
+    # Exit function if image array data is invalid
+        if (data := self._image.get_array()) is None:
+            return
+
     # Fix axes extents
-        self.ax.set_xlim(extents[:2])
+        extents = (-0.5, data.shape[1] - 0.5, data.shape[0] - 0.5, -0.5)
+        self.ax.set_xlim(extents[:2]) 
         self.ax.set_ylim(extents[2:])
     
     # Fix image extents (correct aspect ratio)
-        self.image.set_extent(extents)
-    
-    # Force re-applying current clims (fix colormap bug of discrete maps)
-        self.update_clim(*self.image.get_clim())
-   
+        self._image.set_extent(extents)
+
     # Fix image zoom issues when pressing home button multiple times
         if self.fig.get_tight_layout():
             self.fig.tight_layout()
-    
+
     # Render the canvas
         self.draw_idle()
 
@@ -751,19 +838,85 @@ class ImageCanvas(_CanvasBase):
             The y coordinate of the pixel.
 
         '''
-        if not self.is_empty():
-            data = self.image.get_array()
-            if x <= (data.shape[1] - 1) and y <= (data.shape[0] - 1):
-                self.ax.set_xlim((x - 1, x + 1))
-                self.ax.set_ylim((y + 1, y - 1))
-                self.draw_idle()
+        if (
+            not self._image is None
+            and (data := self._image.get_array()) is not None
+            and x <= (data.shape[1] - 1)
+            and y <= (data.shape[0] - 1)
+        ):
+            self.ax.set_xlim((x - 1, x + 1))
+            self.ax.set_ylim((y + 1, y - 1))
+            self.draw_idle()
+
+
+    def _format_cursor(self, data: Any, encoder: dict[int, str] | None = None) -> str:
+        '''
+        Format cursor data when mouse hovering on map image.
+
+        Parameters
+        ----------
+        data : Any
+            Image data of hovered pixel.
+        encoder : dict[int, str] | None, optional
+            Class encoder for discrete map data. Use None for heatmap data. The
+            default is None.
+
+        Returns
+        -------
+        str
+            String representation of 'data'.
+
+        '''
+        if encoder is None:
+            return f'Pixel Value = {data}'
+        name = '--' if np.ma.is_masked(data) else encoder.get(int(data), '?')
+        return f'Pixel Class = {name}'
+
+
+    def _set_image(
+        self,
+        data: npt.NDArray[Any],
+        cmap: mpl_colors.Colormap,
+        norm: mpl_colors.Normalize
+    ) -> AxesImage:
+        '''
+        Set and return a new map image. Canvas requires a redraw to show the
+        changes.
+
+        Parameters
+        ----------
+        data : NDArray[Any]
+            Map data array.
+        cmap : mpl_colors.Colormap
+            Heatmap or discrete map colormap.
+        norm : mpl_colors.Normalize
+            Color mapping normalization.
+
+        Returns
+        -------
+        AxesImage
+            The new map image.
+
+        '''
+        # Set image
+        if self._image is None:
+            kwargs = {'cmap': cmap, 'norm': norm, 'interpolation': 'none'}
+            self._image = self.ax.imshow(data, **kwargs)
+        else:
+            self._image.set(data=data, cmap=cmap, norm=norm)
+
+        # Adjust image's aspect ratio
+        extents = (-0.5, data.shape[1] - 0.5, data.shape[0] - 0.5, -0.5)
+        self._image.set_extent(extents)
+
+        return self._image
 
 
     def draw_discretemap(
         self,
         data: np.ndarray,
         encoder: dict[int, str], 
-        colors: list[tuple[int, int, int]],
+        colors: Collection[tuple[int, int, int]],
         title: str | None = None
     ) -> None:
         '''
@@ -771,50 +924,37 @@ class ImageCanvas(_CanvasBase):
 
         Parameters
         ----------
-        data : numpy ndarray
+        data : np.ndarray
             A 2D array storing the image pixels as numerical class IDs.
         encoder : dict[int, str]
             Dictionary that links the class IDs (key) with the corresponding
             class names (values).
-        colors : list[tuple[int, int, int]]
-            List of RGB triplets. The length of the list must match the length
-            of the encoder dictionary.
+        colors : Collection[tuple[int, int, int]]
+            RGB color triplets. The number of colors must match the length of
+            'encoder'.
         title : str or None, optional
             The image title. If None, the previous image title will be used.
             The default is None.
 
         '''
-    # Call parent method to run generic update actions
-        super().update_canvas()
+    # Run generic update actions
+        self._update_canvas()
 
     # Set image title
         if title is not None: 
-            self.ax.set_title(title, pad=self._title_pad)
-
-    # Set color map
-        self.set_discretemap_cmap(colors)
-
-    # Define boundary norm
-        norm = self.set_boundary_norm(len(colors))
-
-    # Set image
-        if self.is_empty():
-            img_kw = {'cmap': self.cmap, 'norm': norm, 'interpolation': 'none'}
-            self.image = self.ax.imshow(data, **img_kw)
-        else:
-            self.image.set(data=data, cmap=self.cmap, norm=norm)
-
-    # Adjust aspect ratio
-        self.image.set_extent((-0.5,data.shape[1]-0.5, data.shape[0]-0.5,-0.5))
+            self.set_padded_title(title)
+            
+    # Draw new map with a discrete colormap and boundary normalization
+        cmap = self._set_discrete_colormap(colors, data)
+        norm = self.get_boundary_norm(len(colors))
+        image = self._set_image(data, cmap, norm)
 
     # Set cursor data format (i.e., when hovering with mouse over pixels)
-        self.image.format_cursor_data = lambda k: (
-            f'Pixel Class = {"--" if np.ma.is_masked(k) else encoder[k]}'
-        )
+        image.format_cursor_data = partial(self._format_cursor, encoder=encoder)
 
-    # Hide colorbar
-        if self.cbar is not None: 
-            self.cax.set_visible(False)
+    # Disable the colorbar (discrete maps are not expected to have one)
+        self._toggle_colorbar(False)
+        # self._toggle_colorbar(self._has_colorbar) # use this to show cbar
 
     # Redraw canvas
         self.draw_idle()
@@ -840,90 +980,117 @@ class ImageCanvas(_CanvasBase):
             A Matplotlib default colormap name. The default is "Spectral_r".
 
         '''
-    # Call the parent method to run generic update actions
-        super().update_canvas()
+    # Run generic update actions
+        self._update_canvas()
 
     # Set image title
         if title is not None: 
-            self.ax.set_title(title, pad=self._title_pad)
+            self.set_padded_title(title)
 
-    # Set color map
-        self.set_heatmap_cmap(cmap_name)
-
-    # Set linear boundary norm
+    # Draw new map with a linear colormap and linear normalization
+        cmap = self._set_linear_colormap(cmap_name)
         norm = mpl_colors.Normalize()
-
-    # Set image
-        if self.is_empty():
-            img_kw = {'cmap': self.cmap, 'norm': norm, 'interpolation': 'none'}
-            self.image = self.ax.imshow(data, **img_kw)
-        else:
-            self.image.set(data=data, cmap=self.cmap, norm=norm)
-
-    # # Update norm limits
-    #     self.update_clim(data.min(), data.max())
-   
-    # Set and show colorbar
-        if self.has_cbar:
-            if self.cbar is None: self.set_cbar()
-            self.cax.set_visible(True)
-
-    # Adjust aspect ratio
-        self.image.set_extent((-0.5,data.shape[1]-0.5, data.shape[0]-0.5,-0.5))
+        image = self._set_image(data, cmap, norm)
 
     # Set cursor data format (i.e., when hovering with mouse over pixels)
-        self.image.format_cursor_data = lambda v: f"Pixel Value = {v}"
+        image.format_cursor_data = partial(self._format_cursor)
+
+    # Enable the colorbar if required
+        self._toggle_colorbar(self._has_colorbar)
 
     # Redraw canvas
         self.draw_idle()
 
 
-    def get_map(self, return_mask: bool = False) -> (
-        tuple[np.ndarray, np.ndarray | None] | np.ndarray | None
-    ):
+    def has_masked_array(self) -> bool:
         '''
-        Get an unmasked version of the array displayed in the canvas and,
-        optionally, its mask. If you just want the array "as is" use instead
-        "self.image.get_array()".
+        Check if the canvas is displaying masked data.
+
+        Returns
+        -------
+        bool
+            Whether the displayed data is masked.
+
+        '''
+        if self._image is None:
+            return False
+        return np.ma.is_masked(self._image.get_array())
+
+
+    def get_array(self) -> np.ndarray | np.ma.MaskedArray | None:
+        '''
+        Get the underlying array in the displayed image.
+
+        Returns
+        -------
+        np.ndarray or None
+            The image array or None if image is empty.
+
+        '''
+        if self._image is None:
+            return None
+        return self._image.get_array()
+
+
+    @overload # when 'return_mask' is explicitly False (default)
+    def get_unmasked_array(
+        self,
+        return_mask: Literal[False] = False
+    ) -> np.ndarray | None: ...
+
+    @overload # when 'return_mask' is explicitly True
+    def get_unmasked_array(
+        self,
+        return_mask: Literal[True]
+    ) -> tuple[np.ndarray | None, np.ndarray | None]: ...
+
+    @overload # when 'return_mask' is a boolean variable
+    def get_unmasked_array(
+        self,
+        return_mask: bool
+    ) -> np.ndarray | None | tuple[np.ndarray | None, np.ndarray | None]: ...
+
+    def get_unmasked_array(
+        self,
+        return_mask: bool = False
+    ) -> np.ndarray | None | tuple[np.ndarray | None, np.ndarray | None]:
+        '''
+        Get an unmasked version of the underlying array in the displayed image
+        and, optionally, its mask. To get the array "as is" use "get_array()".
 
         Parameters
         ----------
         return_mask : bool, optional
-            Whether the mask of a masked map array should be returned. The
-            default is False.
+            Also return the detached mask, if existent. The default is False.
 
         Returns
         -------
-        array : numpy ndarray or None
-            The displayed map array or None if no map is displayed.
-        mask : numpy ndarray or None, optional
-            The mask array, if 'return_mask' is True and the array is masked.
+        np.ndarray or None or tuple[np.ndarray or None, np.ndarray or None]
+            The unmasked array (or None, if empty) and, optionally, its mask
+            (or None, if empty).
 
-        '''
-        if self.is_empty(): return None
+        '''    
+    # Return None array (and None mask, if required) when array is invalid
+        if (array := self.get_array()) is None:
+            return None if not return_mask else (None, None)
 
-        array = self.image.get_array()
-
-        if np.ma.is_masked(array):
-            mask = array.mask
-            array = array.data
-        else:
-            mask = None
-
-        if return_mask:
-            return array, mask
-        else:
-            return array
+        unmasked_array = np.ma.getdata(array)
+        mask = np.ma.getmaskarray(array) if np.ma.is_masked(array) else None
+        return unmasked_array if not return_mask else (unmasked_array, mask)
 
 
 
 class BarCanvas(_CanvasBase):
 
+    _bar_properties = {'edgecolor': style.IVORY, 'linewidth': 0.5}
+    _grid_properties = {'linestyle': ':', 'linewidth': 0.5, 'zorder': 0}
+    _legend_properties = {'labelcolor': style.IVORY}
+
     def __init__(
         self,
-        orientation: str = 'v',
+        orientation: Literal['h', 'v'] = 'v',
         size: tuple[float, float] = (6.4, 3.6),
-        layout: str = 'tight',
+        layout: Literal['constrained', 'compressed', 'tight'] | None = 'tight',
         **kwargs
     ) -> None:
         '''
@@ -932,14 +1099,13 @@ class BarCanvas(_CanvasBase):
 
         Parameters
         ----------
-        orientation : str, optional
-            Orientation of the bars. Can be 'h' (horizontal) or 'v' (vertical).
+        orientation : Literal['h', 'v'], optional
+            Orientation of the bars. Can be horizontal ('h') or vertical ('v').
             The default is 'v'.
         size : tuple[float, float], optional
             Size of the canvas. The default is (6.4, 3.6)
-        layout : str, optional
-            Layout engine of the figure. One of ['constrained', 'compressed', 
-            'tight' and 'none']. The default is 'tight'.
+        layout : Literal['constrained', 'compressed', 'tight'] | None, optional
+            Layout engine of the figure. The default is 'tight'.
         **kwargs
             Parent class arguments (see _CanvasBase class).
 
@@ -947,12 +1113,23 @@ class BarCanvas(_CanvasBase):
         super().__init__(size=size, layout=layout, **kwargs)
 
     # Set main attributes
-        self.orient = orientation
-        self.plot = None
-        self.bar_width = 0.5
-        self.decimal_precision = settings.manager.get('data/decimal_precision')
-        self.label_amounts = []
-        self.visible_amounts = False
+        self._orient = orientation
+        self._plot: list[BarContainer] = []
+        self._bar_thickness = 0.5
+
+    # Set label amounts attributes
+        self._decimal_precision = settings.manager.get('data/decimal_precision')
+        self._visible_amounts = False
+        self._label_amounts: list[list[Annotation]] = []
+        self._label_amounts_properties: dict[str, Any] = {
+            'fmt': f'%.{self._decimal_precision}f',
+            'padding': 16,
+            'label_type': 'center',
+            'color': style.IVORY,
+            'path_effects': [
+                mpl_patheffects.withStroke(linewidth=2, foreground='k')
+            ]
+        }
 
 
     def is_empty(self) -> bool:
@@ -965,7 +1142,7 @@ class BarCanvas(_CanvasBase):
             Whether the canvas is empty.
 
         '''
-        return self.plot is None
+        return not len(self._plot)
 
 
     def clear_canvas(self) -> None:
@@ -973,65 +1150,76 @@ class BarCanvas(_CanvasBase):
         Clear out the canvas and reset some properties.
 
         '''
-    # Call the parent method to run generic cleaning actions
-        super().clear_canvas(deep_clear=True)
+    # Run generic deep cleaning actions
+        self._clear_canvas(deep_clear=True)
 
     # Reset the references to the plotted data
-        self.plot = None
-        self.label_amounts.clear()
+        self._plot.clear()
+        self._label_amounts.clear()
         self.draw_idle()
 
 
-    def show_amounts(self, enabled: bool) -> None:
+    def _show_label_amounts(self, visible: bool) -> None:
         '''
-        Show/hide amounts on top of the bars.
+        Show/hide existing bar label amounts. Canvas requires a redraw to show
+        the changes.
 
         Parameters
         ----------
-        enabled : bool
+        visible : bool
+            Whether labels should be visible or not.
+
+        '''
+        for series in self._label_amounts:
+            for lbl in series:
+                lbl.set_visible(visible)
+
+
+    def _set_label_amounts(self) -> None:
+        '''
+        Draw the bar labels showing amounts. Canvas requires a redraw to show
+        the changes.
+
+        '''
+        kwargs = self._label_amounts_properties
+        for series in self._plot:
+            self._label_amounts.append(self.ax.bar_label(series, **kwargs))
+
+
+    def toggle_amounts(self, toggled: bool) -> None:
+        '''
+        Show/hide label amounts displayed on top of the bars.
+
+        Parameters
+        ----------
+        toggled : bool
             Whether or not to display the amounts.
 
         '''
-    # Update the attribute in any case
-        self.visible_amounts = enabled
+        # Update the attribute in any case
+        self._visible_amounts = toggled
 
-    # Exit function if the canvas is empty
-        if self.is_empty():
-            return
-
-    # Show the amounts
-        if enabled:
-            pe = [mpl_patheffects.withStroke(linewidth=2, foreground='k')]
-            kwargs = {
-                'fmt': f'%.{self.decimal_precision}f',
-                'padding': 16,
-                'label_type': 'center',
-                'color': style.IVORY,
-                'path_effects': pe
-            }
-            self.label_amounts = self.ax.bar_label(self.plot, **kwargs)
-
-    # Or hide the amounts
+        # Set visibility of label amounts, creating them if necessary
+        if toggled and not len(self._label_amounts):
+            self._set_label_amounts()
         else:
-            for lbl in self.label_amounts:
-                lbl.remove()
-            self.label_amounts.clear()
+            self._show_label_amounts(toggled)
 
-    # Redraw the canvas
+        # Redraw the canvas
         self.draw_idle()
 
 
-    def set_bar_width(self, width: float) -> None:
+    def set_bar_thickness(self, thickness: float) -> None:
         '''
-        Set the width of plotted bars.
+        Set the thickness of plotted bars.
 
         Parameters
         ----------
         width : float
-            The required width.
+            The required thickness.
 
         '''
-        self.bar_width = width
+        self._bar_thickness = thickness
 
 
     def set_decimal_precision(self, precision: int) -> None:
@@ -1044,112 +1232,246 @@ class BarCanvas(_CanvasBase):
             Number of decimal places.
             
         '''
-        self.decimal_precision = precision
+        self._decimal_precision = precision
+        self._label_amounts_properties['fmt'] = f'%.{precision}f'
+
+
+    def _get_ticklabels(self) -> list[Text]:
+        '''
+        Get current tick labels based on the orientation of the bar plot.
+
+        Returns
+        -------
+        list[Text]
+            X or Y tick labels.
+
+        '''
+        if self._orient == 'h':
+            return self.ax.get_yticklabels()
+        else:
+            return self.ax.get_xticklabels()
+
+
+    def change_bar_color(self, name: str, color: tuple[int, int, int]) -> None:
+        '''
+        Change the color of the bar named 'name'.
+
+        Parameters
+        ----------
+        name : str
+            Bar name, as displayed in the corresponding tick label.
+        color : tuple[int, int, int]
+            New color as RGB triplet.
+
+        Raises
+        ------
+        ValueError
+            Raised if using this method on a multi-bars plot.
+
+        '''
+
+        # Exit function if plot is empty
+        if not (n_series := len(self._plot)):
+            return
+
+        # Raise error if this is a multi-bars plot
+        if n_series > 1:
+            raise ValueError(
+                "Cannot use 'change_bar_color' in a multi-bars plot. " \
+                "Use 'change_category_color' instead."
+            )
+
+        # Extract tick labels to identify the correct bar from given 'name'
+        ticklabels = self._get_ticklabels()
+
+        # Change the color of the corresponding bar
+        for i, bar in enumerate(self._plot[0]):
+            bar: Rectangle
+            if name == ticklabels[i].get_text():
+                (float_rgb,) = rgb_to_float((color,))
+                bar.set_facecolor(float_rgb)
+                break
+        
+        self.draw_idle()
+
+
+    def change_category_color(self, name: str, color: tuple[int, int, int]) -> None:
+        '''
+        Change the color of all bars belonging to the category named 'name'.
+
+        Parameters
+        ----------
+        name : str
+            Category name, as displayed in the legend.
+        color : tuple[int, int, int]
+            New color as RGB triplet.
+
+        Raises
+        ------
+        ValueError
+            Raised if using this method on a single-bar plot.
+
+        '''
+
+        # Exit function if plot is empty
+        if not (n_series := len(self._plot)):
+            return
+
+        # Raise error if this is a single-bar plot
+        if n_series == 1:
+            raise ValueError(
+                "Cannot use 'change_category_color' in a single-bar plot. " \
+                "Use 'change_bar_color' instead."
+            )
+
+        # Change the color of the bars that belong to the corresponding category
+        for series in self._plot:
+            if name == series.get_label():
+                (float_rgb,) = rgb_to_float((color,))
+                for bar in series:
+                    bar: Rectangle
+                    bar.set_facecolor(float_rgb)
+                break
+
+        # Redraw legend
+        if (legend := self.ax.get_legend()) is not None:
+            legend.remove()
+        self.ax.legend(**self._legend_properties)
+        self.draw_idle()
 
 
     def update_canvas(
         self,
-        data: list[int | float] | list[list[int | float]], 
-        tickslabels: list[str] | None = None,
-        title: str | None = None,
-        colors: list[tuple[int, int, int]] | None = None,
-        multibars: bool = False, 
-        labels: list[str] | None = None
+        data: Sequence[Sequence[int | float]], 
+        ticklabels: Collection[str],
+        colors: Collection[tuple[int, int, int]] | None = None,
+        categories: Sequence[str] | None = None,
+        title: str | None = None
     ) -> None:
         '''
-        Update the canvas with a new plot.
+        Update the canvas with a new plot. The plot can either be a single-bar
+        plot (one bar for each element) or a grouped-bars plot, where each 
+        element displays multiple categories of values, using grouped bars.
 
         Parameters
         ----------
-        data : list[int or float] or list[list[int or float]]
-            X-axis values. If 'multibars' is True, this should be provided as a
-            list of lists, where len(data) is the number of categories (or 
-            groups). Sub-lists must share the same length.
-        tickslabels : list[str] or None, optional
-            X-ticks labels. The length of the list must match the length of 
-            'data' (or of its sub-lists if 'multibars' is True). If None, no 
-            tick label is shown. The default is None.
-        title : str or None, optional
-             The plot title. If None, no title is shown. The default is None.
-        colors : list[tuple[int, int, int]] or None, optional
-            A list of RGB triplets. The length of the list must match the 
-            length of 'data' (or of its sub-lists if 'multibars' is True). If 
-            None, Matplotlib's default colors are used. The default is None.
-        multibars : bool, optional
-            Whether to adapt the plot to display bars in categories or groups. 
-            The default is False.
-        labels : list[str] or None, optional
-            A list of labels associated with each bar or each category if 
-            'multibars' is True. If provided, they are displayed in a legend. 
-            The length of the list must match the length of 'data' (or of its 
-            sub-lists if 'multibars' is True). If None, no legend will be 
-            displayed. The default is None.
+        data : Sequence[Sequence[int | float]]
+            A sequence of sequences, where each inner sequence contains the 
+            values of all elements for a single data category. Use multiple 
+            inner sequences to include multiple categories for each element, 
+            displayed as a grouped-bars plot. Each inner sequence must contain 
+            the same number of elements.
+        ticklabels : Collection[str]
+            Tick labels for each element. The number of labels must match the 
+            number of elements in the inner sequences. They must be unique.
+        colors : Collection[tuple[int, int, int]] | None, optional
+            A collection of RGB triplets. If one inner sequence of elements is
+            passed to 'data' (single-bar plot), the number of colors must match
+            the number of elements in that sequence. If multiple sequences are
+            passed (grouped-bars plot), they are interpreted as category colors 
+            and their amount must match the number of inner sequences. If None,
+            the Matplotlib's default colors are used. The default is None.
+        categories : Sequence[str] | None, optional
+            Labels associated with each value category. This is mostly useful
+            if multiple inner sequences are passed to 'data' (grouped-bars 
+            plot). The number of category labels must match the number of inner
+            sequences. If provided, category labels are displayed in a legend.
+            If None, no legend will be displayed. The default is None.
+        title : str | None, optional
+            The plot title. If None, no title is shown. The default is None.
+
+        Raises
+        ------
+        ValueError
+            Raised if 'data' sequences have different lengths.
+        ValueError
+            Raised if an invalid number of 'ticklabels' is passed.
+        ValueError
+            Raised if an invalid number of 'colors' is passed.
+        ValueError
+            Raised if an invalid number of 'categories' is passed.
 
         '''
-    # Call the parent method to run generic update actions
-        super().update_canvas()
+        # Run generic update actions
+        self._update_canvas()
 
-    # Clear the canvas and exit the function if data is empty
-        if not len(data): 
-            self.clear_canvas()
-            return
+        # Clear the canvas and exit the function if data is empty
+        if not (n_series := len(data)):
+            return self.clear_canvas()
+        
+        # Check for inconsistencies in input parameters
+        if len((series_length := set(len(d) for d in data))) > 1:
+            raise ValueError('Data sequences must have the same length.')
+        
+        n_values = series_length.pop()
+        if (ntl := len(set(ticklabels))) != n_values:
+            raise ValueError(f'Got {ntl} unique tick labels, but {n_values} are required.')
 
-    # Remove the previous plot if there is one
+        mpl_colors = None if colors is None else rgb_to_float(colors)
+        if mpl_colors is not None:
+            nc = len(mpl_colors)
+            if n_series == 1 and nc != n_values:
+                raise ValueError(f'Got {nc} colors, but {n_values} are required.')
+            if n_series > 1 and nc != n_series:
+                raise ValueError(f'Got {nc} colors, but {n_series} are required.')
+
+        if categories is not None and (ncat := len(categories)) != n_series:
+            raise ValueError(f'Got {ncat} categories, but {n_series} are required.')
+
+        # Remove the previous plot, including label amounts and legend
         if not self.is_empty(): 
             self.ax.clear()
+            self._plot.clear()
+            self._label_amounts.clear()
 
-    # Set the grid on for y or x axis
-        gridax = 'y' if self.orient == 'v' else 'x'
-        self.ax.grid(True, axis=gridax, ls=':', lw=0.5, zorder=0)
-
-    # Adjust the ticks and tickslabels properties
-        if tickslabels is not None:
-            ticks = np.arange(1, len(tickslabels)+1)
-            if self.orient == 'v':
-                self.ax.set_xticks(ticks, labels=tickslabels, rotation=-60)
-                self.ax.tick_params(axis='x', which='both', length=0)
-            else:
-                self.ax.set_yticks(ticks, labels=tickslabels)
-                self.ax.tick_params(axis='y', which='both', length=0)
+        # Adjust the ax properties that are based on plot orientation
+        ticks = np.arange(1, len(ticklabels) + 1)
+        match self._orient:
+            case 'v':
+                plot_function = self.ax.bar
+                self.ax.set_xticks(ticks, labels=ticklabels)
+                self.ax.tick_params('x', which='both', length=0, rotation=-60)
+                self.ax.grid(True, axis='y', **self._grid_properties)
+            case 'h':
+                plot_function = self.ax.barh
+                self.ax.set_yticks(ticks, labels=ticklabels)
+                self.ax.tick_params('y', which='both', length=0)
                 self.ax.invert_yaxis()
+                self.ax.grid(True, axis='x', **self._grid_properties)
+            case _: # safety
+                return
 
-    # Set the title
+        # Set the title
         if title is not None: 
-            self.ax.set_title(title, pad=self._title_pad)
+            self.set_padded_title(title)
 
-    # Convert the bar colors to a matplotlib compatible format
-        if colors is not None: 
-            colors = rgb_to_float(colors)
+        # Adjust the canvas for a multi-bars plot, if required
+        shift = 0 if n_series == 1 else self._bar_thickness / n_series
+        shift_step = np.linspace(-shift, shift, n_series)
 
-    # Adjust the canvas for a multibar plot, if required (multibars is used as 
-    # a boolean switch)
-        shift = self.bar_width/len(data) * multibars
-        shift_step = np.linspace(-shift, shift, len(data))
-        n_iter = multibars * len(data)
+        # Build the plot
+        for i in range(n_series):
+            cat = categories[i] if categories else None
+            col = mpl_colors[i] if mpl_colors and n_series > 1 else mpl_colors
+            series = plot_function(
+                ticks + shift_step[i],
+                data[i],
+                self._bar_thickness,
+                color=col,
+                label=cat,
+                **self._bar_properties
+            )
+            series.set_label(f'Series {i}' if cat is None else cat)
+            self._plot.append(series)
 
-    # Build the plot
-        if not n_iter:
-            data = (data, )
-            n_iter = 1
+        # Build the legend
+        if categories is not None:
+            self.ax.legend(**self._legend_properties)
 
-        for i in range(n_iter):
-            lbl = labels if labels is None else labels[i]
-            args = (ticks + shift_step[i], data[i], self.bar_width)
-            kw = {'color': colors, 'ec': style.IVORY, 'lw': 0.5, 'label': lbl}
+        # Refresh label amounts if required
+        self.toggle_amounts(self._visible_amounts)
 
-            if self.orient == 'v':
-                self.plot = self.ax.bar(*args, **kw)
-            else:
-                self.plot = self.ax.barh(*args, **kw)
-
-    # Build the legend
-        if labels is not None: 
-            self.ax.legend() # this will probably need tweaks (legends stacking?)
-
-    # Refresh label amounts if required
-        self.show_amounts(self.visible_amounts)
-
-    # Redraw the canvas
+        # Redraw the canvas
         self.draw_idle()
 
 
@@ -1184,11 +1506,38 @@ class HistogramCanvas(_CanvasBase):
         self.ax.yaxis.set_ticks_position('both')
 
     # Set main attributes
-        self.density = density
-        self.log = logscale
-        self.nbins = 50
-        self.hist_data, self.roi_hist_data = None, None
-        self.hist, self.roi_hist = None, None
+        self._density = density
+        self._log = logscale
+        self._nbins = 50
+        self._hist_data: np.ndarray | None = None
+        self._roi_hist_data: np.ndarray | None = None
+
+
+    def get_bins(self) -> int:
+        '''
+        Get the number of histogram bins.
+
+        Returns
+        -------
+        int
+            Number of bins.
+
+        '''
+        return self._nbins
+
+
+    def set_bins(self, num: int) -> None:
+        '''
+        Set the number of histogram bins. The plot is refreshed automatically.
+
+        Parameters
+        ----------
+        num : int
+            Number of bins.
+
+        '''
+        self._nbins = num
+        self.refresh_view()
 
 
     def is_empty(self) -> bool:
@@ -1201,7 +1550,7 @@ class HistogramCanvas(_CanvasBase):
             Whether the canvas is empty.
 
         '''
-        return self.hist is None
+        return self._hist_data is None
 
 
     def clear_canvas(self) -> None:
@@ -1209,15 +1558,28 @@ class HistogramCanvas(_CanvasBase):
         Clear out the plot and reset some attributes.
 
         '''
-    # Call the parent method to run generic cleaning actions
-        super().clear_canvas(deep_clear=True)
+    # Run generic deep cleaning actions
+        self._clear_canvas(deep_clear=True)
 
-        self.hist, self.roi_hist = None, None
-        self.hist_data, self.roi_hist_data = None, None
+        self._hist_data = None
+        self._roi_hist_data = None
         self.draw_idle()
 
 
-    def toggle_logscale(self, toggled: bool) -> None:
+    def get_logscale(self) -> bool:
+        '''
+        Check if the scale is logarithmic or not.
+
+        Returns
+        -------
+        bool
+            Whether the scale is logarithmic or not.
+
+        '''
+        return self._log
+
+
+    def set_logscale(self, toggled: bool) -> None:
         '''
         Toggle on/off logarithmic scale. The plot is refreshed automatically.
 
@@ -1227,21 +1589,7 @@ class HistogramCanvas(_CanvasBase):
             Toggle on/off.
 
         '''
-        self.log = toggled
-        self.refresh_view()
-
-
-    def set_nbins(self, num: int) -> None:
-        '''
-        Set the number of histogram bins. The plot is refreshed automatically.
-
-        Parameters
-        ----------
-        num : int
-            Number of bins.
-
-        '''
-        self.nbins = num
+        self._log = toggled
         self.refresh_view()
 
 
@@ -1250,11 +1598,27 @@ class HistogramCanvas(_CanvasBase):
         Refresh (re-render) the plot.
 
         '''
-        if not self.is_empty():
-            data = self.hist_data
-            roi_data = self.roi_hist_data
-            title = self.ax.get_title()
-            self.update_canvas(data, roi_data, title)
+        if (data := self._hist_data) is not None:
+            self.update_canvas(data, self._roi_hist_data, self.ax.get_title())
+
+
+    def _to_hist_data(self, data: np.ndarray) -> npt.NDArray[Any]:
+        '''
+        Helper method to transform 2D array data to histogram-ready, flattened
+        data. It accepts both masked and unmasked data arrays.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Masked or unmasked 2D data array.
+
+        Returns
+        -------
+        NDArray[Any]
+            1D flattened data array.
+
+        '''
+        return np.ma.compressed(data) if np.ma.is_masked(data) else data.flatten()
 
 
     def update_canvas(
@@ -1269,7 +1633,7 @@ class HistogramCanvas(_CanvasBase):
         Parameters
         ----------
         data : numpy ndarray
-            The histogram data.
+            Data to plot in histogram.
         roi_data : numpy ndarray or None, optional
             The histogram data of a portion of a map enclosed by a ROI. Such
             data is plotted over the main plot. The default is None.
@@ -1277,15 +1641,17 @@ class HistogramCanvas(_CanvasBase):
             The title of the plot. If None, the previous title will be used. 
             The default is None.
 
-        Example of roi_data
-        -----------------------------
-        data = MAP.image.get_array()
-        r0, r1, c0, c1 = ROI.extents
-        roi_data = data[r0:r1, c0:c1]
+        Example
+        -------
+        How to extract ROI data
+        >>> data = image_canvas.get_array()
+        >>> r0, r1, c0, c1 = ROI.extents
+        >>> roi_data = data[r0:r1, c0:c1]
+        >>> histogram_canvas.update_canvas(data, roi_data)
 
         '''
-    # Call the parent method to run generic update actions
-        super().update_canvas()
+    # Run generic update actions
+        self._update_canvas()
 
     # Clear the canvas if it is already populated
         if not self.is_empty():
@@ -1293,23 +1659,20 @@ class HistogramCanvas(_CanvasBase):
 
     # Set the title
         if title is not None:
-            self.ax.set_title(title, pad=self._title_pad)
+            self.set_padded_title(title)
 
     # Plot the histogram data
-        masked = np.ma.is_masked(data)
-        self.hist_data = data.compressed() if masked else data.flatten()
-        hist_kw = {'bins': self.nbins, 'density': self.density, 'log': self.log}
-        self.hist = self.ax.hist(self.hist_data, **hist_kw)
+        self._hist_data = self._to_hist_data(data)
+        hist_kw = {'bins': self._nbins, 'density': self._density, 'log': self._log}
+        self.ax.hist(self._hist_data, **hist_kw)
 
     # Plot the ROI histogram data, if requested
         if roi_data is None:
-            self.roi_hist_data = None
-            self.roi_hist = None
+            self._roi_hist_data = None
         else:
-            masked = np.ma.is_masked(roi_data)
-            self.roi_hist_data = roi_data.compressed() if masked else roi_data.flatten()
-            roi_hist_kw = {**hist_kw, 'fc': style.HIST_MASK}
-            self.roi_hist = self.ax.hist(self.roi_hist_data, **roi_hist_kw)
+            self._roi_hist_data = self._to_hist_data(roi_data)
+            roi_hist_kw = {**hist_kw, 'facecolor': style.HIST_MASK}
+            self.ax.hist(self._roi_hist_data, **roi_hist_kw)
     
     # Adjust the x and y lims
         self.update_xylim()
@@ -1327,9 +1690,11 @@ class HistogramCanvas(_CanvasBase):
         if not self.is_empty():
         # Update the xy limits
             self.update_xylim()
+
         # Fix image zoom issues when pressing home button multiple times
             if self.fig.get_tight_layout():
                 self.fig.tight_layout()
+
         # Redraw canvas
             self.draw_idle()
 
@@ -1344,14 +1709,24 @@ class HistogramCanvas(_CanvasBase):
 
 
 
-class ConfMatCanvas(_CanvasBase):
+class ConfMatCanvas(ImageCanvas):
+
+    _annotation_properties = {
+        'color': 'w',
+        'horizontalalignment': 'center',
+        'verticalalignment': 'center',
+        'path_effects': [
+            mpl_patheffects.withStroke(linewidth=2, foreground='k')
+        ]
+    }
+    _confmat_colormap = 'cividis' # default colormap, may be a user preference
+    _title_pad = 5
 
     def __init__(
         self,
         title: str = 'Confusion Matrix',
         xlab: str = 'Predicted classes',
         ylab: str = 'True classes',
-        cbar: bool = True,
         size: tuple[float, float] = (9.0, 9.0),
         **kwargs
     ) -> None:
@@ -1366,8 +1741,6 @@ class ConfMatCanvas(_CanvasBase):
             Name of the x-axis. The default is 'Predicted classes'.
         ylab : str, optional
             Name of the y-axis. The default is 'True classes'.
-        cbar : bool, optional
-            Whether to include a colorbar in the canvas. The default is True.
         size : tuple[float, float], optional
             Size of the canvas. The default is (9, 9).
         **kwargs
@@ -1377,12 +1750,8 @@ class ConfMatCanvas(_CanvasBase):
     # Call the constructor of the parent class
         super().__init__(size=size, **kwargs)
 
-    # Set main attributes
-        self.matrix = None
-        self.matplot = None
-        self.show_cbar = cbar
-        self.cbar = None
-        self.cax = None
+    # Set main attributes (self._image and self._cbar are inherited from parent)
+        self._matrix: npt.NDArray[Any] | None = None
 
     # Set title and axis labels attributes and initialize the ax
         self.title = title
@@ -1396,35 +1765,41 @@ class ConfMatCanvas(_CanvasBase):
         Reset the ax to default state.
 
         '''
-        self.ax.set_title(self.title, pad=self._title_pad)
+        self.set_padded_title(self.title)
         self.ax.set_xlabel(self.xlab)
         self.ax.set_ylabel(self.ylab)
 
 
-    def set_cbar(self) -> None:
+    def _set_colorbar(self) -> Colorbar | None:
         '''
-        Initialize the colorbar ax.
+        Reimplementation of parent '_set_colorbar' method. It sets a title to
+        the colorbar.
+
+        Returns
+        -------
+        Colorbar | None
+            The new colorbar or None, if the current image is empty. 
 
         '''
-        divider = make_axes_locatable(self.ax)
-        self.cax = divider.append_axes("right", size="5%", pad=0.1)
-        self.cbar = self.fig.colorbar(self.matplot, cax=self.cax)
-        self.cbar.ax.set_title('%')
+        cbar = super()._set_colorbar()
+        if cbar is not None:
+            cbar.ax.set_title('%')
+        return cbar
 
 
-    def _compute_percentage(self, matrix: np.ndarray) -> np.ndarray:
+    def _compute_percentage(self, matrix: npt.NDArray[Any]) -> npt.NDArray[Any]:
         '''
         Transform 'matrix' data to percentage, rounded to one decimal place.
 
         Parameters
         ----------
-        matrix : numpy ndarray
+        matrix : NDArray[Any]
             Original matrix data.
 
         Returns
         -------
-        numpy ndarray
-            Transformed matrix data.
+        NDArray[Any]
+            Percentage matrix data.
 
         '''
         sums = matrix.sum(1).reshape(-1, 1)
@@ -1433,63 +1808,39 @@ class ConfMatCanvas(_CanvasBase):
         return matrix
 
 
-    def annotate(self, as_percent: bool) -> None:
+    def _set_annotations(self, perc: bool) -> None:
         '''
-        Populate the canvas with the matrix values.
+        Populate the canvas with the matrix values. Canvas requires a redraw to
+        show the changes.
 
         Parameters
         ----------
-        as_percent : bool
+        perc : bool
             Whether annotations should be displayed as percentages.
 
         '''
-    # Get the matrix data. If the matrix plot is None, exit function
-        if self.matplot:
-            matrix = self.matrix
-        else:
+    # Exit function if image or matrix data are invalid
+        if self._image is None or self._matrix is None:
             return
         
     # Compute percentages if required
-        if as_percent:
-            matrix = self._compute_percentage(self.matrix)
+        mtx = self._compute_percentage(self._matrix) if perc else self._matrix
 
     # Define a meshgrid from the matrix shape
-        n_rows, n_cols = matrix.shape
+        n_rows, n_cols = mtx.shape
         row_ind = np.arange(n_rows)
         col_ind = np.arange(n_cols)
         xx, yy = np.meshgrid(col_ind, row_ind)
 
     # Annotate each node with the corresponding value
-        pe = [mpl_patheffects.withStroke(linewidth=2, foreground='k')]
-        kw = {'va': 'center', 'ha': 'center', 'color': 'w', 'path_effects': pe}
-        for t, x, y in zip(matrix.flatten(), xx.flatten(), yy.flatten()):
-            self.ax.annotate(t, (x, y), **kw)
+        for t, x, y in zip(mtx.flatten(), xx.flatten(), yy.flatten()):
+            self.ax.annotate(t, (x, y), **self._annotation_properties)
 
 
-    def clear_canvas(self) -> None:
+    def _remove_annotations(self) -> None:
         '''
-        Clear out the plot and reset some properties.
-
-        '''
-    # Call the parent method to run generic cleaning actions
-        super().clear_canvas(deep_clear=True)
-
-    # Hide colorbar
-        if self.cbar is not None: 
-            self.cax.set_visible(False)
-
-    # Reset some properties
-        self.matrix = None
-        self.matplot = None
-        self._init_ax()
-
-    # Redraw the canvas
-        self.draw_idle()
-
-
-    def remove_annotations(self) -> None:
-        '''
-        Remove any previous annotation on the canvas.
+        Remove any previous annotation on the canvas. Canvas requires a redraw
+        to show the changes.
 
         '''
         for child in self.ax.get_children():
@@ -1497,85 +1848,135 @@ class ConfMatCanvas(_CanvasBase):
                 child.remove()
 
 
-    def set_ticks(self, labels: list[str] | tuple[str, ...], axis: str = 'both') -> None:
+    def annotate(self, as_percentage: bool) -> None:
         '''
-        Set the ticks and their labels for the confusion matrix (true/predicted 
-        classes).
+        Annotate matrix's cells with values. If 'as_percentage' is True, the
+        values are displayed as percentages.
 
         Parameters
         ----------
-        labels : list[str] or tuple[str, ...]
-            List of labels.
-        axis : str, optional
-            Axis to be populated with labels. The available choices are 'x',
-            'y' or 'both'. The default is 'both'.
-
-        Raises
-        ------
-        AssertionError
-            Raised if 'axis' argument is not one of ['x', 'y', 'both'].
+        as_percentage : bool
+            Whether annotations should be displayed as percentages or not.
 
         '''
-        assert axis in ('x', 'y', 'both')
-        ticks = np.arange(len(labels))
-
-        if axis in ('x', 'both'):
-            self.ax.set_xticks(
-                ticks, labels=labels, fontsize='small', rotation=-60)
-            self.ax.tick_params(labelbottom=True, labeltop=False)
-        if axis in ('y', 'both'):
-            self.ax.set_yticks(ticks, labels=labels, fontsize='small')
-
+        self._remove_annotations()
+        self._set_annotations(as_percentage)
         self.draw_idle()
 
 
-    def update_canvas(self, data: np.ndarray, percent_annotations: bool = True) -> None:
+    def _set_ticks(self, labels: Collection[str]) -> None:
+        '''
+        Set ticks and ticks labels of the confusion matrix.
+
+        Parameters
+        ----------
+        labels : Collection[str]
+            Collection of labels.
+
+        '''
+        ticks = np.arange(len(labels))
+        self.ax.set_xticks(ticks, labels=labels, fontsize='small', rotation=-60)
+        self.ax.set_yticks(ticks, labels=labels, fontsize='small')
+        self.ax.tick_params(labelbottom=True, labeltop=False)
+
+
+    def _set_matrix(self, data: npt.NDArray[Any]) -> AxesImage:
+        '''
+        Set and return a new matrix image. Canvas requires a redraw to show the
+        changes.
+
+        Parameters
+        ----------
+        data : NDArray[Any]
+            Matrix data array.
+
+        Returns
+        -------
+        AxesImage
+            The new matrix image.
+
+        '''
+        if self._image is None:
+            kwargs = {'cmap': self._confmat_colormap, 'interpolation': 'none'}
+            self._image = self.ax.matshow(data, **kwargs)
+        else:
+            self._image.set_data(data)
+            self._image.set_clim(data.min(), data.max())
+            extent = (-0.5, data.shape[1] - 0.5, data.shape[0] - 0.5, -0.5)
+            self._image.set_extent(extent)
+
+        return self._image 
+
+
+    def update_canvas(
+        self,
+        data: npt.NDArray[Any],
+        labels: Collection[str],
+        perc_ann: bool = True
+    ) -> None:
         '''
         Update the canvas with a new matrix.
 
         Parameters
         ----------
-        data : numpy ndarray
+        data : NDArray[Any]
             Confusion matrix array of squared shape.
-        percent_annotations : bool, optional
+        labels : Collection[str]
+            Names of true/predicted classes in confusion matrix.
+        perc_ann : bool, optional
             Whether annotations should be displayed as percentages. The default
             is True.
 
         '''
-    # Call the parent method to run generic update actions
-        super().update_canvas()
+        # Run generic update actions
+        self._update_canvas()
 
-    # Always compute matrix data percentage for a nicer colormap
-        self.matrix = data
+        # Store original matrix data but use percentages for a nicer colormap
+        self._matrix = data
         data = self._compute_percentage(data)
+        self._set_matrix(data)
 
-    # If the plot is empty, build the matrix and the colorbar (if required)
-        if self.matplot is None:
-            self.matplot = self.ax.matshow(
-                data, cmap='cividis', interpolation='none')
-            if self.show_cbar:
-                if self.cbar is None: 
-                    self.set_cbar()
-                self.cax.set_visible(True)
+        # Draw true/predicted classes names as X and Y ticks labels
+        self._set_ticks(labels)
 
-    # If the matrix is not empty, refresh it
-        else:
-            self.matplot.set_data(data)
-            self.matplot.set_clim(data.min(), data.max())
-            self.remove_annotations()
-            # Set extent to allow plotting a different shaped matrix
-            extent = (-0.5, data.shape[1]-0.5, data.shape[0]-0.5, -0.5)
-            self.matplot.set_extent(extent)
+        # Draw colorbar if requested
+        self._toggle_colorbar(self._has_colorbar)
 
-    # Add new annotations
-        self.annotate(percent_annotations)
+        # Draw annotations (this also redraws the canvas)
+        self.annotate(perc_ann)
 
-    # Redraw the canvas
+
+    def clear_canvas(self) -> None:
+        '''
+        Reimplemented 'clear_canvas' method that better fits the requirements
+        of a matrix canvas.
+
+        '''
+    # Run generic deep cleaning actions
+        self._clear_canvas(deep_clear=True)
+
+    # Reset properties
+        self._matrix = None
+        self._image = None
+
+    # Remove the colorbar
+        self._clear_colorbar()
+
+    # Re-initialize title and x-y labels
+        self._init_ax()
         self.draw_idle()
 
 
 
 class SilhouetteCanvas(_CanvasBase):
+
+    _avg_line_properties = {
+        'color': 'r',
+        'linestyle': '--',
+        'linewidth': 2, 
+        'path_effects': [mpl_patheffects.withStroke(foreground=style.IVORY)]
+    }
+    _y_btm_init = 15
 
     def __init__(self, size: tuple[float, float] = (4.8, 6.4), **kwargs) -> None:
         '''
@@ -1590,8 +1991,6 @@ class SilhouetteCanvas(_CanvasBase):
 
         '''
         super().__init__(size=size, init_blank=False, **kwargs)
-
-        self.y_btm_init = 15
         self._init_ax()
 
 
@@ -1617,13 +2016,13 @@ class SilhouetteCanvas(_CanvasBase):
 
         '''
     # Format the RGB palette colors as matplotlib compatible floating values
-        pal = dict(zip(palette.keys(), rgb_to_float(palette.values())))
+        colors = dict(zip(palette.keys(), rgb_to_float(palette.values())))
 
     # Iterate through clusters (artists) and use their label as identifier
         for artist in self.ax.get_children():
             if isinstance(artist, PolyCollection):
-                id_ = int(artist.get_label())
-                artist.set(fc = pal[id_])
+                id_ = int(str(artist.get_label()))
+                artist.set_facecolor(colors[id_])
 
     # Redraw the canvas
         self.draw_idle()
@@ -1651,19 +2050,19 @@ class SilhouetteCanvas(_CanvasBase):
             Palette dictionary (-> cluster_id: RGB_color).
 
         '''
-    # Call the parent method to run generic update actions
-        super().update_canvas()
+    # Run generic update actions
+        self._update_canvas()
 
     # Reset the ax and set the new title
-        self.ax.cla()
+        self.ax.clear()
         self._init_ax()
-        self.ax.set_title(title, pad=self._title_pad)
+        self.set_padded_title(title)
 
     # Format the RGB palette colors as matplotlib compatible floating values
-        pal = dict(zip(palette.keys(), rgb_to_float(palette.values())))
+        colors = dict(zip(palette.keys(), rgb_to_float(palette.values())))
 
     # Adjust the initial vertical (y) padding
-        y_btm = self.y_btm_init
+        y_btm = self._y_btm_init
 
     # Plot silhouettes, using y padding as a reference
         for clust_id, values in sil_values.items():
@@ -1672,16 +2071,15 @@ class SilhouetteCanvas(_CanvasBase):
                 y = np.arange(y_btm, y_top),
                 x1 = 0,
                 x2 = values,
-                lw = 0.3,
-                fc = pal[clust_id],
-                ec = style.IVORY, 
+                linewidth = 0.3,
+                facecolor = colors[clust_id],
+                edgecolor = style.IVORY, 
                 label = str(clust_id)
             )
-            y_btm = y_top + self.y_btm_init
+            y_btm = y_top + self._y_btm_init
 
-    # Draw the average silhouette score as a red vertical dashed line
-        pe = [mpl_patheffects.withStroke(foreground=style.IVORY)]
-        self.ax.axvline(x=sil_avg, color='r', ls='--', lw=2, path_effects=pe)
+    # Draw the average silhouette score
+        self.ax.axvline(x=sil_avg, **self._avg_line_properties)
 
     # Render the plot
         self.draw_idle()
@@ -1692,13 +2090,9 @@ class SilhouetteCanvas(_CanvasBase):
         Clear out the canvas.
 
         '''
-    # Call the parent method to run generic cleaning actions
-        super().clear_canvas(deep_clear=True)
-
-    # Initialize ax
+        # Run generic deep cleaning actions and re-initialize X-Y labels 
+        self._clear_canvas(deep_clear=True)
         self._init_ax()
-        
-    # Redraw the canvas
         self.draw_idle()
 
 
@@ -1736,7 +2130,7 @@ class PieCanvas(_CanvasBase):
 
     # Set main attributes
         self._3d = tridimensional
-        self.perc_fmt = perc_fmt
+        self._perc_fmt = perc_fmt
 
 
     def _init_ax(self) -> None:
@@ -1744,7 +2138,7 @@ class PieCanvas(_CanvasBase):
         Reset the ax to default state.
 
         '''
-        super().clear_canvas(deep_clear=True)
+        self._clear_canvas(deep_clear=True)
 
     # Legend must be cleared to avoid stacking of multiple legend boxes
         self.fig.legends.clear()
@@ -1755,8 +2149,8 @@ class PieCanvas(_CanvasBase):
 
     def update_canvas(
         self,
-        data: np.ndarray,
-        labels: list[str],
+        data: Sequence[int | float],
+        labels: Sequence[str],
         title: str = '', 
         legend: bool = True
     ) -> None:
@@ -1765,10 +2159,10 @@ class PieCanvas(_CanvasBase):
 
         Parameters
         ----------
-        data : numpy ndarray
+        data : Sequence[int | float]
             Values that populate the pie.
-        labels : list[str]
-            A sequence of strings providing the labels for each wedge.
+        labels : Sequence[str]
+            Labels for each wedge.
         title : str, optional
             Plot title. The default is ''.
         legend : bool, optional
@@ -1776,33 +2170,35 @@ class PieCanvas(_CanvasBase):
 
         '''
     # Intialize the canvas and the ax
-        super().update_canvas()
+        self._update_canvas()
         self._init_ax()
        
     # Set title
         if title:
-            self.ax.set_title(title, pad=self._title_pad)
+            self.set_padded_title(title)
         
     # Adjust wedges and labels layout parameters
         expl = [0.1] * len(data) if self._3d else None
-        lbldist = 1.1 if self.perc_fmt else 0.4
+        lbldist = 0.4 if self._perc_fmt is None else 1.1
 
     # Draw pie chart
         self.ax.pie(
-            x = data,
-            explode = expl,
-            autopct = self.perc_fmt,
-            shadow = self._3d,
-            labels = labels,
-            labeldistance = None if legend else lbldist
+            x=data,
+            explode=expl,
+            autopct=self._perc_fmt,
+            shadow=self._3d,
+            labels=labels,
+            labeldistance=None if legend else lbldist
         )
     
     # Draw legend
         if legend:
             self.fig.subplots_adjust(left=0.2, bottom=0.2)
-            hand, lbls = self.ax.get_legend_handles_labels()
-            self.fig.legend(hand, lbls, loc='lower left', fontsize='small',
-                            bbox_to_anchor=(0, 0))
+            self.fig.legend(
+                loc='lower left',
+                fontsize='small',
+                bbox_to_anchor=(0, 0)
+            )
         
     # Render the plot
         self.draw_idle()
@@ -1818,7 +2214,16 @@ class PieCanvas(_CanvasBase):
 
 
 
+type CurvePlotData = tuple[Sequence[float | int], Sequence[float | int]] # (x_coords, y_coords)
 class CurveCanvas(_CanvasBase):
+
+    _grid_properties = {'linestyle': ':', 'linewidth': 0.5, 'zorder': 0}
+    _legend_properties = {
+        'facecolor': style.IVORY,
+        'framealpha': 1,
+        'frameon': True,
+        'loc': 'best'
+    }
 
     def __init__(
         self,
@@ -1848,10 +2253,10 @@ class CurveCanvas(_CanvasBase):
         super().__init__(**kwargs)
 
     # Set main attributes
-        self.title = title
-        self.xlab = xlab
-        self.ylab = ylab
-        self.grid_on = grid
+        self._title = title
+        self._xlab = xlab
+        self._ylab = ylab
+        self._grid_on = grid
 
     # Initialize the ax
         self._init_ax()
@@ -1862,31 +2267,31 @@ class CurveCanvas(_CanvasBase):
         Reset the ax to default state.
 
         '''
-        self.ax.set_title(self.title, pad=self._title_pad)
-        self.ax.set_xlabel(self.xlab)
-        self.ax.set_ylabel(self.ylab)
-        self.ax.grid(self.grid_on, ls=':', lw=0.5, zorder=0)
+        self.set_padded_title(self._title)
+        self.ax.set_xlabel(self._xlab)
+        self.ax.set_ylabel(self._ylab)
+        self.ax.grid(self._grid_on, **self._grid_properties)
 
 
-    def add_curve(
+    def _add_curve(
         self,
-        xdata: np.ndarray | float | int,
-        ydata: np.ndarray | float | int,
+        xdata: npt.ArrayLike | float | int,
+        ydata: npt.ArrayLike | float | int,
         label: str = '',
-        color: Iterable[float] | float | str | None = None
+        color: MplColor | None = None
     ) -> None:
         '''
         Add a new curve. Warning: drawing is not performed by this method.
 
         Parameters
         ----------
-        xdata : numpy ndarray or float or int
+        xdata : ArrayLike | float | int
             X coordinate(s) of the point(s) of the curve.
-        ydata : numpy ndarray or float or int
+        ydata : ArrayLike | float | int
             Y coordinate(s) of the point(s) of the curve.
         label : str, optional
             Curve name. The default is ''.
-        color : Iterable[float] or float or str or None, optional
+        color : MplColor | None, optional
             A valid matplotlib color. If None, a default color will be selected
             based on current matplotlib style. The default is None.
 
@@ -1909,9 +2314,9 @@ class CurveCanvas(_CanvasBase):
 
     def update_canvas(
         self,
-        curves: list[tuple[float, float]],
-        labels: list[str], 
-        colors: list[tuple[float, float, float] | float | str] | None = None
+        curves: Collection[CurvePlotData],
+        labels: Collection[str], 
+        colors: Collection[tuple[int, int, int] | None] | None = None
     ) -> None:
         '''
         Update existent curves in the plot. If curve is not existent, add it as
@@ -1919,12 +2324,12 @@ class CurveCanvas(_CanvasBase):
 
         Parameters
         ----------
-        curves : list[tuple[float, float]]
-            List of (x, y) cooords for each curve.
-        labels : list[str]
-            A sequence of unique strings providing the label for each curve.
-        colors : list[tuple[float, float, float] or float or str] or None, optional
-            List of valid Matplotlib colors for each curve. If None or empty,
+        curves : Collection[CurvePlotData]
+            Collection of (x, y) coordinates for each curve to plot.
+        labels : Collection[str]
+           Unique labels for each curve.
+        colors : Collection[tuple[int, int, int] | None] | None, optional
+            List of colors for each curve as RGB triplets. If None or empty,
             default colors will be selected based on current matplotlib style.
             The default is None.
 
@@ -1937,38 +2342,39 @@ class CurveCanvas(_CanvasBase):
             lengths. This is not raised when 'colors' is an empty list.
 
         '''
-        super().update_canvas()
+        self._update_canvas()
 
     # Check for unique labels
         if len(set(labels)) < len(labels):
             raise ValueError('"Labels" must be unique names.')
         
     # Set colors to a list of None if not specified
-        if not colors:
-            colors = [None] * len(curves)
+        if colors:
+            mpl_col = [None if c is None else rgb_to_float((c,))[0] for c in colors]
+        else:
+            mpl_col = [None] * len(curves)
 
     # Check that all parameters have same length
-        if not len(curves) == len(labels) == len(colors):
+        if not len(curves) == len(labels) == len(mpl_col):
             raise ValueError('"Data", "labels" and "colors" must have same length.')
 
     # Determine existent curves
         existent_curves = self.ax.lines
         existent_labels = [ec.get_label() for ec in existent_curves]
 
-    # Add new curves, update existent ones.
-        for cur, lbl, col in zip(curves, labels, colors):
+    # Add new curves and update existent ones
+        for cur, lbl, col in zip(curves, labels, mpl_col):
             if lbl in existent_labels:
                 existent_curves[existent_labels.index(lbl)].set_data(cur)
             else:
-                self.add_curve(*cur, label=lbl, color=col)
+                self._add_curve(*cur, label=lbl, color=col)
 
     # Rescale the plot
         self.ax.relim()
         self.ax.autoscale_view()
 
-    # Render the legend in the most suitable position
-        self.ax.legend(
-            loc='best', frameon=True, facecolor=style.IVORY, framealpha=1)
+    # Draw the legend
+        self.ax.legend(**self._legend_properties)
     
     # Render the plot
         self.draw_idle()
@@ -1990,19 +2396,19 @@ class CurveCanvas(_CanvasBase):
         Clear out the canvas.
         
         '''
-        super().clear_canvas(deep_clear=True)
+        self._clear_canvas(deep_clear=True)
         self._init_ax()
         self.draw_idle()
 
 
 
-class NavTbar(backend_qtagg.NavigationToolbar2QT):
+class NavTbar(backend_qt.NavigationToolbar2QT):
 
     def __init__(
         self,
         canvas: _CanvasBase,
         parent: QWidget | None = None, 
-        orient: Qt.Orientation = Qt.Horizontal,
+        orient: Qt.Orientation = Qt.Orientation.Horizontal,
         coords: bool = True
     ) -> None:
         '''
@@ -2020,11 +2426,10 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
             Whether to display coordinates in the toolbar. The default is True.
 
         '''
-        super().__init__(canvas, parent, coordinates=coords)
+        super().__init__(canvas, parent, coords)
 
     # Set the main attributes of the class
-        self.canvas = canvas
-        self.orient = orient
+        self._orient = orient
 
     # Set custom icons
         icons_dict = {
@@ -2038,12 +2443,11 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
                 a.setIcon(icon)
 
     # Set the orientation of the toolbar (vertical/horizontal)
-        self.setOrientation(self.orient)
+        self.setOrientation(self._orient)
 
     # Avoid coords and data label to be cut off
         if coords:
-            self.locLabel.setSizePolicy(
-                QSizePolicy.Expanding, QSizePolicy.Minimum)
+            self.locLabel.setSizePolicy(style.SP_EXPANDING, style.SP_MINIMUM)
 
     # Set the toolbar style-sheet
         self.setStyleSheet(style.SS_TOOLBAR)
@@ -2054,7 +2458,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         cls,
         canvas: ImageCanvas,
         parent: QWidget | None = None,
-        orient: Qt.Orientation = Qt.Horizontal
+        orient: Qt.Orientation = Qt.Orientation.Horizontal
     ) -> 'NavTbar':
         '''
         Convenient method to instantiate a Navigation Toolbar attached to an
@@ -2086,7 +2490,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         cls,
         canvas: BarCanvas,
         parent: QWidget | None = None,
-        orient: Qt.Orientation = Qt.Horizontal
+        orient: Qt.Orientation = Qt.Orientation.Horizontal
     ) -> 'NavTbar':
         '''
         Convenient method to instantiate a Navigation Toolbar attached to a Bar
@@ -2118,7 +2522,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         cls,
         canvas: HistogramCanvas, 
         parent: QWidget | None = None,
-        orient: Qt.Orientation = Qt.Horizontal
+        orient: Qt.Orientation = Qt.Orientation.Horizontal
     ) -> 'NavTbar':
         '''
         Convenient method to instantiate a Navigation Toolbar attached to a
@@ -2176,7 +2580,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         
         self.lbl_action = QAction(style.getIcon('PERCENT'), 'Show amounts')
         self.lbl_action.setCheckable(True)
-        self.lbl_action.toggled.connect(self.canvas.show_amounts)
+        self.lbl_action.toggled.connect(self.canvas.toggle_amounts)
         self.insertAction(before_idx, self.lbl_action)
 
 
@@ -2197,8 +2601,8 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         
         self.log_action = QAction(style.getIcon('LOG'), 'Log scale')
         self.log_action.setCheckable(True)
-        self.log_action.setChecked(self.canvas.log)
-        self.log_action.toggled.connect(self.canvas.toggle_logscale)
+        self.log_action.setChecked(self.canvas.get_logscale())
+        self.log_action.toggled.connect(self.canvas.set_logscale)
         self.insertAction(before_idx, self.log_action)
         
 
@@ -2234,7 +2638,6 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         super().insertAction(before_action, action)
 
 
-
     def insertActions(self, before_idx: int, actions: list[QAction]) -> None:
         '''
         Convenient reimplementation of 'insertActions' method, that allows
@@ -2251,7 +2654,6 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         before_action = self.findChildren(QAction)[before_idx]
         super().insertActions(before_action, actions)
 
-
     
     def insertSeparator(self, before_idx: int) -> None:
         '''
@@ -2266,7 +2668,6 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         '''
         before_action = self.findChildren(QAction)[before_idx]
         super().insertSeparator(before_action)
-
 
 
     def getTrueActions(self) -> list[QAction]:
@@ -2312,7 +2713,7 @@ class NavTbar(backend_qtagg.NavigationToolbar2QT):
         '''
         new_h = event.size().height()
         old_h = event.oldSize().height()
-        if new_h > old_h and self.orient == Qt.Horizontal:
+        if new_h > old_h and self._orient == Qt.Orientation.Horizontal:
             self.setMinimumHeight(new_h)
 
 
@@ -2322,7 +2723,7 @@ class RoiPatch(Rectangle):
     def __init__(
         self,
         bbox: tuple[float, float, int, int],
-        color: tuple[float, float, float] | float | str,
+        color: tuple[int, int, int],
         filled: bool
     ) -> None:
         '''
@@ -2333,14 +2734,15 @@ class RoiPatch(Rectangle):
         ----------
         bbox : tuple[float, float, int, int]
             ROI bounding box (x0, y0, width, height).
-        color : tuple[float, float, float] or float or str
-            A valid Matplotlib color.
+        color : tuple[int, int, int]
+            Patch color as an RGB triplet.
         filled : bool
             Whether the ROI patch should be filled.
 
         '''
         x0, y0, w, h = bbox
-        super().__init__((x0, y0), w, h, linewidth=2, color=color, fill=filled)
+        (mpl_col,) = rgb_to_float((color,))
+        super().__init__((x0, y0), w, h, linewidth=2, color=mpl_col, fill=filled)
 
 
 
@@ -2377,18 +2779,18 @@ class RoiAnnotation(Annotation):
         )
         
 
-    def set_text(self, text: str) -> None:
+    def set_text(self, s: str) -> None:
         '''
-        Change the text annotation.
+        Reimplementation of parent 'set_text' method. Passing an hyphen string
+        will clear the annotation text, hiding the annotation box. 
 
         Parameters
         ----------
-        text : str
-            New text.
+        s : str
+            New text string.
 
         '''
-    # Hyphen hides ROI annotation
-        super().set_text('' if text == '-' else text)
+        super().set_text('' if s == '-' else s)
 
 
 
@@ -2405,13 +2807,13 @@ class Crosshair(mpl_widgets.MultiCursor): # !!! Not used yet
 
         '''
         super().__init__(
-            canvas = None, # deprecated (see 'MultiCursor' class for details)
-            axes = axes,
-            useblit = True,
-            horizOn  =True,
-            vertOn = True,
-            color = style.BLACK_PEARL,
-            lw = 1
+            canvas=None, # deprecated (see 'MultiCursor' class for details)
+            axes=axes,
+            useblit=True,
+            horizOn=True,
+            vertOn=True,
+            color=style.BLACK_PEARL,
+            linewidth=1
         )
 
 
@@ -2484,8 +2886,15 @@ class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
         active, the pointing hand cursor is set, otherwise the arrow cursor.
 
         '''
-        cursor = Qt.PointingHandCursor if self.active else Qt.ArrowCursor
-        self.canvas.setCursor(QCursor(cursor))
+        if self.canvas is None:
+            return
+
+        if self.active:
+            cursor = Qt.CursorShape.PointingHandCursor
+        else:
+            cursor = Qt.CursorShape.ArrowCursor
+
+        self.canvas.setCursor(QCursor(cursor)) # pyright: ignore[reportAttributeAccessIssue]
 
 
 
@@ -2496,7 +2905,7 @@ class RectSel(mpl_widgets.RectangleSelector):
         ax: Axes,
         onselect: Callable,
         interactive: bool = True,
-        btns: list[int] | None = [1]
+        btns: list[int] | None = None
     ) -> None:
         '''
         A reimplemented Matplotlib rectangle selector widget, tailored for ROI 
@@ -2514,7 +2923,7 @@ class RectSel(mpl_widgets.RectangleSelector):
         btns : list[int] or None, optional
             List of mouse buttons that can trigger the drawing event. Left = 1,
             Middle = 2 and Right = 3. If None, all buttons are included. The
-            default is [1].
+            default is None.
 
         '''
     # Customize the appearence of the rectangle selector
@@ -2552,8 +2961,8 @@ class RectSel(mpl_widgets.RectangleSelector):
     def fixed_extents(
         self,
         shape: tuple[int, int],
-        fmt: str = 'matrix',
-        mode: str = 'full'
+        fmt: Literal['matrix', 'xy'] = 'matrix',
+        mode: Literal['full'] = 'full'
     ) -> tuple[int, int, int, int] | None:
         '''
         Get integer extents of the selector after checking if it lies within
@@ -2563,11 +2972,11 @@ class RectSel(mpl_widgets.RectangleSelector):
         ----------
         shape : tuple[int, int]
             Control shape. It must be provided as (rows, cols).
-        fmt : str, optional
+        fmt : Literal['matrix', 'xy'], optional
             The output format of coords. If 'matrix' the coords format is
             (row_min, row_max, col_min, col_max). If 'xy' the coords format is
             (x_min, x_max, y_min, y_max). The default is 'matrix'.
-        mode : str, optional
+        mode : Literal['full'], optional
             How to treat pixels at the border of the selector region. At the
             moment the only supported mode is 'full', which means that only
             the pixels that are entirely covered by the selector region will be
@@ -2601,7 +3010,7 @@ class RectSel(mpl_widgets.RectangleSelector):
                 ymin = round(ymin + 1)
                 ymax = round(ymax)
             case _:
-                raise ValueError(f'No mode available for {mode}')
+                raise ValueError(f'{mode} is not a valid mode.')
 
     # Exit function if the extents are completely outside the map
         if xmax < 0 or xmin > shape[1] or ymax < 0 or ymin > shape[0]:
@@ -2620,7 +3029,7 @@ class RectSel(mpl_widgets.RectangleSelector):
             case 'xy':
                 extents = (xmin, xmax, ymin, ymax)
             case _:
-                raise ValueError('No format available for {fmt}')
+                raise ValueError(f'{fmt} is not a valid format.')
 
         return extents
 
@@ -2628,7 +3037,7 @@ class RectSel(mpl_widgets.RectangleSelector):
     def fixed_rect_bbox(
         self,
         shape: tuple[int, int],
-        mode: str = 'full'
+        mode: Literal['full'] = 'full'
     ) -> tuple[float, float, int, int] | None:
         '''
         Get the bounding box of the selector after checking if it lies within
@@ -2637,66 +3046,108 @@ class RectSel(mpl_widgets.RectangleSelector):
         Parameters
         ----------
         shape : tuple[int, int]
-            Control shape. It must be provided as (rows, cols).
-        mode : str, optional
-            How to treat pixels at the border of the selector region. At the
-            moment the only supported mode is 'full', which means that only
-            the pixels that are entirely covered by the selector region will be
-            included. The default is 'full'.
+            Control shape provided as (rows, cols).
+        mode : Literal['full'], optional
+            How to treat pixels at the border of the selector region.
+            Default is 'full'.
 
         Returns
         -------
         bbox : tuple[float, float, int, int] or None
             Fixed bounding box (x0, y0, width, height). If the selector region
-            falls entirely outside the map area, it will be None.
-
-        Raises
-        ------
-        ValueError
-            Raised if 'mode' parameter is not 'full'.  
+            falls entirely outside the map area, returns None.
 
         '''
-    # Get the default bounding box
-        x0, y0, w, h = self._rect_bbox
-
-    # Exit function if the bounding box is completely outside the map
-        if (
-            x0 + 0.5 > shape[1]
-            or x0 + w < -0.5
-            or y0 + 0.5 > shape[0]
-            or y0 + h < -0.5
-        ):
+        # Get fixed_extents in 'xy' format
+        extents = self.fixed_extents(shape, fmt='xy', mode=mode)
+        if extents is None:
             return None
 
-    # Fix extents that are partially outside the map borders
-        if x0 < -0.5:
-            w += x0 + 0.5
-            x0 = -0.5
-        if x0 + w + 0.5 > shape[1]:
-            w = shape[1] - 0.5 - x0
-        if y0 < -0.5:
-            h += y0 + 0.5
-            y0 = -0.5
-        if y0 + h + 0.5 > shape[0]:
-            h = shape[0] - 0.5 - y0
+        # Convert extents to bbox
+        xmin, xmax, ymin, ymax = extents
+        x0 = xmin - 0.5
+        y0 = ymin - 0.5
+        w = xmax - xmin
+        h = ymax - ymin
 
-    # Exclude pixels not entirely selected --> 'mode' : 'full'
-        match mode:
-            case 'full':
-                _x0 = round(x0 + 1) - 0.5
-                _y0 = round(y0 + 1) - 0.5
-                w = int(w + x0 - _x0)
-                h = int(h + y0 - _y0)
-            case _:
-                raise ValueError(f'No mode available for {mode}')
-    
-    # Bbox is invalid if it has non-positive height or width (safety)
+        # Bbox is invalid if it has non-positive height or width (safety)
         if w < 1 or h < 1:
-            return None
+            return None 
+        return (x0, y0, w, h)
 
-    # Return the fixed bounding box
-        bbox = (_x0, _y0, w, h)
-        return bbox
+
+    # def fixed_rect_bbox(
+    #     self,
+    #     shape: tuple[int, int],
+    #     mode: Literal['full'] = 'full'
+    # ) -> tuple[float, float, int, int] | None:
+    #     '''
+    #     Get the bounding box of the selector after checking if it lies within
+    #     the provided shape.
+
+    #     Parameters
+    #     ----------
+    #     shape : tuple[int, int]
+    #         Control shape. It must be provided as (rows, cols).
+    #     mode : Literal['full'], optional
+    #         How to treat pixels at the border of the selector region. At the
+    #         moment the only supported mode is 'full', which means that only
+    #         the pixels that are entirely covered by the selector region will be
+    #         included. The default is 'full'.
+
+    #     Returns
+    #     -------
+    #     bbox : tuple[float, float, int, int] or None
+    #         Fixed bounding box (x0, y0, width, height). If the selector region
+    #         falls entirely outside the map area, it will be None.
+
+    #     Raises
+    #     ------
+    #     ValueError
+    #         Raised if 'mode' parameter is not 'full'.  
+
+    #     '''
+    # # Get the default bounding box
+    #     x0, y0, w, h = self._rect_bbox
+
+    # # Exit function if the bounding box is completely outside the map
+    #     if (
+    #         x0 + 0.5 > shape[1]
+    #         or x0 + w < -0.5
+    #         or y0 + 0.5 > shape[0]
+    #         or y0 + h < -0.5
+    #     ):
+    #         return None
+
+    # # Fix extents that are partially outside the map borders
+    #     if x0 < -0.5:
+    #         w += x0 + 0.5
+    #         x0 = -0.5
+    #     if x0 + w + 0.5 > shape[1]:
+    #         w = shape[1] - 0.5 - x0
+    #     if y0 < -0.5:
+    #         h += y0 + 0.5
+    #         y0 = -0.5
+    #     if y0 + h + 0.5 > shape[0]:
+    #         h = shape[0] - 0.5 - y0
+
+    # # Exclude pixels not entirely selected --> 'mode' : 'full'
+    #     match mode:
+    #         case 'full':
+    #             _x0 = round(x0 + 1) - 0.5
+    #             _y0 = round(y0 + 1) - 0.5
+    #             w = int(w + x0 - _x0)
+    #             h = int(h + y0 - _y0)
+    #         case _:
+    #             raise ValueError(f"'{mode}' is not a valid mode.")
+    
+    # # Bbox is invalid if it has non-positive height or width (safety)
+    #     if w < 1 or h < 1:
+    #         return None
+
+    # # Return the fixed bounding box
+    #     bbox = (_x0, _y0, w, h)
+    #     return bbox
 
 
     def update(self) -> None:
@@ -2715,8 +3166,15 @@ class RectSel(mpl_widgets.RectangleSelector):
         active, the pointing hand cursor is set, otherwise the arrow cursor.
 
         '''
-        cursor = Qt.PointingHandCursor if self.active else Qt.ArrowCursor
-        self.canvas.setCursor(QCursor(cursor))
+        if self.canvas is None:
+            return
+
+        if self.active:
+            cursor = Qt.CursorShape.PointingHandCursor
+        else:
+            cursor = Qt.CursorShape.ArrowCursor
+    
+        self.canvas.setCursor(QCursor(cursor)) # pyright: ignore[reportAttributeAccessIssue]
 
 
 
@@ -2727,7 +3185,7 @@ class HeatmapScaler(mpl_widgets.SpanSelector):
         ax: Axes,
         onselect: Callable,
         interactive: bool = True,
-        btns: list[int] | None = [1]
+        btns: list[int] | None = None
     ) -> None:
         '''
         A reimplemented Matplotlib span selector widget, tailored for scaling
@@ -2744,7 +3202,7 @@ class HeatmapScaler(mpl_widgets.SpanSelector):
         btns : list[int] or None, optional
             List of buttons that can trigger the selection. Can be left mouse 
             button [1], wheel mouse button [2], right mouse button [3] or None,
-            which means all the buttons. The default is [1].
+            which means all the buttons. The default is None.
 
         '''
     # Customize the appearence of the span selector
@@ -2776,7 +3234,7 @@ class HeatmapScaler(mpl_widgets.SpanSelector):
 
 def rgb_to_float(
     rgb_list: Iterable[tuple[int, int, int]]
-    ) -> list[tuple[float, float, float]] | tuple[float, float, float]:
+) -> list[tuple[float, float, float]]:
     '''
     Convert RGB values to Matplotlib compatible floating values, ranging in
     [0, 1].
@@ -2784,17 +3242,13 @@ def rgb_to_float(
     Parameters
     ----------
     rgb_list : Iterable[tuple[int, int, int]]
-        A list of RGB triplets.
+        An iterable of RGB triplets.
 
     Returns
     -------
-    list[tuple[float, float, float]] or tuple[float, float, float]
-        A list of float RGB triplets or a single float RGB triplet if only one
-        color is passed.
+    list[tuple[float, float, float]]
+        A list of converted float RGB triplets.
 
     '''
     float_rgb = [(r/255, g/255, b/255) for (r, g, b) in rgb_list]
-    if len(float_rgb) == 1:
-        return float_rgb[0]
-    else:
-        return float_rgb
+    return float_rgb

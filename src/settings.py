@@ -4,13 +4,15 @@ Created on Tue Dec 14 14:09:21 2021
 
 @author: albdag
 """
+
 from pathlib import Path
+from typing import Any
 
 from PyQt5.QtCore import QByteArray, QSettings, QStandardPaths
 
 
 ICON_DIR = Path(':') / 'icons' # using QResources
-DOC_DIR = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+DOC_DIR = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
 
 class SettingsManager():
     
@@ -42,10 +44,10 @@ class SettingsManager():
 
         '''
         self._path = (root_dir / 'settings.ini').as_posix()
-        self.settings = QSettings(self._path, QSettings.IniFormat)
+        self.settings = QSettings(self._path, QSettings.Format.IniFormat)
 
 
-    def get(self, name: str) -> QByteArray | bool | int | str:
+    def get(self, name: str) -> Any:
         '''
         Get current value of setting with name 'name'.
 
@@ -56,7 +58,7 @@ class SettingsManager():
 
         Returns
         -------
-        QByteArray or bool or int or str
+        Any
             Current value associated with the required setting.
 
         Raises
@@ -72,7 +74,7 @@ class SettingsManager():
         return self.settings.value(name, default, type_)
 
 
-    def set(self, name: str, value: QByteArray | bool | int | str) -> None:
+    def set(self, name: str, value: Any) -> None:
         '''
         Change the current value of setting with name 'name'.
 
@@ -80,7 +82,7 @@ class SettingsManager():
         ----------
         name : str
             A valid setting name. If it does not exist, it will be created.
-        value : QByteArray or bool or int or str
+        value : Any
             Value to be assigned to setting.
 
         '''

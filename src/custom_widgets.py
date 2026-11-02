@@ -5,7 +5,9 @@ Created on Wed Apr 28 12:27:17 2021
 @author: albdag
 """
 
+from collections.abc import Collection, Sequence
 import os
+from typing import Literal, TypedDict
 
 from PyQt5 import QtWidgets as QW
 from PyQt5 import QtGui as QG
@@ -39,8 +41,12 @@ class DataGroup(QW.QTreeWidgetItem):
         super().__init__()
 
     # Set the flags. Data groups are selectable and their name is editable
-        self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
-                      QC.Qt.ItemIsEnabled | QC.Qt.ItemIsEditable)
+        self.setFlags(QC.Qt.ItemFlag((
+            QC.Qt.ItemFlag.ItemIsSelectable
+            | QC.Qt.ItemFlag.ItemIsUserCheckable
+            | QC.Qt.ItemFlag.ItemIsEnabled
+            | QC.Qt.ItemFlag.ItemIsEditable
+        )))
 
     # Set the font as bold
         font = self.font(0)
@@ -99,7 +105,7 @@ class DataGroup(QW.QTreeWidgetItem):
         '''
     # Collect in a single list the objects data from all subgroups
         objects = self.getAllDataObjects()
-        obj_data = [o.get('data') for o in objects]
+        obj_data = [o.getComponents()['data'] for o in objects]
 
     # Extract the shape from each object data and obtain the trending shape  
         if any(obj_data): # returns False if all data in the list are None
@@ -114,8 +120,8 @@ class DataGroup(QW.QTreeWidgetItem):
 
     def getCompositeMask(
         self,
-        include: str = 'selected',
-        mode: str = 'union',
+        include: Literal['checked', 'selected'] = 'selected',
+        mode: iatools.BinaryMergeModes = 'union',
         ignore_single_mask: bool = False
     ) -> Mask | None:
         '''
@@ -124,10 +130,10 @@ class DataGroup(QW.QTreeWidgetItem):
 
         Parameters
         ----------
-        include : str, optional
-            Whether to merge the 'selected' or 'checked' maps. The default is
+        include : Literal['checked', 'selected'], optional
+            Whether to merge the 'checked' or 'selected' maps. The default is
             'selected'.
-        mode : str, optional
+        mode : BinaryMergeModes, optional
             How the composite mask should be constructed. If 'intersection' or
             'I', it is the product of all the masks. If 'union' or 'U', it is
             the sum of all the masks. The default is 'union'.
@@ -152,19 +158,19 @@ class DataGroup(QW.QTreeWidgetItem):
 
         match include:
             case 'selected':
-                masks = [c.get('data') for c in cld if c.isSelected()]
+                data = [c.getMaskData() for c in cld if c.isSelected()]
             case 'checked':
-                masks = [c.get('data') for c in cld if c.checkState(0)]
+                data = [c.getMaskData() for c in cld if c.getComponents()['checkstate']]
             case _:
                 raise TypeError(f'Invalid "include" argument: {include}.')
-
+        
+        masks = [d for d in data if d is not None]
         if len(masks) == 0:
             comp_mask = None
         elif len(masks) == 1:
             comp_mask = None if ignore_single_mask else masks[0]
-        else:
-            comp_mask = Mask(
-                iatools.binary_merge([m.mask for m in masks], mode))
+        else: # Raises TypeError if mode is invalid
+            comp_mask = Mask(iatools.binary_merge([m.mask for m in masks], mode))
 
         return comp_mask
 
@@ -180,14 +186,8 @@ class DataGroup(QW.QTreeWidgetItem):
 
 
 class DataSubGroup(QW.QTreeWidgetItem):
-
-    datatype_dict = {
-        'Input Maps': InputMap,
-        'Mineral Maps': MineralMap,
-        'Masks': Mask
-    }
     
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: Literal['Input Maps', 'Mineral Maps', 'Masks']) -> None:
         '''
         A specialized TreeWidgetItem for the Data Manager pane (for details see
         'docks.DataManager' class). This widget can hold different data types
@@ -197,19 +197,35 @@ class DataSubGroup(QW.QTreeWidgetItem):
 
         Parameters
         ----------
-        name : str
+        name : Literal['Input Maps', 'Mineral Maps', 'Masks']
             The name of the subgroup.
+
+        Raises
+        ------
+        ValueError
+            Raised if "name" is not a valid name.
 
         '''
         super().__init__()
 
     # Set main attributes
         self.name = name
-        self.datatype = self.datatype_dict.get(name, None)
+        match name:
+            case 'Input Maps':
+                self.datatype = InputMap
+            case 'Mineral Maps':
+                self.datatype = MineralMap
+            case 'Masks':
+                self.datatype = Mask
+            case _:
+                raise ValueError(f'{name} is not a valid name for a subgroup.')
 
     # Set the flags. Data subgroups can be selected but cannot be edited
-        self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
-                      QC.Qt.ItemIsEnabled)
+        self.setFlags(QC.Qt.ItemFlag((
+            QC.Qt.ItemFlag.ItemIsSelectable
+            | QC.Qt.ItemFlag.ItemIsUserCheckable
+            | QC.Qt.ItemFlag.ItemIsEnabled
+        )))
 
     # Set the font as underlined
         font = self.font(0)
@@ -232,7 +248,7 @@ class DataSubGroup(QW.QTreeWidgetItem):
         return empty
 
 
-    def addData(self, data: InputMap | MineralMap | Mask):
+    def addData(self, data: InputMap | MineralMap | Mask) -> None:
         '''
         Add data to the subgroup in the form of data objects.
 
@@ -305,12 +321,13 @@ class DataSubGroup(QW.QTreeWidgetItem):
 
         Returns
         -------
-        children : List[DataObject]
+        data_objects : List[DataObject]
             List of DataObject children.
 
         '''
         children = [self.child(idx) for idx in range(self.childCount())]
-        return children
+        data_objects = [c for c in children if isinstance(c, DataObject)]
+        return data_objects
     
 
     def group(self) -> DataGroup | None:
@@ -324,16 +341,28 @@ class DataSubGroup(QW.QTreeWidgetItem):
             Parent group.
 
         '''
-        return self.parent()
+        if isinstance(parent := self.parent(), DataGroup):
+            return parent
+        return
 
 
+
+class DataObjectComponents(TypedDict):
+    data: InputMap | MineralMap | Mask | None
+    filepath: str | None
+    name: str
+    is_edited: bool
+    not_found: bool
+    has_warning: bool
+    status_icon: QG.QIcon
+    warn_icon: QG.QIcon
+    status_tip: str
+    warn_tip: str
+    checkstate: QC.Qt.CheckState
 
 class DataObject(QW.QTreeWidgetItem):
-   
-    MainData = InputMap | MineralMap | Mask # add point analysis
-    DataComponent = MainData | str | bool | QG.QIcon | QC.Qt.CheckState | None
 
-    def __init__(self, data: MainData | None) -> None:
+    def __init__(self, data: InputMap | MineralMap | Mask | None) -> None:
         '''
         A specialized TreeWidgetItem for the Data Manager pane (for details see
         'docks.DataManager' class). This widget is a data container, enabling
@@ -349,11 +378,15 @@ class DataObject(QW.QTreeWidgetItem):
 
         '''
     # Set the data object type to 'User Type' for more customization options
-        super().__init__(type = QW.QTreeWidgetItem.UserType)
+        super().__init__(type = QW.QTreeWidgetItem.ItemType.UserType)
 
     # Set the flags. A data object is selectable and editable by the user.
-        self.setFlags(QC.Qt.ItemIsSelectable | QC.Qt.ItemIsUserCheckable |
-                      QC.Qt.ItemIsEnabled | QC.Qt.ItemIsEditable)
+        self.setFlags(QC.Qt.ItemFlag((
+            QC.Qt.ItemFlag.ItemIsSelectable
+            | QC.Qt.ItemFlag.ItemIsUserCheckable
+            | QC.Qt.ItemFlag.ItemIsEnabled
+            | QC.Qt.ItemFlag.ItemIsEditable
+        )))
         
     # Set status stack [102 = not_found, 101 = edited, 0 = Empty status] 
         self._status_stack = [102, 101, 0] 
@@ -374,7 +407,7 @@ class DataObject(QW.QTreeWidgetItem):
         self.setData(1, 3, '') # Warning tooltip - ToolTipRole (= 3)
     # Set the "checked" state for togglable data (Masks and Points [in future])
         if isinstance(data, (Mask,)): # add PointAnalysis class
-            self.setData(0, 10, QC.Qt.Unchecked) # CheckedRole (10)
+            self.setData(0, 10, QC.Qt.CheckState.Unchecked) # CheckedRole (10)
 
 
     def setInvalidFilepath(self, path: str) -> None:
@@ -407,7 +440,7 @@ class DataObject(QW.QTreeWidgetItem):
             Whether the filepath is valid or not.
 
         '''
-        filepath = self.get('filepath')
+        filepath = self.getComponents()['filepath']
         return filepath is None or os.path.exists(filepath)
     
 
@@ -422,119 +455,97 @@ class DataObject(QW.QTreeWidgetItem):
             Display name.
 
         '''
-        data, filepath = self.get('data', 'filepath')
+        components = self.getComponents()
+        data, filepath = components['data'], components['filepath']
         if filepath is None:
             if isinstance(data, (InputMap, MineralMap)):
-                obj_type = 'map'
-            else:
-                obj_type = 'mask'
+                name = 'Unnamed map'
+            elif isinstance(data, Mask):
+                name = 'Unnamed mask'
             # add Point Analysis here
-            name = f'Unnamed {obj_type}'
-
+            else:
+                name = 'Unnamed item' # safety
         else:
             name = cf.path2filename(filepath)
 
         return name
 
 
-    def holdsInputMap(self) -> bool:
+    def getInputMapData(self) -> InputMap | None:
         '''
-        Check if the object holds input map data.
+        Retrieve the input map data contained in the object, if any.
 
         Returns
         -------
-        bool
-            Whether or not the object holds input map data.
+        InputMap or None
+            Input map data or None if the object does not contain it.
 
         '''
-        return isinstance(self.get('data'), InputMap)
+        if isinstance(data := self.data(0, 100), InputMap):
+            return data
+        return
 
 
-    def holdsMineralMap(self) -> bool:
+    def getMineralMapData(self) -> MineralMap | None:
         '''
-        Check if the object holds mineral map data.
+        Retrieve the mineral map data contained in the object, if any.
 
         Returns
         -------
-        bool
-            Wether or not the object holds mineral map data.
-
+        MineralMap or None
+            Mineral map data or None if the object does not contain it.
+            
         '''
-        return isinstance(self.get('data'), MineralMap)
+        if isinstance(data := self.data(0, 100), MineralMap):
+            return data
+        return
 
 
-    def holdsMap(self) -> bool:
+    def getMaskData(self) -> Mask | None:
         '''
-        Check if the object holds generic map data.
+        Retrieve the mask data contained in the object, if any.
 
         Returns
         -------
-        bool
-            Wether or not the object holds map data.
-
+        Mask or None
+            Mask data or None if the object does not contain it.
+            
         '''
-        return self.holdsInputMap() or self.holdsMineralMap()
+        if isinstance(data := self.data(0, 100), Mask):
+            return data
+        return
 
 
-    def holdsMask(self) -> bool:
+    # def getPointsData(self):
+
+
+    def getComponents(self) -> DataObjectComponents:
         '''
-        Check if the object holds mask data.
+        Get all Data Object components.
 
         Returns
         -------
-        bool
-            Wether or not the object holds mask data.
+        components : DataObjectComponents
+            Data Object components as a strongly-typed dictionary.
 
         '''
-        return isinstance(self.get('data'), Mask)
-
-
-    # def holdsPointsData(self):
-
-
-    def get(self, *args: str) -> list[DataComponent] | DataComponent:
-        '''
-        Convenient method to get data components.
-
-        Parameters
-        ----------
-        *args : str
-            One or multiple components keys.
-
-        Returns
-        -------
-        out : list[DataComponent] or DataComponent
-            Requested data components. It returns the first element of the list
-            if just one data component is requested.
-
-        Raises
-        ------
-        KeyError
-            Raised if an invalid argument is passed.
-
-        '''
-    # Define a dictionary holding all the object's comppnents
-        components = {
-            'data' : self.data(0, 100),
-            'filepath' : self.data(0, 110),
-            'name' : self.data(0, 0),
-            'is_edited' : self.data(0, 101),
-            'not_found' : self.data(0, 102),
-            'has_warning' : self.data(0, 103),
-            'status_icon' : self.data(0, 1),
-            'warn_icon' : self.data(1, 1),
-            'status_tip' : self.data(0, 3),
-            'warn_tip' : self.data(1, 3),
-            'checked' : self.data(0, 10)
+        components: DataObjectComponents = {
+            'data': self.data(0, 100),
+            'filepath': self.data(0, 110),
+            'name': self.data(0, 0),
+            'is_edited': self.data(0, 101),
+            'not_found': self.data(0, 102),
+            'has_warning': self.data(0, 103),
+            'status_icon': self.data(0, 1),
+            'warn_icon': self.data(1, 1),
+            'status_tip': self.data(0, 3),
+            'warn_tip': self.data(1, 3),
+            'checkstate': self.data(0, 10)
         }
-
-    # Raises a KeyError if invalid arg is passed
-        out = [components[a] for a in args]
-        if len(out) == 1: out = out[0]
-        return out
+        return components
     
 
-    def setObjectData(self, data: MainData):
+    def setObjectData(self, data: InputMap | MineralMap | Mask) -> None:
         '''
         Set 'data' as the Data Object main data. This method also updates the 
         filepath.
@@ -567,7 +578,7 @@ class DataObject(QW.QTreeWidgetItem):
 
         '''      
     # Do nothing if data is None
-        data = self.get('data')  
+        data = self.getComponents()['data']
         if data is None:
             return
 
@@ -627,7 +638,7 @@ class DataObject(QW.QTreeWidgetItem):
     # Show/hide the not found status icon and tooltip
         self._toggleStatus(102, toggle)
     # Set empty object data if 'not found'
-        if toggle and self.get('data') is not None:
+        if toggle and self.getComponents()['data'] is not None:
             self.setData(0, 100, None)
 
 
@@ -657,19 +668,18 @@ class DataObject(QW.QTreeWidgetItem):
         self._status_stack.insert(idx, status) 
         
     # Visually show the last status in the stack (show status icon and tooltip)
-        last = self._status_stack[-1]
-
-        if last == 0: # Empty status
-            icon = QG.QIcon()
-            tooltip = ''
-        elif last == 101: # File edited status
-            icon = style.getIcon('EDIT')
-            tooltip = 'Edits not saved'
-        elif last == 102: # File not found status
-            icon = style.getIcon('FILE_ERROR')
-            tooltip = 'File was deleted, moved or renamed'
-        else: # invalid status, should not be possible
-            return
+        match self._status_stack[-1]:
+            case 0: # Empty status
+                icon = QG.QIcon()
+                tooltip = ''
+            case 101: # File edited status
+                icon = style.getIcon('EDIT')
+                tooltip = 'Edits not saved'
+            case 102: # File not found status
+                icon = style.getIcon('FILE_ERROR')
+                tooltip = 'File was deleted, moved or renamed'
+            case _: # invalid status, should not be possible
+                return
         
         self.setData(0, 1, icon)
         self.setData(0, 3, tooltip)
@@ -698,17 +708,17 @@ class DataObject(QW.QTreeWidgetItem):
 
     def setChecked(self, checked: bool) -> None:
         '''
-        Set the check state of Data Object to 'checked'.
+        Set the check state of Data Object. Only Checked or Unchecked states
+        can be set.
 
         Parameters
         ----------
         checked : bool
-            Check state. Only checked (=True) or unchecked (=False) states are
-            accepted.
+            Check state (True = Checked, False = Unchecked).
 
         '''
-        checkstate = QC.Qt.Checked if checked else QC.Qt.Unchecked
-        self.setData(0, 10, checkstate)
+        c = QC.Qt.CheckState.Checked if checked else QC.Qt.CheckState.Unchecked
+        self.setData(0, 10, c)
 
 
     def subgroup(self) -> DataSubGroup | None:
@@ -718,25 +728,26 @@ class DataObject(QW.QTreeWidgetItem):
 
         Returns
         -------
-        DataSubGroup or None
+        subgroup : DataSubGroup or None
             Parent subgroup.
 
         '''
-        return self.parent()
+        if isinstance(subgroup := self.parent(), DataSubGroup):
+            return subgroup
+        return
 
 
 
 class SampleMapsSelector(QW.QWidget):
 
     sampleUpdateRequested = QC.pyqtSignal()
-    mapsUpdateRequested = QC.pyqtSignal(int) # index of sample
     mapsListUpdated = QC.pyqtSignal()
     mapClicked = QC.pyqtSignal(DataObject)
     mapChanged = QC.pyqtSignal(DataObject)
 
     def __init__(
         self,
-        maps_type: str,
+        maps_type: Literal['inmaps', 'minmaps'],
         checkable: bool = True,
         parent: QW.QWidget | None = None
     ) -> None:
@@ -749,7 +760,7 @@ class SampleMapsSelector(QW.QWidget):
 
         Parameters
         ----------
-        maps_type : str
+        maps_type : Literal['inmaps', 'minmaps']
             Must be 'inmaps' to list input maps or 'minmaps' to list mineral 
             maps.
         checkable : bool, optional
@@ -766,12 +777,15 @@ class SampleMapsSelector(QW.QWidget):
         '''
         super().__init__(parent)
 
-    # Set main attributes
+    # Check for valid "maps_type" argument
         if maps_type not in ('inmaps', 'minmaps'):
             raise ValueError(f'Invalid "maps_type" argument: {maps_type}.')
+        
+    # Set main attributes
         self.maps_type = maps_type
         self.checkable = checkable
-        self._current_sample = None
+        self._available_samples: list[DataGroup] = []
+        self._current_sample: DataGroup | None = None
 
     # Initialize GUI and connect its signals to slots
         self._init_ui()
@@ -806,21 +820,19 @@ class SampleMapsSelector(QW.QWidget):
         Signals-slots connector.
 
         '''
-    # Send combobox signals as custom signals
-        self.sample_combox.clicked.connect(self.sampleUpdateRequested.emit)
-        self.sample_combox.activated.connect(
-            lambda idx: self.mapsUpdateRequested.emit(idx))
-        
-    # Send tree widget signals as custom signals
+    # Forward custom signals
+        self.sample_combox.clicked.connect(self.sampleUpdateRequested)
         self.maps_list.itemClicked.connect(lambda i: self.mapClicked.emit(i))
         self.maps_list.itemChanged.connect(lambda i: self.mapChanged.emit(i))
+
+    # Populate the maps list when a new sample is selected in the combobox
+        self.sample_combox.activated.connect(self.updateMapsList)
 
 
     def updateCombox(self, samples: list[DataGroup]) -> None:
         '''
-        Populate the samples combobox with the samples currently loaded in the
-        Data Manager. This method is called by the main window when the combo
-        box is clicked.
+        Populate the samples combobox with the available 'samples'. This method
+        must be managed by the parent widget.
 
         Parameters
         ----------
@@ -830,44 +842,69 @@ class SampleMapsSelector(QW.QWidget):
         '''
         samples_names = [s.text(0) for s in samples]
         self.sample_combox.updateItems(samples_names)
+        self._available_samples = samples
         self._current_sample = None
 
     
-    def updateList(self, sample: DataGroup) -> None:
+    def updateMapsList(self, sample_idx: int) -> None:
         '''
-        Updates the list of currently loaded maps owned by the sample currently
-        selected in the samples combobox. This method is called by the main 
-        window when a new item is selected in the sample combobox.
+        Populate the maps list with the maps owned by the sample at index 
+        'sample_idx' inside the combobox.
 
         Parameters
         ----------
-        sample : DataGroup
-            The currently selected sample as a DataGroup.
+        sample_idx : int
+            Index of the sample in the combo-box.
 
         '''
+    # Ensure the sample index is valid (safety)
+        if not 0 <= sample_idx < len(self._available_samples):
+            return
+        
     # Clear the input maps lists and set current sample
         self.maps_list.clear()
+        sample = self._available_samples[sample_idx]
         self._current_sample = sample
 
-    # Exit function if the subgroup is empty
+    # Get valid input map objects and re-assemble them into the inmaps list
         subgr = sample.inmaps if self.maps_type == 'inmaps' else sample.minmaps
-        if subgr.isEmpty():
-            return
-
-    # Get every input map object and re-assemble them into the inmaps list
         for c in subgr.getChildren():
-            item = DataObject(c.get('data'))
-            if self.checkable:
-                item.setChecked(True)
-            self.maps_list.addTopLevelItem(item)
+            components = c.getComponents()
+            if (data := components['data']) is not None:
+                item = DataObject(data)
+                item.setName(components['name'])
+                if self.checkable:
+                    item.setChecked(True)
+                self.maps_list.addTopLevelItem(item)
 
     # Send a signal to inform that maps data changed
         self.mapsListUpdated.emit()
 
 
+    def getMap(self, idx: int) -> DataObject | None:
+        '''
+        Get map data object at index 'idx'.
+
+        Parameters
+        ----------
+        idx : int
+            Index of map.
+
+        Returns
+        -------
+        DataObject or None
+            Map data object at given index or None if index is invalid.
+
+        '''
+        item = self.maps_list.topLevelItem(idx)
+        if isinstance(item, DataObject) or item is None:
+            return item
+        return
+
+
     def getMaps(self) -> list[DataObject]:
         '''
-        Get all maps.
+        Get all map data objects.
 
         Returns
         -------
@@ -875,7 +912,8 @@ class SampleMapsSelector(QW.QWidget):
             List of all maps.
 
         '''
-        return [self.maps_list.topLevelItem(i) for i in range(self.mapsCount())]
+        maps = [self.getMap(i) for i in range(self.mapsCount())]
+        return [m for m in maps if m is not None]
 
 
     def getCheckedMaps(self) -> list[DataObject]:
@@ -907,17 +945,19 @@ class SampleMapsSelector(QW.QWidget):
         return self.maps_list.topLevelItemCount()
     
 
-    def currentMap(self) -> DataObject:
+    def currentMap(self) -> DataObject | None:
         '''
         Return the currently selected map.
 
         Returns
         -------
-        DataObject
-            Currently selected map object.
+        DataObject or None
+            Currently selected map object or None when no map is selected.
 
         '''
-        return self.maps_list.currentItem()
+        if isinstance(item :=self.maps_list.currentItem(), DataObject):
+            return item
+        return
     
 
     def currentSample(self) -> DataGroup | None:
@@ -927,7 +967,7 @@ class SampleMapsSelector(QW.QWidget):
         Returns
         -------
         DataGroup or None
-            Currently selected sample.
+            Currently selected sample or None if no sample is selected.
 
         '''
         return self._current_sample
@@ -976,6 +1016,11 @@ class Legend(QW.QTreeWidget):
         parent : QWidget or None, optional
             GUI parent widget of this widget. The default is None.
 
+        Raises
+        ------
+        RuntimeError
+            Raised if the initialization of the header fails.
+
         '''
         super().__init__(parent)
 
@@ -984,22 +1029,27 @@ class Legend(QW.QTreeWidget):
         self.amounts = amounts
         self.has_context_menu = context_menu
         self.precision = settings.manager.get('data/decimal_precision')
-        
-    # Customize the legend appearence and properties (headers & selection mode)
+
+    # Set header properties
+        if (header := self.header()) is None:
+            raise RuntimeError('Failed to initialize headers.')
+        self._header = header
         self.setColumnCount(2 + self.amounts)
         self.setHeaderLabels(['Color', 'Class'] + ['Amount'] * self.amounts)
-        self.header().setSectionResizeMode(QW.QHeaderView.Interactive)
-        self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
+        self._header.setSectionResizeMode(style.HRM_INTERACTIVE)
+
+    # Set selection mode
+        self.setSelectionMode(QW.QAbstractItemView.SelectionMode.ExtendedSelection)
 
     # Disable default editing. Item editing is forced via requestClassRename()
-        self.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
+        self.setEditTriggers(QW.QAbstractItemView.EditTrigger.NoEditTriggers)
 
     # Set custom scrollbars
-        self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
-        self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
+        self.setHorizontalScrollBar(StyledScrollBar(style.O_HORIZONTAL))
+        self.setVerticalScrollBar(StyledScrollBar(style.O_VERTICAL))
 
     # Enable custom context menu
-        self.setContextMenuPolicy(QC.Qt.CustomContextMenu)
+        self.setContextMenuPolicy(QC.Qt.ContextMenuPolicy.CustomContextMenu)
 
     # Set stylesheet (right-click menu when editing items name)
         self.setStyleSheet(style.SS_MENU)
@@ -1029,49 +1079,47 @@ class Legend(QW.QTreeWidget):
 
         '''
 
-    # Get the item that is clicked from 'point' and define a menu
-        i = self.itemAt(point)
-        if i is None: return
+    # Exit funtion if 'point' is not on any item (on void)
+        if (item := self.itemAt(point)) is None:
+            return
+
+    # Create menu
         menu = QW.QMenu()
         menu.setStyleSheet(style.SS_MENU)
 
-    # Rename class
-        menu.addAction(style.getIcon('RENAME'), 'Rename',
-                       lambda: self.requestClassRename(i))
-
-    # Merge classes
-        merge = menu.addAction(
-            style.getIcon('MERGE'), 'Merge', self.requestClassMerge)
+    #[Define Actions]
+    #|Rename class
+        rename = QW.QAction(style.getIcon('RENAME'), 'Rename', menu)
+        rename.triggered.connect(lambda: self.requestClassRename(item))
+    #|Merge classes
+        merge = QW.QAction(style.getIcon('MERGE'), 'Merge', menu)
         merge.setEnabled(len(self.selectedItems()) > 1)
-
-    # Separator
-        menu.addSeparator()
- 
-    # Copy current color HEX string
-        menu.addAction(style.getIcon('COPY'), 'Copy color HEX',
-                       lambda: self.copyColorHexToClipboard(i))
-
-    # Change color
-        menu.addAction(style.getIcon('PALETTE'), 'Set color',
-                       lambda: self.requestColorChange(i))
-
-    # Randomize color
-        menu.addAction(style.getIcon('RANDOMIZE_COLOR'), 'Randomize color',
-                       lambda: self.requestRandomColorChange(i))
-        
-    # Separator
-        menu.addSeparator()
-
-    # Higlight item
-        highlight = QW.QAction(style.getIcon('HIGHLIGHT'), 'Highlight')
+        merge.triggered.connect(self.requestClassMerge)
+    #|Copy color HEX string
+        copy_color = QW.QAction(style.getIcon('COPY'), 'Copy color HEX', menu)
+        copy_color.triggered.connect(lambda: self.copyColorHexToClipboard(item))
+    #|Set color
+        set_color = QW.QAction(style.getIcon('PALETTE'), 'Set color', menu)
+        set_color.triggered.connect(lambda: self.requestColorChange(item))
+    #|Randomize color
+        rand_color = QW.QAction(
+            style.getIcon('RANDOMIZE_COLOR'), 'Randomize color', menu)
+        rand_color.triggered.connect(lambda: self.requestRandomColorChange(item))
+    #|Higlight item
+        highlight = QW.QAction(style.getIcon('HIGHLIGHT'), 'Highlight', menu)
         highlight.setCheckable(True)
-        highlight.setChecked(i == self._highlighted_item)
-        highlight.toggled.connect(lambda t: self.requestItemHighlight(t, i))
-        menu.addAction(highlight)
+        highlight.setChecked(item == self._highlighted_item)
+        highlight.toggled.connect(lambda t: self.requestItemHighlight(t, item))
+    #|Extract mask
+        extr_mask = QW.QAction(style.getIcon('ADD_MASK'), 'Extract mask', menu)
+        extr_mask.triggered.connect(self.requestMaskFromClass)
 
-    # Extract mask
-        menu.addAction(style.getIcon('ADD_MASK'), 'Extract mask',
-                       self.requestMaskFromClass)
+    # Populate menu
+        menu.addActions((rename, merge))
+        menu.addSeparator()
+        menu.addActions((copy_color, set_color, rand_color))
+        menu.addSeparator()
+        menu.addActions((highlight, extr_mask))
 
     # Show the menu in the same spot where the user triggered the event
         menu.exec(self.mapToGlobal(point))
@@ -1108,8 +1156,8 @@ class Legend(QW.QTreeWidget):
             The selected phase item.
 
         '''
-        clipboard = QW.qApp.clipboard()
-        clipboard.setText(item.whatsThis(0))
+        if (clipboard := QW.qApp.clipboard()) is not None:
+            clipboard.setText(item.whatsThis(0))
 
 
     def requestColorChange(self, item: QW.QTreeWidgetItem) -> None:
@@ -1186,7 +1234,8 @@ class Legend(QW.QTreeWidget):
     # Deny renaming protected '_ND'_ class
         old_name = item.text(1)
         if old_name == '_ND_':
-            return MsgBox(self, 'Crit', 'This class cannot be renamed.')
+            MsgBox(self, 'Crit', 'This class cannot be renamed.')
+            return
     
     # Do nothing if the dialog is canceled or the class is not renamed
         label = 'Rename class (max. 8 ASCII characters)'
@@ -1197,17 +1246,17 @@ class Legend(QW.QTreeWidget):
         
     # Deny renaming to protected '_ND_' class
         elif name == '_ND_':
-            return MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+            MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
         
     # Deny renaming if the name already exists
         elif self.hasClass(name):
-            return MsgBox(self, 'Crit', f'{name} is already taken.')
+            MsgBox(self, 'Crit', f'{name} is already taken.')
 
     # Deny renaming if the new name is not an ASCII <= 8 characters string
         elif 0 < len(name) <= 8 and name.isascii():
             self.itemRenameRequested.emit(item, name)
         else:
-            return MsgBox(self, 'Crit',  'Invalid name.')
+            MsgBox(self, 'Crit',  'Invalid name.')
 
 
     def renameClass(self, item: QW.QTreeWidgetItem, name: str) -> None:
@@ -1239,7 +1288,8 @@ class Legend(QW.QTreeWidget):
         
     # Deny renaming protected '_ND'_ class
         if '_ND_' in classes:
-            return MsgBox(self, 'Crit', '"_ND_" class cannot be merged.')
+            MsgBox(self, 'Crit', '"_ND_" class cannot be merged.')
+            return
         
     # Do nothing if the dialog is canceled
         text = f'Merge {classes} in a new class (max. 8 ASCII characters):'
@@ -1249,17 +1299,17 @@ class Legend(QW.QTreeWidget):
         
     # Deny renaming to protected '_ND_' class
         elif name == '_ND_':
-            return MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
+            MsgBox(self, 'Crit', '"_ND_" is a protected class name.')
     
     # Deny renaming if the name already exists (excluding selected classes)
         elif name not in classes and self.hasClass(name):
-            return MsgBox(self, 'Crit', f'{name} is already taken.')
+            MsgBox(self, 'Crit', f'{name} is already taken.')
 
     # Deny renaming if the new name is not an ASCII <= 8 characters string
         elif 0 < len(name) <= 8 and name.isascii():
             self.itemsMergeRequested.emit(classes, name)
         else:
-            return MsgBox(self, 'Crit', 'Invalid name.')
+            MsgBox(self, 'Crit', 'Invalid name.')
 
 
     def requestItemHighlight(self, toggled: bool, item: QW.QTreeWidgetItem) -> None:
@@ -1347,12 +1397,12 @@ class Legend(QW.QTreeWidget):
             Whether the legend already contains a class with the given name.
 
         '''
-        n_classes = self.topLevelItemCount()
-        class_names = [self.topLevelItem(i).text(1) for i in range(n_classes)]
+        items = [self.topLevelItem(i) for i in range(self.topLevelItemCount())]
+        class_names = [i.text(1) for i in items if i is not None]
         return name in class_names
 
 
-    def update(self, mineral_map: MineralMap) -> None:
+    def refresh(self, mineral_map: MineralMap) -> None:
         '''
         Updates the legend.
 
@@ -1375,7 +1425,7 @@ class Legend(QW.QTreeWidget):
             self.addClass(phase, color, amount)
 
     # Resize columns
-        self.header().resizeSections(QW.QHeaderView.ResizeToContents)
+        self._header.resizeSections(style.HRM_RESIZETOCONTENTS)
 
 
 
@@ -1384,7 +1434,7 @@ class ColorIcon(QG.QIcon):
     def __init__(
         self,
         color: tuple[int, int, int] | str,
-        edgecolor: str = style.IVORY,
+        edgecolor: tuple[int, int, int] | str = style.IVORY,
         lw: int = 1,
         size: tuple[int, int] = (64, 64)
     ) -> None:
@@ -1394,10 +1444,10 @@ class ColorIcon(QG.QIcon):
         Parameters
         ----------
         color : tuple[int, int, int] or str
-            RGB triplet or HEX color string.
-        edgecolor : str, optional
-            Color of the icon border, expressed as a HEX string. The default is 
-            #F9F9F4 (IVORY).
+            Icon color as RGB triplet or HEX string.
+        edgecolor : tuple[int, int, int] or str, optional
+            Color of the icon border as RGB triplet or HEX string. The default
+            is #F9F9F4 (IVORY).
         lw : int, optional
             Border line width. The default is 1.
         size : tuple[int, int], optional
@@ -1406,7 +1456,9 @@ class ColorIcon(QG.QIcon):
         Raises
         ------
         TypeError
-            Raised if color is not a valid type.
+            Raised if "color" is not a valid type.
+        TypeError
+            Raised if "edgecolor" is not a valid type.
 
         '''
     # Set main attributes
@@ -1423,9 +1475,15 @@ class ColorIcon(QG.QIcon):
             raise TypeError(f'Color must be tuple or str, not {type(color)}')
             
     # Add border
-        painter = QG.QPainter(pixmap)
-        pen = QG.QPen(QG.QColor(edgecolor))
+        if isinstance(edgecolor, tuple):
+            pen = QG.QPen(QG.QColor(*edgecolor))
+        elif isinstance(edgecolor, str):
+            pen = QG.QPen(QG.QColor(edgecolor))
+        else:
+            raise TypeError(f'Edgecolor must be tuple or str, not {type(edgecolor)}')
+        
         pen.setWidth(lw)
+        painter = QG.QPainter(pixmap)
         painter.setPen(pen)
         # -1 to make the border inside the pixmap
         painter.drawRect(0, 0, self.width - 1, self.height - 1)  
@@ -1443,7 +1501,7 @@ class StyledButton(QW.QPushButton):
         icon: QG.QIcon | None = None,
         text: str | None = None,
         bg : str | None = None,
-        text_padding: int = 1,
+        inner_gap: int = 1,
         parent: QW.QWidget | None = None
      ) -> None:
         '''
@@ -1459,29 +1517,42 @@ class StyledButton(QW.QPushButton):
         bg : str or None, optional
             Background color of the button. If None the default color is used.
             The default is None.
-        text_padding : int, optional
-            Adds some space between the icon and the text. The default is 1.
+        inner_gap : int, optional
+            Space between the icon and the text. The default is 1.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
         '''
         super().__init__(parent)
         self.setSizePolicy(QW.QSizePolicy.Preferred, QW.QSizePolicy.Fixed)
+        self.gap = inner_gap
 
-    # Set icon
-        if icon:
+    # Set icon and text
+        if icon is not None:
             self.setIcon(icon)
-            if text: # add spacing between icon and text
-                text = text.rjust(text_padding + len(text))
-    # Set text
-        if text:
-            self.setText(text)
+        self.setText(text)
 
     # Overwrite default background color if requested
         ss = style.SS_BUTTON
         if bg:
             ss += 'QPushButton {background-color: %s; font: bold;}' %(bg)
         self.setStyleSheet(ss)
+
+
+    def setText(self, text: str | None) -> None:
+        '''
+        Reimplementation of the default "setText()" method that simply adds a
+        gap between the button's icon and the button's text.
+
+        Parameters
+        ----------
+        text : str or None
+            Button's text.
+
+        '''
+        if text is not None and not self.icon().isNull():
+            text = text.rjust(self.gap + len(text))
+        return super().setText(text)
 
 
 
@@ -1518,7 +1589,7 @@ class StyledComboBox(QW.QComboBox):
         self.setStyleSheet(style.SS_COMBOX + style.SS_MENU)
 
 
-    def wheelEvent(self, event: QG.QWheelEvent) -> None:
+    def wheelEvent(self, e: QG.QWheelEvent | None) -> None:
         '''
         Reimplementation of the wheelEvent to better control mouse wheel scroll
         activation of the combobox. The event will be accepted only if SHIFT is
@@ -1526,15 +1597,15 @@ class StyledComboBox(QW.QComboBox):
 
         Parameters
         ----------
-        event : QWheelEvent
+        event : QWheelEvent or None
             The mouse wheel event.
 
         '''
-        modifiers = event.modifiers()
-        if modifiers & QC.Qt.ShiftModifier:
-            super().wheelEvent(event)
-        else:
-            event.ignore()
+        if e is not None:
+            if bool(e.modifiers() & QC.Qt.KeyboardModifier.ShiftModifier):
+                super().wheelEvent(e)
+            else:
+                e.ignore()
 
 
 
@@ -1579,7 +1650,7 @@ class StyledDoubleSpinBox(QW.QDoubleSpinBox):
         self.setStyleSheet(style.SS_MENU)
 
 
-    def wheelEvent(self, event: QG.QWheelEvent) -> None:
+    def wheelEvent(self, e: QG.QWheelEvent | None) -> None:
         '''
         Reimplementation of the wheelEvent to better control mouse wheel scroll
         activation of the spinbox. The event will be accepted only if SHIFT is
@@ -1588,15 +1659,15 @@ class StyledDoubleSpinBox(QW.QDoubleSpinBox):
 
         Parameters
         ----------
-        event : QWheelEvent
+        event : QWheelEvent or None
             The mouse wheel event.
 
         '''
-        modifiers = event.modifiers()
-        if modifiers & QC.Qt.ShiftModifier:
-            super().wheelEvent(event)
-        else:
-            event.ignore()
+        if e is not None:
+            if bool(e.modifiers() & QC.Qt.KeyboardModifier.ShiftModifier):
+                super().wheelEvent(e)
+            else:
+                e.ignore()
 
 
 
@@ -1618,12 +1689,13 @@ class StyledListWidget(QW.QListWidget):
         super().__init__(parent)
 
     # Set custom scroll bars
-        self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
-        self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
+        self.setHorizontalScrollBar(StyledScrollBar(style.O_HORIZONTAL))
+        self.setVerticalScrollBar(StyledScrollBar(style.O_VERTICAL))
 
     # Set extended selection mode if requested
         if ext_sel:
-            self.setSelectionMode(QW.QAbstractItemView.ExtendedSelection)
+            sel_mode = QW.QAbstractItemView.SelectionMode.ExtendedSelection
+            self.setSelectionMode(sel_mode)
 
 
     def getItems(self) -> list[QW.QListWidgetItem]:
@@ -1637,6 +1709,7 @@ class StyledListWidget(QW.QListWidget):
 
         '''
         items = [self.item(row) for row in range(self.count())]
+        items = [i for i in items if i is not None]
         return items
     
 
@@ -1716,7 +1789,7 @@ class StyledScrollBar(QW.QScrollBar):
         super().__init__(orientation, parent)
 
     # Set the stylesheet
-        if orientation == QC.Qt.Horizontal:
+        if orientation == QC.Qt.Orientation.Horizontal:
             self.setStyleSheet(style.SS_SCROLLBARH)
         else:
             self.setStyleSheet(style.SS_SCROLLBARV)
@@ -1758,7 +1831,7 @@ class StyledSpinBox(QW.QSpinBox):
         self.setStyleSheet(style.SS_MENU)
 
 
-    def wheelEvent(self, event: QG.QWheelEvent) -> None:
+    def wheelEvent(self, e: QG.QWheelEvent | None) -> None:
         '''
         Reimplementation of the wheelEvent to better control mouse wheel scroll
         activation of the spinbox. The event will be accepted only if SHIFT is
@@ -1767,15 +1840,15 @@ class StyledSpinBox(QW.QSpinBox):
 
         Parameters
         ----------
-        event : QWheelEvent
+        event : QWheelEvent or None
             The mouse wheel event.
 
         '''
-        modifiers = event.modifiers()
-        if modifiers & QC.Qt.ShiftModifier:
-            super(StyledSpinBox, self).wheelEvent(event)
-        else:
-            event.ignore()
+        if e is not None:
+            if bool(e.modifiers() & QC.Qt.KeyboardModifier.ShiftModifier):
+                super().wheelEvent(e)
+            else:
+                e.ignore()
 
 
 
@@ -1803,12 +1876,28 @@ class StyledTable(QW.QTableWidget):
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
+        Raises
+        ------
+        RuntimeError
+            Raised if the intialization of horizontal header fails.
+        RuntimeError
+            Raised if the intialization of vertical header fails.
+
         '''
         super().__init__(rows, cols, parent)
 
+    # Initialize horizontal and vertical headers
+        if (h_header := self.horizontalHeader()) is None:
+            raise RuntimeError('Horizontal header initialization failed.')
+        self.h_header = h_header
+
+        if (v_header := self.verticalHeader()) is None:
+            raise RuntimeError('Vertical header initialization failed.')
+        self.v_header = v_header
+
     # Set custom scroll bars
-        self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
-        self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
+        self.setHorizontalScrollBar(StyledScrollBar(style.O_HORIZONTAL))
+        self.setVerticalScrollBar(StyledScrollBar(style.O_VERTICAL))
 
     # Set extended selection mode if requested
         if ext_sel:
@@ -1843,7 +1932,7 @@ class StyledTabWidget(QW.QTabWidget):
 
     def __init__(
         self,
-        tabs_align: str = 'left',
+        tabs_align: Literal['c', 'center', 'l', 'left', 'r', 'right'] = 'left',
         wheel_scroll: bool = False,
         parent: QW.QWidget | None = None
     ) -> None:
@@ -1853,9 +1942,8 @@ class StyledTabWidget(QW.QTabWidget):
 
         Parameters
         ----------
-        tabs_align : str, optional
-            Tabs alignment in the tab bar. Can be: 'left', 'l', 'right', 'r',
-            'center', 'c'. The default is 'left'.
+        tabs_align : Literal['c', 'center', 'l', 'left', 'r', 'right'], optional
+            Tabs alignment in the tab bar. The default is 'left'.
         wheel_scroll : bool, optional
             Whether mouse wheel event should allow to change current tab. The 
             default is False.
@@ -1864,15 +1952,22 @@ class StyledTabWidget(QW.QTabWidget):
 
         Raises
         ------
+        RuntimeError
+            Raised if the initialization of the tab bar fails.
         ValueError
             Raised if "tabs_align" is not a valid string.
 
         '''
         super().__init__(parent)
 
-    # Set tabs unscrollable via mouse wheel if requested 
-        if not wheel_scroll: 
-            self.setTabBar(self.UnscrollableTabBar())
+    # Set tabs unscrollable via mouse wheel if requested
+        if wheel_scroll:
+            if (tabbar := self.tabBar()) is None:
+                raise RuntimeError('Failed to initialize tab bar.')
+            self.tabbar = tabbar
+        else:
+            self.tabbar = self.UnscrollableTabBar()
+            self.setTabBar(self.tabbar)
 
     # Set stylesheet
         match tabs_align:
@@ -1888,16 +1983,17 @@ class StyledTabWidget(QW.QTabWidget):
         self.setStyleSheet(style.SS_TABWIDGET + ss_align)
 
 
-    def addTab(
+    def wrap_tab(
         self,
         qobject: QW.QLayout | QW.QWidget,
         icon: QG.QIcon | None = None,
         title: str | None = None,
         tight: bool = False
-    ) -> None:
+    ) -> int:
         '''
-        Reimplementation of the 'addTab' method, useful to achive consistent 
-        look of the tabwidget, no matter the type of widget is set as its tab.
+        Wrap "qobject" in a GroupArea and add it to the tab widget. This method
+        is useful to achive consistent look of the tab widget, regardless of 
+        the type of object is set as its tab.
 
         Parameters
         ----------
@@ -1917,23 +2013,22 @@ class StyledTabWidget(QW.QTabWidget):
             Raised when qobject is not a QWidget or a QLayout.
 
         '''
-    # Set a GroupArea as the wrapper widget for "qobject"
-        if isinstance(qobject, (QW.QLayout, QW.QWidget)):
-            has_frame = self.tabBar().documentMode()
-            tab = GroupArea(qobject, frame=has_frame, tight=tight)
-            if has_frame:
-                tab.setStyleSheet(None)
-                tab.setObjectName('FramedWrapper')  # Name for custom qss
+    # Ensure that "qobject" is a valid widget or layout
+        if not isinstance(qobject, (QW.QLayout, QW.QWidget)):
+            raise TypeError(f'Invalid "qobject" type: {type(qobject)}.')
 
-    # Raise error if "qobject" is invalid
-        else:
-            raise TypeError(f'Invalid qobject type: {type(qobject)}.')
+    # Set a GroupArea as the wrapper widget for "qobject"
+        has_frame = self.tabbar.documentMode()
+        tab = GroupArea(qobject, frame=has_frame, tight=tight)
+        if has_frame:
+            tab.setStyleSheet(None)
+            tab.setObjectName('FramedWrapper')  # Name for custom qss
 
     # Add the tab with or without an icon
         if icon:
-            super().addTab(tab, icon, title)
+            return super().addTab(tab, icon, title)
         else:
-            super().addTab(tab, title)
+            return super().addTab(tab, title)
 
 
     def setTabBarExpanding(self) -> None:
@@ -1942,9 +2037,9 @@ class StyledTabWidget(QW.QTabWidget):
         style of the Tab Widget pane.
 
         '''
-        self.tabBar().setExpanding(True)
-        self.tabBar().setDocumentMode(True)
-        self.tabBar().setUsesScrollButtons(False)
+        self.tabbar.setExpanding(True)
+        self.tabbar.setDocumentMode(True)
+        self.tabbar.setUsesScrollButtons(False)
         ss = 'QTabWidget::pane {padding: 0px; border: 0px; margin: 0px;}'
         self.setStyleSheet(self.styleSheet() + ss)
 
@@ -1980,11 +2075,11 @@ class StyledTabWidget(QW.QTabWidget):
             Widget held by the tab or None if the index is invalid.
 
         '''
-        wrapper = super().widget(index)
+        wrapper: QW.QWidget | GroupArea | None = super().widget(index)
         if isinstance(wrapper, GroupArea):
-            wrapped_object = wrapper.wrappedObject() 
+            wrapped_object = wrapper.wrappedObject()
             if isinstance(wrapped_object, QW.QWidget):
-                return wrapped_object 
+                return wrapped_object
         return wrapper
 
     class UnscrollableTabBar(QW.QTabBar):
@@ -2003,7 +2098,7 @@ class StyledTabWidget(QW.QTabWidget):
             super().__init__(parent)
 
 
-        def wheelEvent(self, event: QG.QWheelEvent) -> None:
+        def wheelEvent(self, event: QG.QWheelEvent | None) -> None:
             '''
             Reimplements the wheelEvent to ignore it.
 
@@ -2013,7 +2108,8 @@ class StyledTabWidget(QW.QTabWidget):
                 The wheel mouse event.
 
             '''
-            event.ignore()
+            if event is not None:
+                event.ignore()
 
 
 
@@ -2036,7 +2132,8 @@ class AutoUpdateComboBox(StyledComboBox):
 
         '''
         super().__init__(parent=parent, **kwargs)
-        
+
+
     def showPopup(self) -> None:
         '''
         Reimplementation of the showPopup method. It just emits the new clicked
@@ -2068,10 +2165,10 @@ class RadioBtnLayout(QW.QBoxLayout):
 
     def __init__(
         self,
-        names: list[str],
-        icons: list[QG.QIcon] | None = None,
+        names: Sequence[str],
+        icons: Sequence[QG.QIcon] | None = None,
         default: int = 0,
-        orient: str = 'vertical',
+        orient: Literal['h', 'horizontal', 'v', 'vertical'] = 'vertical',
         parent: QW.QWidget | None = None
     ) -> None:
         '''
@@ -2080,22 +2177,21 @@ class RadioBtnLayout(QW.QBoxLayout):
 
         Parameters
         ----------
-        names : list[str]
-            List of radio button names.
-        icons : list[QIcon] or None, optional
-            List of button icons. Must be the same length of names. The default
-            is None.
+        names : Sequence[str]
+            Sequence of radio button names.
+        icons : Sequence[QIcon] or None, optional
+            Sequence of button icons. If provided, it must be the same length
+            of "names". The default is None.
         default : int, optional
             Id of the radio button selected by default. The default is 0.
-        orient : str, optional
-            Orientation of the layout. Can be 'horizontal' ('h') or 'vertical'
-            ('v'). The default is 'vertical'.
+        orient : Literal['h', 'horizontal', 'v', 'vertical'], optional
+            Orientation of the layout. The default is 'vertical'.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
         Raises
         ------
-        NameError
+        ValueError
             Orient must be one of ['horizontal', 'h', 'vertical', 'v'].
         ValueError
             If provided, icons list must have the same length of names list.
@@ -2107,11 +2203,11 @@ class RadioBtnLayout(QW.QBoxLayout):
     # Set the orientation of the layout
         match orient:
             case 'horizontal' | 'h':
-                direction = QW.QBoxLayout.LeftToRight
+                direction = QW.QBoxLayout.Direction.LeftToRight
             case 'vertical' | 'v':
-                direction = QW.QBoxLayout.TopToBottom
+                direction = QW.QBoxLayout.Direction.TopToBottom
             case _:
-                raise NameError(f'{orient} is not a valid orientation.')
+                raise ValueError(f'{orient} is not a valid orientation.')
         
     # Check for same length of names and icons (if provided) lists
         if icons is not None and len(names) != len(icons):
@@ -2149,7 +2245,7 @@ class RadioBtnLayout(QW.QBoxLayout):
             self.selectionChanged.emit(id_)
 
 
-    def button(self, id_: int) -> StyledRadioButton:
+    def button(self, id_: int) -> QW.QAbstractButton | None:
         '''
         Return the radio button with given id.
 
@@ -2168,13 +2264,13 @@ class RadioBtnLayout(QW.QBoxLayout):
         return btn
 
 
-    def buttons(self) -> list[StyledRadioButton]:
+    def buttons(self) -> list[QW.QAbstractButton]:
         '''
         Return all radio buttons.
 
         Returns
         -------
-        btns: list[StyledRadioButton]
+        btns: list[QAbstractButton]
             All radio buttons.
 
         '''
@@ -2182,27 +2278,30 @@ class RadioBtnLayout(QW.QBoxLayout):
         return btns
 
 
-    def getChecked(self, as_id: bool = False) -> StyledRadioButton | int:
+    def get_checked(self) -> QW.QAbstractButton:
         '''
         Return the checked radio button.
 
-        Parameters
-        ----------
-        as_id : bool, optional
-            Return checked radio button id instead of object. The default is 
-            False.
+        Returns
+        -------
+        StyledRadioButton
+            The checked radio button.
+
+        '''
+        return self.btn_group.checkedButton()
+
+
+    def get_checked_id(self) -> int:
+        '''
+        Return the checked radio button id.
 
         Returns
         -------
-        StyledRadioButton or int
-            The checked radio button object or its id.
+        int
+            The checked radio button id.
 
         '''
-        if as_id: 
-            return self.btn_group.checkedId()
-        else:    
-            return self.btn_group.checkedButton()
-
+        return self.btn_group.checkedId()
 
 
 class GroupArea(QW.QGroupBox):
@@ -2214,7 +2313,7 @@ class GroupArea(QW.QGroupBox):
         checkable: bool = False,
         frame: bool = True,
         tight: bool | None = None,
-        align: QC.Qt.Alignment = QC.Qt.AlignHCenter,
+        align: Literal['c', 'center', 'l', 'left', 'r', 'right'] = 'center',
         parent: QW.QWidget | None = None
     ) -> None:
         '''
@@ -2235,9 +2334,8 @@ class GroupArea(QW.QGroupBox):
             Whether the layout of the group box should take all the available 
             space. If None, this is automatically set depending on "title" and
             "frame". The default is None.
-        align : Qt.Alignment, optional
-            The alignment of the title. Can be Qt.AlignLeft, Qt.AlignRight or
-            Qt.AlignHCenter. The default is Qt.AlignHCenter.
+        align : Literal['c', 'center', 'l', 'left', 'r', 'right'], optional
+            The alignment of the title. The default is 'center.
         parent : QWidget or None, optional
             The GUI parent of this widget. The default is None.
 
@@ -2253,15 +2351,14 @@ class GroupArea(QW.QGroupBox):
         if title:
             super().__init__(title, parent)
             match align:
-                case QC.Qt.AlignLeft:
+                case 'left' | 'l':
                     align_css = 'top left'
-                case QC.Qt.AlignRight:
+                case 'right' | 'r':
                     align_css = 'top right'
-                case QC.Qt.AlignHCenter:
+                case 'center' | 'c':
                     align_css = 'top center'
                 case _:
-                    valid = ("Qt.AlignLeft", "Qt.AlignRight", "Qt.AlignHCenter")
-                    raise ValueError(f'Argument "align" can only be {valid}.')
+                    raise ValueError(f'Invalid "align" argument: {align}.')
 
             title_ss = f'QGroupBox::title {{subcontrol-position: {align_css};}}'
             self.setStyleSheet(style.SS_GROUPAREA_TITLE + title_ss)
@@ -2292,22 +2389,32 @@ class GroupArea(QW.QGroupBox):
         self.setLayout(layout)
 
 
-    def wrappedObject(self) -> QW.QLayout | QW.QWidget:
+    def wrappedObject(self) -> QW.QLayout | QW.QWidget | None:
         '''
         Return the object wrapped in the group area.
 
         Returns
         -------
-        QW.QLayout or QW.QWidget
-            Original layout or widget wrapped in the group area.
+        QW.QLayout | QW.QWidget | None
+            Original object wrapped in the group area.
 
         '''
-        layout = self.layout()
-        if layout.objectName() == 'GroupAreaWrapperLayout':
-            return layout.itemAt(0).widget()
-        else:
+    # Return None if the layout is invalid (safety)
+        if (layout := self.layout()) is None:
+            return None
+
+    # If the layout is NOT a wrapper (so it's the original object), return it
+        if layout.objectName() != 'GroupAreaWrapperLayout':
             return layout
-    
+
+    # If the layout is a wrapper, extract and return its wrapped object
+        if (item := layout.itemAt(0)) is not None:
+            return item.widget()
+
+    # Safety fallback
+        return None
+
+
 
 class CollapsibleArea(QW.QWidget):
 
@@ -2360,7 +2467,7 @@ class CollapsibleArea(QW.QWidget):
     # Set collapsed view if required
         if collapsed:
             self.area.setMaximumHeight(0)
-            self.arrow.setArrowType(QC.Qt.RightArrow)
+            self.arrow.setArrowType(QC.Qt.ArrowType.RightArrow)
 
 
     def _init_ui(self) -> None:
@@ -2371,7 +2478,7 @@ class CollapsibleArea(QW.QWidget):
     # Arrow button (Tool Button)
         self.arrow = QW.QToolButton()
         self.arrow.setStyleSheet(style.SS_TOOLBUTTON)
-        self.arrow.setArrowType(QC.Qt.DownArrow)
+        self.arrow.setArrowType(QC.Qt.ArrowType.DownArrow)
         
     # Section title (Label)
         self.title = QW.QLabel(self._title)
@@ -2436,7 +2543,7 @@ class CollapsibleArea(QW.QWidget):
 
         '''
         self._collapsed = True
-        self.arrow.setArrowType(QC.Qt.RightArrow)
+        self.arrow.setArrowType(QC.Qt.ArrowType.RightArrow)
 
         if self._animated:
             self.animation.setStartValue(self.area.height())
@@ -2452,7 +2559,7 @@ class CollapsibleArea(QW.QWidget):
 
         '''
         self._collapsed = False
-        self.arrow.setArrowType(QC.Qt.DownArrow)
+        self.arrow.setArrowType(QC.Qt.ArrowType.DownArrow)
 
         if self._animated:
             self.animation.setStartValue(0)
@@ -2469,7 +2576,7 @@ class GroupScrollArea(QW.QScrollArea):
         self,
         qobject: QW.QLayout | QW.QWidget,
         title: str | None = None,
-        title_align: QC.Qt.Alignment = QC.Qt.AlignHCenter,
+        title_align: Literal['c', 'center', 'l', 'left', 'r', 'right'] = 'center',
         hscroll: bool = True,
         vscroll: bool = True,
         frame: bool = False,
@@ -2486,9 +2593,8 @@ class GroupScrollArea(QW.QScrollArea):
         title : str or None, optional
             If set, "qobject" will be wrapped in a GroupArea that shows this
             title. The default is None.
-        title_align : Qt.Alignment, optional
-            The alignment of the title. Can be Qt.AlignLeft, Qt.AlignRight or
-            Qt.AlignHCenter. The default is Qt.AlignHCenter.
+        title_align : Literal['c', 'center', 'l', 'left', 'r', 'right'], optional
+            The alignment of the title. The default is 'center'.
         hscroll : bool, optional
             Whether the horizontal scrollbar is shown. The default is True.
         vscroll : bool, optional
@@ -2514,18 +2620,21 @@ class GroupScrollArea(QW.QScrollArea):
             self.setStyleSheet(style.SS_GROUPSCROLLAREA_NOFRAME)
 
     # Set the scrollbars
-        self.setHorizontalScrollBar(StyledScrollBar(QC.Qt.Horizontal))
-        self.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical))
-        hpol = QC.Qt.ScrollBarAsNeeded if hscroll else QC.Qt.ScrollBarAlwaysOff
-        vpol = QC.Qt.ScrollBarAsNeeded if vscroll else QC.Qt.ScrollBarAlwaysOff
-        self.setHorizontalScrollBarPolicy(hpol)
-        self.setVerticalScrollBarPolicy(vpol)
+        self.setHorizontalScrollBar(StyledScrollBar(style.O_HORIZONTAL))
+        self.setVerticalScrollBar(StyledScrollBar(style.O_VERTICAL))
+        scroll_as_needed = QC.Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        scroll_always_off = QC.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        h_scroll_policy = scroll_as_needed if hscroll else scroll_always_off
+        v_scroll_policy = scroll_as_needed if vscroll else scroll_always_off
+        self.setHorizontalScrollBarPolicy(h_scroll_policy)
+        self.setVerticalScrollBarPolicy(v_scroll_policy)
 
     # Set a layout according to "qobject" type
         if isinstance(qobject, QW.QLayout):
             layout = qobject
         elif isinstance(qobject, QW.QWidget):
             layout = QW.QVBoxLayout()
+            layout.setObjectName('GroupScrollAreaWrapperLayout')
             layout.addWidget(qobject)
         else: # raise error if "qobject" is invalid
             raise TypeError(f'Invalid "qobject" of type {type(qobject)}.')
@@ -2544,21 +2653,39 @@ class GroupScrollArea(QW.QScrollArea):
         self.setWidgetResizable(True)
 
 
-    def wrappedObject(self) -> QW.QLayout | QW.QWidget:
+    def wrappedObject(self) -> QW.QLayout | QW.QWidget | None:
         '''
         Return the object wrapped in the scroll area.
 
         Returns
         -------
-        QW.QLayout or QW.QWidget
-            Original layout or widget wrapped in the scroll area.
+        QW.QLayout | QW.QWidget | None
+            Original object wrapped in the scroll area.
 
         '''
-        wrapper = self.widget()
+    # Return None if the wrapper is invalid (safety)
+        wrapper: QW.QWidget | GroupArea | None = self.widget()
+        if wrapper is None:
+            return None
+
+    # If wrapper is GroupArea, use its dedicated method 
         if isinstance(wrapper, GroupArea):
             return wrapper.wrappedObject()
-        else:
-            return wrapper.layout().itemAt(0).widget()
+
+    # If wrapper is QWidget and its layout is NOT a wrapper layout (so it's the
+    # original object), return it
+        lyt = wrapper.layout()
+        if lyt is not None and lyt.objectName() != 'GroupScrollAreaWrapperLayout':
+            return lyt
+
+    # If wrapper is QWidget and its layout is a wrapper layout, extract and 
+    # return its wrapped object (which is a widget)
+        if lyt is not None and (item := lyt.itemAt(0)) is not None:
+            return item.widget()
+
+    # Safety fallback
+        return None
+
 
 
 class SplitterLayout(QW.QBoxLayout):
@@ -2566,7 +2693,7 @@ class SplitterLayout(QW.QBoxLayout):
     def __init__(
         self,
         spacing: int = 5,
-        orient: str = 'horizontal',
+        orient: Literal['h', 'horizontal', 'v', 'vertical'] = 'horizontal',
         parent: QW.QWidget | None = None
     ) -> None:
         '''
@@ -2577,9 +2704,8 @@ class SplitterLayout(QW.QBoxLayout):
         ----------
         spacing : int, optional
             Spacing between widgets within the layout. The default is 5.
-        orient : str, optional
-            The orientation of the layout. Must be one of 'horizontal', 'h', 
-            'vertical', 'v'. The default is 'horizontal'.
+        orient : Literal['h', 'horizontal', 'v', 'vertical'], optional
+            The orientation of the layout. The default is 'horizontal'.
         parent : QWidget or None, optional
             The GUI parent of this layout. The default is None.
 
@@ -2596,11 +2722,11 @@ class SplitterLayout(QW.QBoxLayout):
     # Set the orientation of the layout and the splitter
         match self.orientation:
             case 'horizontal' | 'h':
-                layout_direction = QW.QBoxLayout.LeftToRight
-                splitter_orientation = QC.Qt.Horizontal
+                layout_direction = QW.QBoxLayout.Direction.LeftToRight
+                splitter_orientation = style.O_HORIZONTAL
             case 'vertical' | 'v':
-                layout_direction = QW.QBoxLayout.TopToBottom
-                splitter_orientation = QC.Qt.Vertical
+                layout_direction = QW.QBoxLayout.Direction.TopToBottom
+                splitter_orientation = style.O_VERTICAL
             case _:
                 raise ValueError(f'{orient} is not a valid orientation.')
 
@@ -2654,92 +2780,120 @@ class SplitterLayout(QW.QBoxLayout):
         return margins
 
 
-    def insertLayout(self, layout: QW.QLayout, index: int, stretch: int = 0) -> None:
+    def insertLayout(
+            self, index: int, layout: QW.QLayout | None, stretch: int = 0) -> None:
         '''
-        Insert a layout at a given index. If index is invalid, the layout is
-        inserted at the end.
+        Reimplementation of the 'insertLayout' method, that ensures that the
+        'layout' is inserted in the main splitter widget at 'index' after being 
+        wrapped inside a helper widget. If index is invalid, the layout is 
+        inserted at the end of the splitter.
 
         Parameters
         ----------
-        layout : QLayout
-            Layout to be inserted.
         index : int
-            Index of insertion. 
+            Index of insertion.
+        layout : QLayout | None
+            Layout to be inserted. If None, this method does nothing. 
         stretch : int, optional
             Optional stretch for the inserted layout. The default is 0.
 
         '''
-        wrapper = QW.QWidget()
-        layout.setContentsMargins(self._getLayoutMargins(layout, index))
-        wrapper.setLayout(layout)
-        self.splitter.insertWidget(index, wrapper)
-        self.splitter.setStretchFactor(index, stretch)
+        if layout is not None:
+            wrapper = QW.QWidget()
+            layout.setContentsMargins(self._getLayoutMargins(layout, index))
+            wrapper.setLayout(layout)
+            self.splitter.insertWidget(index, wrapper)
+            self.splitter.setStretchFactor(index, stretch)
 
 
-    def addLayout(self, layout: QW.QLayout, stretch: int = 0) -> None:
+    def addLayout(self, layout: QW.QLayout | None, stretch: int = 0) -> None:
         '''
-        Add a layout after all the other items.
+        Reimplementation of the 'addLayout' method, that ensures that the
+        'layout' is appended to the main splitter widget after being wrapped
+        inside a helper widget.
 
         Parameters
         ----------
-        layout : QLayout
-            Layout to be added.
+        layout : QLayout | None
+            Layout to be added. If None, this method does nothing.
         stretch : int, optional
             Optional stretch for the added layout. The default is 0.
 
         '''
-        index = self.splitter.count()
-        wrapper = QW.QWidget()
-        layout.setContentsMargins(self._getLayoutMargins(layout, index))
-        wrapper.setLayout(layout)
-        self.splitter.addWidget(wrapper)
-        self.splitter.setStretchFactor(index, stretch)
+        if layout is not None:
+            index = self.splitter.count()
+            wrapper = QW.QWidget()
+            layout.setContentsMargins(self._getLayoutMargins(layout, index))
+            wrapper.setLayout(layout)
+            self.splitter.addWidget(wrapper)
+            self.splitter.setStretchFactor(index, stretch)
 
 
-    def insertWidget(self, widget: QW.QWidget, index: int, stretch: int = 0) -> None:
+    def insertWidget(
+        self,
+        index: int,
+        widget: QW.QWidget | None, 
+        stretch: int = 0, 
+        alignment: QC.Qt.AlignmentFlag = QC.Qt.AlignmentFlag.AlignLeft
+    ) -> None:
         '''
-        Insert a widget at a given index. If index is invalid, the widget is
+        Reimplementation of the 'insertWidget' method, that ensures that the
+        'widget' is inserted in the main splitter widget at 'index' after being
+        wrapped inside a helper widget. If index is invalid, the widget is
         inserted at the end.
 
         Parameters
         ----------
-        widget : QWidget
-            Widget to be inserted.
         index : int
             Index of insertion.
+        widget : QWidget | None
+            Widget to be inserted. If None, this method does nothing.
         stretch : int, optional
             Optional stretch for the inserted widget. The default is 0.
+        alignment : AlignmentFlag
+            Unused. Only required for a fully compatible method override.
 
         '''
-        wrapper = QW.QWidget()
-        layout = QW.QVBoxLayout()
-        layout.addWidget(widget)
-        layout.setContentsMargins(self._getLayoutMargins(layout, index))
-        wrapper.setLayout(layout)
-        self.splitter.insertWidget(index, wrapper)
-        self.splitter.setStretchFactor(index, stretch)
+        if widget is not None:
+            wrapper = QW.QWidget()
+            layout = QW.QVBoxLayout()
+            layout.addWidget(widget)
+            layout.setContentsMargins(self._getLayoutMargins(layout, index))
+            wrapper.setLayout(layout)
+            self.splitter.insertWidget(index, wrapper)
+            self.splitter.setStretchFactor(index, stretch)
 
 
-    def addWidget(self, widget: QW.QWidget, stretch: int = 0) -> None:
+    def addWidget(
+        self,
+        a0: QW.QWidget | None,
+        stretch: int = 0,
+        alignment: QC.Qt.AlignmentFlag = QC.Qt.AlignmentFlag.AlignLeft
+    ) -> None:
         '''
-        Add a widget after all the other items.
+        Reimplementation of the 'addWidget' method, that ensures that the
+        'widget' is appended to the main spliiter widget after being wrapped
+        inside a helper widget.
 
         Parameters
         ----------
-        widget : QWidget
-            Widget to be added.
+        a0 : QWidget | None
+            Widget to be added. If None, this method does nothing.
         stretch : int, optional
             Optional stretch for the added widget. The default is 0.
+        alignment : AlignmentFlag
+            Unused. Only required for a fully compatible method override.
 
         '''
-        index = self.splitter.count()
-        wrapper = QW.QWidget()
-        layout = QW.QVBoxLayout()
-        layout.addWidget(widget)
-        layout.setContentsMargins(self._getLayoutMargins(layout, index))
-        wrapper.setLayout(layout)
-        self.splitter.addWidget(wrapper)
-        self.splitter.setStretchFactor(index, stretch)
+        if self.widget is not None:
+            index = self.splitter.count()
+            wrapper = QW.QWidget()
+            layout = QW.QVBoxLayout()
+            layout.addWidget(a0)
+            layout.setContentsMargins(self._getLayoutMargins(layout, index))
+            wrapper.setLayout(layout)
+            self.splitter.addWidget(wrapper)
+            self.splitter.setStretchFactor(index, stretch)
 
 
 
@@ -2747,21 +2901,22 @@ class SplitterGroup(QW.QSplitter):
 
     def __init__(
         self,
-        qobjects: list[QW.QLayout | QW.QWidget] | None = None, 
-        stretches: list[int] | None = None,
-        orient: QC.Qt.Orientation = QC.Qt.Horizontal
+        qobjects: Collection[QW.QLayout | QW.QWidget] | None = None, 
+        stretches: Collection[int] | None = None,
+        orient: QC.Qt.Orientation = QC.Qt.Orientation.Horizontal
     ) -> None:
         '''
         A convenient class to quickly group multiple widgets in a QSplitter.
 
         Parameters
         ----------
-        qobjects : list[QLayout or QWidget] or None, optional
-            List of layout-like or widget-like objects. If None, the list will 
-            be passed as empty. The default is None.
-        stretches : list[int] or None, optional
-            List of stretches for each object. Must have the same size of  
-            qobjects. If None, stretches are not set. The default is None.
+        qobjects : Collection[QLayout or QWidget] or None, optional
+            Collection of layout-like or widget-like objects. If None, an empty
+            splitter group is initialized. The default is None.
+        stretches : Collection[int] or None, optional
+            Collection of stretch values for each object. It must have the same
+            size of "qobjects". If None, stretches are not set. The default is
+            None.
         orient : Qt.Orientation, optional
             Orientation of the splitter. The default is Qt.Horizontal.
 
@@ -2834,7 +2989,7 @@ class FramedLabel(QW.QLabel):
     def __init__(self, text: str = '', parent: QW.QWidget | None = None) -> None:
         '''
         A label decorated with a squared frame. Its text is user-selectable and
-        its size policy is fixed to avoid visual glitches when using monitor
+        its size policy is fixed to avoid visual glitches when using screens
         with different resolutions.
 
         Parameters
@@ -2848,8 +3003,9 @@ class FramedLabel(QW.QLabel):
         super().__init__(text, parent)
     
     # Set widget attributes
-        self.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
-        self.setTextInteractionFlags(QC.Qt.TextSelectableByMouse)
+        self.setSizePolicy(style.SP_IGNORED, style.SP_FIXED)
+        text_selectable = QC.Qt.TextInteractionFlag.TextSelectableByMouse
+        self.setTextInteractionFlags(text_selectable)
 
     # Set stylesheet
         self.setStyleSheet(style.SS_MENU + 'QLabel {border: 1px solid black;}')
@@ -2927,7 +3083,7 @@ class PathLabel(FramedLabel):
         self.placeholder = placeholder
     
     # Set widget attributes
-        self.setAlignment(QC.Qt.AlignLeft | QC.Qt.AlignVCenter)
+        self.setAlignment(QC.Qt.AlignmentFlag(style.A_LEFT | style.A_VCENTER))
 
     # Set stylesheet
         self.setStyleSheet(style.SS_PATHLABEL + style.SS_MENU)
@@ -2977,7 +3133,8 @@ class PathLabel(FramedLabel):
 
         '''
         metrics = self.fontMetrics()
-        elided = metrics.elidedText(text, QC.Qt.ElideRight, self.width() - 2)
+        width =  self.width() - 2
+        elided = metrics.elidedText(text, QC.Qt.TextElideMode.ElideRight, width)
         self.setText(elided)
 
 
@@ -2995,9 +3152,9 @@ class PathLabel(FramedLabel):
             The default is True.
 
         '''
-        if path is None: path = '*Path not found'
-        self.fullpath = path
-        if auto_display: self.display()
+        self.fullpath = '*Path not found' if path is None else path
+        if auto_display: 
+            self.display()
 
 
     def clearPath(self) -> None:
@@ -3010,20 +3167,21 @@ class PathLabel(FramedLabel):
         self.setToolTip('')
 
 
-    def resizeEvent(self, event: QG.QResizeEvent):
+    def resizeEvent(self, a0: QG.QResizeEvent | None) -> None:
         '''
         Reimplementation of the 'resizeEvent' method. If text wrapping is 
         enabled, allows the label to elide the text adapting it to new size.
 
         Parameters
         ----------
-        event : QResizeEvent
+        a0 : QResizeEvent
             The resize event.
 
         '''
-        event.accept()
-        if self.elide:
-            self.setTextElided(self._displayedText)
+        if a0 is not None:
+            a0.accept()
+            if self.elide:
+                self.setTextElided(self._displayedText)
 
 
 
@@ -3043,7 +3201,7 @@ class DescriptiveProgressBar(QW.QWidget):
 
     # Description label (Label)
         self.desc = QW.QLabel()
-        self.desc.setSizePolicy(QW.QSizePolicy.Ignored, QW.QSizePolicy.Fixed)
+        self.desc.setSizePolicy(style.SP_IGNORED, style.SP_FIXED)
 
     # Progress bar (Progress Bar)
         self.pbar = QW.QProgressBar()
@@ -3051,7 +3209,7 @@ class DescriptiveProgressBar(QW.QWidget):
     # Adjust main layout
         layout = QW.QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.desc, alignment=QC.Qt.AlignCenter)
+        layout.addWidget(self.desc, alignment=style.A_CENTER)
         layout.addWidget(self.pbar)
         self.setLayout(layout)
 
@@ -3177,35 +3335,41 @@ class PopUpProgBar(QW.QProgressDialog):
         To display another dialog over this progress bar dialog while keeping 
         it responsive, set this dialog as its parent:
 
-        # Construct the progress bar dialog
-        parent_widget = PyQt5.QtWidgets.QWidget()
-        n_iter = 5
-        pbar = PopUpProgBar(parent_widget, n_iter)
+        Construct the progress bar dialog
+        >>> parent_widget = PyQt5.QtWidgets.QWidget()
+        >>> n_iter = 5
+        >>> pbar = PopUpProgBar(parent_widget, n_iter)
 
-        # Run a processing iteration
-        result = 0
-        for i in range(n_iter):
-            try:
-                result += 1/i
-            except ZeroDivisionError:
-                # Set 'pbar' as the message box's parent <<--[ RELEVANT CODE ]
-                MsgBox(pbar, 'Info', f'{i} caused an error. Skipped.')
-            finally:
-                pbar.increase()
+        Run a processing iteration
+        >>> result = 0
+        >>> for i in range(n_iter):
+                try:
+                    result += 1 / i
+                except ZeroDivisionError:
+                    # [RELEVANT CODE]: set 'pbar' as the message box's parent
+                    MsgBox(pbar, 'Info', f'{i} caused an error. Skipped.')
+                finally:
+                    pbar.increase()
 
         '''
     # Initialize custom progress dialog. Cancel button is forced to be None.
-        flags = QC.Qt.Tool | QC.Qt.WindowTitleHint | QC.Qt.WindowStaysOnTopHint
+        flags = QC.Qt.WindowType(
+            QC.Qt.WindowType.Tool
+            | QC.Qt.WindowType.WindowTitleHint 
+            | QC.Qt.WindowType.WindowStaysOnTopHint
+        )
         super().__init__(label, None, 0, n_iter, parent, flags=flags)
 
     # Set attributes
         self.auto_delete = auto_delete
     
     # Set widget properties
+        self.setWindowModality(QC.Qt.WindowModality.ApplicationModal)
+        self.setWindowTitle('Please wait...')
         self.setMinimumDuration(0)
         self.setValue(0)
-        self.setWindowModality(QC.Qt.ApplicationModal) 
-        self.setWindowTitle('Please wait...')
+        if self.auto_delete:
+            self.setAttribute(QC.Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
 
     def increase(self) -> None:
@@ -3216,21 +3380,15 @@ class PopUpProgBar(QW.QProgressDialog):
         self.setValue(self.value() + 1)
 
 
-    def hideEvent(self, event: QG.QHideEvent) -> None:
+    def reset(self) -> None:
         '''
-        Reimplementation of the default 'hideEvent' method. If 'auto_delete' is
-        True, this requests the destruction of the progress dialog immediately 
-        after it is hidden.
-
-        Parameters
-        ----------
-        event : QG.QHideEvent
-            The triggered hide event.
+        Reimplementation of the 'reset' method. If 'auto_delete' is True, this
+        triggers window closure so WA_DeleteOnClose executes.
 
         '''
-        event.accept()
+        super().reset()
         if self.auto_delete:
-            self.deleteLater()
+            self.close()
 
 
     def reject(self) -> None:
@@ -3326,6 +3484,34 @@ class SeparatorSymbolSelector(StyledComboBox):
 
 class MsgBox(QW.QMessageBox):
 
+    _buttons = {
+        'Ok': QW.QMessageBox.StandardButton.Ok,
+        'Open': QW.QMessageBox.StandardButton.Open,
+        'Save': QW.QMessageBox.StandardButton.Save,
+        'Cancel': QW.QMessageBox.StandardButton.Cancel,
+        'Close': QW.QMessageBox.StandardButton.Close,
+        'Discard': QW.QMessageBox.StandardButton.Discard,
+        'Apply': QW.QMessageBox.StandardButton.Apply,
+        'Reset': QW.QMessageBox.StandardButton.Reset,
+        'RestoreDefaults': QW.QMessageBox.StandardButton.RestoreDefaults,
+        'Help': QW.QMessageBox.StandardButton.Help,
+        'SaveAll': QW.QMessageBox.StandardButton.SaveAll,
+        'Yes': QW.QMessageBox.StandardButton.Yes,
+        'YesToAll': QW.QMessageBox.StandardButton.YesToAll,
+        'No': QW.QMessageBox.StandardButton.No,
+        'NoToAll': QW.QMessageBox.StandardButton.NoToAll,
+        'Abort': QW.QMessageBox.StandardButton.Abort,
+        'Retry': QW.QMessageBox.StandardButton.Retry,
+        'Ignore': QW.QMessageBox.StandardButton.Ignore
+    }
+
+    _icons = {
+        'Question': QW.QMessageBox.Icon.Question,
+        'Information': QW.QMessageBox.Icon.Information,
+        'Warning': QW.QMessageBox.Icon.Warning,
+        'Critical': QW.QMessageBox.Icon.Critical
+    }
+
     def __init__(
         self,
         parent: QW.QWidget | None,
@@ -3334,7 +3520,7 @@ class MsgBox(QW.QMessageBox):
         dtext: str = '',
         title: str | None = None,
         icon: QW.QMessageBox.Icon | None = None,
-        btns: QW.QMessageBox.StandardButtons | None = None,
+        btns: QW.QMessageBox.StandardButton | None = None,
         def_btn: QW.QMessageBox.StandardButton | None = None,
         cbox: QW.QCheckBox | None = None
     ) -> None:
@@ -3364,7 +3550,7 @@ class MsgBox(QW.QMessageBox):
         icon : QMessageBox.Icon or None, optional
             Message box icon. If None, it is set according to 'kind'. The
             default is None.
-        btns : QMessageBox.StandardButtons or None, optional
+        btns : QMessageBox.StandardButton or None, optional
             Message box buttons. If None, they are set according to 'kind'. 
             The default is None.
         def_btn : QMessageBox.StandardButton or None, optional
@@ -3380,33 +3566,34 @@ class MsgBox(QW.QMessageBox):
 
         '''
     # Set default icon, buttons and default button according to message type
-        question_buttons = QW.QMessageBox.Yes | QW.QMessageBox.No
+        question_buttons = QW.QMessageBox.StandardButton(
+            self._buttons['Yes'] | self._buttons['No']
+        )
         match kind:
             case 'Info' | 'I':
-                icon = QW.QMessageBox.Information if icon is None else icon
-                btns = QW.QMessageBox.Ok if btns is None else btns
+                icon = self._icons['Information'] if icon is None else icon
+                btns = self._buttons['Ok'] if btns is None else btns
             case 'Quest' | 'Q':
-                icon = QW.QMessageBox.Question if icon is None else icon
+                icon = self._icons['Question'] if icon is None else icon
                 btns = question_buttons if btns is None else btns
-                def_btn = QW.QMessageBox.No if def_btn is None else def_btn
+                def_btn = self._buttons['No'] if def_btn is None else def_btn
             case 'Warn' | 'W':
-                icon = QW.QMessageBox.Warning if icon is None else icon
-                btns = QW.QMessageBox.Ok if btns is None else btns
+                icon = self._icons['Warning'] if icon is None else icon
+                btns = self._buttons['Ok'] if btns is None else btns
             case 'QuestWarn' | 'QW':
-                icon = QW.QMessageBox.Warning if icon is None else icon
+                icon = self._icons['Warning'] if icon is None else icon
                 btns = question_buttons if btns is None else btns
-                def_btn = QW.QMessageBox.No if def_btn is None else def_btn
+                def_btn = self._buttons['No'] if def_btn is None else def_btn
             case 'Crit' | 'C':
-                icon = QW.QMessageBox.Critical if icon is None else icon
-                btns = QW.QMessageBox.Ok if btns is None else btns
+                icon = self._icons['Critical'] if icon is None else icon
+                btns = self._buttons['Ok'] if btns is None else btns
             case _:
                 raise ValueError('f{kind} is an invalid message box kind.')
         
     # Auto-set title if not specified
         if title is None:
             try:
-                title = parent.windowTitle()
-                if title == '': 
+                if parent is None or (title := parent.windowTitle()) == '':
                     title = 'X-Min Learn'
             except AttributeError:
                 title = 'X-Min Learn'
@@ -3424,6 +3611,41 @@ class MsgBox(QW.QMessageBox):
         self.exec()
 
 
+    def _clicked_standard_button(self) -> QW.QMessageBox.StandardButton:
+        '''
+        Helper method to return the clicked button as a StandardButton enum.
+
+        Returns
+        -------
+        QMessageBox.StandardButton
+            Clicked button as a StandardButton.
+
+        '''
+        if (btn := self.clickedButton()) is None:
+            return self._buttons['Cancel']
+        return self.standardButton(btn)
+
+
+    def is_choice(self, button_key: str) -> bool:
+        '''
+        Check if the clicked button matches a specific button.
+
+        Parameters
+        ----------
+        button_key : str
+            String key matching a standard button. Check the "self._buttons" 
+            class attribute for a list of valid keys.
+
+        Returns
+        -------
+        bool
+            Whether the user choice matches the specified button.
+
+        '''
+        clicked = self._clicked_standard_button()
+        return self._buttons.get(button_key) == clicked
+
+    # deprecated -> use is_choice('Yes')
     def yes(self) -> bool:
         '''
         Check if user clicked on 'Yes' button.
@@ -3431,12 +3653,12 @@ class MsgBox(QW.QMessageBox):
         Returns
         -------
         bool
-            Whether user clicked on 'Yes'.
+            Whether user clicked on 'Yes' button.
 
         '''
-        return self.clickedButton().text() == '&Yes'
+        return self.is_choice('Yes')
     
-
+    # deprecated -> use is_choice('No')
     def no(self) -> bool:
         '''
         Check if user clicked on 'No' button.
@@ -3444,10 +3666,10 @@ class MsgBox(QW.QMessageBox):
         Returns
         -------
         bool
-            Whether user clicked on 'No'.
+            Whether user clicked on 'No' button.
             
         '''
-        return self.clickedButton().text() == '&No'
+        return self.is_choice('No')
     
 
     def cboxChecked(self) -> bool:
@@ -3473,9 +3695,9 @@ class FileDialog(QW.QFileDialog):
 
     def __init__(self,
         parent: QW.QWidget | None,
-        action: str,
+        action: Literal['open', 'O', 'save', 'S'],
         caption: str = '',
-        filters: str = '',
+        filters: str | None = '',
         multifile: bool = False,
         set_default_folder: bool = True
     ) -> None:
@@ -3489,15 +3711,15 @@ class FileDialog(QW.QFileDialog):
         parent : QW.QWidget or None
             The GUI parent of this widget. If not None, the dialog will popup
             centered with it.
-        action : str
+        action : Literal['open', 'O', 'save', 'S']
             If 'open' (or 'O'), executes an open file dialog; if 'save' (or 
             'S'), executes a save file dialog.
         caption : str, optional
             The dialog's caption (title). The default is ''.
-        filters : str, optional
-            Accepted file types. If '', all types are valid. This parameter is
-            ignored if 'action' is 'save' (or 'S') and 'multifile' is True. The
-            default is ''.
+        filters : str | None, optional
+            Accepted file types. If '' or None, all types are valid. This 
+            parameter is ignored if 'action' is 'save' (or 'S') and 'multifile'
+            is True. The default is ''.
         multifile : bool, optional
             Whether multiple files should be opened or saved. When 'action' is
             'save' (or 'S') an this parameter is True, an open existent folder
@@ -3517,21 +3739,21 @@ class FileDialog(QW.QFileDialog):
         match action:
             case 'open' | 'O':
                 dir_type = 'in'
-                accept_mode = QW.QFileDialog.AcceptOpen
+                accept_mode = QW.QFileDialog.AcceptMode.AcceptOpen
                 if multifile:
-                    file_mode = QW.QFileDialog.ExistingFiles
+                    file_mode = QW.QFileDialog.FileMode.ExistingFiles
                 else:
-                    file_mode = QW.QFileDialog.ExistingFile
+                    file_mode = QW.QFileDialog.FileMode.ExistingFile
  
             case 'save' | 'S':
                 dir_type = 'out'
                 if multifile:
-                    accept_mode = QW.QFileDialog.AcceptOpen
-                    file_mode = QW.QFileDialog.Directory
+                    accept_mode = QW.QFileDialog.AcceptMode.AcceptOpen
+                    file_mode = QW.QFileDialog.FileMode.Directory
                     filters = None
                 else:
-                    accept_mode = QW.QFileDialog.AcceptSave
-                    file_mode = QW.QFileDialog.AnyFile
+                    accept_mode = QW.QFileDialog.AcceptMode.AcceptSave
+                    file_mode = QW.QFileDialog.FileMode.AnyFile
             
             case _:
                 raise ValueError(f'Invalid "action" argument: {action}')
@@ -3543,13 +3765,13 @@ class FileDialog(QW.QFileDialog):
 
     # Construct dialog
         super().__init__(parent, caption, home_dir, filters)
-        if file_mode == QW.QFileDialog.Directory:
-            self.setOption(QW.QFileDialog.ShowDirsOnly, True)
-            self.setOption(QW.QFileDialog.DontResolveSymlinks, True)
+        if file_mode == QW.QFileDialog.FileMode.Directory:
+            self.setOption(QW.QFileDialog.Option.ShowDirsOnly, True)
+            self.setOption(QW.QFileDialog.Option.DontResolveSymlinks, True)
 
         self.setFileMode(file_mode)
         self.setAcceptMode(accept_mode)
-        self.setViewMode(QW.QFileDialog.Detail)
+        self.setViewMode(QW.QFileDialog.ViewMode.Detail)
 
     # Execute dialog. If required, and the dialog is accepted, update the app's 
     # default input or output folder.
@@ -3559,6 +3781,20 @@ class FileDialog(QW.QFileDialog):
             settings.manager.set(f'system/{dir_type}_path', folder)
 
 
+    def returns_multipaths(self) -> bool:
+        '''
+        Check if dialog is set up to return a list of multiple filepaths.
+
+        Returns
+        -------
+        bool
+            Whether the dialog returns multiple filepaths.
+
+        '''
+        return self.fileMode() == QW.QFileDialog.FileMode.ExistingFiles
+
+
+    # deprecated -> use get_path() or get_paths() methods
     def get(self) -> list[str] | str | None:
         '''
         Get the filepath(s) returned by the dialog.
@@ -3571,10 +3807,64 @@ class FileDialog(QW.QFileDialog):
             None is returned.
 
         '''
-        if self.result(): # returns 0 if dialog was canceled, 1 if accepted
-            paths = self.selectedFiles()
-            multipaths = self.fileMode() == QW.QFileDialog.ExistingFiles
-            return paths if multipaths else paths[0]
+        return self.get_paths() if self.returns_multipaths() else self.get_path()
+
+
+    def get_path(self) -> str | None:
+        '''
+        Get the single filepath returned by the dialog. This method cannot be 
+        called if the dialog was initialized with multifile=True.
+
+        Returns
+        -------
+        str or None
+            A single user-selected filepath or None if the dialog was canceled.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if a single path is requested from a multi-file dialog.
+
+        '''
+        # Raise error if a single path is requested from a multi-file dialog
+        if self.returns_multipaths():
+            raise RuntimeError(
+                'Cannot call "get_path()" from a multi-file dialog. '
+                'Use "get_paths()" instead.'
+            )
+
+        # Ensure that dialog was not canceled and that path is valid
+        if self.result() and (paths := self.selectedFiles()):
+            return paths[0] # TODO consider using pathlib
+        return None
+
+
+    def get_paths(self) -> list[str] | None:
+        '''
+        Get the multiple filepaths returned by the dialog. This method cannot
+        be called if the dialog was initialized with multifile=False.
+
+        Returns
+        -------
+        str or None
+            All user-selected filepaths or None if the dialog was canceled.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if multiple paths are requested from a single-file dialog.
+            
+        '''
+        # Raise error if multiple paths are requested from a single-file dialog
+        if not self.returns_multipaths():
+            raise RuntimeError(
+                'Cannot call "get_paths()" from a single-file dialog. '
+                'Use "get_path()" instead.'
+            )
+
+        # Ensure that dialog was not canceled and that path is valid
+        if self.result():
+            return self.selectedFiles() # TODO consider using pathlib
         return None
 
 
@@ -3583,7 +3873,7 @@ class LineSeparator(QW.QFrame):
 
     def __init__(
         self,
-        orient: str = 'horizontal',
+        orient: Literal['h', 'horizontal', 'v', 'vertical'] = 'horizontal',
         lw: int = 2,
         parent: QW.QWidget | None = None
     ) -> None:
@@ -3592,7 +3882,7 @@ class LineSeparator(QW.QFrame):
 
         Parameters
         ----------
-        orient : str, optional
+        orient : Literal['h', 'horizontal', 'v', 'vertical'], optional
             Line orientation. Must be 'horizontal' ('h') or 'vertical' ('v').
             The default is 'horizontal'.
         lw : int, optional
@@ -3610,13 +3900,13 @@ class LineSeparator(QW.QFrame):
 
         match orient:
             case 'horizontal' | 'h':
-                self.setFrameShape(QW.QFrame.HLine)
+                self.setFrameShape(QW.QFrame.Shape.HLine)
             case 'vertical' | 'v':
-                self.setFrameShape(QW.QFrame.VLine)
+                self.setFrameShape(QW.QFrame.Shape.VLine)
             case _:
                 raise ValueError(f'{orient} is not a valid orientation.')
         
-        self.setFrameShadow(QW.QFrame.Plain)
+        self.setFrameShadow(QW.QFrame.Shadow.Plain)
         self.setLineWidth(lw)
       
 
@@ -3644,7 +3934,7 @@ class CoordinatesFinder(QW.QFrame):
 
         self.x_input = QW.QLineEdit()
         self.x_input.setStyleSheet(style.SS_MENU)
-        self.x_input.setAlignment(QC.Qt.AlignHCenter)
+        self.x_input.setAlignment(style.A_HCENTER)
         self.x_input.setPlaceholderText('X (C)')
         self.x_input.setValidator(validator)
         self.x_input.setToolTip('X or Column value')
@@ -3652,7 +3942,7 @@ class CoordinatesFinder(QW.QFrame):
 
         self.y_input = QW.QLineEdit()
         self.y_input.setStyleSheet(style.SS_MENU)
-        self.y_input.setAlignment(QC.Qt.AlignHCenter)
+        self.y_input.setAlignment(style.A_HCENTER)
         self.y_input.setPlaceholderText('Y (R)')
         self.y_input.setValidator(validator)
         self.y_input.setToolTip('Y or Row value')
@@ -3667,9 +3957,9 @@ class CoordinatesFinder(QW.QFrame):
     # Adjust widget layout
         mainLayout = QW.QHBoxLayout()
         mainLayout.setContentsMargins(5, 2, 5, 2) # l, t, r, b
-        mainLayout.addWidget(self.go_btn, alignment=QC.Qt.AlignHCenter)
-        mainLayout.addWidget(self.x_input, alignment=QC.Qt.AlignHCenter)
-        mainLayout.addWidget(self.y_input, alignment=QC.Qt.AlignHCenter)
+        mainLayout.addWidget(self.go_btn, alignment=style.A_HCENTER)
+        mainLayout.addWidget(self.x_input, alignment=style.A_HCENTER)
+        mainLayout.addWidget(self.y_input, alignment=style.A_HCENTER)
         self.setLayout(mainLayout)
 
 
@@ -3708,7 +3998,7 @@ class DocumentBrowser(QW.QWidget):
     def __init__(
         self,
         readonly: bool = True,
-        toolbar: bool = True,
+        tbar: bool = True,
         placeholder: str = '',
         parent: QW.QWidget | None = None
     ) -> None:
@@ -3720,7 +4010,7 @@ class DocumentBrowser(QW.QWidget):
         ----------
         readonly : bool, optional
             Whether document is read-only. The default is True.
-        toolbar : bool, optional
+        tbar : bool, optional
             Whether a toolbar with search, edit and zoom functionalities should
             be visible. The default is True.
         placeholder : str, optional
@@ -3734,7 +4024,7 @@ class DocumentBrowser(QW.QWidget):
 
     # Set main attributes
         self.readonly = readonly
-        self.toolbar_visible = toolbar
+        self.toolbar_visible = tbar
         self.placeholder_text = placeholder
 
     # Initialize GUI and connect its signals to slots
@@ -3747,52 +4037,49 @@ class DocumentBrowser(QW.QWidget):
         GUI constructor.
 
         '''
-    # Text browser space (Text Edit)
+    # Text browser space
         self.browser = QW.QTextEdit()
-        self.browser.setVerticalScrollBar(StyledScrollBar(QC.Qt.Vertical)) 
+        self.browser.setVerticalScrollBar(StyledScrollBar(style.O_VERTICAL)) 
         self.browser.setStyleSheet(style.SS_MENU)
         self.browser.setReadOnly(self.readonly)
         self.browser.setPlaceholderText(self.placeholder_text)
 
-    # Browser toolbar (Toolbar)
-        self.tbar = QW.QToolBar('Browser toolbar')
-        self.tbar.setStyleSheet(style.SS_TOOLBAR)
-        self.tbar.setVisible(self.toolbar_visible)
-
-    # Zoom in (Action) [-> Browser Toolbar]
-        self.zoom_in_action = self.tbar.addAction(
-            style.getIcon('ZOOM_IN'), 'Zoom in')
-
-    # Zoom out (Action) [-> Browser Toolbar]
-        self.zoom_out_action = self.tbar.addAction(
-            style.getIcon('ZOOM_OUT'), 'Zoom out')
-        
-    # Separator [-> Browser Toolbar]
-        self.tbar.addSeparator()
-
-    # Search Up (Action) [-> Browser Toolbar]
-        self.search_up_action = self.tbar.addAction(
-            style.getIcon('CHEVRON_UP'), 'Search up')
-
-    # Search Down (Action) [-> Browser Toolbar]
-        self.search_down_action = self.tbar.addAction(
-            style.getIcon('CHEVRON_DOWN'), 'Search down')
-        
-    # Search box (Line Edit) [-> Browser Toolbar]
-        self.search_box = QW.QLineEdit()
+    #[Browser toolbar actions]
+    #|Zoom In
+        self.zoom_in_action = QW.QAction(
+            style.getIcon('ZOOM_IN'), 'Zoom in', self)
+    #|Zoom Out
+        self.zoom_out_action = QW.QAction(
+            style.getIcon('ZOOM_OUT'), 'Zoom out', self)
+    #|Search Up
+        self.search_up_action = QW.QAction(
+            style.getIcon('CHEVRON_UP'), 'Search up', self)
+    #|Search Down
+        self.search_down_action = QW.QAction(
+            style.getIcon('CHEVRON_DOWN'), 'Search down', self)
+    
+    #[Browser toolbar widget-actions]
+    #|Search box (Line Edit)
+        self.search_box = QW.QLineEdit(self)
         self.search_box.setStyleSheet(style.SS_MENU)
         self.search_box.setPlaceholderText('Search')
         self.search_box.setClearButtonEnabled(True)
-        self.tbar.addWidget(self.search_box)
-
-    # Add optional separator if editing is enabled [-> Browser Toolbar]
-        self.tbar.addSeparator().setVisible(not self.readonly)
-
-    # Edit document (Check Box) [-> Browser Toolbar]
-        self.edit_cbox = QW.QCheckBox('Editing')
+    #|Edit document (Check Box)
+        self.edit_cbox = QW.QCheckBox('Editing', self)
         self.edit_cbox.setChecked(not self.readonly)
         self.edit_cbox.setVisible(not self.readonly)
-        self.tbar.addWidget(self.edit_cbox)
+
+    # Browser toolbar
+        self.tbar = QW.QToolBar('Browser toolbar')
+        self.tbar.setStyleSheet(style.SS_TOOLBAR)
+        self.tbar.setVisible(self.toolbar_visible)
+        self.tbar.addActions((self.zoom_in_action, self.zoom_out_action))
+        self.tbar.addSeparator()
+        self.tbar.addActions((self.search_up_action, self.search_down_action))
+        self.tbar.addWidget(self.search_box)
+        if not self.readonly:
+            self.tbar.addSeparator()
+            self.tbar.addWidget(self.edit_cbox)
 
     # Adjust Main Layout
         layout = QW.QVBoxLayout()
@@ -3882,7 +4169,7 @@ class DocumentBrowser(QW.QWidget):
 
         '''
         self.browser.setFocus()
-        find_flag = QG.QTextDocument.FindBackward
+        find_flag = QG.QTextDocument.FindFlag.FindBackward
         self.browser.find(self.search_box.text(), find_flag)
 
 
@@ -3914,7 +4201,7 @@ class RandomSeedGenerator(QW.QWidget):
 
     # Set main attributes
         self._old_seed = None
-        self.seed = None
+        self.seed: int = 0 # placeholder, will be set by randomizeSeed
 
     # Initialize GUI and connect its signals to slots
         self._init_ui()
@@ -3948,7 +4235,7 @@ class RandomSeedGenerator(QW.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QW.QLabel('Seed'))
         layout.addWidget(self.seed_input, 1)
-        layout.addWidget(self.rand_btn, alignment = QC.Qt.AlignRight)
+        layout.addWidget(self.rand_btn, alignment=style.A_RIGHT)
         self.setLayout(layout)
 
 
@@ -4040,7 +4327,7 @@ class PercentLineEdit(QW.QFrame):
         self._max_perc = 100 if max_perc < 100 else max_perc
 
     # Widget attributes
-        self.setFrameStyle(QW.QFrame.StyledPanel | QW.QFrame.Plain)
+        self.setFrameStyle(QW.QFrame.Shape.StyledPanel | QW.QFrame.Shadow.Plain)
         self.setLineWidth(2)
 
     # Initialize GUI and connect its signals to slots
@@ -4110,7 +4397,7 @@ class PercentLineEdit(QW.QFrame):
         else:
             icon = str(style.ICONS.get('CARET_DOUBLE_YELLOW'))
 
-        pixmap = QG.QPixmap(icon).scaled(20, 20, QC.Qt.KeepAspectRatio)
+        pixmap = QG.QPixmap(icon).scaled(20, 20, style.ARM_KEEP)
         self.iconlbl.setPixmap(pixmap)
 
 
@@ -4279,6 +4566,159 @@ class PercentLineEdit(QW.QFrame):
 
 
 
+type FileStatusType = Literal['Valid', 'Invalid', 'Warning']
+class StatusFileLoader(QW.QWidget):
+
+    def __init__(self, filext: str = '', parent: QW.QWidget | None = None) -> None:
+        '''
+        Interactive widget useful to load filepaths and provide visual feedback
+        on their status (valid, invalid or with warnings).
+
+        Parameters
+        ----------
+        filext : str
+            File extension filter. An empty string means all files. The default
+            is ''.
+        parent : QWidget or None, optional
+            The GUI parent of this widget. The default is None.
+
+        '''
+        super().__init__(parent)
+
+    # Define main attributes
+        self.filter = filext
+        self.filepath: str | None = None
+        self.status: FileStatusType = 'Invalid'
+
+    # Initialize GUI and connect its signals to slots
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self) -> None:
+        '''
+        GUI constructor.
+
+        '''
+    # Add file (Styled Button)
+        self.add_btn = StyledButton(style.getIcon('CIRCLE_ADD_GREEN'))
+        self.add_btn.setFlat(True)
+
+    # Remove file (Styled Button)
+        self.del_btn = StyledButton(style.getIcon('CIRCLE_DEL_RED'))
+        self.del_btn.setFlat(True)
+        self.del_btn.setEnabled(False)
+
+    # Status file path (Path Label)
+        self.status_path = PathLabel(full_display=False)
+        self.status_path.setFrameWidth(2)
+        self.status_path.setFrameColor(style.BAD_RED)
+
+    # Adjust layout
+        layout = QW.QGridLayout()
+        layout.setContentsMargins(1, 1, 1, 1)
+        layout.addWidget(self.add_btn, 0, 0, style.A_BOTTOM)
+        layout.addWidget(self.del_btn, 0, 1, style.A_BOTTOM)
+        layout.addWidget(self.status_path, 1, 0, 1, -1)
+        self.setLayout(layout)
+
+
+    def _connect_slots(self) -> None:
+        '''
+        Signals-slots connector.
+
+        '''
+        self.add_btn.clicked.connect(self.loadFile)
+        self.del_btn.clicked.connect(self.removeFile)
+
+
+    def loadFile(self) -> None:
+        '''
+        Load file from an open file dialog.
+
+        '''
+        path = FileDialog(self, 'open', 'Load File', self.filter).get_path()
+        if path:
+            self.addFile(path)
+
+
+    def addFile(self, path: str) -> None:
+        '''
+        Add filepath 'path'. This method can be used to add a path directly 
+        without showing an open file dialog.
+
+        Parameters
+        ----------
+        path : str
+            Filepath to be added.
+
+        '''
+    # Raise error if filepath is invalid
+        if not os.path.exists(path):
+            raise FileNotFoundError(f'File not found: {path}') 
+
+        self.filepath = path
+        self.status_path.setPath(path)
+        self.setStatus('Valid')
+        self.add_btn.setEnabled(False)
+        self.del_btn.setEnabled(True)
+
+
+    def removeFile(self) -> None:
+        '''
+        Remove loaded filepath.
+
+        '''
+        self.filepath = None
+        self.status_path.clearPath()
+        self.setStatus('Invalid')
+        self.add_btn.setEnabled(True)
+        self.del_btn.setEnabled(False)
+
+
+    def getStatus(self) -> FileStatusType:
+        '''
+        Get the current file status.
+
+        Returns
+        -------
+        FileStatusType
+            Current status.
+
+        '''
+        return self.status
+
+
+    def setStatus(self, status: FileStatusType) -> None:
+        '''
+        Set current status of file to 'status'. This visually changes the color
+        of the label frame to green (Valid), red (Invalid) or yellow (Warning).
+
+        Parameters
+        ----------
+        status : FileStatusType
+            File status.
+
+        Raises
+        ------
+        ValueError
+            Raised if status is an invalid string.
+
+        '''
+        match status:
+            case 'Valid':
+                self.status_path.setFrameColor(style.OK_GREEN)
+            case 'Invalid':
+                self.status_path.setFrameColor(style.BAD_RED)
+            case 'Warning':
+                self.status_path.setFrameColor(style.WARN_YELLOW)
+            case _:
+                raise ValueError(f'Invalid status: {status}.')
+        
+        self.status = status
+
+
+
 class DatasetDesigner(StyledTable):
     
     def __init__(self, parent: QW.QWidget | None = None) -> None:
@@ -4295,9 +4735,10 @@ class DatasetDesigner(StyledTable):
         super().__init__(0, 4, parent=parent)
 
     # Set selection behaviour
-        self.setSelectionBehavior(QW.QAbstractItemView.SelectRows)
+        selection_behaviour = QW.QAbstractItemView.SelectionBehavior.SelectRows
+        self.setSelectionBehavior(selection_behaviour)
 
-    # Initialize horizontal headers
+    # Set horizontal header properties
         self.columns = ['', 'Input Maps', '', 'Mineral Map']
         self.setHorizontalHeaderLabels(self.columns)
         self.resizeHorizontalHeader()
@@ -4310,12 +4751,13 @@ class DatasetDesigner(StyledTable):
         content.
 
         '''
-    # Stretch = 1, ResizeToContent = 3
-        header = self.horizontalHeader()
-        header.setSectionResizeMode(1) # All columns
-        header.setSectionResizeMode(0, 3) # Fill-row 
-        header.setSectionResizeMode(self.columnCount() - 2, 3) # Separator
-        header.setSectionResizeMode(self.columnCount() - 1, 3) # Mineral Map
+        # Stretch all columns
+        self.h_header.setSectionResizeMode(style.HRM_STRETCH)
+        # Resize to contents the fill-row, the minmap and the separator columns  
+        count = self.columnCount()
+        self.h_header.setSectionResizeMode(0, style.HRM_RESIZETOCONTENTS)
+        self.h_header.setSectionResizeMode(count - 2, style.HRM_RESIZETOCONTENTS)
+        self.h_header.setSectionResizeMode(count - 1, style.HRM_RESIZETOCONTENTS)
 
 
     def setFillRowButton(self, row: int) -> None:
@@ -4357,8 +4799,8 @@ class DatasetDesigner(StyledTable):
         wid = StatusFileLoader('Mineral maps (*.mmp);;ASCII maps (*.txt *.gz)')
         self.setCellWidget(row, n_columns - 1, wid)
 
-    # Set resize mode of vertical header to ResizeToContent(3)
-        self.verticalHeader().setSectionResizeMode(row, 3)
+    # Set resize mode of vertical header
+        self.v_header.setSectionResizeMode(row, style.HRM_RESIZETOCONTENTS)
 
 
     def refresh(self, features: list[str]) -> None:
@@ -4423,24 +4865,29 @@ class DatasetDesigner(StyledTable):
         identify multiple files based on their name fitting with column names.
 
         '''
-    # Do nothing if path is invalid or file dialog is canceled
+    # Exit function if row cannot be retrieved from fill-row sender button
+        if not isinstance(sender := self.sender(), StyledButton):
+            return
+        row = self.indexAt(sender.pos()).row()
+        
+    # Exit function if path is invalid or file dialog is canceled
         ftype = 'ASCII maps (*.txt *.gz)'
-        paths = FileDialog(self, 'O', 'Load Maps', ftype, multifile=True).get()
+        paths = FileDialog(self, 'O', 'Load Maps', ftype, multifile=True).get_paths()
         if not paths:
             return
         
     # Try matching maps with loaded file names
         required_maps = self.columns[1:-2]
         pbar = PopUpProgBar(self, len(paths), 'Loading maps')
-        bad_files = []
+        bad_files: list[str] = []
         for n, p in enumerate(paths, start=1):
             try:
                 matching_col = cf.match_map(cf.path2filename(p), required_maps)
             # If a filename matches with a column, then add it
                 if matching_col is not None:
-                    row = self.indexAt(self.sender().pos()).row()
                     col = self.columns.index(matching_col)
-                    self.cellWidget(row, col).addFile(p)
+                    if (loader := self.get_file_loader(row, col)) is not None:
+                        loader.addFile(p)
 
             except FileNotFoundError:
                 bad_files.append(p)
@@ -4451,6 +4898,28 @@ class DatasetDesigner(StyledTable):
         if len(bad_files):
             text = 'One or more files have been deleted, removed or renamed.'
             MsgBox(self, 'Crit', text, '\n'.join(bad_files))
+
+
+    def get_file_loader(self, row: int, col: int) -> StatusFileLoader | None:
+        '''
+        Return the file loader widget at 'row', 'col'.
+
+        Parameters
+        ----------
+        row : int
+            Cell row.
+        col : int
+            Cell column.
+
+        Returns
+        -------
+        StatusFileLoader | None
+            The cell widget if its type is 'StatusFileLoader', otherwise None.
+            
+        '''
+        if isinstance(wid := self.cellWidget(row, col), StatusFileLoader):
+            return wid
+        return None
 
 
     def getRowData(self, row: int) -> tuple[list[InputMap], MineralMap | None]:
@@ -4471,181 +4940,30 @@ class DatasetDesigner(StyledTable):
 
         '''
         n_columns = self.columnCount()
-        input_maps, mineral_map = [], None
-
+        input_maps: list[InputMap] = []
+        mineral_map: MineralMap | None = None
         pbar = PopUpProgBar(self, n_columns - 1, 'Loading data')
 
         for col in range(1, n_columns):
-            try:
-                # Skip separator column
-                if col == n_columns - 2: 
-                    continue
-                wid = self.cellWidget(row, col)
-                path = wid.filepath
-                # Extract Mineral Map
-                if col == n_columns - 1:
-                    mineral_map = MineralMap.load(path)
-                # Extract Input Map
-                else: 
-                    input_maps.append(InputMap.load(path))
-            except:
-                wid.setStatus('Invalid')
-            finally:
-                pbar.setValue(col)
+            # Skip cell if it not contains a file loader widget (= separator)
+            if (loader := self.get_file_loader(row, col)) is None:
+                pass
+            # Invalidate loader if it contains an invalid filepaths (safety)
+            elif (path := loader.filepath) is None:
+                loader.setStatus('Invalid')
+            # Try loading Input or Mineral Map. Invalidate loader if failed.
+            else:
+                try:
+                    if col == n_columns - 1:
+                        mineral_map = MineralMap.load(path)
+                    else: 
+                        input_maps.append(InputMap.load(path))
+                except:
+                    loader.setStatus('Invalid')
 
-        return input_maps, mineral_map
+            pbar.setValue(col)
 
-
-
-class StatusFileLoader(QW.QWidget):
-
-    def __init__(self, filext: str = '', parent: QW.QWidget | None = None) -> None:
-        '''
-        Interactive widget useful to load filepaths and provide visual feedback
-        on their status (valid, invalid or with warnings).
-
-        Parameters
-        ----------
-        filext : str
-            File extension filter. An empty string means all files. The default
-            is ''.
-        parent : QWidget or None, optional
-            The GUI parent of this widget. The default is None.
-
-        '''
-        super().__init__(parent)
-
-    # Define main attributes
-        self.filter = filext
-        self.filepath = None
-        self.status = 'Invalid'
-
-    # Initialize GUI and connect its signals to slots
-        self._init_ui()
-        self._connect_slots()
-
-
-    def _init_ui(self) -> None:
-        '''
-        GUI constructor.
-
-        '''
-    # Add file (Styled Button)
-        self.add_btn = StyledButton(style.getIcon('CIRCLE_ADD_GREEN'))
-        self.add_btn.setFlat(True)
-
-    # Remove file (Styled Button)
-        self.del_btn = StyledButton(style.getIcon('CIRCLE_DEL_RED'))
-        self.del_btn.setFlat(True)
-        self.del_btn.setEnabled(False)
-
-    # Status file path (Path Label)
-        self.status_path = PathLabel(full_display=False)
-        self.status_path.setFrameWidth(2)
-        self.status_path.setFrameColor(style.BAD_RED)
-
-    # Adjust layout
-        layout = QW.QGridLayout()
-        layout.setContentsMargins(1, 1, 1, 1)
-        layout.addWidget(self.add_btn, 0, 0, QC.Qt.AlignBottom)
-        layout.addWidget(self.del_btn, 0, 1, QC.Qt.AlignBottom)
-        layout.addWidget(self.status_path, 1, 0, 1, -1)
-        self.setLayout(layout)
-
-
-    def _connect_slots(self) -> None:
-        '''
-        Signals-slots connector.
-
-        '''
-        self.add_btn.clicked.connect(self.loadFile)
-        self.del_btn.clicked.connect(self.removeFile)
-
-
-    def loadFile(self) -> None:
-        '''
-        Load file from an open file dialog.
-
-        '''
-        path = FileDialog(self, 'open', 'Load File', self.filter).get()
-        if path:
-            self.addFile(path)
-
-
-    def addFile(self, path: str) -> None:
-        '''
-        Add filepath 'path'. This method can be used to add a path directly 
-        without showing an open file dialog.
-
-        Parameters
-        ----------
-        path : str
-            Filepath to be added.
-
-        '''
-    # Raise error if filepath is invalid
-        if not os.path.exists(path):
-            raise FileNotFoundError(f'File not found: {path}') 
-
-        self.filepath = path
-        self.status_path.setPath(path)
-        self.setStatus('Valid')
-        self.add_btn.setEnabled(False)
-        self.del_btn.setEnabled(True)
-
-
-    def removeFile(self) -> None:
-        '''
-        Remove loaded filepath.
-
-        '''
-        self.filepath = None
-        self.status_path.clearPath()
-        self.setStatus('Invalid')
-        self.add_btn.setEnabled(True)
-        self.del_btn.setEnabled(False)
-
-
-    def getStatus(self) -> str:
-        '''
-        Get the current file status.
-
-        Returns
-        -------
-        str
-            Current status. Can be 'Valid', 'Invalid' or 'Warning'.
-
-        '''
-        return self.status
-
-
-    def setStatus(self, status: str) -> None:
-        '''
-        Set current status of file to 'status'. This visually changes the color
-        of the label frame to green (Valid), red (Invalid) or yellow (Warning).
-
-        Parameters
-        ----------
-        status : str
-            Required status. It must be 'Valid', 'Invalid' or 'Warning'.
-
-        Raises
-        ------
-        ValueError
-            Raised if status is an invalid string.
-
-        '''
-        match status:
-            case 'Valid':
-                self.status_path.setFrameColor(style.OK_GREEN)
-            case 'Invalid':
-                self.status_path.setFrameColor(style.BAD_RED)
-            case 'Warning':
-                self.status_path.setFrameColor(style.WARN_YELLOW)
-            case _:
-                raise ValueError(f'Invalid status: {status}.')
-        
-        self.status = status
+        return (input_maps, mineral_map)
 
 
 
@@ -4668,13 +4986,13 @@ class MapsMatcher(StyledTable):
         '''
     # Set widget properties
         super().__init__(0, 2, ext_sel=False, parent=parent)
-        self.setEditTriggers(QW.QAbstractItemView.NoEditTriggers)
-        self.setSelectionMode(QW.QAbstractItemView.NoSelection)
+        self.setEditTriggers(QW.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setSelectionMode(QW.QAbstractItemView.SelectionMode.NoSelection)
 
-    # Set headers properties
-        self.horizontalHeader().setSectionResizeMode(3) # resize to contents
-        self.horizontalHeader().setStretchLastSection(True)
-        self.horizontalHeader().setHidden(True)
+    # Set horizontal header properties
+        self.h_header.setSectionResizeMode(style.HRM_RESIZETOCONTENTS)
+        self.h_header.setStretchLastSection(True)
+        self.h_header.setHidden(True)
 
 
     def setMaps(self, maps_names: list[str]) -> None:
@@ -4701,20 +5019,19 @@ class MapsMatcher(StyledTable):
         self.mapsChanged.emit()
 
     
-    def updateSelector(self, index: int, items: list[str]) -> None:
+    def updateSelector(self, row: int, items: list[str]) -> None:
         '''
-        Populate the selector at 'index' with 'items'.
+        Populate the selector at 'row' with 'items'.
 
         Parameters
         ----------
-        index : int
-            Index of the selector.
+        row : int
+            Row index of the selector.
         items : list[str]
             List of maps names available for matching.
 
         '''
-        selector: AutoUpdateComboBox = self.cellWidget(index, 1)
-        selector.updateItems(items)
+        self.getSelector(row).updateItems(items)
 
 
     def autoFillSelectors(self, items: list[str]):
@@ -4727,16 +5044,69 @@ class MapsMatcher(StyledTable):
         ----------
         items : list[str]
             List of maps names available for matching.
+
         '''
         for row in range(self.rowCount()):
-        # Update each selector with 'items'
-            map_name = self.item(row, 0).text()
-            selector: AutoUpdateComboBox = self.cellWidget(row, 1)
+            # Update each selector with 'items'
+            selector = self.getSelector(row)
             selector.updateItems(items)
-        # Setting selector index to -1 will display an empty current text
+
+            # Set selector current index. Index -1 will display an empty text.
+            map_name = self.getMapName(row)
             matching = cf.match_map(map_name, items)
             index = -1 if matching is None else items.index(matching)
             selector.setCurrentIndex(index)
+
+
+    def getMapName(self, row: int) -> str:
+        '''
+        Get map name at 'row'.
+
+        Parameters
+        ----------
+        row : int
+            Row index of the map.
+
+        Returns
+        -------
+        map_name : str
+            Name of the map at 'row'.
+
+        Raises
+        ------
+        ValueError
+            Raised when 'row' is an invalid row index.
+
+        '''
+        if (item := self.item(row, 0)) is None:
+            raise ValueError(f'Invalid row index: {row}')
+        map_name = item.text()
+        return map_name
+
+
+    def getSelector(self, row: int) -> AutoUpdateComboBox:
+        '''
+        Get the selector at 'row'.
+
+        Parameters
+        ----------
+        row : int
+            Row index of the selector.
+
+        Returns
+        -------
+        selector : AutoUpdateComboBox
+            Selector at 'row'.
+
+        Raises
+        ------
+        ValueError
+            Raised when 'row' is an invalid row index.
+
+        '''
+        if (selector := self.cellWidget(row, 1)) is None:
+            raise ValueError(f'Invalid row index: {row}')
+        return selector
 
 
     def getMatchedMaps(self) -> list[str]:
@@ -4751,7 +5121,7 @@ class MapsMatcher(StyledTable):
 
         '''
         rows = range(self.rowCount())
-        return [self.cellWidget(r, 1).currentText() for r in rows]
+        return [self.getSelector(r).currentText() for r in rows]
     
 
     def getMatchedIndices(self) -> list[int]:
@@ -4767,4 +5137,4 @@ class MapsMatcher(StyledTable):
 
         '''
         rows = range(self.rowCount())
-        return [self.cellWidget(r, 1).currentIndex() for r in rows]
+        return [self.getSelector(r).currentIndex() for r in rows]

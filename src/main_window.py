@@ -4,7 +4,7 @@ Created on Sun Mar  5 19:31:39 2023
 
 @author: albdag
 """
-import gc
+
 import json
 import pickle
 import zipfile
@@ -13,6 +13,7 @@ from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
+from _base import InputMap, MineralMap, Mask
 import convenient_functions as cf
 import custom_widgets as CW
 import dialogs
@@ -24,6 +25,8 @@ import tools
 
 class MainWindow(QW.QMainWindow):
 
+    projectModified = QC.pyqtSignal()
+
     def __init__(self) -> None:
         '''
         The main window of X-Min Learn.
@@ -34,13 +37,13 @@ class MainWindow(QW.QMainWindow):
     # Set main window properties
         self.setWindowTitle('New project[*]') 
         self.setWindowIcon(style.getIcon('LOGO_32'))
-        self.setDockOptions(self.AllowTabbedDocks)
+        self.setDockOptions(self.DockOption.AllowTabbedDocks)
         self.setAnimated(settings.manager.get('GUI/smooth_animation'))
         self.setStyleSheet(style.SS_MAINWINDOW)
 
     # Set main window attributes
-        self.project_path = None
-        self.open_tools = []
+        self.project_path: str | None = None
+        self.open_tools: list[tools.DraggableTool] = []
 
     # Initialize GUI and connect its signals with slots
         self._init_ui()
@@ -61,11 +64,14 @@ class MainWindow(QW.QMainWindow):
 
     # Central Widget (Tab Widget)
         self.tabWidget = MainTabWidget(self)
-        self.tabWidget.addTab(self.dataViewer)
+        self.tabWidget.add_tabified_widget(self.dataViewer)
         self.setCentralWidget(self.tabWidget)
 
     # Hide the close button from the data viewer tab
-        self.tabWidget.tabBar().tabButton(0, QW.QTabBar.RightSide).hide()
+        btn_pos = QW.QTabBar.ButtonPosition.RightSide
+        btn = self.tabWidget.tabbar.tabButton(0, btn_pos)
+        if btn is not None:
+            btn.hide()
 
     # Initialize panes
         self._init_panes()
@@ -81,7 +87,8 @@ class MainWindow(QW.QMainWindow):
 
     # Add app version label to status bar
         version_lbl = QW.QLabel(QW.qApp.applicationVersion())
-        self.statusBar().addPermanentWidget(version_lbl)
+        if (statusbar := self.statusBar()) is not None:
+            statusbar.addPermanentWidget(version_lbl)
 
 
     def _init_panes(self) -> None:
@@ -154,31 +161,32 @@ class MainWindow(QW.QMainWindow):
                       probmap_pane, rgba_pane)
         
     # Store the panes toggle view actions, set their icons and their objectName
-        self.panes_tva = []
+        self.panes_tva: list[QW.QAction] = []
         for p in self.panes:
-            action = p.toggleViewAction()
-            action.setStatusTip(p.tip)
             p.setObjectName(p.title) # required for saving pane state
-            if p.icon is not None:
-                action.setIcon(p.icon)
-                action.setIconVisibleInMenu(True)
-            self.panes_tva.append(action)
+            action = p.toggleViewAction()
+            if action is not None:
+                action.setStatusTip(p.tip)
+                if p.icon is not None:
+                    action.setIcon(p.icon)
+                    action.setIconVisibleInMenu(True)
+                self.panes_tva.append(action)
 
     # Add panes to main window
-        self.addPane(QC.Qt.LeftDockWidgetArea, manager_pane)
-        self.addPane(QC.Qt.LeftDockWidgetArea, histogram_pane, visible=False)
-        self.addPane(QC.Qt.LeftDockWidgetArea, mode_pane, visible=False)
+        self.addPane(QC.Qt.DockWidgetArea.LeftDockWidgetArea, manager_pane, True)
+        self.addPane(QC.Qt.DockWidgetArea.LeftDockWidgetArea, histogram_pane)
+        self.addPane(QC.Qt.DockWidgetArea.LeftDockWidgetArea, mode_pane)
         self.tabifyDockWidget(manager_pane, histogram_pane)
         self.tabifyDockWidget(manager_pane, mode_pane)
-        self.addPane(QC.Qt.RightDockWidgetArea, roi_pane, visible=False)
-        self.addPane(QC.Qt.RightDockWidgetArea, probmap_pane, visible=False)
-        self.addPane(QC.Qt.RightDockWidgetArea, rgba_pane, visible=False)
+        self.addPane(QC.Qt.DockWidgetArea.RightDockWidgetArea, roi_pane)
+        self.addPane(QC.Qt.DockWidgetArea.RightDockWidgetArea, probmap_pane)
+        self.addPane(QC.Qt.DockWidgetArea.RightDockWidgetArea, rgba_pane)
         self.tabifyDockWidget(roi_pane, probmap_pane)
         self.tabifyDockWidget(roi_pane, rgba_pane)
 
     # Resize panes
         w = max([p.widget().minimumSizeHint().width() for p in self.panes])
-        self.resizeDocks(self.panes, [w] * len(self.panes), QC.Qt.Horizontal)
+        self.resizeDocks(self.panes, [w] * len(self.panes), style.O_HORIZONTAL)
         
 
     def _init_actions(self) -> None:
@@ -304,80 +312,101 @@ class MainWindow(QW.QMainWindow):
         self.panes_toolbar.addActions(self.panes_tva)
 
     # Set default toolbars position in the window
-        self.addToolBar(QC.Qt.LeftToolBarArea, self.panes_toolbar)
-        self.addToolBar(QC.Qt.LeftToolBarArea, self.tools_toolbar)
+        self.addToolBar(QC.Qt.ToolBarArea.LeftToolBarArea, self.panes_toolbar)
+        self.addToolBar(QC.Qt.ToolBarArea.LeftToolBarArea, self.tools_toolbar)
 
 
     def _init_menu(self) -> None:
         '''
         Initialize main menu.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if the menu bar initialization fails.
         
         '''
     # Set custom stylesheet to menu bar
-        menu_bar = self.menuBar()
+        if (menu_bar := self.menuBar()) is None:
+            raise RuntimeError("Failed to initialize menu bar.")
         menu_bar.setStyleSheet(style.SS_MENUBAR + style.SS_MENU)
 
+    # Initialize menus
+        file_menu = QW.QMenu('&File', menu_bar)
+        dataset_menu = QW.QMenu('&Dataset', menu_bar)
+        class_menu = QW.QMenu('&Classification', menu_bar)
+        postclass_menu = QW.QMenu('&Post-classification', menu_bar)
+        utility_menu = QW.QMenu('&Utility', menu_bar)
+        view_menu = QW.QMenu('&View', menu_bar)
+        info_menu = QW.QMenu('&?', menu_bar)
+
     # File Menu
-        file_menu = menu_bar.addMenu('&File')
         file_menu.addActions((
             self.new_project_action,
             self.open_project_action,
             self.save_project_action,
             self.save_project_as_action
         ))
-
         file_menu.addSeparator()
 
-        import_submenu = file_menu.addMenu(style.getIcon('IMPORT'), '&Import...')
+        # File -> Import sub-menu
+        import_submenu = QW.QMenu('&Import...', file_menu)
+        import_submenu.setIcon(style.getIcon('IMPORT'))
         import_submenu.addActions((
             self.load_inmaps_action,
             self.load_minmaps_action,
             self.load_masks_action
         ))
-        
+        file_menu.addMenu(import_submenu)
+
         file_menu.addActions((self.pref_action, self.close_action))
+        menu_bar.addMenu(file_menu)
 
     # Dataset Menu
-        dataset_menu = menu_bar.addMenu('&Dataset')
         dataset_menu.addActions((
             self.ds_builder_action,
             self.subsample_ds_action,
             self.merge_ds_action
         ))
-        
+        menu_bar.addMenu(dataset_menu)
+
     # Classification Menu
-        class_menu = menu_bar.addMenu('&Classification')
         class_menu.addActions((
             self.classifier_action, self.model_learner_action))
+        menu_bar.addMenu(class_menu)
 
     # Post-classification Menu
-        postclass_menu = menu_bar.addMenu('&Post-classification')
         postclass_menu.addAction(self.refiner_action)
+        menu_bar.addMenu(postclass_menu)
 
     # Utility Menu
-        utility_menu = menu_bar.addMenu('&Utility')
-        convert_submenu = utility_menu.addMenu('&Convert')
+        # Utility -> Convert sub-menu
+        convert_submenu = QW.QMenu('&Convert', utility_menu)
         convert_submenu.addActions((
             self.conv2inmap_action, self.conv2minmap_action))
+        utility_menu.addMenu(convert_submenu)
+
         utility_menu.addAction(self.dummymap_action)
+        menu_bar.addMenu(utility_menu)
 
     # View Menu
-        view_menu = menu_bar.addMenu('&View')
-        panes_submenu = view_menu.addMenu('&Panes')
+        # View -> Panes sub-menu
+        panes_submenu = QW.QMenu('&Panes', view_menu)
         panes_submenu.addActions(self.panes_tva)
+        view_menu.addMenu(panes_submenu)
+
         view_menu.addSeparator()
-        view_menu.addActions((
-            self.panes_toolbar.toggleViewAction(),
-            self.tools_toolbar.toggleViewAction()
-        ))
+        view_menu.addAction(self.panes_toolbar.toggleViewAction())
+        view_menu.addAction(self.tools_toolbar.toggleViewAction())
+        menu_bar.addMenu(view_menu)
         
     # Info menu
-        info_menu = menu_bar.addMenu('&?')
         info_menu.addActions((self.about_action, self.aboutqt_action))
         # Separator
         # Help (user-guide?)
         # Separator
         # Check updates (link to github page?)
+        menu_bar.addMenu(info_menu)
 
 
     def _connect_slots(self) -> None:
@@ -385,8 +414,12 @@ class MainWindow(QW.QMainWindow):
         Signals-slots connector.
 
         '''
+    # Project modification-aware signal, forwarded by some child signals
+        self.projectModified.connect(self.on_project_modified)
+
     # Main Tab Widget signals
-        self.tabWidget.tabDetachRequested.connect(self.popOutTool)
+        self.tabWidget.tabToolDetachRequested.connect(self.popOutTool)
+        self.tabWidget.tabToolCloseRequested.connect(self.on_close_tabified_tool)
 
     # Connect all panes toggle view actions with a custom slot to force showing
     # them when they are tabified
@@ -397,54 +430,36 @@ class MainWindow(QW.QMainWindow):
         self.dataManager.updateSceneRequested.connect(self.updateScene)
         self.dataManager.clearSceneRequested.connect(self.clearScene)
         self.dataManager.rgbaChannelSet.connect(self.setRgbaChannel)
-        self.dataManager.model().dataChanged.connect(
-            lambda: self.setWindowModified(True))
-        self.dataManager.model().rowsRemoved.connect(
-            lambda: self.setWindowModified(True))
+        self.dataManager.dataModified.connect(self.projectModified)
         
     # Histogram Viewer signals
-        self.histViewer.scalerRangeChanged.connect(
-            lambda: self.setWindowModified(True))
+        self.histViewer.scalerRangeChanged.connect(self.projectModified)
 
-    # Mode Viewer signal
+    # Mode Viewer signals
         self.modeViewer.updateSceneRequested.connect(self.updateScene)
 
     # ROI Editor signals
         self.roiEditor.rectangleSelectorUpdated.connect(self.updateHistogram)
-        self.roiEditor.rectangleSelectorUpdated.connect(
-            lambda: self.setWindowModified(True))
-
-        self.roiEditor.autoroi_dial.maps_selector.sampleUpdateRequested.connect(
-            lambda: self.roiEditor.autoroi_dial.maps_selector.updateCombox(
+        self.roiEditor.rectangleSelectorUpdated.connect(self.projectModified)
+        self.roiEditor.roiDataAltered.connect(self.projectModified)
+        self.roiEditor.autoroiSamplesRequested.connect(
+            lambda: self.roiEditor.updateDetectorSamplesList(
                 self.dataManager.getAllGroups()))
         
-        self.roiEditor.autoroi_dial.maps_selector.mapsUpdateRequested.connect(
-            lambda idx: self.roiEditor.autoroi_dial.maps_selector.updateList(
-                self.dataManager.topLevelItem(idx)))
+    # Probability Map Viewer signals
+        self.pmapViewer.probabilityRangeChanged.connect(self.projectModified)
         
-        self.roiEditor.table.model().dataChanged.connect(
-            lambda: self.setWindowModified(True))
-        self.roiEditor.table.model().rowsRemoved.connect(
-            lambda: self.setWindowModified(True))
+    # RGBA Viewer signals
+        self.rgbaViewer.rgbaModified.connect(self.projectModified)
         
-    # Probability Map Viewer signal
-        self.pmapViewer.probabilityRangeChanged.connect(
-            lambda: self.setWindowModified(True))
-        
-    # RGBA Viewer signal
-        self.rgbaViewer.rgbaModified.connect(
-            lambda: self.setWindowModified(True))
-        
-    # Project-related operations (new, open, save) 
+    # Project-related actions (new, open, save) 
         self.new_project_action.triggered.connect(self.newProject)
         self.open_project_action.triggered.connect(self.openProject)
-        self.save_project_action.triggered.connect(
-            lambda: self.saveProject(overwrite=True))
-        self.save_project_as_action.triggered.connect(
-            lambda: self.saveProject(overwrite=False))
+        self.save_project_action.triggered.connect(self._onSaveProject)
+        self.save_project_as_action.triggered.connect(self._onSaveProject)
         
     # Quit app 
-        self.close_action.triggered.connect(self.close)
+        self.close_action.triggered.connect(self._onCloseAction)
 
     # Import data  
         self.load_inmaps_action.triggered.connect(self.importData)
@@ -502,6 +517,32 @@ class MainWindow(QW.QMainWindow):
                 'PhaseRefiner', settings.manager.get('GUI/tools_tabbed')))
 
 
+    def on_project_modified(self) -> None:
+        '''
+        Actions to perform when the current project is modified.
+
+        '''
+        self.setWindowModified(True)
+
+
+    def on_close_tabified_tool(self, idx: int) -> None:
+        '''
+        Actions to be performed when user requests to close a tab of the main
+        tab widget containing a tool.
+
+        Parameters
+        ----------
+        idx : int
+            Index of the tab to be closed.
+            
+        '''
+        # Ask confirm to close the tool contained in the tab
+        if isinstance(tool := self.tabWidget.widget(idx), tools.DraggableTool):
+            if tool.is_safe_to_close():
+                self.unregister_tool(tool)
+                self.tabWidget.closeTab(idx)
+
+
     def about(self) -> None:
         '''
         Show the about X-Min Learn dialog.
@@ -538,7 +579,7 @@ class MainWindow(QW.QMainWindow):
         self,
         area: QC.Qt.DockWidgetArea,
         pane: docks.Pane,
-        visible: bool = True
+        visible: bool = False
     ) -> None:
         '''
         Add 'pane' to main window as a dock widget, located in the specified
@@ -551,7 +592,7 @@ class MainWindow(QW.QMainWindow):
         pane : docks.Pane
             Pane to be added.
         visible : bool, optional
-            Whether the pane should be visible. The default is True.
+            Whether the pane should be visible. The default is False.
 
         '''
         self.addDockWidget(area, pane)
@@ -591,8 +632,14 @@ class MainWindow(QW.QMainWindow):
         QW.QMenu
             Styled popup menu.
 
+        Raises
+        -------
+        RuntimeError
+            Raised if the creation of the popup menu fails.
+
         '''
-        popupmenu = super().createPopupMenu()
+        if (popupmenu := super().createPopupMenu()) is None:
+            raise RuntimeError("Failed to create popup menu.")
         popupmenu.setStyleSheet(style.SS_MENU)
         return popupmenu
 
@@ -613,7 +660,7 @@ class MainWindow(QW.QMainWindow):
 
         '''
     # Force garbage collection every time a new tool instance gets opened
-        gc.collect()
+        # gc.collect()
         
     # Dataset Builder instances have no special signal to connect
         if toolname == 'DatasetBuilder':
@@ -629,9 +676,6 @@ class MainWindow(QW.QMainWindow):
             tool.inmaps_selector.sampleUpdateRequested.connect(
                 lambda: tool.inmaps_selector.updateCombox(
                     self.dataManager.getAllGroups()))
-            tool.inmaps_selector.mapsUpdateRequested.connect(
-                lambda idx: tool.inmaps_selector.updateList(
-                    self.dataManager.topLevelItem(idx)))
     
     # Phase Refiner instances have sample selector's signals to be connected
         elif toolname == 'PhaseRefiner':
@@ -639,21 +683,18 @@ class MainWindow(QW.QMainWindow):
             tool.minmap_selector.sampleUpdateRequested.connect(
                 lambda: tool.minmap_selector.updateCombox(
                     self.dataManager.getAllGroups()))
-            tool.minmap_selector.mapsUpdateRequested.connect(
-                lambda idx: tool.minmap_selector.updateList(
-                    self.dataManager.topLevelItem(idx)))
     
     # Exit function if 'tool' is not a valid string (safety)
         else:
             return
 
     # Connect tool's 'closed' signal and add it to the list of opened tools
-        tool.closed.connect(lambda: self.closeTool(tool))
+        tool.closed.connect(lambda: self.unregister_tool(tool))
         self.open_tools.append(tool)
 
     # Show tool as a new tab in the tab widget or as a floating window
         if tabbed:
-            self.tabWidget.addTab(tool)
+            self.tabWidget.add_tabified_widget(tool)
         else:
             tool.show()
 
@@ -669,45 +710,57 @@ class MainWindow(QW.QMainWindow):
         index : int
             The index of the tab to be detached.
 
-        '''
-        tool = self.tabWidget.widget(index)
+        '''   
+    # If tool is None, close the tab (safety)
+        if (tool := self.tabWidget.widget(index)) is None:
+            self.tabWidget.closeTab(index)
 
-        if isinstance(tool, tools.DraggableTool):
-        # Set tool as floating (parent=None) and remove it from tab widget
+    # Set draggable tool as floating (parent=None) and close its tab
+        elif isinstance(tool, tools.DraggableTool):
             tool.setParent(None)
             self.tabWidget.closeTab(index)
         # Set tool preferred size and move it to the center of the main window
             center = self.geometry().center()
-            w, h = tool._floating_size.width(), tool._floating_size.height()
+            w, h = tool.floating_size.width(), tool.floating_size.height()
             x, y = center.x() - w // 2, center.y() - h // 2
             QC.QTimer.singleShot(0, lambda: tool.setGeometry(x, y, w, h))
             tool.setVisible(True)
-            
 
-    def closeTool(self, tool: tools.DraggableTool) -> None:
+    # If tool is a QWidget (-> DataViewer) do nothing (safety)
+        else:
+            return
+
+
+    def unregister_tool(self, tool: tools.DraggableTool) -> None:
         '''
-        Properly close a draggable tool, by disconnecting its signals and
-        killing its references to avoid memory leaking.
+        Remove tool from the list of tracked opened tools (clear reference).
 
         Parameters
         ----------
         tool : DraggableTool
-            Tool to be closed.
+            Tool to unregister.
 
         '''
-    # Do nothing if tool is not a DraggableTool (safety)
-        if not isinstance(tool, tools.DraggableTool): 
-            return
-        
-    # If tool is tabbed, remove its tab from the main tab widget
-        if not tool.isFloating():
-            tab_index = self.tabWidget.indexOf(tool)
-            self.tabWidget.closeTab(tab_index)
-    
-    # Destroy tool
-        tool.disconnect()
-        tool.killReferences()
-        self.open_tools.remove(tool)
+        if tool in self.open_tools:
+            self.open_tools.remove(tool)
+
+
+    def close_all_tools(self) -> None:
+        '''
+        Close all opened tool, both floating or tabbed.
+
+        '''
+        for tool in reversed(self.open_tools):
+            # If tool is floating, force its closure without asking confirm
+            if tool.isFloating(): 
+                tool.force_close()
+            # If tool is tabified, destroy it by closing its parent tab
+            else:
+                tab_index = self.tabWidget.indexOf(tool)
+                self.tabWidget.closeTab(tab_index)
+
+        # Clear the list that tracks opened tools
+        self.open_tools.clear()
 
 
     def importData(self) -> None:
@@ -735,54 +788,58 @@ class MainWindow(QW.QMainWindow):
             return
 
 
-    def updateScene(self, item: docks.DataManagerWidgetItem) -> None:
+    def updateScene(self, item: docks.DataManagerWidgetItem | None) -> None:
         '''
         Main control method for rendering data in the Data Viewer and in the 
         panes. 
 
         Parameters
         ----------
-        item : DataObject or DataSubGroup or DataGroup
-            Item to be rendered. Canonically, it should be a DataObject; if a
+        item : DataObject or DataSubGroup or DataGroup or None
+            Item to be rendered; canonically, it should be a DataObject. If a
             DataSubGroup or a DataGroup is passed, this method attempts to
-            re-render the currently displayed data object.
+            re-render the currently displayed data object. If None is passed,
+            this method does nothing.
 
         '''
     # Re-call this method to refresh the displayed map if item is (sub)group
         if isinstance(item, (CW.DataGroup, CW.DataSubGroup)):
             self.updateScene(self.dataViewer._displayed)
 
-    # Actions to be performed when item is a data object
+    # Rendering operations require item to be a data object
         elif isinstance(item, CW.DataObject):
 
         # Exit function and clear the scene if item has been deleted (safety)
             try:
-                i_data, i_path, i_name = item.get('data', 'filepath', 'name')
+                components = item.getComponents()
+                i_data = components['data']
+                i_path = components['filepath']
+                i_name = components['name']
             except RuntimeError:
-                return self.clearScene()     
+                return self.clearScene()
+
         # Exit function and clear the scene if item has no valid parent group
             sample = self.dataManager.getItemParentGroup(item)
             if sample is None:
                 return self.clearScene()
+
         # Check for source file existence
             if not item.filepathValid():
                 item.setNotFound(True)
-        # Also get mask if present
+
+        # Get mask if present
             mode = settings.manager.get('data/mask_merging_rule')
             mask = sample.getCompositeMask('checked', mode=mode)
             if mask is not None:
                 mask = mask.mask
 
-        # Actions to be performed if the item holds map data in general
-            if item.holdsMap():
+        # Actions to be performed if item contains input map data
+            if isinstance(i_data, InputMap):
+                inmap = i_data.map if mask is None else i_data.get_masked(mask)
                 title = f'{sample.name} - {i_name}'
+
                 self.dataViewer._displayed = item
                 self.dataViewer.curr_path.setPath(i_path)
-
-        # Actions to be performed if item holds input map data
-            if item.holdsInputMap():
-                inmap = i_data.map if mask is None else i_data.get_masked(mask)
-
                 self.dataViewer.canvas.draw_heatmap(inmap, title)
                 self.modeViewer.clearAll()
                 self.pmapViewer.canvas.clear_canvas()
@@ -790,35 +847,39 @@ class MainWindow(QW.QMainWindow):
                 if self.histViewer.scaler_action.isChecked():
                     self.histViewer.updateScalerExtents()
    
-        # Actions to be performed if item holds mineral map data
-            elif item.holdsMineralMap():
+        # Actions to be performed if item contains mineral map data
+            elif isinstance(i_data, MineralMap):
                 mmap, enc, col = i_data.get_plot_data()
+                title = f'{sample.name} - {i_name}'
+
                 if mask is None:
                     pmap = i_data.probmap
                 else:
                     _, mmap, pmap = i_data.get_masked(mask)
-
+                
+                self.dataViewer._displayed = item
+                self.dataViewer.curr_path.setPath(i_path)
                 self.dataViewer.canvas.draw_discretemap(mmap, enc, col, title)
-                self.modeViewer.update(item, title)
+                self.modeViewer.update_viewer(item, title)
                 self.pmapViewer.canvas.draw_heatmap(pmap, title)
                 if self.pmapViewer.toggle_range_action.isChecked():
                     self.pmapViewer.updateViewRange()
                 self.histViewer.hideScaler()
                 self.histViewer.canvas.clear_canvas()
 
-        # Actions to be performed if item holds mask data
+        # Actions to be performed if item contains mask data
         # We re-call this method using the currently displayed (map) item so
         # that any visual modification generated by (un)checking a mask is
         # automatically rendered even when the currently selected item in the
         # Data Manager is not a map. This is triggered only within same sample.
-            elif item.holdsMask():
+            elif isinstance(i_data, Mask):
                 displ_item = self.dataViewer._displayed
                 displ_sample = self.dataManager.getItemParentGroup(displ_item)
                 if sample == displ_sample:
                     self.updateScene(displ_item)
 
-        # Actions to be performed if item holds point data
-            # elif currentItem.holdsPointsData(): pass
+        # Actions to be performed if item contains point data
+            # elif isinstance(i_data, PointsAnalysis): pass
 
     # Exit function if item is not group, subgroup or data object (safety)
         else:
@@ -846,12 +907,11 @@ class MainWindow(QW.QMainWindow):
 
         '''
     # Exit function if the canvas does not display an input map
-        if not self.dataViewer.canvas.contains_heatmap(): 
+        if not self.dataViewer.canvas.has_heatmap(): 
             return
 
     # Exit function if data is invalid
-        data = self.dataViewer.canvas.image.get_array()
-        if data is None: 
+        if (data := self.dataViewer.canvas.get_array()) is None: 
             return
         
     # Populate ROI mask using ROI coords if they're valid
@@ -881,11 +941,23 @@ class MainWindow(QW.QMainWindow):
     # Get the current item in the data manager. If it is valid (= a DataObject
     # holding an Input Map), send its data to the RGBA Composite Maps Viewer
         item = self.dataManager.currentItem()
-        if isinstance(item, CW.DataObject) and item.holdsInputMap():
-            self.rgbaViewer.setChannel(channel, item.get('data'))
+        if (
+            isinstance(item, CW.DataObject) and 
+            (inmap := item.getInputMapData()) is not None
+        ):
+            self.rgbaViewer.setChannel(channel, inmap)
 
         # Force show the RGBA pane to provide feedback
             self.setPaneVisibility(self.panes[5], True)
+
+
+    def _onSaveProject(self) -> None:
+        '''
+        Handle "Save" and "Save As" action triggers.
+
+        '''
+        overwrite = self.sender() == self.save_project_action
+        self.saveProject(overwrite)
 
 
     def saveProject(self, overwrite: bool = True) -> bool:
@@ -909,42 +981,54 @@ class MainWindow(QW.QMainWindow):
         n_obj = len(unsaved_data_objects := self.dataManager.unsavedData())
         for n in range(n_obj):
             data_obj = unsaved_data_objects.pop(0)
-            name = data_obj.get('name')
-            subgr = data_obj.subgroup().name
-            group = data_obj.subgroup().group().name
+            
+        # Skip objects with invalid subgroup or group (safety)
+            if (
+                (subgr := data_obj.subgroup()) is None or
+                (group := subgr.group()) is None
+            ):
+                continue
+
+            name = data_obj.getComponents()['name']
+            displ_name = ' / '.join((group.name, subgr.name, name))
             text = (
-                f'Found unsaved data in Data Manager:\n{group} – {subgr} – '
-                f'{name}.\nSave it? ({n_obj - n - 1} more found)'
+                f'Found unsaved data in Data Manager:\n{displ_name}\n'
+                f'Save it? ({n_obj - n - 1} more found)'
             )
-            btns = (
-                QW.QMessageBox.Yes
-                | QW.QMessageBox.YesToAll
-                | QW.QMessageBox.No
-                | QW.QMessageBox.NoToAll
-                | QW.QMessageBox.Cancel
+            btns = QW.QMessageBox.StandardButton(
+                QW.QMessageBox.StandardButton.Yes
+                | QW.QMessageBox.StandardButton.YesToAll
+                | QW.QMessageBox.StandardButton.No
+                | QW.QMessageBox.StandardButton.NoToAll
+                | QW.QMessageBox.StandardButton.Cancel
             )
-            def_btn = QW.QMessageBox.Cancel
-            choice = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)    
-            match choice.clickedButton().text():
-                case '&Yes':
-                    self.dataManager.saveData(data_obj)
-                    continue
-                case 'Yes to &All':
-                    for obj in [data_obj] + unsaved_data_objects:
-                        self.dataManager.saveData(obj)
-                case '&No':
-                    continue
-                case 'N&o to All':
-                    pass
-                case 'Cancel': # also triggers if "X" or "Esc" are pressed
-                    return False
+
+            def_btn = QW.QMessageBox.StandardButton.Cancel
+            msgbox = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)
+            
+            if msgbox.is_choice('Yes'):
+                self.dataManager.saveData(data_obj)
+                continue
+            elif msgbox.is_choice('YesToAll'):
+                for obj in [data_obj] + unsaved_data_objects:
+                    self.dataManager.saveData(obj)
+            elif msgbox.is_choice('No'):
+                continue
+            elif msgbox.is_choice('NoToAll'):
+                pass
+            elif msgbox.is_choice('Cancel'): # also triggers with "X" or "Esc"
+                return False
             break
 
     # Prompt user to deal with unsaved ROI map data
         if self.roiEditor.isRoiMapUnsaved():
             text = 'Found unsaved ROI data in the current ROI map. Save it?'
-            btns = QW.QMessageBox.Yes | QW.QMessageBox.No | QW.QMessageBox.Cancel
-            def_btn = QW.QMessageBox.Cancel
+            btns = QW.QMessageBox.StandardButton(
+                QW.QMessageBox.StandardButton.Yes
+                | QW.QMessageBox.StandardButton.No 
+                | QW.QMessageBox.StandardButton.Cancel
+            )
+            def_btn = QW.QMessageBox.StandardButton.Cancel
             choice = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)
             if choice.yes():
                 self.roiEditor.saveRoiMap()
@@ -957,7 +1041,7 @@ class MainWindow(QW.QMainWindow):
         path = self.project_path
         if not overwrite or path is None:
             ftype = 'X-Min Learn project (*.xmj)'
-            path = CW.FileDialog(self, 'save', 'Save Project', ftype).get()
+            path = CW.FileDialog(self, 'save', 'Save Project', ftype).get_path()
             if not path:
                 return False
 
@@ -1014,9 +1098,14 @@ class MainWindow(QW.QMainWindow):
             return True
 
     # Otherwise, ask for user's choice to save the current project
-        btns = QW.QMessageBox.Yes | QW.QMessageBox.No | QW.QMessageBox.Cancel
-        choice = CW.MsgBox(self, 'QuestWarn', 'Save current project?', 
-                           btns=btns, def_btn=QW.QMessageBox.Yes)
+        text = 'Save current project?'
+        btns = QW.QMessageBox.StandardButton(
+            QW.QMessageBox.StandardButton.Yes 
+            | QW.QMessageBox.StandardButton.No 
+            | QW.QMessageBox.StandardButton.Cancel
+        )
+        def_btn = QW.QMessageBox.StandardButton.Yes
+        choice = CW.MsgBox(self, 'QuestWarn', text, btns=btns, def_btn=def_btn)
     
     # User wants to save -> launch 'saveProject' method and return its output
         if choice.yes(): 
@@ -1048,8 +1137,7 @@ class MainWindow(QW.QMainWindow):
             pane.widget().resetConfig()
         
     # Kill floating and tabbed tools
-        for tool in reversed(self.open_tools):
-            self.closeTool(tool)
+        self.close_all_tools()
    
     # Update window attributes and properties
         self.project_path = None
@@ -1068,7 +1156,7 @@ class MainWindow(QW.QMainWindow):
             
     # Do nothing if project path is invalid (file dialog is canceled)
         ftype = 'X-Min Learn project (*.xmj)'
-        path = CW.FileDialog(self, 'open', 'Open Project', ftype).get()
+        path = CW.FileDialog(self, 'open', 'Open Project', ftype).get_path()
         if not path:
             return
         
@@ -1080,7 +1168,8 @@ class MainWindow(QW.QMainWindow):
                 panes_data = json.loads(xmj.read('PanesData'))
                 tools_data = pickle.loads(xmj.read('ToolsData'))
         except Exception as e:
-            return CW.MsgBox(self, 'Crit', 'Failed to open project.', str(e))
+            CW.MsgBox(self, 'Crit', 'Failed to open project.', str(e))
+            return
         
     # Ask for user's choice if the project and the app version do not coincide
         if (v := project_info['Version']) != QW.qApp.applicationVersion():
@@ -1109,7 +1198,7 @@ class MainWindow(QW.QMainWindow):
 
     # Load current view object
         for item in self.dataManager.getAllDataObjects():
-            if item.get('filepath') == current_view['Path']:
+            if item.getComponents()['filepath'] == current_view['Path']:
                 self.dataManager.setCurrentItem(item)
                 self.updateScene(item)
                 break
@@ -1128,7 +1217,15 @@ class MainWindow(QW.QMainWindow):
                       '\n\n'.join((f'{k} -> {e}' for k, e in loading_errors)))
 
 
-    def closeEvent(self, event: QG.QCloseEvent) -> None:
+    def _onCloseAction(self):
+        '''
+        Handle main window closure action from File menu.
+
+        '''
+        self.close()
+
+
+    def closeEvent(self, a0: QG.QCloseEvent | None) -> None:
         '''
         Reimplementation of the closeEvent. It shows a dialog to save the
         project if it has been modified. The current state of the window is
@@ -1136,27 +1233,31 @@ class MainWindow(QW.QMainWindow):
 
         Parameters
         ----------
-        event : QCloseEvent
+        a0 : QCloseEvent or None
             The close event.
 
         '''
+        # Exit function when close event is invalid (safety)
+        if a0 is None:
+            return
+        
         if self.projectSafeToClose():
         # Avoid to manually have to close floating tools if main app is closed
-            for tool in reversed(self.open_tools):
-                self.closeTool(tool)
+            self.close_all_tools()
 
         # Save the current state of main window's panes and toolbars
             settings.manager.set('system/window_state', self.saveState(version=0))
-            event.accept()
+            a0.accept()
             
         else:
-            event.ignore()
+            a0.ignore()
 
 
 
 class MainTabWidget(QW.QTabWidget):
 
-    tabDetachRequested = QC.pyqtSignal(int)
+    tabToolDetachRequested = QC.pyqtSignal(int) # index of tab
+    tabToolCloseRequested = QC.pyqtSignal(int) # index of tab
 
     def __init__(self, parent: QW.QWidget) -> None:
         '''
@@ -1171,6 +1272,11 @@ class MainTabWidget(QW.QTabWidget):
         parent : QWidget
             The GUI parent of this widget.
 
+        Raises
+        ------
+        RuntimeError
+            Raised if the main tab bar initialization fails.
+
         '''
         super().__init__(parent)
 
@@ -1182,8 +1288,11 @@ class MainTabWidget(QW.QTabWidget):
         self.setMovable(True)
         self.setTabsClosable(True)
 
-    # Enable custom context menu for tab bar
-        self.tabBar().setContextMenuPolicy(QC.Qt.CustomContextMenu)
+    # Create a tab bar with a custom context menu
+        if (tabbar := self.tabBar()) is None:
+            raise RuntimeError("Failed to initialize the main tab bar.")
+        self.tabbar = tabbar
+        self.tabbar.setContextMenuPolicy(QC.Qt.ContextMenuPolicy.CustomContextMenu)
 
     # Connect signals to slots
         self._connect_slots()
@@ -1195,9 +1304,9 @@ class MainTabWidget(QW.QTabWidget):
 
         '''
     # Tab bar signals
-        self.tabCloseRequested.connect(lambda idx: self.widget(idx).close())
-        self.tabBarDoubleClicked.connect(self.tabDetachRequested.emit)
-        self.tabBar().customContextMenuRequested.connect(self.showContextMenu)
+        self.tabCloseRequested.connect(self.tabToolCloseRequested)
+        self.tabBarDoubleClicked.connect(self.tabToolDetachRequested)
+        self.tabbar.customContextMenuRequested.connect(self.showContextMenu)
 
 
     def showContextMenu(self, point: QC.QPoint) -> None:
@@ -1211,8 +1320,7 @@ class MainTabWidget(QW.QTabWidget):
 
         ''' 
     # Do nothing if the point is not on a tab
-        tabbar = self.tabBar()
-        tab_idx = tabbar.tabAt(point)
+        tab_idx = self.tabbar.tabAt(point)
         if tab_idx == -1:
             return
     
@@ -1229,55 +1337,62 @@ class MainTabWidget(QW.QTabWidget):
         menu.addAction(
             style.getIcon('UNDOCK'), 
             'Detach', 
-            lambda: self.tabDetachRequested.emit(tab_idx)
+            lambda: self.tabToolDetachRequested.emit(tab_idx)
         )
         
     # Close tool (Action)
         menu.addAction(
             style.getIcon('CLOSE'),
             'Close',
-            lambda: self.tabCloseRequested.emit(tab_idx)
+            lambda: self.tabToolCloseRequested.emit(tab_idx)
         )
 
     # Show the menu in the same spot where the user triggered the event
-        menu.exec(tabbar.mapToGlobal(point)) 
+        menu.exec(self.tabbar.mapToGlobal(point)) 
 
     # Force tab bar to update hover state after menu closes (fix visual bug)
         global_pos = QG.QCursor.pos()
-        pos = tabbar.mapFromGlobal(global_pos)
-        evt = QG.QMouseEvent(QC.QEvent.MouseMove, pos, global_pos,
-                             QC.Qt.NoButton, QC.Qt.NoButton, QC.Qt.NoModifier)
-        QW.qApp.sendEvent(tabbar, evt)
+        pos = self.tabbar.mapFromGlobal(global_pos)
+        event = QG.QMouseEvent(
+            QC.QEvent.Type.MouseMove,
+            pos,
+            global_pos,
+            QC.Qt.MouseButton.NoButton,
+            QC.Qt.MouseButton.NoButton,
+            QC.Qt.KeyboardModifier.NoModifier
+        )
+        QW.qApp.sendEvent(self.tabbar, event)
 
 
-    def addTab(self, widget: tools.DraggableTool | QW.QWidget) -> None:
+    def add_tabified_widget(self, widget: tools.DraggableTool | QW.QWidget) -> None:
         '''
-        Reimplementation of the default 'addTab' method. A GroupScrollArea is
-        set as the 'widget' container. This helps in the visualization of
-        complex widgets across different sized screens.
+        Add a tabified widget. A GroupScrollArea is set as the container for 
+        the provided 'widget'. This helps in the visualization of complex 
+        widgets across different sized screens.
 
         Parameters
         ----------
         widget : DraggableTool or QWidget
-            The widget to be added as tab.
+            The widget to be added in a new tab.
 
         '''
     # Insert widget in a scroll area, add it and set it as the current tab
         icon, title = widget.windowIcon(), widget.windowTitle()
         scroll = CW.GroupScrollArea(widget)
-        super().addTab(scroll, icon, title)
+        scroll.setAttribute(QC.Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.addTab(scroll, icon, title)
         self.setCurrentWidget(scroll)
 
-    # Send 'tabified' signal if a draggable tool is added
+    # Send 'tabified' signal if a draggable tool is added (currently useless)
         if isinstance(widget, tools.DraggableTool):
             widget.tabified.emit()
 
 
-    def widget(self, index: int) -> QW.QWidget | None:
+    def widget(self, index: int) -> tools.DraggableTool | QW.QWidget | None:
         '''
         Reimplementation of the default 'widget' method. Returns the widget
         held by the tab at 'index' by extracting it from the GroupScrollArea
-        that wraps it (see 'addTab' method for more details).
+        that wraps it (see 'add_tabified_widget' method for more details).
 
         Parameters
         ----------
@@ -1286,12 +1401,19 @@ class MainTabWidget(QW.QTabWidget):
 
         Returns
         -------
-        wid : QWidget or None
+        wid : DraggableTool or QWidget or None
             The widget in the tab page or None if 'index' is out of range.
 
         '''
-        scroll_area = self.scrollArea(index)
-        wid = None if scroll_area is None else scroll_area.wrappedObject()
+        # Return None if index is out of range
+        if (scroll_area := self.scrollArea(index)) is None:
+            return None
+        
+        # Return None if wrapped object is not a valid type (safety)
+        wid = scroll_area.wrappedObject()
+        if not isinstance(wid, (tools.DraggableTool, QW.QWidget)):
+            return None
+        
         return wid
 
 
@@ -1324,12 +1446,12 @@ class MainTabWidget(QW.QTabWidget):
             The tab index in the tab bar.
 
         '''
-    # 'removeTab' just removes the tab from the tab bar but does not delete the
-    # actual widget page, so we manually do it by deleting the scroll area that
-    # wraps the tool
+        # 'removeTab' just removes the tab from the tab bar but does not delete
+        # the actual widget page. Therefore, we manually do it by closing the
+        # scroll area (page of the tab). This also destroys the wrapped tool.
         scroll_area = self.scrollArea(index)
-        self.removeTab(index) 
-        scroll_area.deleteLater()
+        self.removeTab(index)
+        scroll_area.close()
 
 
     def indexOf(self, widget: tools.DraggableTool | QW.QWidget) -> int:
@@ -1370,60 +1492,69 @@ class MainTabWidget(QW.QTabWidget):
 
         Returns
         -------
-        int
+        idx : int
             Index of the scroll area.
 
         '''
-        super().indexOf(scroll_area)
+        if (idx := super().indexOf(scroll_area)) is None:
+            return -1
+        return idx
     
 
-    def getAllWidgets(self) -> list[tools.DraggableTool, QW.QWidget]:
+    def getAllWidgets(self) -> list[tools.DraggableTool | QW.QWidget]:
         '''
         Return a list of all the widgets (not the scroll areas that wrap them)
         included in the tab widget.
 
-
         Returns
         -------
-        list[DraggableTool, QWidget]
+        list[DraggableTool or QWidget]
             List of widgets.
 
         '''
         return [self.widget(idx) for idx in range(self.count())]
 
 
-    def dragEnterEvent(self, event: QG.QDragEnterEvent) -> None:
+    def dragEnterEvent(self, a0: QG.QDragEnterEvent | None) -> None:
         '''
         Reimplementation of the default 'dragEnterEvent' method. Customized to
         accept only DraggableTool instances.
 
         Parameters
         ----------
-        event : QDragEntervent
+        a0 : QDragEntervent or None
             The drag enter event triggered by the user's drag action.
 
         '''
-        if isinstance(event.source(), tools.DraggableTool):
-            event.accept()
+    # Do nothing if event is null (safety)
+        if a0 is None:
+            return
+        
+    # Accept only events from a valid source
+        if isinstance(a0.source(), tools.DraggableTool):
+            a0.accept()
 
 
-    def dropEvent(self, event: QG.QDropEvent) -> None:
+    def dropEvent(self, a0: QG.QDropEvent | None) -> None:
         '''
         Reimplementation of the default 'dropEvent' method. Customized to
         accept only DraggableTool instances and add them as new tabs. 
 
         Parameters
         ----------
-        event : QDropEvent
+        a0 : QDropEvent or None
             The drop event triggered by the user's drag & drop action.
 
         '''
-        widget = event.source()
-        if isinstance(widget, tools.DraggableTool):
-            event.setDropAction(QC.Qt.MoveAction)
-            event.accept()
-            
+    # Do nothing if event is null (safety)
+        if a0 is None:
+            return
+
+    # Accept only events from a valid source
+        if isinstance(widget := a0.source(), tools.DraggableTool):
+            a0.setDropAction(QC.Qt.DropAction.MoveAction)
+            a0.accept()
         # Suppress updates temporarily for better performances
             self.setUpdatesEnabled(False)
-            self.addTab(widget)
+            self.add_tabified_widget(widget)
             self.setUpdatesEnabled(True)

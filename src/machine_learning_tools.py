@@ -4,12 +4,15 @@ Created on Wed Apr 28 13:06:51 2021
 
 @author: albdag
 """
-from collections.abc import Callable
+
+from collections.abc import Callable, Sequence
+import json
 import math
 import multiprocessing
+from typing import Any, Literal, Protocol, Self, TypedDict, overload
 
 import numpy as np
-from numpy.typing import DTypeLike
+import numpy.typing as npt
 import sklearn.cluster
 import sklearn.metrics
 import sklearn.neighbors
@@ -18,15 +21,18 @@ import torch
 import torch.utils.data as torch_data
 
 from _base import *
+import dataset_tools as dtools
 import convenient_functions as cf
 import settings
 import threads
 
+# Define a generic TensorLike type, that includes both tensors and numpy arrays
+type TensorLike = torch.Tensor | npt.NDArray[Any]
 
 # Set allowed global classes when loading pytorch models 
 torch.serialization.add_safe_globals([
-    np.core.multiarray._reconstruct,
-    np.core.multiarray.scalar,
+    np.core.multiarray._reconstruct, # pyright: ignore[reportAttributeAccessIssue]
+    np.core.multiarray.scalar,       # pyright: ignore[reportAttributeAccessIssue]
     np.dtype,
     np.ndarray,
     np.dtypes.Int8DType,
@@ -38,94 +44,6 @@ torch.serialization.add_safe_globals([
     np.dtypes.Float64DType,
     np.dtypes.StrDType
 ])
-
-
-class NeuralNetwork(torch.nn.Module):
-
-    def __init__(
-        self,
-        name: str = '_name',
-        loss: str ='_loss',
-        seed: int | None = None
-    ) -> None:
-        '''
-        Base class for neural network architectures developed in X-Min Learn.
-
-        Parameters
-        ----------
-        name : str, optional
-            Network name. To be defined by each child. The default is '_name'.
-        loss : str, optional
-            Network loss. To be defined by each child. The default is '_loss'.
-        seed : int or None, optional
-            Random seed. If None it will be automatically generated. The 
-            default is None.
-
-        '''
-        super().__init__()
-
-    # Set main attributes
-        self._name = name
-        self._loss = loss
-
-    # Set random seed
-        torch.random.manual_seed(seed)
-
-
-    def get_weight(self) -> torch.Tensor:
-        '''
-        Return model weights. To be reimplemented in each child class.
-
-        Returns
-        -------
-        torch Tensor
-            Model weights.
-
-        '''
-        return torch.Tensor([])
-
-
-    def get_bias(self) -> torch.Tensor:
-        '''
-        Return model bias. To be reimplemented in each child class.
-
-        Returns
-        -------
-        torch Tensor
-            Model bias.
-
-        '''
-        return torch.Tensor([])
-
-
-# This method is deprecated, since the same result can be achieved through the 
-# 'load_state_dict' method. It may be useful when only certain weights / biases
-# need to be retrieved from parent model. A practical example could be if one 
-# wants to add new layers / network to an already existent model. However this
-# option is not viable in X-Min Learn and there are no plans to enable it.
-    def embedParentNetworkStateDict(self, parent_state_dict: dict):
-    # Get parent weights and biases
-        parent_weights, parent_biases = None, None
-        for k, v in parent_state_dict.items():
-            if 'weight' in k:
-                parent_weights = v
-            elif 'bias' in k:
-                parent_biases = v
-    
-    # Check that parent weights and biases were identified correctly
-        if parent_weights is None or parent_biases is None:
-            raise ValueError('Cannot parse parent weights and/or biases.')
-
-    # Replace parent weights and biases into new network by using the tensor 
-    # size of parent network output (parent_output size)
-        parent_output_size = parent_biases.size(0)
-
-    # The weights tensor is a ixJ (2D) tensor (i=n_class, j=n_Xfeat)
-        self.get_weight().data[:parent_output_size, :] = parent_weights
-
-    # The biases tensor is a j (1D) tensor (j=n_Xfeat)
-        self.get_bias().data[:parent_output_size] = parent_biases
-
 
 
 class TorchDataset(torch_data.Dataset):
@@ -181,6 +99,7 @@ class TorchDataset(torch_data.Dataset):
         return len(self.targ)
 
 
+
 class DataLoader(torch_data.DataLoader):
 
     def __init__(
@@ -221,7 +140,285 @@ class DataLoader(torch_data.DataLoader):
         self.dataset = TorchDataset(features, targets)
         self.batch_size = batch_size
 
-        super().__init__(self.dataset, batch_size, num_workers=workers, pin_memory=True) 
+        super().__init__(self.dataset, batch_size, num_workers=workers, pin_memory=True)
+
+
+
+type Loss = torch.nn.modules.loss._Loss
+type Optimizer = torch.optim.Optimizer
+
+class NeuralNetwork(torch.nn.Module):
+
+    def __init__(
+        self,
+        name: str = '_name',
+        loss: Loss = torch.nn.modules.loss._Loss(),
+        loss_name: str ='_loss',
+        seed: int | None = None
+    ) -> None:
+        '''
+        Base class for neural network architectures developed in X-Min Learn.
+
+        Parameters
+        ----------
+        name : str, optional
+            Network name. To be defined by each child. The default is '_name'.
+        loss : Loss, optional
+            Network loss function. To be defined by each child. The default is 
+            a generic placeholder _Loss().
+        loss_name : str, optional
+            Network loss name. To be defined by each child. The default is '_loss'.
+        seed : int or None, optional
+            Random seed. If None it will be automatically generated. The 
+            default is None.
+
+        '''
+        super().__init__()
+
+    # Set main attributes
+        self._name = name
+        self._loss_name = loss_name
+        self.loss = loss
+
+    # Set random seed
+        torch.random.manual_seed(seed)
+
+
+    def get_weight(self) -> torch.Tensor:
+        '''
+        Return model weights. To be reimplemented in each child class.
+
+        Returns
+        -------
+        torch Tensor
+            Model weights.
+
+        '''
+        return torch.Tensor([])
+
+
+    def get_bias(self) -> torch.Tensor:
+        '''
+        Return model bias. To be reimplemented in each child class.
+
+        Returns
+        -------
+        torch Tensor
+            Model bias.
+
+        '''
+        return torch.Tensor([])
+
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        '''
+        Defines how to process the input 'x'. To be reimplemented in each child 
+        class.
+
+        Parameters
+        ----------
+        x : torch Tensor
+            Input data.
+
+        Returns
+        -------
+        torch Tensor
+            Output data.
+
+        '''
+        return x
+
+
+    def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        '''
+        Defines how to predict output classes and probabilities. To be 
+        reimplemented in each child class.
+
+        Parameters
+        ----------
+        x : torch Tensor
+            Input data.
+
+        Returns
+        -------
+        probs : torch Tensor
+            Probability scores.
+        classes : torch Tensor
+            Output classes.
+
+        '''
+        return x, x
+
+
+    def learn(
+        self,
+        x_train: torch.Tensor,
+        y_train: torch.Tensor, 
+        x_test: torch.Tensor,
+        y_test: torch.Tensor, 
+        optimizer: Optimizer,
+        device: str
+    ) -> tuple[float, float, float, float]:
+        '''
+        Defines a single learning iteration.
+
+        Parameters
+        ----------
+        x_train : torch Tensor
+            Train set feature data.   
+        y_train : torch Tensor
+            Train set target data.
+        x_test : torch Tensor
+            Test set feature data.   
+        y_test : torch Tensor
+            Test set target data.
+        optimizer : Optimizer
+            Model optimization function.
+        device : str
+            Where learning iteration is computed. Can be 'cpu' or 'cuda'.
+
+        Returns
+        -------
+        train_loss : float
+            Train set loss.
+        test_loss : float
+            Test set loss.
+        train_acc : float
+            Train set accuracy.
+        test_acc : float
+            Test set accuracy.
+
+        '''
+        x_train = x_train.to(device)
+        y_train = y_train.long().to(device)
+        x_test = x_test.to(device)
+        y_test = y_test.long().to(device)
+
+    # Predict train data and compute train loss
+        self.train()
+        optimizer.zero_grad()
+
+        out = self.forward(x_train)
+        loss = self.loss(out, y_train)
+        acc = (out.argmax(1) == y_train).float().mean()
+ 
+        loss.backward()
+        optimizer.step()
+
+        train_loss = loss.item()
+        train_acc = acc.item()
+
+    # Predict test data and compute test loss
+        self.eval()
+        with torch.set_grad_enabled(False):
+
+            out = self.forward(x_test)
+            loss = self.loss(out, y_test)
+            acc = (out.argmax(1) == y_test).float().mean()
+
+            test_loss = loss.item()
+            test_acc = acc.item()
+
+        return (train_loss, test_loss, train_acc, test_acc)
+
+
+    def batch_learn(
+        self,
+        train_loader: DataLoader,
+        test_loader: DataLoader, 
+        optimizer: Optimizer,
+        device: str
+    ) -> tuple[float, float, float, float]:
+        '''
+        Defines a single batched learning iteration. 
+
+        Parameters
+        ----------
+        train_loader : DataLoader
+            Train set data loader. See 'DataLoader' class for details.   
+        test_loader : DataLoader
+            Test set data loader. See 'DataLoader' class for details. 
+        optimizer : Optimizer
+            Model optimization function.
+        device : str
+            Where learning iteration is computed. Can be 'cpu' or 'cuda'.
+
+        Returns
+        -------
+        train_loss : float
+            Train set loss.
+        test_loss : float
+            Test set loss.
+        train_acc : float
+            Train set accuracy.
+        test_acc : float
+            Test set accuracy.
+
+        '''
+        loaders = {'train': train_loader, 'test': test_loader}
+        batch_tr_loss, batch_ts_loss = [], []
+        batch_tr_acc, batch_ts_acc = [], []
+
+        for mode in ('train', 'test'):
+            self.train() if mode == 'train' else self.eval()
+            
+            with torch.set_grad_enabled(mode == 'train'):
+                for batch in loaders[mode]:
+                    x = batch['features'].to(device, non_blocking=True)
+                    y = batch['target'].long().to(device, non_blocking=True)
+
+                    if mode == 'train':
+                        optimizer.zero_grad()
+
+                    out = self.forward(x)
+                    loss = self.loss(out, y)
+                    # acc = accuracy_score(y, out.max(1)[1])
+                    acc = (out.argmax(1) == y).float().mean()
+
+                    if mode == 'train':
+                        loss.backward()
+                        optimizer.step()
+                        batch_tr_loss.append(loss.item())
+                        batch_tr_acc.append(acc.item())
+                    else:
+                        batch_ts_loss.append(loss.item())
+                        batch_ts_acc.append(acc.item())
+
+        train_loss = sum(batch_tr_loss) / len(batch_tr_loss)
+        test_loss = sum(batch_ts_loss) / len(batch_ts_loss)
+        train_accuracy = sum(batch_tr_acc) / len(batch_tr_acc)
+        test_accuracy = sum(batch_ts_acc) / len(batch_ts_acc)
+
+        return (train_loss, test_loss, train_accuracy, test_accuracy)
+
+
+# This method is deprecated, since the same result can be achieved through the 
+# 'load_state_dict' method. It may be useful when only certain weights / biases
+# need to be retrieved from parent model. A practical example could be if one 
+# wants to add new layers / network to an already existent model. However this
+# option is not viable in X-Min Learn and there are no plans to enable it.
+    def embedParentNetworkStateDict(self, parent_state_dict: dict):
+    # Get parent weights and biases
+        parent_weights, parent_biases = None, None
+        for k, v in parent_state_dict.items():
+            if 'weight' in k:
+                parent_weights = v
+            elif 'bias' in k:
+                parent_biases = v
+    
+    # Check that parent weights and biases were identified correctly
+        if parent_weights is None or parent_biases is None:
+            raise ValueError('Cannot parse parent weights and/or biases.')
+
+    # Replace parent weights and biases into new network by using the tensor 
+    # size of parent network output (parent_output size)
+        parent_output_size = parent_biases.size(0)
+
+    # The weights tensor is a ixJ (2D) tensor (i=n_class, j=n_Xfeat)
+        self.get_weight().data[:parent_output_size, :] = parent_weights
+
+    # The biases tensor is a j (1D) tensor (j=n_Xfeat)
+        self.get_bias().data[:parent_output_size] = parent_biases
 
 
 
@@ -242,13 +439,13 @@ class SoftMaxRegressor(NeuralNetwork):
 
         '''
         name = 'Softmax Regression'
-        loss = 'Cross-Entropy loss'
-        super().__init__(name=name, loss=loss, **kwargs)
+        loss = torch.nn.CrossEntropyLoss()
+        loss_name = 'Cross-Entropy loss'
+        super().__init__(name=name, loss=loss, loss_name=loss_name, **kwargs)
 
     # Set main attributes
-        self.linear = torch.nn.Linear(in_features, out_classes) 
+        self.linear = torch.nn.Linear(in_features, out_classes)
         self.softmax = torch.nn.Softmax(dim=1)
-        self.loss = torch.nn.CrossEntropyLoss() 
 
 
     def get_weight(self) -> torch.Tensor:
@@ -320,188 +517,51 @@ class SoftMaxRegressor(NeuralNetwork):
         return probs, classes
 
 
-    def learn( # maybe could be moved to parent class
-        self,
-        x_train: torch.Tensor,
-        y_train: torch.Tensor, 
-        x_test: torch.Tensor,
-        y_test: torch.Tensor, 
-        optimizer: torch.optim.Optimizer,
-        device: str
-    ) -> tuple[float, float, float, float]:
-        '''
-        Defines a single learning iteration.
 
-        Parameters
-        ----------
-        x_train : torch Tensor
-            Train set feature data.   
-        y_train : torch Tensor
-            Train set target data.
-        x_test : torch Tensor
-            Test set feature data.   
-        y_test : torch Tensor
-            Test set target data.
-        optimizer : torch Optimizer
-            Model optimization function.
-        device : str
-            Where learning iteration is computed. Can be 'cpu' or 'cuda'.
+class _BaseModelVariables(TypedDict):
+    algorithm: str
+    loss_function: str
+    optimizer: str
+    input_features: list[str]
+    class_encoder: dict[str, int]
+    device: str
+    seed: int
+    parent_model_path: str
+    dataset_path: str
+    tvt_ratios: tuple[float, float, float]
+    balancing_info: list[dtools.BalancingInfo]
+    polynomial_degree: int
+    epochs: int
+    learning_rate: float
+    weight_decay: float
+    momentum: float
+    batch_size: int
+    accuracy: tuple[float, float, float]
+    loss: tuple[float, float, None]
+    f1_scores: tuple[tuple[float, float, float], tuple[float, float, float]]
 
-        Returns
-        -------
-        train_loss : float
-            Train set loss.
-        test_loss : float
-            Test set loss.
-        train_acc : float
-            Train set accuracy.
-        test_acc : float
-            Test set accuracy.
+class _ExtendedModelVariables(TypedDict):
+    accuracy_list: tuple[list[float], list[float]]
+    loss_list: tuple[list[float], list[float]]
+    standards: tuple[torch.Tensor, torch.Tensor]
+    optimizer_state_dict: dict[str, Any]
+    model_state_dict: dict[str, Any]
+    version: int
 
-        '''
-        x_train = x_train.to(device)
-        y_train = y_train.long().to(device)
-        x_test = x_test.to(device)
-        y_test = y_test.long().to(device)
-
-    # Predict train data and compute train loss
-        self.train()
-        optimizer.zero_grad()
-
-        out = self.forward(x_train)
-        loss = self.loss(out, y_train)
-        acc = (out.argmax(1) == y_train).float().mean()
- 
-        loss.backward()
-        optimizer.step()
-
-        train_loss = loss.item()
-        train_acc = acc.item()
-
-    # Predict test data and compute test loss
-        self.eval()
-        with torch.set_grad_enabled(False):
-
-            out = self.forward(x_test)
-            loss = self.loss(out, y_test)
-            acc = (out.argmax(1) == y_test).float().mean()
-
-            test_loss = loss.item()
-            test_acc = acc.item()
-
-        return (train_loss, test_loss, train_acc, test_acc)
-
-
-    def batch_learn( # maybe could be moved to parent class
-        self,
-        train_loader: DataLoader,
-        test_loader: DataLoader, 
-        optimizer: torch.optim.Optimizer,
-        device: str
-    ) -> tuple[float, float, float, float]:
-        '''
-        Defines a single batched learning iteration. 
-
-        Parameters
-        ----------
-        train_loader : DataLoader
-            Train set data loader. See 'DataLoader' class for details.   
-        test_loader : DataLoader
-            Test set data loader. See 'DataLoader' class for details. 
-        optimizer : torch Optimizer
-            Model optimization function.
-        device : str
-            Where learning iteration is computed. Can be 'cpu' or 'cuda'.
-
-        Returns
-        -------
-        train_loss : float
-            Train set loss.
-        test_loss : float
-            Test set loss.
-        train_acc : float
-            Train set accuracy.
-        test_acc : float
-            Test set accuracy.
-
-        '''
-        loaders = {'train': train_loader, 'test': test_loader}
-        batch_tr_loss, batch_ts_loss = [], []
-        batch_tr_acc, batch_ts_acc = [], []
-
-        for mode in ('train', 'test'):
-            self.train() if mode == 'train' else self.eval()
-            
-            with torch.set_grad_enabled(mode == 'train'):
-                for batch in loaders[mode]:
-                    x = batch['features'].to(device, non_blocking=True)
-                    y = batch['target'].long().to(device, non_blocking=True)
-
-                    if mode == 'train':
-                        optimizer.zero_grad()
-
-                    out = self.forward(x)
-                    loss = self.loss(out, y)
-                    # acc = accuracy_score(y, out.max(1)[1])
-                    acc = (out.argmax(1) == y).float().mean()
-
-                    if mode == 'train':
-                        loss.backward()
-                        optimizer.step()
-                        batch_tr_loss.append(loss.item())
-                        batch_tr_acc.append(acc.item())
-                    else:
-                        batch_ts_loss.append(loss.item())
-                        batch_ts_acc.append(acc.item())
-
-        train_loss = sum(batch_tr_loss) / len(batch_tr_loss)
-        test_loss = sum(batch_ts_loss) / len(batch_ts_loss)
-        train_accuracy = sum(batch_tr_acc) / len(batch_tr_acc)
-        test_accuracy = sum(batch_ts_acc) / len(batch_ts_acc)
-
-        return (train_loss, test_loss, train_accuracy, test_accuracy)
-
-
+class ModelVariables(_BaseModelVariables, _ExtendedModelVariables): pass
 
 class EagerModel():
 
 # Model versioning is used to keep compatibility with old models
     _current_version = 2 
 
-    _base_vrb = [
-        'version',
-        'algorithm', 
-        'loss_function', 
-        'optimizer',
-        'input_features', 
-        'class_encoder', 
-        'device', 
-        'seed',
-        'parent_model_path', 
-        'dataset_path', 
-        'tvt_ratios',
-        'balancing_info', 
-        'polynomial_degree', 
-        'epochs', 
-        'learning_rate',
-        'weight_decay', 
-        'momentum',
-        'batch_size', 
-        'accuracy', 
-        'loss', 
-        'f1_scores'
-    ]
-    _extended_vrb = [
-        'accuracy_list', 
-        'loss_list',
-        'standards',
-        'optimizer_state_dict', 
-        'model_state_dict'
-    ]
+    _base_variables = list(_BaseModelVariables.__annotations__.keys())
+    _extended_variables = list(_ExtendedModelVariables.__annotations__.keys())
+    _all_variables = list(ModelVariables.__annotations__.keys())
 
     def __init__(
         self,
-        variables: dict[str, object],
+        variables: ModelVariables,
         model_path: str | None = None
     ) -> None:
         '''
@@ -510,7 +570,7 @@ class EagerModel():
 
         Parameters
         ----------
-        variables : dict[str, object]
+        variables : ModelVariables
             Model variables dictionary.
         model_path : str or None, optional
             Model filepath. The default is None.
@@ -547,12 +607,37 @@ class EagerModel():
         Returns
         -------
         EagerModel
-            A new instance of EagerModel.
+            A new instance of EagerModel with empty variables.
 
         '''
-        keys = cls._base_vrb + cls._extended_vrb
-        variables = dict().fromkeys(keys)
-        variables['version'] = cls._current_version
+        variables: ModelVariables = {
+            'algorithm': '',
+            'loss_function': '',
+            'optimizer': '',
+            'input_features': [],
+            'class_encoder': {},
+            'device': '',
+            'seed': 0,
+            'parent_model_path': '',
+            'dataset_path': '',
+            'tvt_ratios': (0., 0., 0.),
+            'balancing_info': [],
+            'polynomial_degree': 0,
+            'epochs': 0,
+            'learning_rate': 0.,
+            'weight_decay': 0.,
+            'momentum': 0.,
+            'batch_size': 0,
+            'accuracy': (0., 0., 0.),
+            'loss': (0., 0., None),
+            'f1_scores': ((0., 0., 0.), (0., 0., 0.)),
+            'accuracy_list': ([], []),
+            'loss_list': ([], []),
+            'standards': (torch.Tensor([]), torch.Tensor([])),
+            'optimizer_state_dict': {},
+            'model_state_dict': {},
+            'version': cls._current_version
+        }
         return cls(variables)
 
 
@@ -575,6 +660,7 @@ class EagerModel():
         variables = torch.load(model_path)
         return cls(variables, model_path)
 
+
     @property
     def algorithm(self) -> str:
         '''
@@ -586,8 +672,9 @@ class EagerModel():
             Algorithm name
 
         '''
-        return self.variables.get('algorithm')
-    
+        return self.variables['algorithm']
+
+
     @property
     def optimizer(self) -> str:
         '''
@@ -599,10 +686,11 @@ class EagerModel():
             Optimizer name.
 
         '''
-        return self.variables.get('optimizer')
-    
+        return self.variables['optimizer']
+
+
     @property
-    def hyperparameters(self) -> tuple[float, float, float, int]:
+    def hyperparameters(self) -> tuple[float, float, float, int, int]:
         '''
         Hyperparameters values used to train the model.
 
@@ -616,14 +704,17 @@ class EagerModel():
             Momentum.
         epochs : int
             Number of epochs.
+        batch_size : int
+            Data batch size.
 
         '''
-        lr = self.variables.get('learning_rate')
-        wd = self.variables.get('weight_decay')
-        mtm = self.variables.get('momentum')
-        epochs = self.variables.get('epochs')
-        # should also return Batch Size
-        return lr, wd, mtm, epochs
+        lr = self.variables['learning_rate']
+        wd = self.variables['weight_decay']
+        mtm = self.variables['momentum']
+        epochs = self.variables['epochs']
+        batch_size = self.variables['batch_size']
+        return lr, wd, mtm, epochs, batch_size
+
 
     @property
     def features(self) -> list[str]:
@@ -636,8 +727,9 @@ class EagerModel():
             List of input features.
 
         '''
-        return self.variables.get('input_features')
-    
+        return self.variables['input_features']
+
+
     @property
     def targets(self) -> list[str]:
         '''
@@ -651,6 +743,7 @@ class EagerModel():
         '''
         return list(self.encoder.keys())
 
+
     @property
     def encoder(self) -> dict[str, int]:
         '''
@@ -662,7 +755,8 @@ class EagerModel():
             Targets encoder.
 
         '''
-        return self.variables.get('class_encoder')
+        return self.variables['class_encoder']
+
 
     @property
     def x_mean(self) -> torch.Tensor:
@@ -675,7 +769,8 @@ class EagerModel():
             Mean Tensor.
 
         '''
-        return self.variables.get('standards')[0]
+        return self.variables['standards'][0]
+
 
     @property
     def x_stdev(self) -> torch.Tensor:
@@ -688,7 +783,8 @@ class EagerModel():
             Standard deviation Tensor.
 
         '''
-        return self.variables.get('standards')[1]
+        return self.variables['standards'][1]
+
 
     @property
     def state_dict(self) -> dict[str, torch.Tensor]:
@@ -701,7 +797,8 @@ class EagerModel():
             State dictionary.
 
         '''
-        return self.variables.get('model_state_dict')
+        return self.variables['model_state_dict']
+
 
     @property
     def poly_degree(self) -> int:
@@ -714,8 +811,9 @@ class EagerModel():
             Polynomial degree.
 
         '''
-        return self.variables.get('polynomial_degree')
-    
+        return self.variables['polynomial_degree']
+
+
     @property
     def seed(self) -> int:
         '''
@@ -727,8 +825,25 @@ class EagerModel():
             Random seed.
             
         '''
-        return self.variables.get('seed')
-    
+        return self.variables['seed']
+
+
+    def _replace_variable_name(self, old_name: str, new_name: str):
+        '''
+        Convenient method to change variables names. Only to be used for legacy
+        models conversion purposes.
+
+        Parameters
+        ----------
+        old_name : str
+            Old variable name.
+        new_name : str
+            New variable name.
+
+        '''
+        if old_name in self.variables.keys():
+            self.variables[new_name] = self.variables.pop(old_name)
+
 
     def _convert_legacy_model(self, version: int, path: str | None = None) -> None:
         '''
@@ -746,31 +861,26 @@ class EagerModel():
         '''
     # Apply changes based on model version
         if version < 1:
-            self.variables['algorithm'] = self.variables.pop('algm_name')
-            self.variables['loss_function'] = self.variables.pop('loss_name')
-            self.variables['optimizer'] = self.variables.pop('optim_name')
-            self.variables['input_features'] = self.variables.pop('ordered_Xfeat')
-            self.variables['class_encoder'] = self.variables.pop('Y_dict')
-            self.variables['parent_model_path'] = self.variables.pop('parentModel_path')
-            self.variables['dataset_path'] = self.variables.pop('GT_dataset_path')
-            self.variables['tvt_ratios'] = self.variables.pop('TVT_rateos')
-            self.variables['polynomial_degree'] = self.variables.pop('regressorDegree')
-            self.variables['f1_scores'] = self.variables.pop('F1_scores')
-
+            self._replace_variable_name('algm_name', 'algorithm')
+            self._replace_variable_name('loss_name', 'loss_function')
+            self._replace_variable_name('optim_name', 'optimizer')
+            self._replace_variable_name('ordered_Xfeat', 'input_features')
+            self._replace_variable_name('Y_dict', 'class_encoder')
+            self._replace_variable_name('parentModel_path', 'parent_model_path')
+            self._replace_variable_name('GT_dataset_path', 'dataset_path')
+            self._replace_variable_name('TVT_rateos', 'tvt_ratios')
+            self._replace_variable_name('regressorDegree', 'polynomial_degree')
+            self._replace_variable_name('F1_scores', 'f1_scores')
             self.variables['batch_size'] = 0
 
         if version < 2:
-            self.variables['learning_rate'] = self.variables.pop('lr')
-            self.variables['weight_decay'] = self.variables.pop('wd')
-            self.variables['momentum'] = self.variables.pop('mtm')
-            self.variables['optimizer_state_dict'] = self.variables.pop('optim_state_dict')
+            self._replace_variable_name('lr', 'learning_rate')
+            self._replace_variable_name('wd', 'weight_decay')
+            self._replace_variable_name('mtm', 'momentum')
+            self._replace_variable_name('optim_state_dict', 'optimizer_state_dict')
 
     # Set updated model version
         self.variables['version'] = self._current_version
-
-    # Reorder variables
-        var_order = self._base_vrb + self._extended_vrb
-        self.variables = cf.sort_dict_by_list(self.variables, var_order)
 
     # Save the converted model and its log file if a path is provided
         if path is not None:
@@ -789,8 +899,7 @@ class EagerModel():
             Missing variables.
 
         '''
-        required_vrb = self._base_vrb + self._extended_vrb
-        missing = set(required_vrb) - set(self.variables.keys())
+        missing = set(self._all_variables) - set(self.variables.keys())
         return missing
     
 
@@ -841,7 +950,7 @@ class EagerModel():
         return network
 
 
-    def get_optimizer(self, network: NeuralNetwork) -> torch.optim.Optimizer:
+    def get_optimizer(self, network: NeuralNetwork) -> Optimizer:
         '''
         Return the optimization function used by this model to train the neural
         network 'network'.
@@ -853,7 +962,7 @@ class EagerModel():
 
         Returns
         -------
-        torch Optimizer
+        Optimizer
             The adopted optimizer.
 
         Raises
@@ -863,19 +972,19 @@ class EagerModel():
 
         Example
         -------
-        variables = {'algorithm': 'Softmax Regression', 'optimizer': 'SGD', ...}
-        model = EagerModel(variables)
-        network = model.get_network_architecture()
-        network.to(model.variables['device']) # optional
-        optimizer = model.get_optimizer(network)
+        >>> variables = {'algorithm': 'Softmax Regression', 'optimizer': 'SGD', ...}
+        >>> model = EagerModel(variables)
+        >>> network = model.get_network_architecture()
+        >>> network.to(model.variables['device']) # optional
+        >>> optimizer = model.get_optimizer(network)
 
-        # To update previous model, just load its state dicts:
-        network.load_state_dict(model.variables['model_state_dict'])
-        optimizer.load_state_dict(model.variables['optimizer_state_dict'])
+        To update previous model, just load its state dicts:
+        >>> network.load_state_dict(model.variables['model_state_dict'])
+        >>> optimizer.load_state_dict(model.variables['optimizer_state_dict'])
 
         '''
         optimizer = self.optimizer
-        lr, wd, mtm, _ = self.hyperparameters
+        lr, wd, mtm, _, _ = self.hyperparameters
         params = network.parameters()
 
         match optimizer:
@@ -941,11 +1050,95 @@ class EagerModel():
             default is False.
 
         '''
-        with open(outpath, 'w') as log:
-            for k, v in self.variables.items():
-                if not extended and k in self._extended_vrb:
-                    continue
-                log.write(f'{k.upper().replace('_', ' ')}\n{repr(v)}\n\n\n')
+        var_keys = self._all_variables if extended else self._base_variables
+        with open(outpath, 'w', encoding="utf-8") as log:
+            for k in var_keys:
+                match k:
+                    case 'algorithm':
+                        title = 'ALGORITHM'
+                        value = self.variables[k]
+                    case 'loss_function':
+                        title = 'LOSS FUNCTION'
+                        value = self.variables[k]
+                    case 'optimizer':
+                        title = 'OPTIMIZER FUNCTION'
+                        value = self.variables[k]
+                    case 'input_features':
+                        title = 'INPUT FEATURES'
+                        value = ', '.join(self.variables[k])
+                    case 'class_encoder':
+                        title = 'OUTPUT CLASSES'
+                        value = str(self.variables[k])[1:-1].replace(', ', '\n')
+                    case 'device':
+                        title = 'DEVICE'
+                        value = self.variables[k]
+                    case 'seed':
+                        title = 'RANDOM SEED'
+                        value = self.variables[k]
+                    case 'parent_model_path':
+                        title = 'PARENT MODEL PATH'
+                        value = repr(self.variables[k])
+                    case 'dataset_path':
+                        title = 'DATASET PATH'
+                        value = repr(self.variables[k])
+                    case 'tvt_ratios':
+                        title = 'TRAIN-VALIDATION-TEST RATIOS'
+                        value = str(self.variables[k])[1:-1]
+                    case 'balancing_info':
+                        title = 'TRAINING DATASET BALANCING INFO'
+                        v = [json.dumps(b, indent=2) for b in self.variables[k]]
+                        value = '\n'.join(v)
+                    case 'polynomial_degree':
+                        title = 'POLYNOMIAL DEGREE'
+                        value = self.variables[k]
+                    case 'epochs':
+                        title = 'EPOCHS'
+                        value = self.variables[k]
+                    case 'learning_rate':
+                        title = 'LEARNING RATE'
+                        value = self.variables[k]
+                    case 'weight_decay':
+                        title = 'WEIGHT DECAY'
+                        value = self.variables[k]
+                    case 'momentum':
+                        title = 'MOMENTUM'
+                        value = self.variables[k]
+                    case 'batch_size':
+                        title = 'BATCH SIZE'
+                        value = self.variables[k]
+                    case 'accuracy':
+                        title = 'ACCURACY (TRAIN-VALIDATION-TEST)'
+                        value = str(self.variables[k])[1:-1]
+                    case 'loss':
+                        title = 'LOSS (TRAIN-VALIDATION-TEST)'
+                        value = str(self.variables[k])[1:-1]
+                    case 'f1_scores':
+                        title = 'F1 SCORES (TRAIN-VALIDATION-TEST)'
+                        t1, t2 = 'Macro', 'Weighted'
+                        v1, v2 = self.variables[k]
+                        value = '\n'.join([t1, str(v1)[1:-1], t2, str(v2)[1:-1]])
+                    case 'accuracy_list':
+                        title = 'ACCURACY LISTS'
+                        t1, t2 = 'Train', 'Validation'
+                        v1, v2 = self.variables[k]
+                        value = '\n'.join([t1, str(v1), t2, str(v2)])
+                    case 'loss_list':
+                        title = 'LOSS LISTS'
+                        t1, t2 = 'Train', 'Validation'
+                        v1, v2 = self.variables[k]
+                        value = '\n'.join([t1, str(v1), t2, str(v2)])
+                    case 'standards':
+                        title = 'FEATURES STANDARDS'
+                        t1, t2 = 'Mean', 'Standard Deviation'
+                        v1, v2 = self.variables[k]
+                        value = '\n'.join([t1, str(v1.tolist()), t2, str(v2.tolist())])
+                    case 'version':
+                        title = 'VERSION'
+                        value = self.variables[k]
+                    case _: # ignore state dicts (can be huge in large models)
+                        continue
+
+                log.write(f'{title}\n{value}\n\n\n')
 
 
     def generate_log_path(self, path: str) -> str:
@@ -994,6 +1187,11 @@ class _ClassifierBase():
         input_stack : InputMapStack
             Stack of input maps.
 
+        Raises
+        ------
+        ValueError
+            Raised if maps from "input_stack" have different shapes.
+
         '''        
     # Set main attributes
         self.kind = kind
@@ -1002,11 +1200,12 @@ class _ClassifierBase():
         self.thread = thread
         self.algorithm = None # to be reimplemented in each subclass
         self.input_stack = input_stack
-        self.map_shape = input_stack.maps_shape
-
+        if (shape := self.input_stack.maps_shape) is None:
+            raise ValueError('Maps of "input_stack" do not fit.')
+        self.map_shape = shape
 
     @property
-    def classification_pipeline(self) -> tuple:
+    def classification_pipeline(self) -> tuple[Callable, ...]:
         '''
         Defines the classification pipeline of this classifier. To reimplement
         in each child.
@@ -1018,6 +1217,21 @@ class _ClassifierBase():
 
         '''
         return ()
+
+
+    def getCoordMaps(self) -> tuple[InputMap, InputMap]:
+        '''
+        Return X, Y pixel indices (coordinates) maps.
+
+        Returns
+        -------
+        tuple[InputMap, InputMap]
+            X, Y coordinates maps.
+
+        '''
+        shape = self.map_shape
+        xx, yy = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
+        return (InputMap(xx), InputMap(yy))
         
         
     def startThreadedClassification(self) -> None:
@@ -1045,9 +1259,10 @@ class ModelBasedClassifier(_ClassifierBase):
 
         '''
     # Set main attributes
+        path = model.filepath
         kwargs = {
             'kind': 'Model-based',
-            'name': cf.path2filename(model.filepath),
+            'name': 'Unknown model' if path is None else cf.path2filename(path),
             'classification_steps': 4,
             'thread': threads.ModelBasedClassificationThread(),
             'input_stack': input_stack
@@ -1075,25 +1290,25 @@ class ModelBasedClassifier(_ClassifierBase):
         f1 = self.preProcessFeatureData
         f2 = self.predict
         f3 = self.postProcessOutputData
-        return f1, f2, f3
+        return (f1, f2, f3)
     
 
-    def classify(self) -> tuple[np.ndarray, np.ndarray]:
+    def classify(self) -> tuple[npt.NDArray[np.str_], npt.NDArray[np.float_]]:
         '''
         Run entire not-threaded classification process.
 
         Returns
         -------
-        pred: numpy ndarray
+        pred: NDArray[np.str_]
             Predictions.
-        prob: numpy ndarray
+        prob: NDArray[np.float_]
             Probability scores.
 
         '''
         feat_data = self.preProcessFeatureData()
         prob, pred = self.predict(feat_data)
         prob, pred = self.postProcessOutputData(prob, pred)
-        return pred, prob
+        return (pred, prob)
 
 
     def preProcessFeatureData(self) -> torch.Tensor:
@@ -1114,8 +1329,7 @@ class ModelBasedClassifier(_ClassifierBase):
 
     # Standardize data
         feat_data = array2tensor(feat_data, 'float32')
-        feat_data = norm_data(feat_data, self.model.x_mean, self.model.x_stdev,
-                              return_standards=False)
+        feat_data, _ = norm_data(feat_data, self.model.x_mean, self.model.x_stdev)
 
         return feat_data
     
@@ -1138,14 +1352,14 @@ class ModelBasedClassifier(_ClassifierBase):
 
         '''
         prob, pred = self.algorithm.predict(feat_data.float())
-        return prob, pred
+        return (prob, pred)
     
 
     def postProcessOutputData(
         self,
         prob: torch.Tensor,
         pred: torch.Tensor
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[npt.NDArray[np.float_], npt.NDArray[np.str_]]:
         '''
         Post-process probability scores and predictions for better readability.
 
@@ -1158,69 +1372,80 @@ class ModelBasedClassifier(_ClassifierBase):
 
         Returns
         -------
-        prob : numpy ndarray
+        prob : NDArray[np.float_]
             Rounded probability scores.
-        pred : numpy ndarray
+        pred : NDArray[np.str_]
             Decoded predictions.
 
         '''
-        prob = prob.detach().numpy().round(2)
-        pred = self.decodeLabels(pred)
-        return prob, pred
+        prob_array = prob.detach().numpy().round(2)
+        pred_array = self.decodeLabels(pred)
+        return (prob_array, pred_array)
     
 
     def encodeLabels(
-        self,
-        array: np.ndarray | torch.Tensor,
-        dtype: DTypeLike = 'int16'
-    ) -> np.ndarray:
+        self, array: TensorLike, dtype: npt.DTypeLike = 'int16') -> npt.NDArray[Any]:
         '''
         Encode labels from text names to class IDs.
 
         Parameters
         ----------
-        array : numpy ndarray or torch Tensor
-            Labels array.
-        dtype : numpy DTypeLike, optional
+        array : TensorLike
+            Labels array as class names.
+        dtype : DTypeLike, optional
             Encoded array dtype. The default is 'int16'.
 
         Returns
         -------
-        res : numpy ndarray
-            Encoded labels array.
+        encoded_array : npt.NDArray[Any]
+            Encoded labels array as class IDs.
 
         '''
-        res = np.copy(array)
-        for k, v in self.model.encoder.items(): res[array==k] = v
-        return res.astype(dtype)
+        # Convert tensor to array
+        if isinstance(array, torch.Tensor):
+            array = tensor2array(array)
+
+        # Encode array
+        encoded_array = np.copy(array)
+        for k, v in self.model.encoder.items(): 
+            encoded_array[array == k] = v
+        return encoded_array.astype(dtype, copy=False)
 
 
     def decodeLabels(
-        self,
-        array: np.ndarray | torch.Tensor,
-        dtype: DTypeLike = 'U8'
-    ) -> np.ndarray:
+        self, array: TensorLike, dtype: npt.DTypeLike = 'U8') -> npt.NDArray[Any]:
         '''
         Decode labels from class IDs to text names.
 
         Parameters
         ----------
-        array : numpy ndarray or torch Tensor
-            Labels array.
-        dtype : numpy DTypeLike, optional
+        array : TensorLike
+            Labels array as class IDs.
+        dtype : DTypeLike, optional
             Decoded array dtype. Only use str-like dtypes. The default is 'U8'.
 
         Returns
         -------
-        res : numpy ndarray
-            Decoded labels array.
+        decoded_array : NDArray[Any]
+            Decoded labels array as class names.
             
         '''
-        res = np.copy(array).astype(dtype)
-        for k, v in self.model.encoder.items(): res[array==v] = k
-        return res
+        # Convert tensor to array
+        if isinstance(array, torch.Tensor):
+            array = tensor2array(array)
+
+        # Decode array
+        decoded_array = np.copy(array).astype(dtype, copy=False)
+        for k, v in self.model.encoder.items():
+            decoded_array[array == v] = k
+        return decoded_array
 
 
+
+class ScikitSupervisedClassifier(Protocol):
+    def fit(self, X: Any, y: Any, /) -> Self: ...
+    def predict(self, X: Any, /) -> npt.NDArray[Any]: ...
+    def predict_proba(self, X: Any, /) -> Any: ...
 
 class RoiBasedClassifier(_ClassifierBase):
 
@@ -1260,11 +1485,11 @@ class RoiBasedClassifier(_ClassifierBase):
         }
         super().__init__(**kwargs)
         self.roimap = roimap
-        self.algorithm = None # to be reimplemented in each subclass
+        self.algorithm: ScikitSupervisedClassifier # to be reimplemented in each subclass
         self.n_jobs = n_jobs
         self.proximity = pixel_proximity
 
-    
+
     @property
     def classification_pipeline(self) -> tuple[Callable, Callable, Callable, Callable]:
         '''
@@ -1286,18 +1511,18 @@ class RoiBasedClassifier(_ClassifierBase):
         f2 = self.fit
         f3 = self.predict
         f4 = self.computeProbabilityScores
-        return f1, f2, f3, f4
+        return (f1, f2, f3, f4)
     
 
-    def classify(self) -> tuple[np.ndarray, np.ndarray]:
+    def classify(self) -> tuple[npt.NDArray[np.str_], npt.NDArray[np.float_]]:
         '''
         Run entire not-threaded classification process.
 
         Returns
         -------
-        pred: numpy ndarray
+        pred: NDArray[np.str_]
             Predictions.
-        prob: numpy ndarray
+        prob: NDArray[np.float_]
             Probability scores.
 
         '''
@@ -1305,32 +1530,16 @@ class RoiBasedClassifier(_ClassifierBase):
         self.fit(x_train, y_train)
         pred = self.predict(in_data)
         prob = self.computeProbabilityScores(in_data)
-        return pred, prob
+        return (pred, prob)
 
 
-    def getCoordMaps(self) -> list[np.ndarray]:
-        '''
-        Return X, Y pixel indices (coordinates) maps.
-
-        Returns
-        -------
-        coord_maps : list[numpy ndarrays]
-            X, Y coordinates maps.
-
-        '''
-        shape = self.map_shape
-        xx, yy = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-        coord_maps = [InputMap(xx), InputMap(yy)]
-        return coord_maps
-
-
-    def preProcessFeatureData(self) -> np.ndarray:
+    def preProcessFeatureData(self) -> npt.NDArray[Any]:
         '''
         Perform several pre-processing operations on input feature data.
 
         Returns
         -------
-        feat_data : numpy ndarray
+        feat_data : NDArray[Any]
             Pre-processed input data.
 
         '''
@@ -1342,19 +1551,19 @@ class RoiBasedClassifier(_ClassifierBase):
         feat_data = self.input_stack.get_feature_array()
 
     # Normalize the data
-        feat_data = norm_data(feat_data, return_standards=False)
+        feat_data, _ = norm_data(feat_data)
 
         return feat_data
 
 
-    def preProcessRoiData(self) -> np.ndarray:
+    def preProcessRoiData(self) -> npt.NDArray[np.str_]:
         '''
         Perform several pre-processing operations on ROI training data.
 
         Returns
         -------
-        roidata : numpy ndarray
-            Pre-processed ROI training data.
+        roidata : NDArray[np.str_]
+            Pre-processed ROI training data array.
 
         '''
         roidata = self.roimap.map
@@ -1369,21 +1578,21 @@ class RoiBasedClassifier(_ClassifierBase):
         return roidata
 
 
-    def getTrainingData(self, return_full_input: bool = True) -> list[np.ndarray]:
+    def getTrainingData(self) -> tuple[
+        npt.NDArray[Any], npt.NDArray[np.str_], npt.NDArray[Any]
+    ]:
         '''
-        Return training data, splitted into features (X) and labels (Y).
-
-        Parameters
-        ----------
-        return_full_input : bool, optional
-            Whether to also return the full input data. The default is True.
+        Return training data, splitted into features (X) and labels (Y). This
+        method returns the full input feature data as well.
 
         Returns
         -------
-        tr_data : list[ndarray]
-            Training data, splitted in feature and label data. The list also
-            includes the full input feature data if 'return_full_input' is 
-            True.
+        x_train : NDArray[Any]
+            Training feature data.
+        y_train : NDArray[np.str_]
+            Training target data.
+        x : NDArray[Any]
+            Full input feature data.
 
         '''
     # Get pre-processed X (feature) and Y (label) data
@@ -1396,39 +1605,36 @@ class RoiBasedClassifier(_ClassifierBase):
     # Use the indices to extract training data from both features and labels
         x_train = x[labeled_indices, :]
         y_train = y[labeled_indices]
+        return (x_train, y_train, x)
 
-        tr_data = [x_train, y_train]
-        if return_full_input: tr_data.append(x)
-        return tr_data
-    
 
-    def fit(self, x_train: np.ndarray, y_train: np.ndarray) -> None:
+    def fit(self, x_train: npt.NDArray[Any], y_train: npt.NDArray[np.str_]) -> None:
         '''
         Fit classifier to training data.
 
         Parameters
         ----------
-        x_train : numpy ndarray
+        x_train : NDArray[Any]
             Training feature data. 
-        y_train : numpy ndarray
+        y_train : NDArray[np.str_]
             Training target data.
 
         '''
         self.algorithm.fit(x_train, y_train)
     
 
-    def predict(self, in_data: np.ndarray) -> np.ndarray:
+    def predict(self, in_data: npt.NDArray[Any]) -> npt.NDArray[np.str_]:
         '''
         Predict unknown data. This method must always be called after 'fit'.
 
         Parameters
         ----------
-        in_data : numpy ndarray
+        in_data : NDArray[np._str]
             Input unlabeled data.
 
         Returns
         -------
-        pred : numpy ndarray
+        pred : NDArray[Any]
             Predicted data.
 
         '''
@@ -1436,18 +1642,19 @@ class RoiBasedClassifier(_ClassifierBase):
         return pred
     
 
-    def computeProbabilityScores(self, in_data: np.ndarray) -> np.ndarray:
+    def computeProbabilityScores(
+        self, in_data: npt.NDArray[Any]) -> npt.NDArray[np.float_]:
         '''
         Compute confidence scores.
 
         Parameters
         ----------
-        in_data : numpy ndarray
+        in_data : NDArray[Any]
             Input unlabeled data.
 
         Returns
         -------
-        prob : numpy ndarray
+        prob : NDArray[np.float_]
             Probability scores.
 
         '''
@@ -1491,6 +1698,10 @@ class KNearestNeighbors(RoiBasedClassifier):
         self.algorithm = sklearn.neighbors.KNeighborsClassifier(neigh, **kw)
 
 
+
+class ScikitUnsupervisedClassifier(Protocol):
+    def fit(self, X: Any, /) -> Self: ...
+    def predict(self, X: Any, /) -> npt.NDArray[Any]: ...
 
 class UnsupervisedClassifier(_ClassifierBase):
 
@@ -1546,7 +1757,7 @@ class UnsupervisedClassifier(_ClassifierBase):
         }
         super().__init__(**kwargs)
         self.seed = seed
-        self.algorithm = None  # to be reimplemented in each child class
+        self.algorithm: ScikitUnsupervisedClassifier # to be reimplemented in each child class
         self.n_jobs = n_jobs
         self.proximity = pixel_proximity
     
@@ -1589,19 +1800,19 @@ class UnsupervisedClassifier(_ClassifierBase):
         f5 = self.computeSilhouetteScore
         f6 = self.computeChiScore
         f7 = self.computeDbiScore
-        return f1, f2, f3, f4, f5, f6, f7
+        return (f1, f2, f3, f4, f5, f6, f7)
     
 
-    def classify(self) -> tuple[np.ndarray, np.ndarray]:
+    def classify(self) -> tuple[npt.NDArray[np.int_], npt.NDArray[np.float_]]:
         '''
         Run entire not-threaded classification process. Warning: this method
         returns prediction labels (clusters) as integer values.
 
         Returns
         -------
-        pred: numpy ndarray
+        pred: NDArray[np.int_]
             Predictions, with clusters expressed as integer IDs.
-        prob: numpy ndarray
+        prob: NDArray[np.float_]
             Probability scores.
 
         '''
@@ -1609,32 +1820,16 @@ class UnsupervisedClassifier(_ClassifierBase):
         self.fit(in_data)
         pred = self.predict(in_data)
         prob = self.computeProbabilityScores(in_data)
-        return pred, prob
+        return (pred, prob)
 
 
-    def getCoordMaps(self) -> list[np.ndarray]:
-        '''
-        Return X, Y pixel indices (coordinates) maps.
-
-        Returns
-        -------
-        coord_maps : list[numpy ndarray]
-            X, Y coordinates maps.
-
-        '''
-        shape = self.map_shape
-        xx, yy = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-        coord_maps = [InputMap(xx), InputMap(yy)]
-        return coord_maps
-    
-
-    def preProcessFeatureData(self) -> np.ndarray:
+    def preProcessFeatureData(self) -> npt.NDArray[Any]:
         '''
         Perform several pre-processing operations on input feature data.
 
         Returns
         -------
-        feat_data : numpy ndarray
+        feat_data : NDArray[Any]
             Pre-processed input data.
 
         '''
@@ -1646,160 +1841,174 @@ class UnsupervisedClassifier(_ClassifierBase):
         feat_data = self.input_stack.get_feature_array()
 
     # Normalize the data
-        feat_data = norm_data(feat_data, return_standards=False)
+        feat_data, _ = norm_data(feat_data)
 
         return feat_data
     
 
-    def fit(self, in_data: np.ndarray) -> None:
+    def fit(self, in_data: npt.NDArray[Any]) -> None:
         '''
         Fit classifier to input data.
 
         Parameters
         ----------
-        in_data : ndarray
+        in_data : NDArray[Any]
             Input data.
 
         '''
         self.algorithm.fit(in_data)
 
     
-    def predict(self, in_data: np.ndarray) -> np.ndarray:
+    def predict(self, in_data: npt.NDArray[Any]) -> npt.NDArray[np.int_]:
         '''
         Cluster input data.
 
         Parameters
         ----------
-        in_data : numpy ndarray
+        in_data : NDArray[Any]
             Input data.
 
         Returns
         -------
-        pred : numpy ndarray
-            Clustered data.
+        pred : NDArray[np.int_]
+            Clustered data with clusters expressed as integer IDs.
 
         '''
         pred = self.algorithm.predict(in_data)
         return pred
     
 
-    def computeProbabilityScores(self, in_data: np.ndarray) -> np.ndarray:
+    def computeProbabilityScores(
+        self, in_data: npt.NDArray[Any]) -> npt.NDArray[np.float_]:
         '''
         Compute confidence scores.
 
         Parameters
         ----------
-        in_data : ndarray
+        in_data : NDArray[Any]
             Input data.
 
         Returns
         -------
-        prob : numpy ndarray
+        prob : NDArray[np.float_]
             Probability scores.
 
+        Raises
+        ------
+        NotImplementedError
+            Raised if scores calculation fails with the implemented algorithm.
+
         '''
-        dist = self.algorithm.transform(in_data).min(axis=1)
-        prob = 1 - dist/dist.max()
-        return prob
+        # Calculate scores from cluster centroid-based distance (KMeans)
+        transform_method = getattr(self.algorithm, 'transform', None)
+        if callable(transform_method): # TODO probably needs a statistically stronger logic
+            dist = np.asarray(transform_method(in_data)).min(axis=1)
+            prob = 1 - dist/dist.max()
+            return prob
+
+        # This error should raise only during development of new algorithms
+        e = 'Missing logic for extracting confidence score with this algorithm.'
+        raise NotImplementedError(e)
     
 
-    def computeSilhouetteScore(self, in_data: np.ndarray, pred: np.ndarray) -> (
-        tuple[
-            dict[int, np.ndarray] | None,
-            float | None
-        ]
-    ):
+    def computeSilhouetteScore(
+        self,
+        in_data: npt.NDArray[Any],
+        pred: npt.NDArray[np.int_]
+    ) -> tuple[dict[int, npt.NDArray[np.float_]], float] | tuple[None, None]:
         '''
         Compute silhouette score. The computation is ignored if the class 
         attribute 'do_silhouette_score' is set to False.
 
         Parameters
         ----------
-        in_data : numpy ndarray
+        in_data : NDArray[Any]
             Input data.
-        pred : numpy ndarray
-            Clustered data.
+        pred : NDArray[np.int_]
+            Clustered data with clusters expressed as integer IDs.
 
         Returns
         -------
-        sil_clust : dict[int, numpy ndarray] or None
+        sil_clust : dict[int, NDArray[np.float_]] | None
             Silhouette scores by cluster. Returns None if 'do_silhouette_score'
             is False.
-        sil_avg : float or None
+        sil_avg : float | None
             Average silhouette score. Returns None if 'do_silhouette_score' is
             False.
 
         '''
-        if self.do_silhouette_score:
+        if not self.do_silhouette_score:
+            return (None, None)
 
-        # Define a random data sample of required size
-            sample_size = int(self.silhouette_ratio * pred.size)
-            rng = np.random.default_rng(self.seed)
-            subset_idx = rng.permutation(pred.size)[:sample_size]
-            data_slice, pred_slice = in_data[subset_idx, :], pred[subset_idx]
+    # Define a random data sample of required size
+        sample_size = int(self.silhouette_ratio * pred.size)
+        rng = np.random.default_rng(self.seed)
+        subset_idx = rng.permutation(pred.size)[:sample_size]
+        data_slice, pred_slice = in_data[subset_idx, :], pred[subset_idx]
 
-        # Compute silhouette score by cluster
-            sil_sam = sklearn.metrics.silhouette_samples(data_slice, pred_slice)
-            unq_val = np.unique(pred_slice)
-            sil_clust = {u: np.sort(sil_sam[pred_slice == u]) for u in unq_val}
+    # Compute silhouette score by cluster
+        sil_sam = np.asarray(
+            sklearn.metrics.silhouette_samples(data_slice, pred_slice))
+        unq_val = np.unique(pred_slice)
+        sil_clust = {u: np.sort(sil_sam[pred_slice == u]) for u in unq_val}
 
-        # Compute average silhouette score
-            sil_avg = np.mean(sil_sam)
-        
-        else:
-            sil_clust, sil_avg = None, None
+    # Compute average silhouette score
+        sil_avg = float(np.mean(sil_sam))
 
-        return sil_clust, sil_avg
+        return (sil_clust, sil_avg)
     
 
-    def computeChiScore(self, in_data: np.ndarray, pred: np.ndarray) -> float | None:
+    def computeChiScore(
+        self,
+        in_data: npt.NDArray[Any],
+        pred: npt.NDArray[np.int_]
+    ) -> float | None:
         '''
         Compute Calinski-Harabasz Index. The computation is ignored if the 
         class attribute 'do_chi_score' is set to False.
 
         Parameters
         ----------
-        in_data : numpy ndarray
+        in_data : NDArray[Any]
             Input data.
-        pred : numpy ndarray
-            Clustered data.
+        pred : NDArray[np.int_]
+            Clustered data with clusters expressed as integer IDs.
 
         Returns
         -------
-        chi : float or None
+        float | None
             Calinski-Harabasz Index. Returns None if 'do_chi_score' is False.
 
         '''
-        if self.do_chi_score:
-            chi = sklearn.metrics.calinski_harabasz_score(in_data, pred)
-        else:
-            chi = None
-        return  chi
+        if not self.do_chi_score:
+            return None
+        return sklearn.metrics.calinski_harabasz_score(in_data, pred)
     
 
-    def computeDbiScore(self, in_data: np.ndarray, pred: np.ndarray) -> float | None:
+    def computeDbiScore(
+        self, in_data: npt.NDArray[Any],
+        pred: npt.NDArray[np.int_]
+    ) -> float | None:
         '''
         Compute Davies-Bouldin Index. The computation is ignored if the class
         attribute 'do_dbi_score' is set to False.
 
         Parameters
         ----------
-        in_data : numpy ndarray
+        in_data : NDArray[Any]
             Input data.
-        pred : numpy ndarray
-            Clustered data.
+        pred : NDArray[np.int_]
+            Clustered data with clusters expressed as integer IDs.
 
         Returns
         -------
-        dbi : float or None
+        float | None
             Davies-Bouldin Index. Returns None if 'do_dbi_score' is False.
 
         '''
-        if self.do_dbi_score:
-            dbi = sklearn.metrics.davies_bouldin_score(in_data, pred)
-        else:
-            dbi = None
-        return dbi
+        if not self.do_dbi_score:
+            return None
+        return sklearn.metrics.davies_bouldin_score(in_data, pred)
         
 
        
@@ -1832,96 +2041,160 @@ class KMeans(UnsupervisedClassifier):
 
 
 
-def array2tensor(array: np.ndarray, dtype: DTypeLike | None = None) -> torch.Tensor:
+def array2tensor(
+    array: npt.NDArray[Any], dtype: npt.DTypeLike | None = None) -> torch.Tensor:
     '''
     Convert numpy array to torch Tensor.
 
     Parameters
     ----------
-    array : numpy ndarray
+    array : NDArray[Any]
         Input numpy array
     dtype : numpy DTypeLike, optional
         Output dtype. If None, it is inferred from array. The default is None.
 
     Returns
     -------
-    torch Tensor
+    tensor : torch Tensor
         Output torch Tensor.
 
     '''
-    if dtype: array = array.astype(dtype)
-    return torch.tensor(array)
+    # Handle type casting on NumPy side if a explicit dtype is provided
+    if dtype is not None:
+        array = array.astype(dtype, copy=False)
+
+    # Convert to contiguous array if needed to prevent memory layout crashes
+    if not array.flags['C_CONTIGUOUS']:
+        array = np.ascontiguousarray(array)
+
+    # Share memory layout via from_numpy (Zero Copy)
+    tensor = torch.from_numpy(array)
+    return tensor
 
 
-def norm_data(
-    data: np.ndarray | torch.Tensor, 
-    mean: np.ndarray | torch.Tensor|None = None, 
-    stdev: np.ndarray | torch.Tensor|None = None, 
-    return_standards: bool = True
-) -> (
-    np.ndarray | torch.Tensor
-    | tuple[
-        np.ndarray | torch.Tensor,
-        np.ndarray | torch.Tensor,
-        np.ndarray | torch.Tensor
-    ]
-):
+def tensor2array(
+    tensor: torch.Tensor, dtype: npt.DTypeLike | None = None) -> npt.NDArray[Any]:
     '''
-    Apply standard score data normalization to input array.
+    Convert torch Tensor to numpy array.
 
     Parameters
     ----------
-    data : numpy ndarray or torch Tensor
-        Input data.
-    mean : numpy ndarray or torch Tensor or None, optional
-        Mean scores per input feature. If None, it is computed. The default is
-        None.
-    stdev : numpy ndarray or torch Tensor or None, optional
-        Standard deviation scores per input feature. If None, it is computed. 
-        The default is None.
-    return_standards : bool, optional
-        Whether to return means and standard deviations. The default is True.
+    tensor : torch Tensor
+        Input torch Tensor.
+    dtype : DTypeLike, optional
+        Output dtype. If None, it is inferred from tensor. The default is None.
 
     Returns
     -------
-    data_norm : numpy ndarray or torch Tensor
-        Normalized input data
-    mean : numpy ndarray or torch Tensor, optional
-        Mean scores per input features. Returned only if 'return_standards' is
-        True.
-    stdev : numpy ndarray or torch Tensor, optional
-        Standard deviation scores per input features. Returned only if 
-        'return_standards' is True.
+    array : NDArray[Any]
+        Output numpy array.
 
     '''
-    mean = data.mean(0) if mean is None else mean
-    stdev = data.std(0) if stdev is None else stdev
-    data_norm = (data - mean) / stdev
-    if return_standards:
-        return (data_norm, mean, stdev)
+    # Ensure tensor is on CPU, detached from autograd, and memory-contiguous
+    array: npt.NDArray[Any] = tensor.detach().cpu().contiguous().numpy()
+
+    # Perform optional dtype conversion
+    if dtype is not None:
+        array = array.astype(dtype, copy=False)
+
+    return array
+
+
+@overload
+def norm_data(
+    data: torch.Tensor,
+    mean: TensorLike | None = None,
+    std: TensorLike | None = None,
+    eps: float = 1e-8
+) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]: ...
+
+@overload
+def norm_data(
+    data: npt.NDArray[Any],
+    mean: TensorLike | None = None,
+    std: TensorLike | None = None,
+    eps: float = 1e-8
+) -> tuple[npt.NDArray[Any], tuple[npt.NDArray[Any], npt.NDArray[Any]]]: ...
+
+def norm_data(
+    data: TensorLike,
+    mean: TensorLike | None = None,
+    std: TensorLike | None = None,
+    eps: float = 1e-8
+) -> tuple[TensorLike, tuple[TensorLike, TensorLike]]:
+    '''
+    Apply standard score data normalization to an input array or tensor.
+
+    Parameters
+    ----------
+    data : TensorLike
+        Input data array or tensor.
+    mean : TensorLike | None, optional
+        Mean scores per feature. If None, they are computed from data. The 
+        default is None.
+    std : TensorLike | None, optional
+        Standard deviation scores per feature. If None, they are computed from 
+        data. The default is None.
+    eps : float, optional
+        Small constant added to standard deviation for numerical stability. The
+        default is 1e-8.
+
+    Returns
+    -------
+    data_norm : TensorLike
+        Normalized data matching input 'data' type.
+    standards : tuple[TensorLike, TensorLike]
+        Mean and standard deviation matching input 'data' type.
+
+    Raises
+    ------
+    TypeError
+        Raised if 'data' is not a NumPy array or a PyTorch tensor.
+
+    '''
+    # Ensure 'mean' and 'std' are tensors if 'data' is a tensor
+    if isinstance(data, torch.Tensor):
+        with torch.no_grad():
+            _mean = data.mean(dim=0) if mean is None else mean
+            _std = data.std(dim=0, unbiased=False) if std is None else std
+            _mean = array2tensor(_mean) if isinstance(_mean, np.ndarray) else _mean
+            _std = array2tensor(_std) if isinstance(_std, np.ndarray) else _std
+
+    # Ensure 'mean' and 'std' are numpy arrays if 'data' is a numpy array
+    elif isinstance(data, np.ndarray):
+        _mean = np.mean(data, axis=0) if mean is None else mean
+        _std = np.std(data, axis=0) if std is None else std
+        _mean = tensor2array(_mean) if isinstance(_mean, torch.Tensor) else _mean
+        _std = tensor2array(_std) if isinstance(_std, torch.Tensor) else _std
+
+    # Raise error if 'data' has an invalid type
     else:
-        return data_norm
+        raise TypeError(f'Invalid data type: {type(data)}.')
+
+    # Return normalized data
+    data_norm = (data - _mean) / (_std + eps)
+    return data_norm, (_mean, _std)
 
 
-def map_polinomial_features(array: np.ndarray, degree: int) -> np.ndarray:
+def map_polinomial_features(arr: npt.NDArray[Any], deg: int) -> npt.NDArray[Any]:
     '''
     Apply polynomial kernel to input features of array.  
 
     Parameters
     ----------
-    array : numpy ndarray
+    arr : NDArray[Any]
         Input array.
-    degree : int
+    deg : int
         Polynomial degree.
 
     Returns
     -------
-    poly_features : numpy ndarray
+    poly_features : NDArray[Any]
         Output polynomial features array.
     
     '''
-    poly = sklearn.preprocessing.PolynomialFeatures(degree, include_bias=False)
-    poly_features = poly.fit_transform(array)
+    poly = sklearn.preprocessing.PolynomialFeatures(deg, include_bias=False)
+    poly_features = poly.fit_transform(arr)
     return poly_features
 
 
@@ -1939,53 +2212,47 @@ def cuda_available() -> bool:
 
 
 def confusion_matrix(
-    true: np.ndarray | torch.Tensor, 
-    pred: np.ndarray | torch.Tensor, 
-    ids: list[int] | tuple[int, ...]
-) -> np.ndarray:
+    true: TensorLike, pred: TensorLike, ids: Sequence[int]) -> npt.NDArray[Any]:
     '''
     Compute confusion matrix.
 
     Parameters
     ----------
-    true : numpy ndarray or torch Tensor
+    true : TensorLike
         True classes.
-    pred : numpy ndarray or torch Tensor
+    pred : TensorLike
         Predicted classes.
-    ids : list[int] or tuple[int, ...]
-        List of classes IDs.
+    ids : Sequence[int]
+        Sequence of classes IDs.
 
     Returns
     -------
-    cm : numpy ndarray
+    confmat : NDArray[Any]
         Confusion matrix of shape (n_classes, n_classes).
 
     '''
-    if isinstance(true, torch.Tensor):
-        true = true.cpu().detach().numpy()
-    if isinstance(pred, torch.Tensor):
-        pred = pred.cpu().detach().numpy()
-
-    cm = sklearn.metrics.confusion_matrix(true, pred, labels=ids)
-    return cm
+    true = tensor2array(true) if isinstance(true, torch.Tensor) else true
+    pred = tensor2array(pred) if isinstance(pred, torch.Tensor) else pred
+    confmat = sklearn.metrics.confusion_matrix(true, pred, labels=ids)
+    return confmat
 
 
 def f1_score(
-    true: np.ndarray | torch.Tensor,
-    pred: np.ndarray | torch.Tensor, 
-    avg: str
+    true: TensorLike,
+    pred: TensorLike, 
+    avg: Literal['micro', 'macro', 'weighted']
 ) -> float:
     '''
     Compute average F1 score of type 'avg'.
 
     Parameters
     ----------
-    true : numpy ndarray or torch Tensor
+    true : TensorLike
         True classes.
-    pred : numpy ndarray or torch Tensor
+    pred : TensorLike
         Predicted classes.
-    avg : str
-        Average type. Must be one of ('micro', 'macro', 'weighted').
+    avg : Literal['micro', 'macro', 'weighted']
+        Average score type.
 
     Returns
     -------
@@ -1993,27 +2260,21 @@ def f1_score(
         Average F1 score.
 
     '''
-    if isinstance(true, torch.Tensor):
-        true = true.cpu().detach().numpy()
-    if isinstance(pred, torch.Tensor):
-        pred = pred.cpu().detach().numpy()
-
-    f1 = sklearn.metrics.f1_score(true, pred, average=avg)
+    true = tensor2array(true) if isinstance(true, torch.Tensor) else true
+    pred = tensor2array(pred) if isinstance(pred, torch.Tensor) else pred
+    f1 = float(sklearn.metrics.f1_score(true, pred, average=avg))
     return f1
 
 
-def accuracy_score(
-    true: np.ndarray | torch.Tensor, 
-    pred: np.ndarray | torch.Tensor
-) -> float:
+def accuracy_score(true: TensorLike, pred: TensorLike) -> float:
     '''
     Compute accuracy score.
 
     Parameters
     ----------
-    true : numpy ndarray or torch Tensor
+    true : TensorLike
         True classes.
-    pred : numpy ndarray or torch Tensor
+    pred : TensorLike
         Predicted classes.
 
     Returns
@@ -2022,12 +2283,9 @@ def accuracy_score(
         Accuracy score.
 
     '''
-    if isinstance(true, torch.Tensor):
-        true = true.cpu().detach().numpy()
-    if isinstance(pred, torch.Tensor):
-        pred = pred.cpu().detach().numpy()
-
-    accuracy = sklearn.metrics.accuracy_score(true, pred)
+    true = tensor2array(true) if isinstance(true, torch.Tensor) else true
+    pred = tensor2array(pred) if isinstance(pred, torch.Tensor) else pred
+    accuracy = float(sklearn.metrics.accuracy_score(true, pred))
     return accuracy
 
 

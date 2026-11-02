@@ -6,6 +6,7 @@ Created on Fri Jan 21 21:54:40 2022
 """
 
 from collections.abc import Callable
+from typing import Any, cast
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -30,8 +31,8 @@ class DynamicStepsThread(QThread):
 
         '''
         super().__init__()
-        self.task = None
-        self.params = ()
+        self.task: Callable | None = None 
+        self.params: tuple[Any, ...] = ()
 
 
     def set_task(self, function: Callable) -> None:
@@ -48,13 +49,13 @@ class DynamicStepsThread(QThread):
         self.task = function
 
 
-    def set_params(self, *args) -> None:
+    def set_params(self, *args: Any) -> None:
         '''
         Set optional parameters for the task.
 
         Parameters
         ----------
-        args
+        *args : Any
             Sequence of parameters.
 
         '''
@@ -119,11 +120,15 @@ class FixedStepsThread(QThread):
 
         '''
         super().__init__()
-        self.pipeline = ()
-        self.args = ()
+        self.pipeline: tuple[Callable, ...] = ()
+        self.args: tuple[Any, ...] = ()
     
 
-    def set_pipeline(self, pipeline: tuple[Callable, ...], *args):
+    def set_pipeline(
+        self,
+        pipeline: tuple[Callable, ...],
+        *args: Any
+    ) -> None:
         '''
         Set the tasks pipeline. This method must be called before starting the
         thread.
@@ -132,7 +137,7 @@ class FixedStepsThread(QThread):
         ----------
         pipeline : tuple[Callable]
             Sequence of functions to be performed by the thread.
-        args 
+        *args : Any 
             Sequence of extra parameters required by pipeline's functions. 
 
         '''
@@ -185,7 +190,7 @@ class FixedStepsThread(QThread):
 
 class LearningThread(DynamicStepsThread):
 
-    renderRequested = pyqtSignal(tuple)
+    renderRequested = pyqtSignal(tuple) # tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list
 
     def __init__(self) -> None:
         '''
@@ -229,7 +234,8 @@ class LearningThread(DynamicStepsThread):
                     break
 
             # Learn
-                tr_loss, ts_loss, tr_acc, ts_acc = self.task()
+                task = cast(Callable, self.task) # sure from super().run()
+                tr_loss, ts_loss, tr_acc, ts_acc = task()
             
             # Store loss and accuracy values
                 tr_loss_list.append(tr_loss)
@@ -284,7 +290,8 @@ class CsvChunkReadingThread(DynamicStepsThread):
         
         try:
         # Read CSV and return chunks
-            with self.task() as reader:
+            task = cast(Callable, self.task) # sure from super().run()
+            with task() as reader:
                 for i, chunk in enumerate(reader, start=1):
                     if self.isInterruptionRequested(): 
                         return
@@ -508,7 +515,7 @@ class BalancingThread(FixedStepsThread):
             f4. Shuffle (o3.1, o3.2, a2) -> o4.1 (array), o4.2 (array)
         Moreover, the following extra arguments (see 'set_pipeline' method from
         parent class) are required:
-            a1. Balancing strategy -> int | str | dict
+            a1. Balancing strategy -> BalancingStrategy (see 'dataset_tools.py')
             a2. Seed -> int
             a3. Oversampling algorithm -> str | None
             a4. Undersampling algorithm -> str | None
@@ -539,11 +546,11 @@ class BalancingThread(FixedStepsThread):
             self.taskInitialized.emit('Parsing strategy')
             os_strat, us_strat, strat_info = parse_strat(strategy, verbose=True)
             balancing_info['Strategy'] = strat_info
-            balancing_info['OS'] = osa
-            balancing_info['US'] = usa
-            balancing_info['n-neigh_US'] = nus
-            balancing_info['k-neigh_OS'] = kos
-            balancing_info['m-neigh_OS'] = mos
+            balancing_info['Over-sampling algorithm'] = osa
+            balancing_info['Under-sampling algorithm'] = usa
+            balancing_info['K-neighbours'] = kos
+            balancing_info['M-neighbours'] = mos
+            balancing_info['N-neighbours'] = nus
             balancing_info['Seed'] = seed
 
         # Compute under-sampling
@@ -636,18 +643,22 @@ class NpvThread(FixedStepsThread):
         tasks. 
 
         '''
+        # Exit funtion if not npv_func is set (safety)
+        if (npv_func := self.npv_func) is None:
+            return
+
         try:
         # Set derived parameters
             c = self.size**2 // 2  # central pixel index of NPV kernel
 
         # Compute NPV for each map
-            npv_list = []
+            npv_list: list[np.ndarray] = []
             for arr, name in zip(self.arrays, self.map_names):
                 if self.isInterruptionRequested(): return
 
             # Neighborhood pixel variance (NPV)
                 self.taskInitialized.emit(f'Computing NPV for {name} map')
-                npv = ndimage.generic_filter(arr, lambda a: self.npv_func(
+                npv = ndimage.generic_filter(arr, lambda a: npv_func(
                                              np.abs(a-a[c])), self.size)
             # NPV rescaling
                 npv = npv/(arr.max() - arr.min())
@@ -657,7 +668,7 @@ class NpvThread(FixedStepsThread):
         # Send the workFinished signal with success and return the 
         # (normalized) cumulative NPV map
             npv_sum = sum(npv_list)
-            npv_sum = npv_sum/npv_sum.max() # normalize to range [0, 1]
+            npv_sum = npv_sum / np.max(npv_sum) # normalize to range [0, 1]
             self.workFinished.emit((npv_sum, ), True)
 
         except Exception as e:
@@ -742,22 +753,26 @@ class RoiDetectionThread(FixedStepsThread):
         tasks. 
 
         '''
+        # Exit function if npv_map or current_roimap are invalid (safety)
+        if self.npv_map is None or self.current_roimap is None:
+            return
+
         try:
         # Set derived parameters
             r = self.size // 2    # ROI radius
             d = r + self.distance
-            shape = self.npv_map.shape
+            rows, cols = self.npv_map.shape
 
         # Exclude borders
-            mask = np.ones(shape)
+            mask = np.ones((rows, cols))
             mask[r:-r, r:-r] = 0
-            self.npv_map[mask==1] = np.nan
+            self.npv_map[mask == 1] = np.nan
 
         # Sort flattened cumulative NPV map by values (smaller values first)
             idx = np.argsort(self.npv_map, axis=None) 
 
         # Create a new empty ROI map
-            auto_roimap = RoiMap.from_shape(shape)
+            auto_roimap = RoiMap.from_shape((rows, cols))
 
         # Detect best ROIs
             rois_found = 0 
@@ -766,16 +781,16 @@ class RoiDetectionThread(FixedStepsThread):
                 if self.isInterruptionRequested(): return
 
             # Get the original row-col coords from the index of the pixel
-                row, col = np.unravel_index(i, shape)
+                row, col = np.unravel_index(i, (rows, cols))
             # Skip NaN pixels (border of NPV cumulative map)
                 if np.isnan(self.npv_map[row, col]):
                     continue
             # Fix out of range ROI extents
                 y0, y1, x0, x1 = row-d, row+d, col-d, col+d
                 if y0 < 0: y0 = 0
-                if y1 > shape[0]: y1 = shape[0]
+                if y1 > rows: y1 = rows
                 if x0 < 0: x0 = 0
-                if x1 > shape[1]: x1 = shape[1] 
+                if x1 > cols: x1 = cols 
             # Allow only ROIs that do not overlap with existent ROIs
                 if (not self.current_roimap.extents_overlaps((x0,x1,y0,y1)) 
                     and not auto_roimap.extents_overlaps((x0,x1,y0,y1))):
