@@ -5688,7 +5688,7 @@ class PhaseRefiner(DraggableTool):
         Auto-update method for the NoData selection combo box.
 
         '''
-        if self.minmap is not None:
+        if self.has_minmap():
             self.nd_combox.updateItems(self.minmap.get_phases())
 
 
@@ -5884,6 +5884,11 @@ class PhaseRefiner(DraggableTool):
         Wrapper method to apply basic or advanced refinement operations.
 
         '''
+    # Exit function if no mineral map is selected yet
+        if not self.has_minmap():
+            CW.MsgBox(self, 'Crit', 'No mineral map selected.')
+            return
+
     # Basic refinement operations
         if self._refiner_mode == 0:
             self.refineBasic()
@@ -6195,6 +6200,10 @@ class PhaseRefiner(DraggableTool):
         Cancel all the refinement operations made on the current mineral map. 
 
         '''
+    # Exit function if a mineral map has not been selected yet
+        if not self.has_minmap():
+            return
+
     # Do nothing if the current mineral map has not been edited
         if self.minmap == self.minmap_backup:
             return
@@ -6217,6 +6226,11 @@ class PhaseRefiner(DraggableTool):
         Save current refined mineral map to disk.
 
         '''
+    # Exit function if a mineral map has not been selected yet
+        if not self.has_minmap():
+            CW.MsgBox(self, 'Crit', 'No mineral map selected.')
+            return
+
     # Ask for output path
         ftype = 'Mineral map (*.mmp)'
         outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get_path()
