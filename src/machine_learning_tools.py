@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 import json
 import math
 import multiprocessing
-from typing import Any, Literal, Protocol, Self, TypedDict, overload
+from typing import Any, Literal, Protocol, Self, TypedDict, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -553,7 +553,7 @@ class ModelVariables(_BaseModelVariables, _ExtendedModelVariables): pass
 class EagerModel():
 
 # Model versioning is used to keep compatibility with old models
-    _current_version = 2 
+    _current_version = 3 
 
     _base_variables = list(_BaseModelVariables.__annotations__.keys())
     _extended_variables = list(_ExtendedModelVariables.__annotations__.keys())
@@ -889,6 +889,36 @@ class EagerModel():
             self._replace_variable_name('wd', 'weight_decay')
             self._replace_variable_name('mtm', 'momentum')
             self._replace_variable_name('optim_state_dict', 'optimizer_state_dict')
+
+        if version < 3:
+            # 'balancing_info' list[dict] to list[BalancingInfo]
+            old_bal_info = cast(list[dict], self.variables['balancing_info'])
+            bal_info: list[dtools.BalancingInfo] = [
+                {
+                    'Strategy': {
+                        cf.get_dictkey(self.encoder, k): v 
+                        for k, v in i['Strategy'].items()
+                    },
+                    'Over-sampling algorithm': i['OS'],
+                    'Under-sampling algorithm': i['US'],
+                    'K-neighbours': i['k-neigh_OS'],
+                    'M-neighbours': i['m-neigh_OS'],
+                    'N-neighbours': i['n-neigh_US'],
+                    'Seed': i['Seed'],
+                    'New TVT ratios': i['New TVT rateos']
+                } for i in old_bal_info
+            ]
+            self.variables['balancing_info'] = bal_info
+            # 'accuracy' list to tuple
+            train_acc, valid_acc, test_acc = self.variables['accuracy']
+            self.variables['accuracy'] = (train_acc, valid_acc, test_acc)
+            # 'loss' list to tuple
+            train_loss, valid_loss, test_loss = self.variables['loss']
+            self.variables['loss'] = (train_loss, valid_loss, test_loss)
+            # 'f1_scores' array (3x2 or 3x3) to tuple[tuple, tuple] (2x3)
+            f1_old = cast(npt.NDArray[np.float_], self.variables['f1_scores'])
+            [[*_, mtr, wtr], [*_, mvd, wvd], [*_, mts, wts]] = f1_old.tolist()
+            self.variables['f1_scores'] = ((mtr, mvd, mts), (wtr, wvd, wts))
 
     # Set updated model version
         self.variables['version'] = self._current_version
