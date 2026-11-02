@@ -29,6 +29,12 @@ import style
 import threads
 
 
+type DraggableToolName = Literal[
+    'DatasetBuilder',
+    'ModelLearner',
+    'MineralClassifier',
+    'PhaseRefiner'
+]
 class DraggableTool(QW.QWidget):
 
     closed = QC.pyqtSignal()

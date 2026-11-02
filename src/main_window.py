@@ -644,16 +644,15 @@ class MainWindow(QW.QMainWindow):
         return popupmenu
 
 
-    def openTool(self, toolname: str, tabbed: bool = True) -> None:
+    def openTool(
+            self, name: tools.DraggableToolName, tabbed: bool = True) -> None:
         '''
         Show a new instance of a draggable tool.
 
         Parameters
         ----------
-        toolname : str
-            Identifier string for the popup tool to be opened. Accepted strings
-            are: 'DatasetBuilder', 'ModelLearner', 'MineralClassifier' and
-            'PhaseRefiner'.
+        name : DraggableToolName
+            Name of the popup tool to be opened.
         tabbed : bool, optional
             Whether the tool should be shown as a tab of the main tab widget 
             (= True) or as a floating window (= False). The default is True.
@@ -663,22 +662,22 @@ class MainWindow(QW.QMainWindow):
         # gc.collect()
         
     # Dataset Builder instances have no special signal to connect
-        if toolname == 'DatasetBuilder':
+        if name == 'DatasetBuilder':
             tool = tools.DatasetBuilder()
 
     # Model Learner instances have no special signal to connect
-        elif toolname == 'ModelLearner':
+        elif name == 'ModelLearner':
             tool = tools.ModelLearner()
 
     # Mineral Classifier instances have sample selector's signals to be connected
-        elif toolname == 'MineralClassifier':
+        elif name == 'MineralClassifier':
             tool = tools.MineralClassifier()
             tool.inmaps_selector.sampleUpdateRequested.connect(
                 lambda: tool.inmaps_selector.updateCombox(
                     self.dataManager.getAllGroups()))
     
     # Phase Refiner instances have sample selector's signals to be connected
-        elif toolname == 'PhaseRefiner':
+        elif name == 'PhaseRefiner':
             tool = tools.PhaseRefiner()
             tool.minmap_selector.sampleUpdateRequested.connect(
                 lambda: tool.minmap_selector.updateCombox(
