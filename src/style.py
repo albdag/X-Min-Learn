@@ -5,6 +5,8 @@ Created on Tue Oct 29 10:41:40 2024
 @author: albdag
 """
 
+from typing import Literal
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import QSizePolicy, QHeaderView
@@ -1157,13 +1159,13 @@ def getFont(family: str = 'default') -> QFont:
     return font
 
 
-def getPalette(kind: str = 'default') -> QPalette:
+def getPalette(kind: Literal['default', 'darkmode'] = 'default') -> QPalette:
     '''
     Return custom application palette of type 'kind'.
 
     Parameters
     ----------
-    kind : str, optional
+    kind : Literal['default', 'darkmode'], optional
         Custom palette. At the moment, only 'default' is fully implemented. The
         default is 'default'.
 
