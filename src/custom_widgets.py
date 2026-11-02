@@ -3768,22 +3768,6 @@ class FileDialog(QW.QFileDialog):
         return self.fileMode() == QW.QFileDialog.FileMode.ExistingFiles
 
 
-    # deprecated -> use get_path() or get_paths() methods
-    def get(self) -> list[str] | str | None:
-        '''
-        Get the filepath(s) returned by the dialog.
-
-        Returns
-        -------
-        list[str] or str or None
-            A list of user-selected filepaths, or a single filepath if dialog
-            accepts the selection of just one file. If the dialog was canceled,
-            None is returned.
-
-        '''
-        return self.get_paths() if self.returns_multipaths() else self.get_path()
-
-
     def get_path(self) -> str | None:
         '''
         Get the single filepath returned by the dialog. This method cannot be 

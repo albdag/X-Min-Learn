@@ -628,7 +628,7 @@ class MergeDatasets(QW.QDialog):
         '''
     # Do nothing if paths are invalid or the file dialog is canceled
         ftype = 'CSV (*.csv)'
-        paths = CW.FileDialog(self, 'open', 'Load Datasets', ftype, True).get()
+        paths = CW.FileDialog(self, 'open', 'Load Datasets', ftype, True).get_paths()
         if not paths:
             return
      
@@ -1224,7 +1224,7 @@ class ImageToInputMap(QW.QDialog):
         '''
     # Do nothing if paths are invalid or the file dialog is canceled
         ft = 'TIF (*.tif *.tiff);;BMP (*.bmp);;PNG (*.png);;JPEG (*.jpg *.jpeg)'
-        paths = CW.FileDialog(self, 'open', 'Load Images', ft, True).get()
+        paths = CW.FileDialog(self, 'open', 'Load Images', ft, True).get_paths()
         if not paths:
             return
 
