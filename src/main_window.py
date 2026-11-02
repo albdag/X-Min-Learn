@@ -13,7 +13,7 @@ from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
-from _base import InputMap, MineralMap, Mask
+from base import InputMap, MineralMap, Mask
 import convenient_functions as cf
 import custom_widgets as CW
 import dialogs

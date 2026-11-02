@@ -14,7 +14,7 @@ import PyQt5.QtWidgets as QW
 
 import numpy as np
 
-from _base import *
+from base import *
 import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools

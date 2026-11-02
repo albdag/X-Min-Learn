@@ -16,7 +16,7 @@ from PyQt5 import QtWidgets as QW
 
 import numpy as np
 
-from _base import *
+from base import *
 import config_schemas
 import convenient_functions as cf
 import custom_widgets as CW

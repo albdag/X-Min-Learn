@@ -15,7 +15,7 @@ from PyQt5 import QtCore as QC
 
 import numpy as np
 
-from _base import *
+from base import *
 import convenient_functions as cf
 import image_analysis_tools as iatools
 import settings

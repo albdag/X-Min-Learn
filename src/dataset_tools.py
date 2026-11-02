@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 import numpy.typing as npt
 
-from _base import InputMapStack, MineralMap
+from base import InputMapStack, MineralMap
 import convenient_functions as cf
 import threads
 

@@ -17,7 +17,7 @@ from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
-from _base import *
+from base import *
 import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools
