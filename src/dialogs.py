@@ -2160,8 +2160,8 @@ class Preferences(QW.QDialog):
             'Reset preferences to default? Some changes may take effect after '
             'restarting the app.'
         )
-        choice = CW.MsgBox(self, 'Quest', text)
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'Quest', text)
+        if msgbox.is_choice('Yes'):
             settings.manager.default()
             self.close()
 

@@ -612,8 +612,8 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Check for user confirm
-        choice = CW.MsgBox(self, 'Quest', 'Remove selected sample(s)?')
-        if choice.no():
+        msgbox = CW.MsgBox(self, 'Quest', 'Remove selected sample(s)?')
+        if msgbox.is_choice('No'):
             return
 
     # Delete groups and clear their data to destroy possible broken references
@@ -629,8 +629,8 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Check for user confirm
-        choice = CW.MsgBox(self, 'Quest', 'Clear selected sample(s)?')
-        if choice.no():
+        msgbox = CW.MsgBox(self, 'Quest', 'Clear selected sample(s)?')
+        if msgbox.is_choice('No'):
             return
 
         for idx in self.getSelectedGroupsIndexes():
@@ -728,8 +728,8 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Check for user confirm
-        choice = CW.MsgBox(self, 'Quest', 'Clear selected data?')
-        if choice.no():
+        msgbox = CW.MsgBox(self, 'Quest', 'Clear selected data?')
+        if msgbox.is_choice('No'):
             return
     
     # Clear out subgroups
@@ -752,8 +752,8 @@ class DataManager(QW.QTreeWidget):
 
         '''
     # Check for user confirm
-        choice = CW.MsgBox(self, 'Quest', 'Remove selected data?')
-        if choice.no():
+        msgbox = CW.MsgBox(self, 'Quest', 'Remove selected data?')
+        if msgbox.is_choice('No'):
             return
     
     # Delete data objects
@@ -848,8 +848,8 @@ class DataManager(QW.QTreeWidget):
     # Otherwise, double check if user really wants to overwrite the file 
         else:
             text = f'Source data ({path}) will be irreversibly altered. Proceed?'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', text)
+            if msgbox.is_choice('No'):
                 return
 
     # Save the data
@@ -972,8 +972,8 @@ class DataManager(QW.QTreeWidget):
                     txt = f'{cnt} mineral classes detected for {p}. Proceed?'
                     dtxt = '\n'.join(mmap.get_phases())
                     # Make pbar the parent of msgbox for it to be responsive
-                    choice = CW.MsgBox(pbar, 'QW', txt, dtxt, 'X-Min Learn')
-                    if choice.no():
+                    msgbox = CW.MsgBox(pbar, 'QW', txt, dtxt, 'X-Min Learn')
+                    if msgbox.is_choice('No'):
                         continue
                 # Convert ASCII-style maps to .mmp
                 if mmap.is_ascii_style():
@@ -1246,8 +1246,8 @@ class DataManager(QW.QTreeWidget):
         )
         msg_cbox = QW.QCheckBox('Include translation dictionary')
         msg_cbox.setChecked(True)
-        choice = CW.MsgBox(self, 'Quest', text, det_text, cbox=msg_cbox)
-        if choice.no():
+        msgbox = CW.MsgBox(self, 'Quest', text, det_text, cbox=msg_cbox)
+        if msgbox.is_choice('No'):
             return
         
     # Do nothing if the outpath is invalid or the file dialog is canceled
@@ -1260,7 +1260,7 @@ class DataManager(QW.QTreeWidget):
         np.savetxt(outpath, minmap.minmap_encoded, fmt='%d')
 
     # Also save the encoder if user requests it
-        if choice.cboxChecked():
+        if msgbox.cboxChecked():
             encoder_path = cf.extend_filename(outpath, '_transDict')
             rows, cols = minmap.shape
             with open(encoder_path, 'w') as ep:
@@ -1441,8 +1441,8 @@ class DataManager(QW.QTreeWidget):
         Remove all groups.
 
         '''
-        choice = CW.MsgBox(self, 'Quest', 'Remove all samples?')
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'Quest', 'Remove all samples?')
+        if msgbox.is_choice('Yes'):
             self.clear()
             self.clearSceneRequested.emit()
 
@@ -3022,10 +3022,10 @@ class RoiEditor(QW.QWidget):
                 'Warning: different map shapes detected. Drawing ROIs will '
                 'lead to unpredictable results. Proceed anyway?'
             )
-            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
+            msgbox = CW.MsgBox(self, 'QuestWarn', warn_text)
 
         # Exit function if user does not want to procede
-            if choice.no():
+            if msgbox.is_choice('No'):
                 return
 
     # Prevent drawing overlapping ROIs
@@ -3184,8 +3184,8 @@ class RoiEditor(QW.QWidget):
 
     # Ask for user confirmation
         roimap = self.current_roimap
-        choice = CW.MsgBox(self, 'Quest', 'Remove selected ROI?')
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'Quest', 'Remove selected ROI?')
+        if msgbox.is_choice('Yes'):
             for row in sorted(selected, reverse=True):
             # Remove from ROI map
                 roimap.del_roi(row)
@@ -3232,10 +3232,10 @@ class RoiEditor(QW.QWidget):
                 'Loading a new ROI map will discard any unsaved changes made '
                 'to the current ROI map. Proceed anyway?'
             )
-            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
+            msgbox = CW.MsgBox(self, 'QuestWarn', warn_text)
 
         # Exit function if user does not want to procede
-            if choice.no():
+            if msgbox.is_choice('No'):
                 return
 
         # Do nothing if filepath is invalid or the file dialog is canceled
@@ -3287,8 +3287,8 @@ class RoiEditor(QW.QWidget):
     # Ask for user confirmation
         if self.isRoiMapUnsaved():
             warn_text = 'Remove current ROI map? Unsaved changes will be lost.'
-            choice = CW.MsgBox(self, 'QuestWarn', warn_text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', warn_text)
+            if msgbox.is_choice('No'):
                 return
     
     # Unload ROI map and redraw the canvas

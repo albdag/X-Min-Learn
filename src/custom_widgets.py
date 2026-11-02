@@ -3644,32 +3644,6 @@ class MsgBox(QW.QMessageBox):
         '''
         clicked = self._clicked_standard_button()
         return self._buttons.get(button_key) == clicked
-
-    # deprecated -> use is_choice('Yes')
-    def yes(self) -> bool:
-        '''
-        Check if user clicked on 'Yes' button.
-
-        Returns
-        -------
-        bool
-            Whether user clicked on 'Yes' button.
-
-        '''
-        return self.is_choice('Yes')
-    
-    # deprecated -> use is_choice('No')
-    def no(self) -> bool:
-        '''
-        Check if user clicked on 'No' button.
-
-        Returns
-        -------
-        bool
-            Whether user clicked on 'No' button.
-            
-        '''
-        return self.is_choice('No')
     
 
     def cboxChecked(self) -> bool:

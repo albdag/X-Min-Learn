@@ -985,8 +985,8 @@ class MineralClassifier(DraggableTool):
         '''
         current = self.currentMineralMap()
         item_idx = self.minmaps_list.indexOfTopLevelItem(current)
-        choice = CW.MsgBox(self, 'QuestWarn', 'Remove selected map?')
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'QuestWarn', 'Remove selected map?')
+        if msgbox.is_choice('Yes'):
             self.minmaps_list.takeTopLevelItem(item_idx)
             new_displayed_item = self.getMineralMap(item_idx - 1)
             self.minmaps_list.setCurrentItem(new_displayed_item)
@@ -1439,8 +1439,8 @@ class MineralClassifier(DraggableTool):
         # If model log was deleted or moved, ask for rebuilding it
             if not os.path.exists(logpath):
                 quest_text = 'Unable to find model log file. Rebuild it?'
-                choice = CW.MsgBox(self, 'Quest', quest_text)
-                if choice.yes():
+                msgbox = CW.MsgBox(self, 'Quest', quest_text)
+                if msgbox.is_choice('Yes'):
                     ext_log = settings.manager.get('data/extended_model_log')
                     self.model.save_log(logpath, extended=ext_log)
 
@@ -1489,7 +1489,8 @@ class MineralClassifier(DraggableTool):
             dupes = {maps[n] for n, i in enumerate(idx) if idx.count(i) > 1}
             if dupes:
                 text = 'One or more maps match multiple features. Proceed?'
-                if CW.MsgBox(self, 'QuestWarn', text, ', '.join(dupes)).no():
+                msgbox = CW.MsgBox(self, 'QuestWarn', text, ', '.join(dupes))
+                if msgbox.is_choice('No'):
                     return
             
         # Reorder input maps to fit the order of model's features
@@ -1724,8 +1725,8 @@ class MineralClassifier(DraggableTool):
         # Check if ROI map extension differs from input maps extensions
             if input_stack.maps_shape != roimap.shape:
                 text = 'ROI map and sample extensions are different. Proceed?'
-                choice = CW.MsgBox(self, 'QuestWarn', text)
-                if choice.no():
+                msgbox = CW.MsgBox(self, 'QuestWarn', text)
+                if msgbox.is_choice('No'):
                     return None
 
             if algm == 'K-Nearest Neighbors':
@@ -2317,8 +2318,8 @@ class DatasetBuilder(DraggableTool):
             return
         
         text = 'Refresh Dataset Designer? Any progress will be lost.'
-        choice = CW.MsgBox(self, 'QuestWarn', text)
-        if choice.yes():
+        msgbox = CW.MsgBox(self, 'QuestWarn', text)
+        if msgbox.is_choice('Yes'):
             features = [item.text() for item in self.feature_list.getItems()]
             self.designer.refresh(features)
             self.designer_tbar.setEnabled(True)
@@ -3600,8 +3601,8 @@ class ModelLearner(DraggableTool):
     # Ask confirmation if a dataset was already processed
         if self.has_dataset() and self.dataset.are_subsets_split():
             text = 'Current progress will be lost if seed is changed. Confirm?'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', text)
+            if msgbox.is_choice('No'):
                 self.seed_generator.blockSignals(True)
                 self.seed_generator.seed_input.setText(str(old_seed))
                 self.seed_generator.blockSignals(False)
@@ -3632,8 +3633,8 @@ class ModelLearner(DraggableTool):
     # Ask confirmation if a dataset was already processed
         if self.has_dataset():
             text = 'Load a new dataset? Current progress will be lost.'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', text)
+            if msgbox.is_choice('No'):
                 return
             else:
                 self._reset()
@@ -3896,8 +3897,8 @@ class ModelLearner(DraggableTool):
         
     # Ask for user confirm
         text = 'Any existent balancing result will be discarded. Continue?'
-        choice = CW.MsgBox(self, 'Quest', text)
-        if choice.no(): 
+        msgbox = CW.MsgBox(self, 'Quest', text)
+        if msgbox.is_choice('No'): 
             return
         
     # Discard balancing results
@@ -4278,8 +4279,8 @@ class ModelLearner(DraggableTool):
     # Ask confirmation if a dataset was already processed
         if (dataset := self.dataset).are_subsets_split():
             text = 'Current progress will be lost if model is loaded. Confirm?'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', text)
+            if msgbox.is_choice('No'):
                 return
             else:
                 self._reset()
@@ -4307,8 +4308,8 @@ class ModelLearner(DraggableTool):
             logpath = '' if path is None else pmodel.generate_log_path(path)
             if not os.path.exists(logpath):
                 quest_text = 'Unable to find model log file. Rebuild it?'
-                choice = CW.MsgBox(pbar, 'Quest', quest_text)
-                if choice.yes():
+                msgbox = CW.MsgBox(pbar, 'Quest', quest_text)
+                if msgbox.is_choice('Yes'):
                     ext_log = settings.manager.get('data/extended_model_log')
                     pmodel.save_log(logpath, extended=ext_log)
             self.pmodel_preview.setDoc(logpath) # Raises no error if missing
@@ -5458,8 +5459,8 @@ class PhaseRefiner(DraggableTool):
     # Ask for user confirm if a mineral map is currently selected
         if self.has_minmap():
             text = 'Change map? Unsaved edits on current map will be lost.'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', text)
+            if msgbox.is_choice('No'):
                 return
     
     # Change current mineral map with the one selected
@@ -6190,8 +6191,8 @@ class PhaseRefiner(DraggableTool):
             return
     
     # Ask for user confirm
-        choice = CW.MsgBox(self, 'Quest', 'Discard all refinements?')
-        if choice.no():
+        msgbox = CW.MsgBox(self, 'Quest', 'Discard all refinements?')
+        if msgbox.is_choice('No'):
             return
     
     # Reset map and render refiner widgets

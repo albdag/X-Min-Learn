@@ -1029,10 +1029,10 @@ class MainWindow(QW.QMainWindow):
                 | QW.QMessageBox.StandardButton.Cancel
             )
             def_btn = QW.QMessageBox.StandardButton.Cancel
-            choice = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)
-            if choice.yes():
+            msgbox = CW.MsgBox(self, 'Quest', text, btns=btns, def_btn=def_btn)
+            if msgbox.is_choice('Yes'):
                 self.roiEditor.saveRoiMap()
-            elif choice.no():
+            elif msgbox.is_choice('No'):
                 pass
             else: # dialog is canceled
                 return False
@@ -1105,14 +1105,14 @@ class MainWindow(QW.QMainWindow):
             | QW.QMessageBox.StandardButton.Cancel
         )
         def_btn = QW.QMessageBox.StandardButton.Yes
-        choice = CW.MsgBox(self, 'QuestWarn', text, btns=btns, def_btn=def_btn)
+        msgbox = CW.MsgBox(self, 'QuestWarn', text, btns=btns, def_btn=def_btn)
     
     # User wants to save -> launch 'saveProject' method and return its output
-        if choice.yes(): 
+        if msgbox.is_choice('Yes'): 
             return self.saveProject()
     
     # User does not want to save -> the project is safe to close
-        elif choice.no():
+        elif msgbox.is_choice('No'):
             return True
     
     # User canceled the choice dialog -> the project is not safe to close
@@ -1174,8 +1174,8 @@ class MainWindow(QW.QMainWindow):
     # Ask for user's choice if the project and the app version do not coincide
         if (v := project_info['Version']) != QW.qApp.applicationVersion():
             text = f'This project is saved in a different version: {v}. Load?'
-            choice = CW.MsgBox(self, 'QuestWarn', text)
-            if choice.no():
+            msgbox = CW.MsgBox(self, 'QuestWarn', text)
+            if msgbox.is_choice('No'):
                 return
 
     # Initialize a list to store any loading error
