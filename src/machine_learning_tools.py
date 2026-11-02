@@ -590,7 +590,7 @@ class EagerModel():
     # Check model version compatibility
         version = self.variables.get('version', 0)
         if version < self._current_version:
-            self._convert_legacy_model(version, self.filepath)
+            self._convert_legacy_model(version)
         elif version > self._current_version:
             raise ValueError(f'This model requires an updated app version.')
 
@@ -859,7 +859,7 @@ class EagerModel():
             self.variables[new_name] = self.variables.pop(old_name)
 
 
-    def _convert_legacy_model(self, version: int, path: str | None = None) -> None:
+    def _convert_legacy_model(self, version: int) -> None:
         '''
         Convert old model to latest version. The applied changes depend on the
         version of the old model.
@@ -867,10 +867,7 @@ class EagerModel():
         Parameters
         ----------
         version : int
-            Model version.
-        path : str or None, optional
-            Model filepath. If provided, the model file will be overwritten.
-            The default is None.
+            Old model version.
 
         '''
     # Apply changes based on model version
@@ -896,11 +893,13 @@ class EagerModel():
     # Set updated model version
         self.variables['version'] = self._current_version
 
-    # Save the converted model and its log file if a path is provided
-        if path is not None:
-            log_path = self.generate_log_path(path)
+    # Save as a new model (do not overwrite old one)
+        if (path := self.filepath) is not None:
+            new_path = cf.extend_filename(path, f'_v{self._current_version}')
+            log_path = self.generate_log_path(new_path)
             extended = settings.manager.get('data/extended_model_log')
-            self.save(path, log_path=log_path, extended_log=extended)
+            self.save(new_path, log_path=log_path, extended_log=extended)
+            self._filepath = new_path
 
 
     def missing_variables(self) -> set[str]:
