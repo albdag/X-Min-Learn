@@ -1,21 +1,23 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Jan 23 09:14:45 2023
+Defines functions and classes for generating visual representations of data,
+including charts, histograms, and model performance plots.
 
+Created on Mon Jan 23 09:14:45 2023
 @author: albdag
 """
 
 from collections.abc import Callable, Collection, Iterable, Sequence
 from functools import partial
-from typing import Any, Literal, overload
-
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QCursor, QResizeEvent
-from PyQt5.QtWidgets import QAction, QMenu, QSizePolicy, QWidget, QWidgetAction
+from typing import Any, Final, Literal, overload
 
 import numpy as np
 import numpy.typing as npt
-
+from matplotlib import backend_bases as mpl_backend_bases
+from matplotlib import colormaps as mpl_colormaps
+from matplotlib import colors as mpl_colors
+from matplotlib import patheffects as mpl_patheffects
+from matplotlib import style as mpl_style
+from matplotlib import widgets as mpl_widgets
 from matplotlib.axes import Axes
 from matplotlib.backends import backend_qt, backend_qtagg
 from matplotlib.collections import PolyCollection
@@ -25,14 +27,11 @@ from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 from matplotlib.patches import Rectangle
 from matplotlib.text import Annotation, Text
-from matplotlib import backend_bases as mpl_backend_bases
-from matplotlib import colormaps as mpl_colormaps
-from matplotlib import colors as mpl_colors
-from matplotlib import patheffects as mpl_patheffects
-from matplotlib import style as mpl_style
-from matplotlib import widgets as mpl_widgets
 from mpl_interactions import panhandler
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QCursor, QResizeEvent
+from PyQt5.QtWidgets import QAction, QMenu, QSizePolicy, QWidget, QWidgetAction
 
 import settings
 import style
@@ -42,8 +41,8 @@ type MplColor = tuple[float, float, float] | float | str
 
 class PanHandler(panhandler):
 
-    _pressCursor = QCursor(Qt.CursorShape.SizeAllCursor)
-    _releaseCursor = QCursor(Qt.CursorShape.ArrowCursor)
+    _PRESS_CURSOR = QCursor(Qt.CursorShape.SizeAllCursor)
+    _RELEASE_CURSOR = QCursor(Qt.CursorShape.ArrowCursor)
 
     def __init__(self, fig: Figure, button: int = 2) -> None:
         '''
@@ -76,8 +75,8 @@ class PanHandler(panhandler):
 
         '''
         if event.button == self.wheelButton:
-            self._releaseCursor = self.fig.canvas.cursor()
-            self.fig.canvas.setCursor(self._pressCursor)
+            self._RELEASE_CURSOR = self.fig.canvas.cursor()
+            self.fig.canvas.setCursor(self._PRESS_CURSOR)
         super()._press(event)
 
 
@@ -93,7 +92,7 @@ class PanHandler(panhandler):
 
         '''
         if self._id_drag is not None:
-            self.fig.canvas.setCursor(self._pressCursor)
+            self.fig.canvas.setCursor(self._PRESS_CURSOR)
         super()._mouse_move(event)
 
 
@@ -110,19 +109,19 @@ class PanHandler(panhandler):
         '''
         super()._release(event)
         if event.button == self.wheelButton:
-            self.fig.canvas.setCursor(self._releaseCursor)
+            self.fig.canvas.setCursor(self._RELEASE_CURSOR)
 
 
 
 class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
-    _figure_kwargs = {
+    _FIGURE_KWARGS: Final[dict[str, Any]] = {
         'facecolor': style.IVORY,
         'edgecolor': style.BLACK_PEARL,
         'linewidth': 1
     }
-    _ax_facecolor = style.BLACK_PEARL
-    _title_pad = 5
+    _AX_FACECOLOR = style.BLACK_PEARL
+    _TITLE_PAD = 5
 
     def __init__(
         self,
@@ -151,8 +150,8 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
         '''
     # Define the figure and the ax of the matplotlib canvas
-        self.fig = Figure(size, layout=layout, **self._figure_kwargs)
-        self.ax = self.fig.add_subplot(111, facecolor=self._ax_facecolor)
+        self.fig = Figure(size, layout=layout, **self._FIGURE_KWARGS)
+        self.ax = self.fig.add_subplot(111, facecolor=self._AX_FACECOLOR)
         
     # Initialize blank ax if required
         if init_blank:
@@ -179,7 +178,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
     def set_padded_title(self, title: str) -> None:
         '''
         Convenient function to set ax title with default title pad. Child
-        classes can overwrite default title pad, by changing '_title_pad'
+        classes can overwrite default title pad, by changing '_TITLE_PAD'
         class attribute.
 
         Parameters
@@ -188,7 +187,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
             New ax title.
 
         '''
-        self.ax.set_title(title, pad=self._title_pad)
+        self.ax.set_title(title, pad=self._TITLE_PAD)
 
 
     def update_toolbar(self) -> None:
@@ -380,7 +379,7 @@ class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
 class ImageCanvas(_CanvasBase):
 
-    _title_pad = 15 # overrides parent class attribute
+    _TITLE_PAD = 15 # overrides parent class attribute
 
     def __init__(
         self,
@@ -413,7 +412,7 @@ class ImageCanvas(_CanvasBase):
     # Define the main attributes of the canvas
         self._is_binary = binary
         self._image: AxesImage | None = None
-        self.scaled_clim = None # scaled clims are currently unused
+        self._scaled_clim = None # scaled clims are currently unused
 
     # Initialize the colormap
         self._cmap: mpl_colors.Colormap | None = None
@@ -463,14 +462,19 @@ class ImageCanvas(_CanvasBase):
         Returns
         -------
         Colormap
-            New linear colormap. 
+            New linear colormap.
+
+        Raises
+        ------
+        TypeError
+            Raised if 'name' is not a valid linear colormap name.
 
         '''
     # Ensure requested colormap is a LinearSegmentedColormap
         self._cmap = mpl_colormaps['binary_r' if self._is_binary else name]
         if not isinstance(self._cmap, mpl_colors.LinearSegmentedColormap):
             self._cmap = None
-            raise ValueError(f'{name} is not a valid heatmap colormap name.')
+            raise TypeError(f'{name} is not a valid linear colormap name.')
 
     # Set colors for outliers and masked data
         self._cmap.set_over(self._over['Linear'])
@@ -539,7 +543,7 @@ class ImageCanvas(_CanvasBase):
 
         Raises
         ------
-        ValueError
+        TypeError
             Raised if 'color_arg' is not a string nor an iterable.
 
         '''
@@ -559,7 +563,7 @@ class ImageCanvas(_CanvasBase):
 
         # Safety fallback
         else:
-            raise ValueError(f'{color_arg} is not a valid argument.')
+            raise TypeError(f'{color_arg} is not a valid argument.')
 
         # Set the new colormap and render it
         self._image.set_cmap(cmap)
@@ -698,29 +702,26 @@ class ImageCanvas(_CanvasBase):
                 raise ValueError(err)
             glb_min = min([arr.min() for arr in arrays])
             glb_max = max([arr.max() for arr in arrays])
-            self.scaled_clim = (glb_min, glb_max)
+            self._scaled_clim = (glb_min, glb_max)
 
     # Disable scaled norm limits
         else: 
-            self.scaled_clim = None
+            self._scaled_clim = None
 
     # Update the norm limits in any case
         self.update_clim()
 
 
     def update_clim(
-        self,
-        vmin: int | float | None = None,
-        vmax: int | float | None = None
-    ) -> None:
+            self, vmin: float | None = None, vmax: float | None = None) -> None:
         '''
         Update the image norm limits.
 
         Parameters
         ----------
-        vmin : int or float or None, optional
+        vmin : float | None, optional
             Lower limit. The default is None.
-        vmax : int or float or None, optional
+        vmax : float | None, optional
             Upper limit. The default is None.
 
         '''
@@ -1082,9 +1083,18 @@ class ImageCanvas(_CanvasBase):
 
 class BarCanvas(_CanvasBase):
 
-    _bar_properties = {'edgecolor': style.IVORY, 'linewidth': 0.5}
-    _grid_properties = {'linestyle': ':', 'linewidth': 0.5, 'zorder': 0}
-    _legend_properties = {'labelcolor': style.IVORY}
+    _BAR_PROPERTIES: Final[dict[str, Any]] = {
+        'edgecolor': style.IVORY,
+        'linewidth': 0.5
+    }
+    _GRID_PROPERTIES: Final[dict[str, Any]] = {
+        'linestyle': ':',
+        'linewidth': 0.5,
+        'zorder': 0
+    }
+    _LEGEND_PROPERTIES: Final[dict[str, Any]] = {
+        'labelcolor': style.IVORY
+    }
 
     def __init__(
         self,
@@ -1336,7 +1346,7 @@ class BarCanvas(_CanvasBase):
         # Redraw legend
         if (legend := self.ax.get_legend()) is not None:
             legend.remove()
-        self.ax.legend(**self._legend_properties)
+        self.ax.legend(**self._LEGEND_PROPERTIES)
         self.draw_idle()
 
 
@@ -1400,23 +1410,27 @@ class BarCanvas(_CanvasBase):
             return self.clear_canvas()
         
         # Check for inconsistencies in input parameters
-        if len((series_length := set(len(d) for d in data))) > 1:
+        if len(series_length := {len(d) for d in data}) > 1:
             raise ValueError('Data sequences must have the same length.')
         
         n_values = series_length.pop()
         if (ntl := len(set(ticklabels))) != n_values:
-            raise ValueError(f'Got {ntl} unique tick labels, but {n_values} are required.')
+            err = f'Got {ntl} unique tick labels, but {n_values} are required.'
+            raise ValueError(err)
 
         mpl_colors = None if colors is None else rgb_to_float(colors)
         if mpl_colors is not None:
             nc = len(mpl_colors)
             if n_series == 1 and nc != n_values:
-                raise ValueError(f'Got {nc} colors, but {n_values} are required.')
+                err = f'Got {nc} colors, but {n_values} are required.'
+                raise ValueError(err)
             if n_series > 1 and nc != n_series:
-                raise ValueError(f'Got {nc} colors, but {n_series} are required.')
+                err = f'Got {nc} colors, but {n_series} are required.'
+                raise ValueError(err)
 
         if categories is not None and (ncat := len(categories)) != n_series:
-            raise ValueError(f'Got {ncat} categories, but {n_series} are required.')
+            err = f'Got {ncat} categories, but {n_series} are required.'
+            raise ValueError(err)
 
         # Remove the previous plot, including label amounts and legend
         if not self.is_empty(): 
@@ -1431,13 +1445,13 @@ class BarCanvas(_CanvasBase):
                 plot_function = self.ax.bar
                 self.ax.set_xticks(ticks, labels=ticklabels)
                 self.ax.tick_params('x', which='both', length=0, rotation=-60)
-                self.ax.grid(True, axis='y', **self._grid_properties)
+                self.ax.grid(True, axis='y', **self._GRID_PROPERTIES)
             case 'h':
                 plot_function = self.ax.barh
                 self.ax.set_yticks(ticks, labels=ticklabels)
                 self.ax.tick_params('y', which='both', length=0)
                 self.ax.invert_yaxis()
-                self.ax.grid(True, axis='x', **self._grid_properties)
+                self.ax.grid(True, axis='x', **self._GRID_PROPERTIES)
             case _: # safety
                 return
 
@@ -1459,14 +1473,14 @@ class BarCanvas(_CanvasBase):
                 self._bar_thickness,
                 color=col,
                 label=cat,
-                **self._bar_properties
+                **self._BAR_PROPERTIES
             )
             series.set_label(f'Series {i}' if cat is None else cat)
             self._plot.append(series)
 
         # Build the legend
         if categories is not None:
-            self.ax.legend(**self._legend_properties)
+            self.ax.legend(**self._LEGEND_PROPERTIES)
 
         # Refresh label amounts if required
         self.toggle_amounts(self._visible_amounts)
@@ -1711,7 +1725,7 @@ class HistogramCanvas(_CanvasBase):
 
 class ConfMatCanvas(ImageCanvas):
 
-    _annotation_properties = {
+    _ANNOTATION_PROPERTIES: Final[dict[str, Any]] = {
         'color': 'w',
         'horizontalalignment': 'center',
         'verticalalignment': 'center',
@@ -1719,8 +1733,8 @@ class ConfMatCanvas(ImageCanvas):
             mpl_patheffects.withStroke(linewidth=2, foreground='k')
         ]
     }
-    _confmat_colormap = 'cividis' # default colormap, may be a user preference
-    _title_pad = 5
+    _CONFMAT_COLORMAP = 'cividis' # default colormap, may be a user preference
+    _TITLE_PAD = 5
 
     def __init__(
         self,
@@ -1834,7 +1848,7 @@ class ConfMatCanvas(ImageCanvas):
 
     # Annotate each node with the corresponding value
         for t, x, y in zip(mtx.flatten(), xx.flatten(), yy.flatten()):
-            self.ax.annotate(t, (x, y), **self._annotation_properties)
+            self.ax.annotate(t, (x, y), **self._ANNOTATION_PROPERTIES)
 
 
     def _remove_annotations(self) -> None:
@@ -1897,7 +1911,7 @@ class ConfMatCanvas(ImageCanvas):
 
         '''
         if self._image is None:
-            kwargs = {'cmap': self._confmat_colormap, 'interpolation': 'none'}
+            kwargs = {'cmap': self._CONFMAT_COLORMAP, 'interpolation': 'none'}
             self._image = self.ax.matshow(data, **kwargs)
         else:
             self._image.set_data(data)
@@ -1970,13 +1984,13 @@ class ConfMatCanvas(ImageCanvas):
 
 class SilhouetteCanvas(_CanvasBase):
 
-    _avg_line_properties = {
+    _AVG_LINE_PROPERTIES: Final[dict[str, Any]] = {
         'color': 'r',
         'linestyle': '--',
         'linewidth': 2, 
         'path_effects': [mpl_patheffects.withStroke(foreground=style.IVORY)]
     }
-    _y_btm_init = 15
+    _Y_BTM_INIT = 15
 
     def __init__(self, size: tuple[float, float] = (4.8, 6.4), **kwargs) -> None:
         '''
@@ -2062,7 +2076,7 @@ class SilhouetteCanvas(_CanvasBase):
         colors = dict(zip(palette.keys(), rgb_to_float(palette.values())))
 
     # Adjust the initial vertical (y) padding
-        y_btm = self._y_btm_init
+        y_btm = self._Y_BTM_INIT
 
     # Plot silhouettes, using y padding as a reference
         for clust_id, values in sil_values.items():
@@ -2076,10 +2090,10 @@ class SilhouetteCanvas(_CanvasBase):
                 edgecolor = style.IVORY, 
                 label = str(clust_id)
             )
-            y_btm = y_top + self._y_btm_init
+            y_btm = y_top + self._Y_BTM_INIT
 
     # Draw the average silhouette score
-        self.ax.axvline(x=sil_avg, **self._avg_line_properties)
+        self.ax.axvline(x=sil_avg, **self._AVG_LINE_PROPERTIES)
 
     # Render the plot
         self.draw_idle()
@@ -2217,8 +2231,12 @@ class PieCanvas(_CanvasBase):
 type CurvePlotData = tuple[Sequence[float | int], Sequence[float | int]] # (x_coords, y_coords)
 class CurveCanvas(_CanvasBase):
 
-    _grid_properties = {'linestyle': ':', 'linewidth': 0.5, 'zorder': 0}
-    _legend_properties = {
+    _GRID_PROPERTIES: Final[dict[str, Any]] = {
+        'linestyle': ':',
+        'linewidth': 0.5,
+        'zorder': 0
+    }
+    _LEGEND_PROPERTIES: Final[dict[str, Any]] = {
         'facecolor': style.IVORY,
         'framealpha': 1,
         'frameon': True,
@@ -2270,13 +2288,13 @@ class CurveCanvas(_CanvasBase):
         self.set_padded_title(self._title)
         self.ax.set_xlabel(self._xlab)
         self.ax.set_ylabel(self._ylab)
-        self.ax.grid(self._grid_on, **self._grid_properties)
+        self.ax.grid(self._grid_on, **self._GRID_PROPERTIES)
 
 
     def _add_curve(
         self,
-        xdata: npt.ArrayLike | float | int,
-        ydata: npt.ArrayLike | float | int,
+        xdata: npt.ArrayLike | float,
+        ydata: npt.ArrayLike | float,
         label: str = '',
         color: MplColor | None = None
     ) -> None:
@@ -2285,9 +2303,9 @@ class CurveCanvas(_CanvasBase):
 
         Parameters
         ----------
-        xdata : ArrayLike | float | int
+        xdata : ArrayLike | float
             X coordinate(s) of the point(s) of the curve.
-        ydata : ArrayLike | float | int
+        ydata : ArrayLike | float
             Y coordinate(s) of the point(s) of the curve.
         label : str, optional
             Curve name. The default is ''.
@@ -2374,7 +2392,7 @@ class CurveCanvas(_CanvasBase):
         self.ax.autoscale_view()
 
     # Draw the legend
-        self.ax.legend(**self._legend_properties)
+        self.ax.legend(**self._LEGEND_PROPERTIES)
     
     # Render the plot
         self.draw_idle()
@@ -2748,6 +2766,12 @@ class RoiPatch(Rectangle):
 
 class RoiAnnotation(Annotation):
 
+    _BBOX_PROPERTIES: Final[dict[str, Any]] = {
+        'boxstyle': 'round',
+        'edgecolor': style.BLACK_PEARL,
+        'facecolor': style.IVORY
+    }
+
     def __init__(
         self,
         text: str,
@@ -2771,10 +2795,10 @@ class RoiAnnotation(Annotation):
 
         '''
         super().__init__(
-            text = '' if text == '-' else text, # hyphen hides ROI annotation
-            xy = xy,
-            xycoords = anchor_patch,
-            bbox = dict(boxstyle='round', fc=style.IVORY, ec=style.BLACK_PEARL),
+            text='' if text == '-' else text, # hyphen hides ROI annotation
+            xy=xy,
+            xycoords=anchor_patch,
+            bbox=self._BBOX_PROPERTIES,
             annotation_clip=True
         )
         
@@ -2794,7 +2818,7 @@ class RoiAnnotation(Annotation):
 
 
 
-class Crosshair(mpl_widgets.MultiCursor): # !!! Not used yet
+class Crosshair(mpl_widgets.MultiCursor): # Not used yet
 
     def __init__(self, axes: list[Axes] | tuple[Axes, ...]) -> None:
         '''
@@ -2820,6 +2844,29 @@ class Crosshair(mpl_widgets.MultiCursor): # !!! Not used yet
 
 class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
 
+    _PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 0.6,
+        'color': style.BLACK_PEARL,
+        'linewidth': 2
+    }
+    _HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 1,
+        'markeredgecolor': style.BLACK_PEARL,
+        'markerfacecolor': style.BLOSSOM
+    }
+    _BOX_PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 0.5,
+        'edgecolor': style.BLACK_PEARL,
+        'facecolor': style.BLOSSOM_LIGHT,
+        'fill': True,
+        'linewidth': 1
+    }
+    _BOX_HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 0.6,
+        'markeredgecolor': style.BLACK_PEARL,
+        'markerfacecolor': style.CASPER_DARK
+    }
+
     def __init__(self, ax: Axes, onselect: Callable, interactive: bool = True) -> None:
         '''
         A reimplemented Matplotlib polygon selector widget [NOT USED YET]
@@ -2840,29 +2887,11 @@ class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
         kwargs = {
             'useblit': True,
             'grab_range': 10,
-            'props': {
-                'color': style.BLACK_PEARL,
-                'alpha': 0.6,
-                'linewidth': 2,
-            },
-            'handle_props': {
-                'markerfacecolor': style.BLOSSOM,
-                'markeredgecolor': style.BLACK_PEARL,
-                'alpha': 1
-            },
+            'props': self._PROPERTIES,
+            'handle_props': self._HANDLE_PROPERTIES,
             'draw_bounding_box': interactive,
-            'box_props': {
-                'facecolor': style.BLOSSOM_LIGHT,
-                'edgecolor': style.BLACK_PEARL,
-                'alpha': 0.5, 
-                'linewidth': 1,
-                'fill': True
-            },
-            'box_handle_props': {
-                'markerfacecolor': style.CASPER_DARK,
-                'markeredgecolor': style.BLACK_PEARL,
-                'alpha': 0.6
-            }
+            'box_props': self._BOX_PROPERTIES,
+            'box_handle_props': self._BOX_HANDLE_PROPERTIES
         }
         super().__init__(ax, onselect, **kwargs)
     
@@ -2900,6 +2929,19 @@ class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
 
 class RectSel(mpl_widgets.RectangleSelector):
 
+    _PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 0.6,
+        'edgecolor': style.BLOSSOM,
+        'facecolor': style.BLACK_PEARL,
+        'fill': True,
+        'linewidth': 2
+    }
+    _HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 1,
+        'markeredgecolor': style.BLACK_PEARL,
+        'markerfacecolor': style.BLOSSOM
+    }
+
     def __init__(
         self,
         ax: Axes,
@@ -2934,21 +2976,11 @@ class RectSel(mpl_widgets.RectangleSelector):
             'minspanx': 1,
             'minspany': 1,
             'useblit': True,
-            'props': {
-                'facecolor': style.BLACK_PEARL,
-                'edgecolor': style.BLOSSOM,
-                'alpha': 0.6, 
-                'linewidth': 2,
-                'fill': True
-            },
+            'props': self._PROPERTIES,
             'spancoords': 'data',
             'button': btns,
             'grab_range': 10,
-            'handle_props': {
-                'markerfacecolor': style.BLOSSOM,
-                'markeredgecolor': style.BLACK_PEARL,
-                'alpha': 1
-            },
+            'handle_props': self._HANDLE_PROPERTIES,
             'interactive': interactive,
             'drag_from_anywhere': True
         }
@@ -3017,10 +3049,10 @@ class RectSel(mpl_widgets.RectangleSelector):
             return None
 
     # Fix extents that are partially outside the map borders
-        if xmin < 0: xmin = 0
-        if xmax > shape[1]: xmax = shape[1]
-        if ymin < 0: ymin = 0
-        if ymax > shape[0]: ymax = shape[0]
+        xmin = max(xmin, 0)
+        xmax = min(xmax, shape[1])
+        ymin = max(ymin, 0)
+        ymax = min(ymax, shape[0])
 
     # Return the fixed extents formatted according to 'fmt'
         match fmt:
@@ -3180,6 +3212,17 @@ class RectSel(mpl_widgets.RectangleSelector):
 
 class HeatmapScaler(mpl_widgets.SpanSelector):
 
+    _PROPERTIES: Final[dict[str, Any]] = {
+        'alpha': 0.6,
+        'edgecolor': style.BLOSSOM,
+        'facecolor': style.BLOSSOM,
+        'fill': True
+    }
+    _HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+        'color': style.BLOSSOM,
+        'linewidth': 2
+    }
+
     def __init__(
         self,
         ax: Axes,
@@ -3210,18 +3253,10 @@ class HeatmapScaler(mpl_widgets.SpanSelector):
             'direction': 'horizontal',
             'minspan': 0,
             'useblit': True,
-            'props': {
-                'facecolor': style.BLOSSOM,
-                'edgecolor': style.BLOSSOM,
-                'alpha': 0.6,
-                'fill': True
-            },
+            'props': self._PROPERTIES,
             'interactive': interactive,
             'button': btns,
-            'handle_props': {
-                'color': style.BLOSSOM,
-                'linewidth': 2
-            },
+            'handle_props': self._HANDLE_PROPERTIES,
             'grab_range': 10,
             'drag_from_anywhere': True
         }

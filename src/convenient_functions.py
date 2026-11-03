@@ -1,14 +1,16 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Apr 28 12:12:28 2021
+A collection of utility functions that streamline common operations across 
+different parts of the application.
 
+Created on Wed Apr 28 12:12:28 2021
 @author: albdag
 """
 
+import os
 from collections import Counter
 from collections.abc import Iterable, Mapping
-import os
 from typing import Any, Literal
+
 
 def get_dictkey[K, V](dictionary: Mapping[K, V], value: V) -> K:
     '''

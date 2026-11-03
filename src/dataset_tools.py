@@ -1,21 +1,23 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Oct 23 09:21:45 2024
+Provides functionalities for handling and preprocessing ground truth datasets,
+including data loading, transformation, and feature extraction to facilitate
+machine learning tasks.
 
+Created on Wed Oct 23 09:21:45 2024
 @author: albdag
 """
 
 from collections.abc import Hashable, Iterable, Sequence
 from typing import Any, Literal, TypedDict, get_args, overload
 
-from imblearn import over_sampling, under_sampling
-import pandas as pd
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
+from imblearn import over_sampling, under_sampling
 
-from base import InputMapStack, MineralMap
 import convenient_functions as cf
 import threads
+from base import InputMapStack, MineralMap
 
 # Balancing algorithm names
 OverSamplingAlgorithmName = Literal[
@@ -50,7 +52,7 @@ BalancingInfo = TypedDict('BalancingInfo', {
     'New TVT ratios': tuple[float, float, float] # train, validation, test
 })
 
-class GroundTruthDataset():
+class GroundTruthDataset:
 
     def __init__(self, dataframe: pd.DataFrame, filepath: str | None = None) -> None:
         '''
@@ -226,7 +228,7 @@ class GroundTruthDataset():
             # Check for same column names
             column_names.add(','.join(sorted(d.columns_names())))
             if len(column_names) > 1:
-                raise ValueError(f'Datasets have different columns.')
+                raise ValueError('Datasets have different columns.')
 
             # Append dataframe to list
             dataframes.append(d.dataframe)
@@ -288,7 +290,7 @@ class GroundTruthDataset():
     
     # Check for same column names
         if sorted(self.columns_names()) != sorted(other.columns_names()):
-            raise ValueError(f'Cannot merge datasets with different columns')
+            raise ValueError('Cannot merge datasets with different columns')
     
     # Merge dataframes and update dataset
         dataframes = [self.dataframe, other.dataframe]
@@ -515,7 +517,7 @@ class GroundTruthDataset():
         
         self.encoder = parent_encoder if parent_encoder is not None else {}
         for u in np.unique(self.targets):
-            if not u in self.encoder.keys():
+            if not u in self.encoder:
                 self.encoder[u] = len(self.encoder)
 
 
@@ -1304,7 +1306,7 @@ class GroundTruthDataset():
     
 
 
-class CsvChunkReader():
+class CsvChunkReader:
 
     def __init__(
         self,
@@ -1424,7 +1426,6 @@ class CsvChunkReader():
         if not filepath.lower().endswith('.csv'):
             raise ValueError('The filepath must have the .csv extension.')
 
-        chunk_list = []
         kwargs = {
             'decimal': self.dec,
             'sep': self.sep,
@@ -1432,8 +1433,7 @@ class CsvChunkReader():
             'chunksize': self.chunksize
         }
         with pd.read_csv(filepath, **kwargs) as reader:
-            for chunk in reader:
-                chunk_list.append(chunk)
+            chunk_list = [chunk for chunk in reader]
 
         return chunk_list
     

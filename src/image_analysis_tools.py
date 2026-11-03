@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Oct 23 12:32:14 2024
+Contains algorithms and utilities for image processing and transformation,
+including image filtering techniques.
 
+Created on Wed Oct 23 12:32:14 2024
 @author: albdag
 """
 
@@ -26,7 +27,7 @@ BinaryMorphologyAlgorithms = Literal[
 KernelShape = Literal['square', 'circle', 'diamond']
 
 # Binary merge modes
-BinaryMergeModes = Literal['I', 'intersection', 'U', 'union']
+type BinaryMergeModes = Literal['I', 'intersection', 'U', 'union']
 
 
 def construct_kernel_filter(shape: KernelShape, size: int) -> npt.NDArray[Any]:
@@ -178,7 +179,7 @@ def replace_with_nearest(
 
 def nan_aware_mode(
     array: npt.NDArray[Any],
-    nan_value: float | int | str | None = None,
+    nan_value: float | str | None = None,
     nan_threshold: float = 0.5
 ) -> float | int | str :
     '''
@@ -190,7 +191,7 @@ def nan_aware_mode(
     ----------
     array : NDArray[Any]
         Input array.
-    nan_value : float or int or str or None, optional
+    nan_value : float | str | None, optional
         The value to be treated as NaN. If None, no value will be treated as 
         NaN. The default is None.
     nan_threshold : float, optional
@@ -218,7 +219,7 @@ def nan_aware_mode(
 def apply_mode_filter(
     array: npt.NDArray[Any],
     structure: npt.NDArray[Any],
-    nan_value: float | int | str | None = None,
+    nan_value: float | str | None = None,
     nan_threshold: float = 0.5
 ) -> npt.NDArray[Any]:
     '''
@@ -232,7 +233,7 @@ def apply_mode_filter(
     structure : NDArray[Any]
         Binary structuring element used for the operation. For more details see
         'construct_kernel_filter'.
-    nan_value : float or int or str or None, optional
+    nan_value : float | str | None, optional
         The value to be treated as NaN. See 'nan_aware_mode' function. The 
         default is None.
     nan_threshold : float, optional

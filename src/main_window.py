@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-Created on Sun Mar  5 19:31:39 2023
+Defines the main application interface, integrating all UI components for the 
+basic user interactions with the software.
 
+Created on Sun Mar  5 19:31:39 2023
 @author: albdag
 """
 
@@ -13,7 +14,6 @@ from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
-from base import InputMap, MineralMap, Mask
 import convenient_functions as cf
 import custom_widgets as CW
 import dialogs
@@ -21,6 +21,7 @@ import docks
 import settings
 import style
 import tools
+from base import InputMap, Mask, MineralMap
 
 
 class MainWindow(QW.QMainWindow):
@@ -537,10 +538,12 @@ class MainWindow(QW.QMainWindow):
             
         '''
         # Ask confirm to close the tool contained in the tab
-        if isinstance(tool := self.tabWidget.widget(idx), tools.DraggableTool):
-            if tool.is_safe_to_close():
-                self.unregister_tool(tool)
-                self.tabWidget.closeTab(idx)
+        if (
+            isinstance(tool := self.tabWidget.widget(idx), tools.DraggableTool)
+            and tool.is_safe_to_close()
+        ):
+            self.unregister_tool(tool)
+            self.tabWidget.closeTab(idx)
 
 
     def about(self) -> None:
@@ -989,7 +992,7 @@ class MainWindow(QW.QMainWindow):
                 continue
 
             name = data_obj.getComponents()['name']
-            displ_name = ' / '.join((group.name, subgr.name, name))
+            displ_name = f'{group.name} / {subgr.name} / {name}'
             text = (
                 f'Found unsaved data in Data Manager:\n{displ_name}\n'
                 f'Save it? ({n_obj - n - 1} more found)'
@@ -1107,16 +1110,11 @@ class MainWindow(QW.QMainWindow):
         msgbox = CW.MsgBox(self, 'QuestWarn', text, btns=btns, def_btn=def_btn)
     
     # User wants to save -> launch 'saveProject' method and return its output
+    # User does not want to save -> the project is safe to close
+    # User canceled the choice dialog -> the project is not safe to close
         if msgbox.is_choice('Yes'): 
             return self.saveProject()
-    
-    # User does not want to save -> the project is safe to close
-        elif msgbox.is_choice('No'):
-            return True
-    
-    # User canceled the choice dialog -> the project is not safe to close
-        else:
-            return False
+        return msgbox.is_choice('No')
 
 
     def newProject(self) -> None:
@@ -1165,7 +1163,7 @@ class MainWindow(QW.QMainWindow):
                 project_info = json.loads(xmj.read('ProjectInfo'))
                 current_view = json.loads(xmj.read('CurrentView'))
                 panes_data = json.loads(xmj.read('PanesData'))
-                tools_data = pickle.loads(xmj.read('ToolsData'))
+                tools_data = pickle.loads(xmj.read('ToolsData')) # noqa: F841
         except Exception as e:
             CW.MsgBox(self, 'Crit', 'Failed to open project.', str(e))
             return

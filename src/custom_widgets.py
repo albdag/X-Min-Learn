@@ -1,25 +1,24 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Apr 28 12:27:17 2021
+Defines custom GUI components that extend standard PyQt widgets.
 
+Created on Wed Apr 28 12:27:17 2021
 @author: albdag
 """
 
-from collections.abc import Collection, Sequence
 import os
-from typing import Literal, TypedDict
-
-from PyQt5 import QtWidgets as QW
-from PyQt5 import QtGui as QG
-from PyQt5 import QtCore as QC
+from collections.abc import Collection, Sequence
+from typing import Final, Literal, TypedDict
 
 import numpy as np
+from PyQt5 import QtCore as QC
+from PyQt5 import QtGui as QG
+from PyQt5 import QtWidgets as QW
 
-from base import *
 import convenient_functions as cf
 import image_analysis_tools as iatools
 import settings
 import style
+from base import *
 
 
 class DataGroup(QW.QTreeWidgetItem):
@@ -41,12 +40,12 @@ class DataGroup(QW.QTreeWidgetItem):
         super().__init__()
 
     # Set the flags. Data groups are selectable and their name is editable
-        self.setFlags(QC.Qt.ItemFlag((
+        self.setFlags(QC.Qt.ItemFlag(
             QC.Qt.ItemFlag.ItemIsSelectable
             | QC.Qt.ItemFlag.ItemIsUserCheckable
             | QC.Qt.ItemFlag.ItemIsEnabled
             | QC.Qt.ItemFlag.ItemIsEditable
-        )))
+        ))
 
     # Set the font as bold
         font = self.font(0)
@@ -221,11 +220,11 @@ class DataSubGroup(QW.QTreeWidgetItem):
                 raise ValueError(f'{name} is not a valid name for a subgroup.')
 
     # Set the flags. Data subgroups can be selected but cannot be edited
-        self.setFlags(QC.Qt.ItemFlag((
+        self.setFlags(QC.Qt.ItemFlag(
             QC.Qt.ItemFlag.ItemIsSelectable
             | QC.Qt.ItemFlag.ItemIsUserCheckable
             | QC.Qt.ItemFlag.ItemIsEnabled
-        )))
+        ))
 
     # Set the font as underlined
         font = self.font(0)
@@ -381,12 +380,12 @@ class DataObject(QW.QTreeWidgetItem):
         super().__init__(type = QW.QTreeWidgetItem.ItemType.UserType)
 
     # Set the flags. A data object is selectable and editable by the user.
-        self.setFlags(QC.Qt.ItemFlag((
+        self.setFlags(QC.Qt.ItemFlag(
             QC.Qt.ItemFlag.ItemIsSelectable
             | QC.Qt.ItemFlag.ItemIsUserCheckable
             | QC.Qt.ItemFlag.ItemIsEnabled
             | QC.Qt.ItemFlag.ItemIsEditable
-        )))
+        ))
         
     # Set status stack [102 = not_found, 101 = edited, 0 = Empty status] 
         self._status_stack = [102, 101, 0] 
@@ -1535,7 +1534,7 @@ class StyledButton(QW.QPushButton):
     # Overwrite default background color if requested
         ss = style.SS_BUTTON
         if bg:
-            ss += 'QPushButton {background-color: %s; font: bold;}' %(bg)
+            ss += 'QPushButton {background-color: %s; font: bold;}' %(bg) # noqa UP031
         self.setStyleSheet(ss)
 
 
@@ -3484,7 +3483,7 @@ class SeparatorSymbolSelector(StyledComboBox):
 
 class MsgBox(QW.QMessageBox):
 
-    _buttons = {
+    _BUTTONS: Final[dict[str, QW.QMessageBox.StandardButton]] = {
         'Ok': QW.QMessageBox.StandardButton.Ok,
         'Open': QW.QMessageBox.StandardButton.Open,
         'Save': QW.QMessageBox.StandardButton.Save,
@@ -3504,8 +3503,7 @@ class MsgBox(QW.QMessageBox):
         'Retry': QW.QMessageBox.StandardButton.Retry,
         'Ignore': QW.QMessageBox.StandardButton.Ignore
     }
-
-    _icons = {
+    _ICONS: Final[dict[str, QW.QMessageBox.Icon]] = {
         'Question': QW.QMessageBox.Icon.Question,
         'Information': QW.QMessageBox.Icon.Information,
         'Warning': QW.QMessageBox.Icon.Warning,
@@ -3567,26 +3565,26 @@ class MsgBox(QW.QMessageBox):
         '''
     # Set default icon, buttons and default button according to message type
         question_buttons = QW.QMessageBox.StandardButton(
-            self._buttons['Yes'] | self._buttons['No']
+            self._BUTTONS['Yes'] | self._BUTTONS['No']
         )
         match kind:
             case 'Info' | 'I':
-                icon = self._icons['Information'] if icon is None else icon
-                btns = self._buttons['Ok'] if btns is None else btns
+                icon = self._ICONS['Information'] if icon is None else icon
+                btns = self._BUTTONS['Ok'] if btns is None else btns
             case 'Quest' | 'Q':
-                icon = self._icons['Question'] if icon is None else icon
+                icon = self._ICONS['Question'] if icon is None else icon
                 btns = question_buttons if btns is None else btns
-                def_btn = self._buttons['No'] if def_btn is None else def_btn
+                def_btn = self._BUTTONS['No'] if def_btn is None else def_btn
             case 'Warn' | 'W':
-                icon = self._icons['Warning'] if icon is None else icon
-                btns = self._buttons['Ok'] if btns is None else btns
+                icon = self._ICONS['Warning'] if icon is None else icon
+                btns = self._BUTTONS['Ok'] if btns is None else btns
             case 'QuestWarn' | 'QW':
-                icon = self._icons['Warning'] if icon is None else icon
+                icon = self._ICONS['Warning'] if icon is None else icon
                 btns = question_buttons if btns is None else btns
-                def_btn = self._buttons['No'] if def_btn is None else def_btn
+                def_btn = self._BUTTONS['No'] if def_btn is None else def_btn
             case 'Crit' | 'C':
-                icon = self._icons['Critical'] if icon is None else icon
-                btns = self._buttons['Ok'] if btns is None else btns
+                icon = self._ICONS['Critical'] if icon is None else icon
+                btns = self._BUTTONS['Ok'] if btns is None else btns
             case _:
                 raise ValueError('f{kind} is an invalid message box kind.')
         
@@ -3622,7 +3620,7 @@ class MsgBox(QW.QMessageBox):
 
         '''
         if (btn := self.clickedButton()) is None:
-            return self._buttons['Cancel']
+            return self._BUTTONS['Cancel']
         return self.standardButton(btn)
 
 
@@ -3633,7 +3631,7 @@ class MsgBox(QW.QMessageBox):
         Parameters
         ----------
         button_key : str
-            String key matching a standard button. Check the "self._buttons" 
+            String key matching a standard button. Check the "self._BUTTONS" 
             class attribute for a list of valid keys.
 
         Returns
@@ -3643,7 +3641,7 @@ class MsgBox(QW.QMessageBox):
 
         '''
         clicked = self._clicked_standard_button()
-        return self._buttons.get(button_key) == clicked
+        return self._BUTTONS.get(button_key) == clicked
     
 
     def cboxChecked(self) -> bool:
@@ -4281,8 +4279,8 @@ class PercentLineEdit(QW.QFrame):
     # Main attributes
         self._base = base_value
         self._value = base_value
-        self._min_perc = 1 if min_perc < 1 else min_perc
-        self._max_perc = 100 if max_perc < 100 else max_perc
+        self._min_perc = max(min_perc, 1)
+        self._max_perc = min(max_perc, 100)
 
     # Widget attributes
         self.setFrameStyle(QW.QFrame.Shape.StyledPanel | QW.QFrame.Shadow.Plain)
@@ -4422,13 +4420,13 @@ class PercentLineEdit(QW.QFrame):
         self.valueEdited.emit(self._value)
 
 
-    def adjustSpinboxPrefix(self, perc: int | float) -> None:
+    def adjustSpinboxPrefix(self, perc: float) -> None:
         '''
         Set a prefix to spinbox if percentage is not within its value range. 
 
         Parameters
         ----------
-        perc : int or float
+        perc : float
             Percentage value.
 
         '''

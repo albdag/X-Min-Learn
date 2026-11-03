@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-Created on Tue Oct 29 10:41:40 2024
+Defines the aesthetics of the graphical interface, including color schemes, 
+fonts, and widget styling for a consistent appearance.
 
+Created on Tue Oct 29 10:41:40 2024
 @author: albdag
 """
 
@@ -9,7 +10,7 @@ from typing import Literal
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
-from PyQt5.QtWidgets import QSizePolicy, QHeaderView
+from PyQt5.QtWidgets import QHeaderView, QSizePolicy
 
 import settings
 

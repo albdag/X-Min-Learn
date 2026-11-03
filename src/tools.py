@@ -1,23 +1,26 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Jun 21 17:16:01 2021
+Defines the UI and the functionalities of the main tools of X-Min Learn:
+- Data Viewer
+- Dataset Builder
+- Model Learner
+- Mineral Classifier 
+- Phase Refiner
 
+Created on Mon Jun 21 17:16:01 2021
 @author: albdag
 """
 
-from collections.abc import Sequence
 import os
-from datetime import datetime
-from typing import Literal, cast, get_args, overload
 import webbrowser
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Final, Literal, cast, get_args, overload
 
 import numpy as np
-
 from PyQt5 import QtCore as QC
 from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
-from base import *
 import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools
@@ -27,7 +30,7 @@ import plots
 import settings
 import style
 import threads
-
+from base import *
 
 type DraggableToolName = Literal[
     'DatasetBuilder',
@@ -778,12 +781,15 @@ class MineralClassifier(DraggableTool):
         minmap_name = self.minmap_combox.currentText()
         match_flag = QC.Qt.MatchFlag.MatchExactly
         items = self.minmaps_list.findItems(minmap_name, match_flag, 0) # TODO: not ideal, find something more solid
-        if len(items) and isinstance(mmap_obj := items[0], CW.DataObject):
-            if (mmap := mmap_obj.getMineralMapData()) is not None:
-                mask = Mask(mmap.minmap != class_name)
-                self.mask_pathlbl.setPath(f'{minmap_name}/{class_name}')
-                self.set_mask(mask)
-                return
+        if (
+            len(items)
+            and isinstance(mmap_obj := items[0], CW.DataObject)
+            and (mmap := mmap_obj.getMineralMapData()) is not None
+        ):
+            mask = Mask(mmap.minmap != class_name)
+            self.mask_pathlbl.setPath(f'{minmap_name}/{class_name}')
+            self.set_mask(mask)
+            return
 
     # Clear mask if no valid matching mineral map is found 
         self.minmap_combox.clear()
@@ -1932,7 +1938,7 @@ class MineralClassifier(DraggableTool):
 
 class DatasetBuilder(DraggableTool):
 
-    _elements = {
+    _ELEMENTS: Final[dict[str, str]] = {
         'Ac': 'Actinium (Z=89)',     'Ag': 'Silver (Z=47)',      
         'Al': 'Aluminum (Z=13)',     'Ar': 'Argon (Z=18)',      
         'As': 'Arsenic (Z=33)',      'At': 'Astatine (Z=85)',   
@@ -2010,7 +2016,7 @@ class DatasetBuilder(DraggableTool):
         self.elements_btns: list[CW.StyledButton] = []
         elem_grid = QW.QGridLayout()
         n_cols = 9
-        for n, (k, v) in enumerate(self._elements.items()):
+        for n, (k, v) in enumerate(self._ELEMENTS.items()):
             elem_btn = CW.StyledButton(text=k)
             elem_btn.setToolTip(v)
             elem_btn.setCheckable(True)
@@ -2289,7 +2295,7 @@ class DatasetBuilder(DraggableTool):
 
     # If name is a valid chemical element, toggle on the linked button.
     # Otherwise, just add a new item.
-        if name in (keys := self._elements.keys()):
+        if name in (keys := self._ELEMENTS.keys()):
             self.elements_btns[list(keys).index(name)].setChecked(True)
         else:
             self.feature_list.addItem(name)
@@ -2586,16 +2592,16 @@ class ModelLearner(DraggableTool):
         'Custom value',
         'Custom multi-value'
     ]
-    _balancing_strategies = get_args(BalancingStrategyName)
+    _BALANCING_STRATEGIES = get_args(BalancingStrategyName)
 
     # Available over-sampling and under-sampling algorithms
-    _os_list = (
+    _OS_LIST = (
         'None',
         'SMOTE',
         'BorderlineSMOTE',
         'ADASYN'
     )
-    _us_list = (
+    _US_LIST = (
         'None',
         'RandUS',
         'NearMiss',
@@ -2952,7 +2958,7 @@ class ModelLearner(DraggableTool):
 
     # Oversampling algorithm selector (Styled Combo Box)
         self.os_combox = CW.StyledComboBox()
-        self.os_combox.addItems(self._os_list)
+        self.os_combox.addItems(self._OS_LIST)
 
     # Oversampling K-neighbours selector (Styled Spin Box)
         kn_tip = 'Nearest neighbours to construct synthetic samples'
@@ -2975,7 +2981,7 @@ class ModelLearner(DraggableTool):
 
     # Undersampling algorithm selector (Styled Combo Box)
         self.us_combox = CW.StyledComboBox()
-        self.us_combox.addItems(self._us_list)
+        self.us_combox.addItems(self._US_LIST)
 
     # Undersampling N-neighbours selector (Styled Spin Box)
         self.n_neigh_spbox = CW.StyledSpinBox()
@@ -2984,7 +2990,7 @@ class ModelLearner(DraggableTool):
 
     # Strategy selector (Styled Combo Box)
         self.strategy_combox = CW.StyledComboBox()
-        self.strategy_combox.addItems(self._balancing_strategies)
+        self.strategy_combox.addItems(self._BALANCING_STRATEGIES)
 
     # Strategy value (Line Edit)
         self.strategy_value = QW.QLineEdit()
@@ -3566,8 +3572,7 @@ class ModelLearner(DraggableTool):
         for thread in (self.balancing_thread, self.learning_thread):
             if thread.isRunning():
                 return (True, thread.objectName())
-        else:
-            return (False, None)
+        return (False, None)
 
 
     def on_balancing_help_clicked(self) -> None:
@@ -3979,19 +3984,19 @@ class ModelLearner(DraggableTool):
             ovs = None
             w.append('Over-Sampling not selected. Increased classes ignored.')
         elif max(ratios) > 5:
-            w.append((
+            w.append(
                 'High after-balancing value(s) detected (>500 %). Aggressive '
                 'over-sampling can cause model overfitting!'
-            ))
+            )
 
         if uds == 'None':
             uds = None
             w.append('Under-Sampling not selected. Decreased classes ignored.')
         elif min(ratios) < 0.2:
-            w.append((
+            w.append(
                 'Low after-balancing value(s) detected (<20 %). Aggressive '
                 'under-sampling can cause information loss!'
-            ))
+            )
 
         icon = QW.QMessageBox.Icon.Warning if w else QW.QMessageBox.Icon.Question
         note = '\n\n'.join(w) if w else 'No additional info.'
@@ -4360,17 +4365,21 @@ class ModelLearner(DraggableTool):
         self.algm_combox.setEnabled(True)
 
 
-    def updateScoreLabel(self, subset: str, metric: str, score: float | None) -> None:
+    def updateScoreLabel(
+        self,
+        subset: Literal['Train', 'Validation', 'Test'],
+        metric: Literal['loss', 'accuracy', 'F1_macro', 'F1_weighted'],
+        score: float | None
+    ) -> None:
         '''
         Update a label that displays a specific learning score.
 
         Parameters
         ----------
-        subset : str
-            Name of the subset. Must be one of ('Train', 'Validation', 'Test').
-        metric : str
-            Name of the score. Must be one of ('loss', 'accuracy', 'F1_macro', 
-            'F1_weighted').
+        subset : Literal['Train', 'Validation', 'Test']
+            Name of the subset.
+        metric : Literal['loss', 'accuracy', 'F1_macro', 'F1_weighted']
+            Name of the score.
         score : float or None
             Value of the score. If None the label is cleared.
 
@@ -4393,7 +4402,7 @@ class ModelLearner(DraggableTool):
         widget = labels[row][col]
 
         if widget:
-            text = '' if score is None else '{:.9f}'.format(score)
+            text = '' if score is None else f'{score:.9f}'
             widget.setText(text)
 
     
@@ -4612,7 +4621,7 @@ class ModelLearner(DraggableTool):
             self.learning_pbar.setTextVisible(False)
 
             dataset = self.dataset
-            var_dict = (model := self.model).variables
+            var_dict = self.model.variables
             d = var_dict['polynomial_degree']
             x_mean, x_stdev = var_dict['standards']
             device = var_dict['device']
@@ -4935,8 +4944,8 @@ class ModelLearner(DraggableTool):
 class PhaseRefiner(DraggableTool):
 
     # Advanced refiner properties
-    _morph_algorithms = get_args(iatools.BinaryMorphologyAlgorithms)
-    _variance_colors = (
+    _MORPH_ALGORITHMS = get_args(iatools.BinaryMorphologyAlgorithms)
+    _VARIANCE_COLORS = (
         (0, 0, 0),       # 0 -> background preserved
         (255, 0, 0),     # 1 -> phase removed
         (0, 255, 0),     # 2 -> phase added
@@ -5045,7 +5054,7 @@ class PhaseRefiner(DraggableTool):
 
     # Algorithm selection (Styled Combo Box) [-> Advanced Refiner]
         self.algm_combox = CW.StyledComboBox()
-        self.algm_combox.addItems(self._morph_algorithms)
+        self.algm_combox.addItems(self._MORPH_ALGORITHMS)
 
     # Algorithm warning icon (Label) [-> Advanced Refiner]
         warn_icon = QG.QPixmap(str(style.ICONS.get('WARNING')))
@@ -5797,11 +5806,10 @@ class PhaseRefiner(DraggableTool):
             3: self._phase
         }
         self.prev_canvas_advan.draw_discretemap(
-            variance_map, encoder, self._variance_colors, '')
+            variance_map, encoder, self._VARIANCE_COLORS, '')
 
     # Compute original phase info
-        orig_pixels = np.count_nonzero((
-            self.minmap_backup.minmap == self._phase))
+        orig_pixels = np.count_nonzero(self.minmap_backup.minmap == self._phase)
         if orig_pixels == 0:
             orig_amount = 0.0
         else:

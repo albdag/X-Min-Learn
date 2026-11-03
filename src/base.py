@@ -1,20 +1,21 @@
-# -*- coding: utf-8 -*-
 """
-Created on Fri Dec 16 17:52:30 2022
+Defines fundamental base classes and core functionalities that serve as the 
+foundation for other modules.
 
+Created on Fri Dec 16 17:52:30 2022
 @author: albdag
 """
 
-from collections.abc import Collection, Iterable
 import os
 import random
+from collections.abc import Collection, Iterable
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
 
-class InputMap():
+class InputMap:
 
     _DTYPE = 'int32'
     _FILEXT = ('.gz', '.txt')
@@ -140,7 +141,7 @@ class InputMap():
 
 
 
-class MineralMap():
+class MineralMap:
 
     _DTYPE_STR = 'U8'
     _DTYPE_INT = 'uint8'
@@ -513,7 +514,7 @@ class MineralMap():
 
         '''
         ids, mode = zip(*self.mode.items())
-        labels = map(lambda id_: self.as_phase(id_), ids)
+        labels = [self.as_phase(id_) for id_ in ids]
         return dict(zip(labels, mode))
     
 
@@ -529,7 +530,7 @@ class MineralMap():
 
         '''
         ids, colors = zip(*self.palette.items())
-        labels = map(lambda id_: self.as_phase(id_), ids)
+        labels = [self.as_phase(id_) for id_ in ids]
         return dict(zip(labels, colors))
 
 
@@ -891,7 +892,7 @@ class MineralMap():
                 minmap=self.minmap,
                 probmap=self.probmap,
                 palette=np.asarray(self.palette, dtype=object)
-            ) #!!! add metadata as a dictionary. Should also be done in InputMaps
+            ) # add metadata as a dictionary. Should also be done in InputMaps
 
         self.filepath = outpath
 
@@ -1003,7 +1004,7 @@ class MineralMap():
 
     # If any of 'rgb' values is not in range 0-255, 'rgb' is invalid
         for channel in rgb:
-            if not channel in range(0, 256):
+            if not channel in range(256):
                 return False
             
     # Otherwise, 'RGB' is valid
@@ -1018,7 +1019,7 @@ class MineralMap():
 
 
 type Roi = tuple[str, tuple[float, float, int, int]] # (ROI label, ROI bbox)
-class RoiMap():
+class RoiMap:
 
     _DTYPE = 'U8'
     _ND = ''
@@ -1275,7 +1276,7 @@ class RoiMap():
             return
         
     # Update the map
-        self.update_map((self.roilist[idx]))
+        self.update_map(self.roilist[idx])
 
     # Update the counter
         self.update_class_counter()
@@ -1455,7 +1456,7 @@ class RoiMap():
 
 
 
-class Mask():
+class Mask:
 
     _DTYPE = 'bool'
     _FILEXT = ('.msk', '.txt')
@@ -1596,7 +1597,7 @@ class Mask():
 
 
 
-class InputMapStack():
+class InputMapStack:
 
     def __init__(self, input_maps: list[InputMap], mask: Mask | None = None) -> None:
         '''
@@ -1751,7 +1752,7 @@ class InputMapStack():
             Whether the arrays share the same shape.
 
         '''
-        return all([a.shape == self.arrays[0].shape for a in self.arrays])
+        return all(a.shape == self.arrays[0].shape for a in self.arrays)
     
     
     def mask_fit(self) -> bool:

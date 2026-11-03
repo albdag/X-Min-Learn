@@ -1,15 +1,16 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Apr 28 13:06:51 2021
+Contains machine learning algorithms and utilities for model training, 
+evaluation, and classification of mineralogical data.
 
+Created on Wed Apr 28 13:06:51 2021
 @author: albdag
 """
 
-from collections.abc import Callable, Sequence
 import json
 import math
 import multiprocessing
-from typing import Any, Literal, Protocol, Self, TypedDict, cast, overload
+from collections.abc import Callable, Sequence
+from typing import Any, Final, Literal, Protocol, Self, TypedDict, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -20,11 +21,11 @@ import sklearn.preprocessing
 import torch
 import torch.utils.data as torch_data
 
-from base import *
-import dataset_tools as dtools
 import convenient_functions as cf
+import dataset_tools as dtools
 import settings
 import threads
+from base import *
 
 # Device types
 type DeviceType = Literal['cpu', 'cuda']
@@ -155,7 +156,7 @@ class NeuralNetwork(torch.nn.Module):
     def __init__(
         self,
         name: str = '_name',
-        loss: Loss = torch.nn.modules.loss._Loss(),
+        loss: Loss | None = None,
         loss_name: str ='_loss',
         seed: int | None = None
     ) -> None:
@@ -166,11 +167,12 @@ class NeuralNetwork(torch.nn.Module):
         ----------
         name : str, optional
             Network name. To be defined by each child. The default is '_name'.
-        loss : Loss, optional
+        loss : Loss | None, optional
             Network loss function. To be defined by each child. The default is 
-            a generic placeholder _Loss().
+            None.
         loss_name : str, optional
-            Network loss name. To be defined by each child. The default is '_loss'.
+            Network loss name. To be defined by each child. The default is
+            '_loss'.
         seed : int or None, optional
             Random seed. If None it will be automatically generated. The 
             default is None.
@@ -181,7 +183,7 @@ class NeuralNetwork(torch.nn.Module):
     # Set main attributes
         self._name = name
         self._loss_name = loss_name
-        self.loss = loss
+        self.loss = torch.nn.modules.loss._Loss() if loss is None else loss
 
     # Set random seed
         torch.random.manual_seed(seed)
@@ -553,14 +555,20 @@ class _ExtendedModelVariables(TypedDict):
 
 class ModelVariables(_BaseModelVariables, _ExtendedModelVariables): pass
 
-class EagerModel():
+class EagerModel:
 
 # Model versioning is used to keep compatibility with old models
-    _current_version = 3 
+    _CURRENT_VERSION = 3 
 
-    _base_variables = list(_BaseModelVariables.__annotations__.keys())
-    _extended_variables = list(_ExtendedModelVariables.__annotations__.keys())
-    _all_variables = list(ModelVariables.__annotations__.keys())
+    _BASE_VARIABLES: Final[list[str]] = list(
+        _BaseModelVariables.__annotations__.keys()
+    )
+    _EXTENDED_VARIABLES: Final[list[str]] = list(
+        _ExtendedModelVariables.__annotations__.keys()
+    )
+    _ALL_VARIABLES: Final[list[str]] = list(
+        ModelVariables.__annotations__.keys()
+    )
 
     def __init__(
         self,
@@ -592,10 +600,10 @@ class EagerModel():
 
     # Check model version compatibility
         version = self.variables.get('version', 0)
-        if version < self._current_version:
+        if version < self._CURRENT_VERSION:
             self._convert_legacy_model(version)
-        elif version > self._current_version:
-            raise ValueError(f'This model requires an updated app version.')
+        elif version > self._CURRENT_VERSION:
+            raise ValueError('This model requires an updated app version.')
 
     # Check for missing variables
         if len(mv := self.missing_variables()):
@@ -639,7 +647,7 @@ class EagerModel():
             'standards': (torch.Tensor([]), torch.Tensor([])),
             'optimizer_state_dict': {},
             'model_state_dict': {},
-            'version': cls._current_version
+            'version': cls._CURRENT_VERSION
         }
         return cls(variables)
 
@@ -858,7 +866,7 @@ class EagerModel():
             New variable name.
 
         '''
-        if old_name in self.variables.keys():
+        if old_name in self.variables:
             self.variables[new_name] = self.variables.pop(old_name)
 
 
@@ -924,11 +932,11 @@ class EagerModel():
             self.variables['f1_scores'] = ((mtr, mvd, mts), (wtr, wvd, wts))
 
     # Set updated model version
-        self.variables['version'] = self._current_version
+        self.variables['version'] = self._CURRENT_VERSION
 
     # Save as a new model (do not overwrite old one)
         if (path := self.filepath) is not None:
-            new_path = cf.extend_filename(path, f'_v{self._current_version}')
+            new_path = cf.extend_filename(path, f'_v{self._CURRENT_VERSION}')
             log_path = self.generate_log_path(new_path)
             extended = settings.manager.get('data/extended_model_log')
             self.save(new_path, log_path=log_path, extended_log=extended)
@@ -945,7 +953,7 @@ class EagerModel():
             Missing variables.
 
         '''
-        missing = set(self._all_variables) - set(self.variables.keys())
+        missing = set(self._ALL_VARIABLES) - set(self.variables.keys())
         return missing
     
 
@@ -1096,7 +1104,7 @@ class EagerModel():
             default is False.
 
         '''
-        var_keys = self._all_variables if extended else self._base_variables
+        var_keys = self._ALL_VARIABLES if extended else self._BASE_VARIABLES
         with open(outpath, 'w', encoding="utf-8") as log:
             for k in var_keys:
                 match k:
@@ -1207,7 +1215,7 @@ class EagerModel():
 
 
 
-class _ClassifierBase():
+class _ClassifierBase:
 
     def __init__(
         self,

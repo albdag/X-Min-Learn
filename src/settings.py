@@ -1,22 +1,22 @@
-# -*- coding: utf-8 -*-
 """
-Created on Tue Dec 14 14:09:21 2021
+Handles configuration settings and user preferences, allowing customization of
+application behavior and appearance.
 
+Created on Tue Dec 14 14:09:21 2021
 @author: albdag
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from PyQt5.QtCore import QByteArray, QSettings, QStandardPaths
-
 
 ICON_DIR = Path(':') / 'icons' # using QResources
 DOC_DIR = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
 
-class SettingsManager():
+class SettingsManager:
     
-    DEFAULTS = {
+    _DEFAULTS: Final[dict[str, Any]] = {
         'GUI/fontsize': (10, int),
         'GUI/high_dpi_scaling': (False, bool),
         'GUI/smooth_animation': (True, bool),
@@ -67,10 +67,10 @@ class SettingsManager():
             Raised if 'name' is not a valid setting.
 
         '''
-        if not name in self.DEFAULTS:
+        if not name in self._DEFAULTS:
             raise ValueError(f'{name} is not a valid setting.')
         
-        default, type_ = self.DEFAULTS[name]
+        default, type_ = self._DEFAULTS[name]
         return self.settings.value(name, default, type_)
 
 
@@ -94,14 +94,14 @@ class SettingsManager():
         Reset non-system settings to their default values.
 
         '''
-        for name, (default, _) in self.DEFAULTS.items():
+        for name, (default, _) in self._DEFAULTS.items():
             if not name.startswith('system/'):
                 self.settings.setValue(name, default)
 
 
     def clear(self) -> None:
         '''
-        Clear all settings. This will also indirectly reset them to defaults.
+        Clear all settings. This will also indirectly reset them to _DEFAULTS.
 
         '''
         self.settings.clear()

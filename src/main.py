@@ -1,21 +1,20 @@
-# -*- coding: utf-8 -*-
 """
-Created on Wed Mar 20 12:31:39 2024
+Primary entry point of the application.
 
+Created on Wed Mar 20 12:31:39 2024
 @author: albdag
 """
 
-from pathlib import Path
-import resources
 import sys
+from pathlib import Path
 
-from PyQt5.QtCore import Qt, QStandardPaths
+from PyQt5.QtCore import QStandardPaths, Qt
 from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
+import resources  # noqa: F401
 import settings
 import style
-
 
 # Global application information
 APPNAME = 'XMinLearn'
@@ -24,7 +23,7 @@ APPVERSION = '1.0.0-beta.3'
 # Windows shell options for distribution
 try:
     from ctypes import windll  # Only exists on Windows.
-    myappid = '.'.join((APPNAME, APPVERSION))
+    myappid = f'{APPNAME}.{APPVERSION}'
     windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except ImportError:
     pass

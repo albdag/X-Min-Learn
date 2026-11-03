@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 """
-Created on Fri Oct 02 17:26:30 2026
+Defines schemas for saving tools and panes state and configs to project files.
 
+Created on Fri Oct 02 17:26:30 2026
 @author: albdag
 """
 

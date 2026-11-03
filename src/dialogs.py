@@ -1,20 +1,20 @@
-# -*- coding: utf-8 -*-
 """
-Created on Tue May  14 15:03:45 2024
+Defines subordinate dialog windows within the graphical user interface.
 
+Created on Tue May  14 15:03:45 2024
 @author: albdag
 """
 
 import os
-from typing import Literal
-
-from PyQt5.QtCore import pyqtSignal, QLocale, QPoint, QSize, Qt
-from PyQt5.QtGui import QColor, QIcon, QPixmap
-import PyQt5.QtWidgets as QW
+from collections.abc import Callable
+from typing import Final, Literal
 
 import numpy as np
+import numpy.typing as npt
+import PyQt5.QtWidgets as QW
+from PyQt5.QtCore import QLocale, QPoint, QSize, Qt, pyqtSignal
+from PyQt5.QtGui import QColor, QIcon, QPixmap
 
-from base import *
 import convenient_functions as cf
 import custom_widgets as CW
 import dataset_tools as dtools
@@ -22,6 +22,7 @@ import image_analysis_tools as iatools
 import plots
 import settings
 import style
+from base import *
 from threads import NpvThread, RoiDetectionThread
 
 
@@ -31,8 +32,15 @@ class AutoRoiDetector(QW.QDialog):
     roimapUpdateRequested = pyqtSignal()
     sampleUpdateRequested = pyqtSignal()
 
-    npv_encoder = {'Pure': np.max, 'Simple': np.median, 'Smooth': np.mean}
-    _roi_col = {'new': (255, 0, 0), 'old': (0, 0, 0)}
+    _NPV_ENCODER: Final[dict[str, Callable[[npt.NDArray[np.float_]], Any]]] = {
+        'Pure': np.max,
+        'Simple': np.median,
+        'Smooth': np.mean
+    }
+    _ROI_COLORS: Final[dict[str, tuple[int, int, int]]] = {
+        'new': (255, 0, 0),
+        'old': (0, 0, 0)
+    }
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -277,7 +285,7 @@ class AutoRoiDetector(QW.QDialog):
 
     # Get user's parameters
         size = self.size_spbox.value()
-        npv_func = self.npv_encoder[self.npv_btns.get_checked().text()]
+        npv_func = self._NPV_ENCODER[self.npv_btns.get_checked().text()]
         
     # Exit function if no maps are selected
         checked_maps = self.maps_selector.getCheckedMaps()
@@ -401,14 +409,14 @@ class AutoRoiDetector(QW.QDialog):
         # Display existent ROIs in black
             if self._current_roimap is not None:
                 for _, bbox in self._current_roimap.roilist:
-                    patch = plots.RoiPatch(bbox, self._roi_col['old'], filled=False)
+                    patch = plots.RoiPatch(bbox, self._ROI_COLORS['old'], False)
                     patch.set_label('Existent ROI')
                     self.canvas.ax.add_patch(patch)
                     self._patches.append(patch)
 
         # Display new auto detected ROIs in red
             for _, bbox in result.roilist:
-                patch = plots.RoiPatch(bbox, self._roi_col['new'], filled=False)
+                patch = plots.RoiPatch(bbox, self._ROI_COLORS['new'], False)
                 patch.set_label('Auto detected ROI')
                 self.canvas.ax.add_patch(patch)
                 self._patches.append(patch)
@@ -673,7 +681,7 @@ class MergeDatasets(QW.QDialog):
         preview = dtools.dataframe_preview(item.text(), dec, n_rows=nrows)
     
     # Show preview in the info area
-        text = f'DATAFRAME PREVIEW\n(First {nrows} rows)\n\n{repr(preview)}'
+        text = f'DATAFRAME PREVIEW\n(First {nrows} rows)\n\n{preview!r}'
         self.input_info.setText(text)
 
 
@@ -689,7 +697,7 @@ class MergeDatasets(QW.QDialog):
         class_count = self.merged_dataset.column_count(-1)
         cnt = '\n'.join(f'{k} = {v}' for k, v in class_count.items())
         header1, header2 = 'MERGED DATAFRAME PREVIEW', '\nPER-CLASS DATA COUNT'
-        text = '\n\n'.join((header1, prev, header2, cnt))
+        text = f'{header1}\n\n{prev}\n\n{header2}\n\n{cnt}'
         self.merged_info.setText(text)
         
 
@@ -706,7 +714,7 @@ class MergeDatasets(QW.QDialog):
         
     # Check that all paths do still exist
         paths = [item.text() for item in self.in_path_list.getItems()]
-        if not all([os.path.exists(p) for p in paths]):
+        if not all(os.path.exists(p) for p in paths):
             err_msg = 'Some datasets have been deleted, moved or renamed.'
             CW.MsgBox(self, 'Crit', err_msg)
             return
@@ -1009,7 +1017,7 @@ class SubSampleDataset(QW.QDialog):
 
         Parameters
         ----------
-        dataset : str
+        dataset : Literal['original', 'sub-sampled']
             Which dataset's preview should be displayed. Can be 'original' or
             'sub-sampled'.
 
@@ -1038,7 +1046,7 @@ class SubSampleDataset(QW.QDialog):
         prev = repr(ds.dataframe)
         cnt = '\n'.join(f'{k} = {v}' for k, v in ds.column_count(-1).items())
         header = f'{dataset.upper()} DATAFRAME PREVIEW'
-        text = '\n\n'.join((header, prev, '\nPER-CLASS DATA COUNT', cnt))
+        text = f'{header}\n\n{prev}\n\n\nPER-CLASS DATA COUNT\n\n{cnt}'
         wid.setText(text)
 
         
@@ -1123,10 +1131,6 @@ class SubSampleDataset(QW.QDialog):
 
 
 class ImageToInputMap(QW.QDialog):
-    '''
-    A dialog to convert images to InputMaps and save them. Multi-channel images
-    can be optionally split into 1-channel images and converted as well.
-    '''
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -1308,7 +1312,7 @@ class ImageToInputMap(QW.QDialog):
 
 class ImageToMineralMap(QW.QDialog):
 
-    _max_classes = 32768 # (2**16)/2 (can be more)
+    _MAX_CLASSES = 32768 # (2 ** 16) / 2 (can be more)
 
     def __init__(self, parent: QW.QWidget | None = None):
         '''
@@ -1494,14 +1498,14 @@ class ImageToMineralMap(QW.QDialog):
         unique = np.unique(array, axis=0)
 
     # Deny conversion if classes exceed maximum amount 
-        if (n_classes := len(unique)) > self._max_classes:
+        if (n_classes := len(unique)) > self._MAX_CLASSES:
             CW.MsgBox(self, 'Crit', 'Too many classes found.')
             return
 
     # Build a flattened minmap
         self.progbar.setRange(0, n_classes)
         minmap = np.empty((row * col), dtype=MineralMap._DTYPE_STR)
-        palette = dict()
+        palette: dict[int, tuple[int, int, int]] = {}
         for n, rgb in enumerate(unique):
             self.progbar.setValue(n + 1)
             mask = (array == rgb).all(axis=1)

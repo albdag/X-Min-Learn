@@ -1,16 +1,16 @@
-# -*- coding: utf-8 -*-
 """
-Created on Fri Jan 21 21:54:40 2022
+Implements multithreading capabilities to enable parallel processing, improving
+application responsiveness during computationally intensive tasks.
 
+Created on Fri Jan 21 21:54:40 2022
 @author: albdag
 """
 
 from collections.abc import Callable
 from typing import Any, cast
 
-from PyQt5.QtCore import QThread, pyqtSignal
-
 import numpy as np
+from PyQt5.QtCore import QThread, pyqtSignal
 from scipy import ndimage
 
 from base import RoiMap
@@ -761,10 +761,10 @@ class RoiDetectionThread(FixedStepsThread):
         # Set derived parameters
             r = self.size // 2    # ROI radius
             d = r + self.distance
-            rows, cols = self.npv_map.shape
+            nrows, ncols = self.npv_map.shape
 
         # Exclude borders
-            mask = np.ones((rows, cols))
+            mask = np.ones((nrows, ncols))
             mask[r:-r, r:-r] = 0
             self.npv_map[mask == 1] = np.nan
 
@@ -772,7 +772,7 @@ class RoiDetectionThread(FixedStepsThread):
             idx = np.argsort(self.npv_map, axis=None) 
 
         # Create a new empty ROI map
-            auto_roimap = RoiMap.from_shape((rows, cols))
+            auto_roimap = RoiMap.from_shape((nrows, ncols))
 
         # Detect best ROIs
             rois_found = 0 
@@ -781,21 +781,23 @@ class RoiDetectionThread(FixedStepsThread):
                 if self.isInterruptionRequested(): return
 
             # Get the original row-col coords from the index of the pixel
-                row, col = np.unravel_index(i, (rows, cols))
+                row, col = np.unravel_index(i, (nrows, ncols))
             # Skip NaN pixels (border of NPV cumulative map)
                 if np.isnan(self.npv_map[row, col]):
                     continue
             # Fix out of range ROI extents
-                y0, y1, x0, x1 = row-d, row+d, col-d, col+d
-                if y0 < 0: y0 = 0
-                if y1 > rows: y1 = rows
-                if x0 < 0: x0 = 0
-                if x1 > cols: x1 = cols 
+                y0, y1, x0, x1 = row - d, row + d, col - d, col + d
+                y0 = max(y0, 0)
+                y1 = min(y1, nrows)
+                x0 = max(x0, 0)
+                x1 = min(x1, ncols)
             # Allow only ROIs that do not overlap with existent ROIs
-                if (not self.current_roimap.extents_overlaps((x0,x1,y0,y1)) 
-                    and not auto_roimap.extents_overlaps((x0,x1,y0,y1))):
-                    bbox = auto_roimap.extents_to_bbox((col-r, col+r+1,
-                                                        row-r, row+r+1))
+                if (
+                    not self.current_roimap.extents_overlaps((x0, x1, y0, y1)) 
+                    and not auto_roimap.extents_overlaps((x0, x1, y0, y1))
+                ):
+                    extents = (col - r, col + r + 1, row - r, row + r + 1)
+                    bbox = auto_roimap.extents_to_bbox(extents)
                     auto_roimap.add_roi('-', bbox)
                     rois_found += 1
                 # Kill the loop if the requested number of ROIs are found

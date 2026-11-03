@@ -1,30 +1,29 @@
-# -*- coding: utf-8 -*-
 """
-Created on Tue Mar  26 11:25:14 2024
+Defines dockable panes that extends the functionalities of the main window.
 
+Created on Tue Mar  26 11:25:14 2024
 @author: albdag
 """
 
-from collections.abc import Collection
 import json
 import os
+from collections.abc import Collection
 from typing import Literal, cast, get_args
 
-from PyQt5.QtCore import pyqtSignal, QMimeData, QPoint, Qt
-from PyQt5.QtGui import QColor, QIcon, QPixmap
-from PyQt5 import QtWidgets as QW
-
 import numpy as np
+from PyQt5 import QtWidgets as QW
+from PyQt5.QtCore import QMimeData, QPoint, Qt, pyqtSignal
+from PyQt5.QtGui import QColor, QIcon, QPixmap
 
-from base import *
 import config_schemas
 import convenient_functions as cf
 import custom_widgets as CW
-import image_analysis_tools as iatools
 import dialogs
+import image_analysis_tools as iatools
 import plots
 import settings
 import style
+from base import *
 
 
 class Pane(QW.QDockWidget):
@@ -108,7 +107,7 @@ class DataManager(QW.QTreeWidget):
     dataModified = pyqtSignal()
     rgbaChannelSet = pyqtSignal(str)
     
-    PALETTE_MIMETYPE = 'application/x-palette+json'
+    _PALETTE_MIMETYPE = 'application/x-palette+json'
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -507,7 +506,7 @@ class DataManager(QW.QTreeWidget):
         items = self.selectedItems()
     # Groups are the top-level items of the DataManager; indexOfTopLevelItem 
     # returns -1 if the item is not a top-level item (i.e., is not a group)
-        indexes = map(lambda i: self.indexOfTopLevelItem(i), items)
+        indexes = [self.indexOfTopLevelItem(i) for i in items]
         groups_idx = [idx for idx in indexes if idx != -1]
         return groups_idx
     
@@ -664,7 +663,7 @@ class DataManager(QW.QTreeWidget):
     # Delete data from source subgroup and append it to destination subgroup 
         dtype = src_subgr.datatype
         src_subgr.delChild(item)
-        dst_subgr = [s for s in dst_group.subgroups if s.datatype == dtype][0]
+        dst_subgr = next(s for s in dst_group.subgroups if s.datatype == dtype)
         dst_subgr.addChild(item)
 
     # Check for unfitting maps shapes on both source and destination groups
@@ -739,7 +738,7 @@ class DataManager(QW.QTreeWidget):
             subgr.takeChildren()
 
     # Check for unfitting maps shapes within the samples
-        for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
+        for idx in {self.indexOfTopLevelItem(g) for g in groups}:
             if (group := self.get_group(idx)) is not None:
                 group.setShapeWarnings()
 
@@ -764,7 +763,7 @@ class DataManager(QW.QTreeWidget):
                 subgr.delChild(i)
 
     # Check for unfitting maps shapes within the samples
-        for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
+        for idx in {self.indexOfTopLevelItem(g) for g in groups}:
             if (group := self.get_group(idx)) is not None:
                 group.setShapeWarnings()
 
@@ -1160,7 +1159,7 @@ class DataManager(QW.QTreeWidget):
 
     # Set JSON data as MIME data for the clipboard
         mimedata = QMimeData()
-        mimedata.setData(self.PALETTE_MIMETYPE, data)
+        mimedata.setData(self._PALETTE_MIMETYPE, data)
         if (clipboard := QW.qApp.clipboard()) is not None:
             clipboard.setMimeData(mimedata)
 
@@ -1185,12 +1184,12 @@ class DataManager(QW.QTreeWidget):
         
     # Exit function if clipboard does not contain palette data (safety)
         mimedata = clipboard.mimeData()
-        if mimedata is None or not mimedata.hasFormat(self.PALETTE_MIMETYPE):
+        if mimedata is None or not mimedata.hasFormat(self._PALETTE_MIMETYPE):
             return
     
     # Try loading the palette data as list of RGB tuples from the clipboard
         try:
-            data = mimedata.data(self.PALETTE_MIMETYPE).data().decode('utf-8')
+            data = mimedata.data(self._PALETTE_MIMETYPE).data().decode('utf-8')
             colors = [tuple(rgb) for rgb in json.loads(data)]
         except json.JSONDecodeError as e:
             CW.MsgBox(self, 'Crit', 'Invalid palette data in clipboard', str(e))
@@ -1264,8 +1263,7 @@ class DataManager(QW.QTreeWidget):
             encoder_path = cf.extend_filename(outpath, '_transDict')
             rows, cols = minmap.shape
             with open(encoder_path, 'w') as ep:
-                for id_, lbl in minmap.encoder.items():
-                    ep.write(f'{id_} :\t{lbl}\n')
+                ep.write(json.dumps(minmap.encoder, indent=2))
             # Include number of rows and columns
                 ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
 
@@ -1396,7 +1394,7 @@ class DataManager(QW.QTreeWidget):
                 pbar.setValue(n)
 
     # Check for unfitting maps shapes within the samples and refresh view
-        for idx in set((self.indexOfTopLevelItem(g) for g in groups)):
+        for idx in {self.indexOfTopLevelItem(g) for g in groups}:
             if (group := self.get_group(idx)) is not None:
                 group.setShapeWarnings()
 
@@ -1513,22 +1511,22 @@ class DataManager(QW.QTreeWidget):
             group = self.addGroup(sample)
         
         # Populate with input maps data
-            if len(data['Input Maps']):
-                inmap_names, inmap_paths = zip(*data['Input Maps'])
+            if len(inmap_data := data.get('Input Maps', [])):
+                inmap_names, inmap_paths = zip(*inmap_data)
                 self.loadData(group.inmaps, inmap_paths)
                 for idx, child in enumerate(group.inmaps.getChildren()):
                     child.setName(inmap_names[idx])
 
         # Populate with mineral maps data
-            if len(data['Mineral Maps']):
-                minmap_names, minmap_paths = zip(*data['Mineral Maps'])
+            if len(minmap_data := data.get('Mineral Maps', [])):
+                minmap_names, minmap_paths = zip(*minmap_data)
                 self.loadData(group.minmaps, minmap_paths)
                 for idx, child in enumerate(group.minmaps.getChildren()):
                     child.setName(minmap_names[idx])
 
         # Populate with masks data
-            if len(data['Masks']):
-                mask_names, mask_paths, mask_checkstates = zip(*data['Masks'])
+            if len(mask_data := data.get('Masks', [])):
+                mask_names, mask_paths, mask_checkstates = zip(*mask_data)
                 self.loadData(group.masks, mask_paths)
                 for idx, child in enumerate(group.masks.getChildren()):
                     child.setName(mask_names[idx])
@@ -3772,8 +3770,9 @@ class ProbabilityMapViewer(QW.QWidget):
 RgbaChannelName = Literal['R', 'G', 'B', 'A']
 class RgbaCompositeMapViewer(QW.QWidget):
 
-    channels = get_args(RgbaChannelName)
     rgbaModified = pyqtSignal()
+
+    _CHANNELS = get_args(RgbaChannelName)
 
     def __init__(self, parent: QW.QWidget | None = None) -> None:
         '''
@@ -3810,7 +3809,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         channels_layout = QW.QGridLayout()
 
         for col, lbl in enumerate(self.rgba_lbls):
-            channel_name = QW.QLabel(self.channels[col])
+            channel_name = QW.QLabel(self._CHANNELS[col])
             channel_name.setAlignment(style.A_HCENTER)
             channels_layout.addWidget(channel_name, 0, col)
             channels_layout.addWidget(lbl, 1, col)
@@ -3853,7 +3852,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     #[Populate sub-menu]
     #|Clear each individual channel
-        for c in self.channels:
+        for c in self._CHANNELS:
             clear_submenu.addAction(
                 f'{c} channel', lambda c=c: self.clearChannel(c))
     #|Separator
@@ -3880,12 +3879,12 @@ class RgbaCompositeMapViewer(QW.QWidget):
             return
         
     # Default "empty" values for each RGBA channel are: R=0, B=0, G=0, A=1
-        idx = self.channels.index(channel)
+        idx = self._CHANNELS.index(channel)
         rgba_map_array[:, :, idx] = 1 if idx == 3 else 0
         self.rgba_lbls[idx].clearPath()
 
     # If no loaded channel is left, clear the canvas; otherwise redraw it
-        if all(map(lambda lbl: lbl.fullpath == '', self.rgba_lbls)):
+        if all(lbl.fullpath == '' for lbl in self.rgba_lbls):
             self.canvas.clear_canvas()
         else:
             self.canvas.draw_heatmap(rgba_map_array, 'RGBA composite map')
@@ -3925,7 +3924,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
         '''
     # Do nothing if 'channel' is not a valid channel (safety)
-        if channel not in self.channels:
+        if channel not in self._CHANNELS:
             return
 
     # Get the current rgba map array or build a new one
@@ -3940,7 +3939,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
             return
 
     # Update the channel with the new data and update the plot
-        idx = self.channels.index(channel)
+        idx = self._CHANNELS.index(channel)
         data = inmap.map
         rgba_map_array[:, :, idx] = np.round(data/data.max(), 2)
         self.canvas.draw_heatmap(rgba_map_array, 'RGBA composite map')
@@ -4007,7 +4006,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
 
     # Update R, G, B, A channels
         self.clearAllChannels()
-        for ch in self.channels:
+        for ch in self._CHANNELS:
             path = config['Channels'][ch]
             if os.path.exists(path):
                 try:
