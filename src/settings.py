@@ -43,8 +43,8 @@ class SettingsManager:
             Path to directory where settings file is stored.
 
         '''
-        self._path = (root_dir / 'settings.ini').as_posix()
-        self.settings = QSettings(self._path, QSettings.Format.IniFormat)
+        self._path = (root_dir / 'settings.ini')
+        self.settings = QSettings(self._path.as_posix(), QSettings.Format.IniFormat)
 
 
     def get(self, name: str) -> Any:
@@ -109,7 +109,7 @@ class SettingsManager:
 
 
 manager = None
-def _setup_manager(root: Path) -> None:
+def setup_manager(root: Path) -> None:
     '''
     Setup the settings manager by providing the path to the 'root' directory
     that contains the settings file. This function is meant to be internally

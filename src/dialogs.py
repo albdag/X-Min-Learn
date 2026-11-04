@@ -16,6 +16,7 @@ from PyQt5.QtCore import QLocale, QPoint, QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QIcon, QPixmap
 
 import convenient_functions as cf
+import crashlog
 import custom_widgets as CW
 import dataset_tools as dtools
 import image_analysis_tools as iatools
@@ -2191,3 +2192,104 @@ class Preferences(QW.QDialog):
             text = 'Some changes may take effect after restarting the app.'
             CW.MsgBox(self, 'Info', text)
             self.close()
+
+
+
+class CrashDialog(QW.QDialog):
+
+    _GITHUB_URL = "https://github.com/albdag/X-Min-Learn/issues"
+
+    def __init__(self, logger: crashlog.CrashLogger, parent=None) -> None:
+        '''
+        A dialog that is displayed when the application crashes.
+
+        Parameters
+        ----------
+        logger : CrashLogger
+            The logger instance.
+        parent : QWidget or None, optional
+            The GUI parent of this dialog. The default is None.
+
+        '''
+        super().__init__(parent)
+               
+        # Set dialog properties
+        self.setFixedSize(420, 580)
+        self.setWindowIcon(style.getIcon('LOGO_32'))
+        self.setWindowTitle("Application Error")
+
+        # Set main attribute
+        self._logger = logger
+
+        # Initialize GUI and connect its signals with slots
+        self._init_ui()
+        self._connect_slots()
+
+
+    def _init_ui(self) -> None:
+        '''
+        GUI constructor.
+
+        '''
+        # Critical error icon
+        icon_label = QW.QLabel()
+        pixmap = QPixmap(str(style.ICONS.get('LOGO_32')))
+        transf_mode = Qt.TransformationMode.SmoothTransformation
+        icon_label.setPixmap(pixmap.scaled(48, 48, style.ARM_KEEP, transf_mode))
+
+        # Header text
+        header_text = '<b>The app encountered an unexpected issue</b>'
+        header_label = QW.QLabel(header_text)
+
+        # Info text
+        info_text = (
+            'An unexpected error occurred and the application crashed. \n\n'
+            'Need support? Please report this issue on X-Min Learn GitHub '
+            'repository. Don\'t forget to include the crash log file!'
+        )
+        info_label = QW.QLabel(info_text)
+        info_label.setWordWrap(True)
+
+        # Repository hyperlink
+        link_text = f'<a href="{self._GITHUB_URL}">Report crash on GitHub</a>'
+        link_label = QW.QLabel(link_text)
+        link_label.setOpenExternalLinks(True)
+
+        # Open log button
+        self.open_log_btn = CW.StyledButton(text='Open log')
+
+        # Close app button
+        self.close_btn = CW.StyledButton(text='Close app')
+
+        # Adjust layout
+        header_layout = QW.QHBoxLayout()
+        header_layout.addWidget(icon_label)
+        header_layout.addStretch()
+        header_layout.addWidget(header_label)
+        
+        btn_layout = QW.QHBoxLayout()
+        btn_layout.addWidget(self.open_log_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.close_btn)
+
+        main_layout = QW.QVBoxLayout()
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.addSpacing(30)
+        main_layout.addLayout(header_layout)
+        main_layout.addSpacing(50)
+        main_layout.addWidget(info_label)
+        main_layout.addSpacing(30)
+        main_layout.addWidget(link_label)
+        main_layout.addStretch()
+        main_layout.addLayout(btn_layout)
+        self.setLayout(main_layout)
+
+
+    def _connect_slots(self) -> None:
+        '''
+        Signals-slots connector.
+
+        '''
+        # Button actions
+        self.open_log_btn.clicked.connect(self._logger.open_log)
+        self.close_btn.clicked.connect(self.accept)

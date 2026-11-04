@@ -12,9 +12,13 @@ from PyQt5.QtCore import QStandardPaths, Qt
 from PyQt5.QtGui import QColor, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
+import crashlog
 import resources  # noqa: F401
 import settings
 import style
+
+# Setup a custom global excepthook early to also catch startup errors
+sys.excepthook = crashlog.custom_excepthook
 
 # Global application information
 APPNAME = 'XMinLearn'
@@ -28,12 +32,13 @@ try:
 except ImportError:
     pass
 
-# Set directory for user configurations (settings)
+# Set directory for user settings and application crash logging
 config_loc = QStandardPaths.StandardLocation.AppConfigLocation
-settings_dir = Path(QStandardPaths.writableLocation(config_loc)) / APPNAME
-if not settings_dir.is_dir():
-    settings_dir.mkdir(parents=True, exist_ok=True)
-settings._setup_manager(settings_dir)
+config_dir = Path(QStandardPaths.writableLocation(config_loc)) / APPNAME
+if not config_dir.is_dir():
+    config_dir.mkdir(parents=True, exist_ok=True)
+settings.setup_manager(config_dir)
+crashlog.setup_logger(config_dir)
 
 # Set high DPI management
 do_high_dpi_scaling = settings.manager.get('GUI/high_dpi_scaling')
@@ -46,7 +51,9 @@ if (dpi_pixmap := getattr(Qt, 'AA_UseHighDpiPixmaps', None)) is not None:
 # Main application execution
 if __name__ == "__main__":
 
+# Ensure the crash logger is cleanly closed when application is closed
     app = QApplication(sys.argv)
+    app.aboutToQuit.connect(crashlog.logger.close)
 
 # Show splash screen
     loader = QSplashScreen(QPixmap(str(style.ICONS.get('LOGO_SPLASH'))))
@@ -68,4 +75,5 @@ if __name__ == "__main__":
     main_win = MainWindow()
     main_win.show()
     loader.finish(main_win)
+    
     sys.exit(app.exec())
