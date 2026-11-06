@@ -7,7 +7,7 @@ Created on Wed Apr 28 12:27:17 2021
 
 import os
 from collections.abc import Collection, Sequence
-from typing import Final, Literal, TypedDict
+from typing import ClassVar, Literal, TypedDict
 
 import numpy as np
 from PyQt5 import QtCore as QC
@@ -1534,7 +1534,7 @@ class StyledButton(QW.QPushButton):
     # Overwrite default background color if requested
         ss = style.SS_BUTTON
         if bg:
-            ss += 'QPushButton {background-color: %s; font: bold;}' %(bg) # noqa UP031
+            ss += 'QPushButton {background-color: %s; font: bold;}' %(bg) # noqa: UP031
         self.setStyleSheet(ss)
 
 
@@ -3483,7 +3483,7 @@ class SeparatorSymbolSelector(StyledComboBox):
 
 class MsgBox(QW.QMessageBox):
 
-    _BUTTONS: Final[dict[str, QW.QMessageBox.StandardButton]] = {
+    _BUTTONS: ClassVar[dict[str, QW.QMessageBox.StandardButton]] = {
         'Ok': QW.QMessageBox.StandardButton.Ok,
         'Open': QW.QMessageBox.StandardButton.Open,
         'Save': QW.QMessageBox.StandardButton.Save,
@@ -3503,7 +3503,7 @@ class MsgBox(QW.QMessageBox):
         'Retry': QW.QMessageBox.StandardButton.Retry,
         'Ignore': QW.QMessageBox.StandardButton.Ignore
     }
-    _ICONS: Final[dict[str, QW.QMessageBox.Icon]] = {
+    _ICONS: ClassVar[dict[str, QW.QMessageBox.Icon]] = {
         'Question': QW.QMessageBox.Icon.Question,
         'Information': QW.QMessageBox.Icon.Information,
         'Warning': QW.QMessageBox.Icon.Warning,
@@ -3513,7 +3513,7 @@ class MsgBox(QW.QMessageBox):
     def __init__(
         self,
         parent: QW.QWidget | None,
-        kind: str,
+        kind: Literal['Info', 'Quest', 'QuestWarn', 'Warn', 'Crit'],
         text: str = '',
         dtext: str = '',
         title: str | None = None,
@@ -3533,10 +3533,9 @@ class MsgBox(QW.QMessageBox):
         parent : QWidget or None
             The GUI parent of this widget. If not None, the dialog will popup
             centered with it.
-        kind : str
+        kind : Literal['Info', 'Quest', 'QuestWarn', 'Warn', 'Crit']
             Message box type. It controls the default icon and buttons if not
-            specified. It must be one of 'Info' (or 'I'), 'Quest (or 'Q'),
-            'Warn' (or 'W'), 'QuestWarn' (or 'QW') or 'Crit' (or 'C').
+            specified.
         text : str, optional
             Message box text. The default is ''.
         dtext : str, optional
@@ -3568,25 +3567,25 @@ class MsgBox(QW.QMessageBox):
             self._BUTTONS['Yes'] | self._BUTTONS['No']
         )
         match kind:
-            case 'Info' | 'I':
+            case 'Info':
                 icon = self._ICONS['Information'] if icon is None else icon
                 btns = self._BUTTONS['Ok'] if btns is None else btns
-            case 'Quest' | 'Q':
+            case 'Quest':
                 icon = self._ICONS['Question'] if icon is None else icon
                 btns = question_buttons if btns is None else btns
                 def_btn = self._BUTTONS['No'] if def_btn is None else def_btn
-            case 'Warn' | 'W':
-                icon = self._ICONS['Warning'] if icon is None else icon
-                btns = self._BUTTONS['Ok'] if btns is None else btns
-            case 'QuestWarn' | 'QW':
+            case 'QuestWarn':
                 icon = self._ICONS['Warning'] if icon is None else icon
                 btns = question_buttons if btns is None else btns
                 def_btn = self._BUTTONS['No'] if def_btn is None else def_btn
-            case 'Crit' | 'C':
+            case 'Warn':
+                icon = self._ICONS['Warning'] if icon is None else icon
+                btns = self._BUTTONS['Ok'] if btns is None else btns
+            case 'Crit':
                 icon = self._ICONS['Critical'] if icon is None else icon
                 btns = self._BUTTONS['Ok'] if btns is None else btns
             case _:
-                raise ValueError('f{kind} is an invalid message box kind.')
+                raise ValueError(f'{kind} is an invalid message box kind.')
         
     # Auto-set title if not specified
         if title is None:

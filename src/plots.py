@@ -8,7 +8,7 @@ Created on Mon Jan 23 09:14:45 2023
 
 from collections.abc import Callable, Collection, Iterable, Sequence
 from functools import partial
-from typing import Any, Final, Literal, overload
+from typing import Any, ClassVar, Literal, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -115,7 +115,7 @@ class PanHandler(panhandler):
 
 class _CanvasBase(backend_qtagg.FigureCanvasQTAgg):
 
-    _FIGURE_KWARGS: Final[dict[str, Any]] = {
+    _FIGURE_KWARGS: ClassVar[dict[str, Any]] = {
         'facecolor': style.IVORY,
         'edgecolor': style.BLACK_PEARL,
         'linewidth': 1
@@ -1083,16 +1083,16 @@ class ImageCanvas(_CanvasBase):
 
 class BarCanvas(_CanvasBase):
 
-    _BAR_PROPERTIES: Final[dict[str, Any]] = {
+    _BAR_PROPERTIES: ClassVar[dict[str, Any]] = {
         'edgecolor': style.IVORY,
         'linewidth': 0.5
     }
-    _GRID_PROPERTIES: Final[dict[str, Any]] = {
+    _GRID_PROPERTIES: ClassVar[dict[str, Any]] = {
         'linestyle': ':',
         'linewidth': 0.5,
         'zorder': 0
     }
-    _LEGEND_PROPERTIES: Final[dict[str, Any]] = {
+    _LEGEND_PROPERTIES: ClassVar[dict[str, Any]] = {
         'labelcolor': style.IVORY
     }
 
@@ -1725,7 +1725,7 @@ class HistogramCanvas(_CanvasBase):
 
 class ConfMatCanvas(ImageCanvas):
 
-    _ANNOTATION_PROPERTIES: Final[dict[str, Any]] = {
+    _ANNOTATION_PROPERTIES: ClassVar[dict[str, Any]] = {
         'color': 'w',
         'horizontalalignment': 'center',
         'verticalalignment': 'center',
@@ -1984,7 +1984,7 @@ class ConfMatCanvas(ImageCanvas):
 
 class SilhouetteCanvas(_CanvasBase):
 
-    _AVG_LINE_PROPERTIES: Final[dict[str, Any]] = {
+    _AVG_LINE_PROPERTIES: ClassVar[dict[str, Any]] = {
         'color': 'r',
         'linestyle': '--',
         'linewidth': 2, 
@@ -2231,12 +2231,12 @@ class PieCanvas(_CanvasBase):
 type CurvePlotData = tuple[Sequence[float | int], Sequence[float | int]] # (x_coords, y_coords)
 class CurveCanvas(_CanvasBase):
 
-    _GRID_PROPERTIES: Final[dict[str, Any]] = {
+    _GRID_PROPERTIES: ClassVar[dict[str, Any]] = {
         'linestyle': ':',
         'linewidth': 0.5,
         'zorder': 0
     }
-    _LEGEND_PROPERTIES: Final[dict[str, Any]] = {
+    _LEGEND_PROPERTIES: ClassVar[dict[str, Any]] = {
         'facecolor': style.IVORY,
         'framealpha': 1,
         'frameon': True,
@@ -2766,7 +2766,7 @@ class RoiPatch(Rectangle):
 
 class RoiAnnotation(Annotation):
 
-    _BBOX_PROPERTIES: Final[dict[str, Any]] = {
+    _BBOX_PROPERTIES: ClassVar[dict[str, Any]] = {
         'boxstyle': 'round',
         'edgecolor': style.BLACK_PEARL,
         'facecolor': style.IVORY
@@ -2844,24 +2844,24 @@ class Crosshair(mpl_widgets.MultiCursor): # Not used yet
 
 class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
 
-    _PROPERTIES: Final[dict[str, Any]] = {
+    _PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 0.6,
         'color': style.BLACK_PEARL,
         'linewidth': 2
     }
-    _HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+    _HANDLE_PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 1,
         'markeredgecolor': style.BLACK_PEARL,
         'markerfacecolor': style.BLOSSOM
     }
-    _BOX_PROPERTIES: Final[dict[str, Any]] = {
+    _BOX_PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 0.5,
         'edgecolor': style.BLACK_PEARL,
         'facecolor': style.BLOSSOM_LIGHT,
         'fill': True,
         'linewidth': 1
     }
-    _BOX_HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+    _BOX_HANDLE_PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 0.6,
         'markeredgecolor': style.BLACK_PEARL,
         'markerfacecolor': style.CASPER_DARK
@@ -2929,14 +2929,14 @@ class PolySel(mpl_widgets.PolygonSelector): # future improvement to ROIs
 
 class RectSel(mpl_widgets.RectangleSelector):
 
-    _PROPERTIES: Final[dict[str, Any]] = {
+    _PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 0.6,
         'edgecolor': style.BLOSSOM,
         'facecolor': style.BLACK_PEARL,
         'fill': True,
         'linewidth': 2
     }
-    _HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+    _HANDLE_PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 1,
         'markeredgecolor': style.BLACK_PEARL,
         'markerfacecolor': style.BLOSSOM
@@ -3212,13 +3212,13 @@ class RectSel(mpl_widgets.RectangleSelector):
 
 class HeatmapScaler(mpl_widgets.SpanSelector):
 
-    _PROPERTIES: Final[dict[str, Any]] = {
+    _PROPERTIES: ClassVar[dict[str, Any]] = {
         'alpha': 0.6,
         'edgecolor': style.BLOSSOM,
         'facecolor': style.BLOSSOM,
         'fill': True
     }
-    _HANDLE_PROPERTIES: Final[dict[str, Any]] = {
+    _HANDLE_PROPERTIES: ClassVar[dict[str, Any]] = {
         'color': style.BLOSSOM,
         'linewidth': 2
     }

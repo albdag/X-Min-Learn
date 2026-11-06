@@ -7,7 +7,7 @@ Created on Tue May  14 15:03:45 2024
 
 import os
 from collections.abc import Callable
-from typing import Final, Literal
+from typing import ClassVar, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -33,12 +33,12 @@ class AutoRoiDetector(QW.QDialog):
     roimapUpdateRequested = pyqtSignal()
     sampleUpdateRequested = pyqtSignal()
 
-    _NPV_ENCODER: Final[dict[str, Callable[[npt.NDArray[np.float_]], Any]]] = {
+    _NPV_ENCODER: ClassVar[dict[str, Callable[[npt.NDArray[np.float_]], Any]]] = {
         'Pure': np.max,
         'Simple': np.median,
         'Smooth': np.mean
     }
-    _ROI_COLORS: Final[dict[str, tuple[int, int, int]]] = {
+    _ROI_COLORS: ClassVar[dict[str, tuple[int, int, int]]] = {
         'new': (255, 0, 0),
         'old': (0, 0, 0)
     }
@@ -306,7 +306,7 @@ class AutoRoiDetector(QW.QDialog):
 
     # Check that input maps have compatible shapes
         if (maps_shape := input_stack.maps_shape) is None:
-            CW.MsgBox(self, 'C', 'Selected maps have different shapes.')
+            CW.MsgBox(self, 'Crit', 'Selected maps have different shapes.')
             return
         
     # Get current ROI map and check its shape
@@ -474,7 +474,7 @@ class AutoRoiDetector(QW.QDialog):
 
         '''
         if self._active_thread is not None:
-            msgbox = CW.MsgBox(self, 'Q', 'Interrupt automatic ROI detection?')
+            msgbox = CW.MsgBox(self, 'Quest', 'Interrupt ROI detection?')
             if msgbox.is_choice('Yes'):
                 self._active_thread.requestInterruption()
                 self._end_threaded_session()

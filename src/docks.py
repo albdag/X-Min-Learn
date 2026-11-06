@@ -26,7 +26,14 @@ import settings
 import style
 from base import *
 
-
+type PaneWidget = (
+    DataManager
+    | HistogramViewer
+    | ModeViewer
+    | RoiEditor
+    | ProbabilityMapViewer
+    | RgbaCompositeMapViewer
+)
 class Pane(QW.QDockWidget):
 
     def __init__(
@@ -82,14 +89,14 @@ class Pane(QW.QDockWidget):
         self.setStyleSheet(style.SS_PANE)
 
 
-    def widget(self) -> QW.QWidget:
+    def widget(self) -> PaneWidget:
         '''
         Reimplemented 'widget' method that ensures the actual pane's widget
         is returned rather than the scroll area that wraps it.
 
         Returns
         -------
-        QWidget
+        PaneWidget
             The widget of the pane.
 
         '''

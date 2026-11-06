@@ -10,7 +10,7 @@ import json
 import math
 import multiprocessing
 from collections.abc import Callable, Sequence
-from typing import Any, Final, Literal, Protocol, Self, TypedDict, cast, overload
+from typing import Any, ClassVar, Literal, Protocol, Self, TypedDict, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -560,13 +560,13 @@ class EagerModel:
 # Model versioning is used to keep compatibility with old models
     _CURRENT_VERSION = 3 
 
-    _BASE_VARIABLES: Final[list[str]] = list(
+    _BASE_VARIABLES: ClassVar[list[str]] = list(
         _BaseModelVariables.__annotations__.keys()
     )
-    _EXTENDED_VARIABLES: Final[list[str]] = list(
+    _EXTENDED_VARIABLES: ClassVar[list[str]] = list(
         _ExtendedModelVariables.__annotations__.keys()
     )
-    _ALL_VARIABLES: Final[list[str]] = list(
+    _ALL_VARIABLES: ClassVar[list[str]] = list(
         ModelVariables.__annotations__.keys()
     )
 

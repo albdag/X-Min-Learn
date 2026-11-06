@@ -27,8 +27,8 @@ APPVERSION = '1.0.0-beta.3'
 # Windows shell options for distribution
 try:
     from ctypes import windll  # Only exists on Windows.
-    myappid = f'{APPNAME}.{APPVERSION}'
-    windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    app_id = f'{APPNAME}.{APPVERSION}'
+    windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
 except ImportError:
     pass
 

@@ -7,7 +7,7 @@ Created on Tue Dec 14 14:09:21 2021
 """
 
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, ClassVar
 
 from PyQt5.QtCore import QByteArray, QSettings, QStandardPaths
 
@@ -16,7 +16,7 @@ DOC_DIR = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.Docume
 
 class SettingsManager:
     
-    _DEFAULTS: Final[dict[str, Any]] = {
+    _DEFAULTS: ClassVar[dict[str, Any]] = {
         'GUI/fontsize': (10, int),
         'GUI/high_dpi_scaling': (False, bool),
         'GUI/smooth_animation': (True, bool),

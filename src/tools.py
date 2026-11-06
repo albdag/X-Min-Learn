@@ -14,7 +14,7 @@ import os
 import webbrowser
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Final, Literal, cast, get_args, overload
+from typing import ClassVar, Literal, cast, get_args, overload
 
 import numpy as np
 from PyQt5 import QtCore as QC
@@ -1182,7 +1182,7 @@ class MineralClassifier(DraggableTool):
         '''
     # Do not allow multiple classification processes at once
         if self._isBusyClassifying:
-            CW.MsgBox(self, 'C', 'Cannot run multiple classifications.')
+            CW.MsgBox(self, 'Crit', 'Cannot run multiple classifications.')
             return
         
     # Build the input maps stack
@@ -1203,7 +1203,7 @@ class MineralClassifier(DraggableTool):
         
     # Check that mask (if present) has correct shape
         if not input_stack.mask_fit():
-            CW.MsgBox(self, 'C', 'The selected mask has invalid shape.')
+            CW.MsgBox(self, 'Crit', 'The selected mask has invalid shape.')
             return
 
     # Get the classifier and launch the classification thread
@@ -1949,7 +1949,7 @@ class MineralClassifier(DraggableTool):
 
 class DatasetBuilder(DraggableTool):
 
-    _ELEMENTS: Final[dict[str, str]] = {
+    _ELEMENTS: ClassVar[dict[str, str]] = {
         'Ac': 'Actinium (Z=89)',     'Ag': 'Silver (Z=47)',      
         'Al': 'Aluminum (Z=13)',     'Ar': 'Argon (Z=18)',      
         'As': 'Arsenic (Z=33)',      'At': 'Astatine (Z=85)',   
