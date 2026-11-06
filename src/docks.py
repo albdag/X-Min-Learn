@@ -17,6 +17,7 @@ from PyQt5.QtGui import QColor, QIcon, QPixmap
 
 import config_schemas
 import convenient_functions as cf
+import crashlog
 import custom_widgets as CW
 import dialogs
 import image_analysis_tools as iatools
@@ -832,15 +833,18 @@ class DataManager(QW.QTreeWidget):
         if not overwrite or path is None or not item.filepathValid():
             if isinstance(item_data, InputMap):
                 filext = 'Compressed ASCII map (*.gz);;ASCII map (*.txt)'
+                caption = 'Save Map'
             elif isinstance(item_data, MineralMap):
                 filext = 'Mineral maps (*.mmp)'
+                caption = 'Save Map'
             elif isinstance(item_data, Mask):
                 filext = 'Mask (*.msk)'
+                caption = 'Save Mask'
             # add PointAnalysis
-            else: 
+            else:
                 return # safety
 
-            path = CW.FileDialog(self, 'save', 'Save Map', filext).get_path()
+            path = CW.FileDialog(self, 'save', caption, filext).get_path()
             if not path:
                 return
     
@@ -859,8 +863,10 @@ class DataManager(QW.QTreeWidget):
         # All edits have been saved, so the edited status is set to False
             item.setEdited(False)
             
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save file.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save file.', dtext)
             return
 
         finally:
@@ -907,7 +913,7 @@ class DataManager(QW.QTreeWidget):
 
     # Data loading routine
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
-        errors = []
+        failed: list[str] = []
         for n, p in enumerate(paths, start=1):
             try:
                 xmap = InputMap.load(p)
@@ -919,16 +925,17 @@ class DataManager(QW.QTreeWidget):
                 item.setInvalidFilepath(p)
                 group.inmaps.addChild(item)
 
-            except Exception as e:
-                errors.append((p, e))
+            except (OSError, ValueError, TypeError) as e:
+                failed.append(p)
+                crashlog.logger.handle_caught_exception(e, self)
 
             finally:
                 pbar.setValue(n)
 
     # Send detailed error message if any file failed to be loaded
-        if n_err := len(errors):
-            text = f'A total of {n_err} file(s) failed to load.'
-            dtext = '\n\n'.join((f'{path}: {exc}' for path, exc in errors))
+        if n := len(failed):
+            text = f'A total of {n} file(s) failed to load.'
+            dtext = f'{'\n'.join(failed)}\n\n{crashlog.logger.log_location_msg}'
             CW.MsgBox(self, 'Crit', text, dtext)
 
     # Auto expand group
@@ -961,7 +968,7 @@ class DataManager(QW.QTreeWidget):
     
     # Data loading routine
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
-        errors = []
+        failed: list[str] = []
         for n, p in enumerate(paths, start=1):
             try:
                 mmap = MineralMap.load(p)
@@ -971,7 +978,7 @@ class DataManager(QW.QTreeWidget):
                     txt = f'{cnt} mineral classes detected for {p}. Proceed?'
                     dtxt = '\n'.join(mmap.get_phases())
                     # Make pbar the parent of msgbox for it to be responsive
-                    msgbox = CW.MsgBox(pbar, 'QW', txt, dtxt, 'X-Min Learn')
+                    msgbox = CW.MsgBox(pbar, 'QuestWarn', txt, dtxt, 'X-Min Learn')
                     if msgbox.is_choice('No'):
                         continue
                 # Convert ASCII-style maps to .mmp
@@ -985,16 +992,17 @@ class DataManager(QW.QTreeWidget):
                 item.setInvalidFilepath(p)
                 group.minmaps.addChild(item)
 
-            except Exception as e:
-                errors.append((p, e))
+            except (OSError, ValueError, TypeError) as e:
+                failed.append(p)
+                crashlog.logger.handle_caught_exception(e, self)
 
             finally:
                 pbar.setValue(n)
 
     # Send detailed error message if any file failed to be loaded
-        if n_err := len(errors):
-            text = f'A total of {n_err} file(s) failed to load.'
-            dtext = '\n\n'.join((f'{path}: {exc}' for path, exc in errors))
+        if n := len(failed):
+            text = f'A total of {n} file(s) failed to load.'
+            dtext = f'{'\n'.join(failed)}\n\n{crashlog.logger.log_location_msg}'
             CW.MsgBox(self, 'Crit', text, dtext)
 
     # Auto expand group
@@ -1027,7 +1035,7 @@ class DataManager(QW.QTreeWidget):
     
     # Data loading routine
         pbar = CW.PopUpProgBar(self, len(paths), 'Loading data')
-        errors = []
+        failed: list[str] = []
         for n, p in enumerate(paths, start=1):
             try:
                 mask = Mask.load(p)
@@ -1039,16 +1047,17 @@ class DataManager(QW.QTreeWidget):
                 item.setInvalidFilepath(p)
                 group.masks.addChild(item)
 
-            except Exception as e:
-                errors.append((p, e))
+            except (OSError, ValueError, TypeError) as e:
+                failed.append(p)
+                crashlog.logger.handle_caught_exception(e, self)
 
             finally:
                 pbar.setValue(n)
 
     # Send detailed error message if any file failed to be loaded
-        if n_err := len(errors):
-            text = f'A total of {n_err} file(s) failed to load.'
-            dtext = '\n\n'.join((f'{path}: {exc}' for path, exc in errors))
+        if n := len(failed):
+            text = f'A total of {n} file(s) failed to load.'
+            dtext = f'{'\n'.join(failed)}\n\n{crashlog.logger.log_location_msg}'
             CW.MsgBox(self, 'Crit', text, dtext)
 
     # Auto expand group
@@ -1254,18 +1263,25 @@ class DataManager(QW.QTreeWidget):
         outpath = CW.FileDialog(self, 'save', 'Save Map', ftype).get_path()
         if not outpath:
             return
-        
-    # Save the mineral map to disk
-        np.savetxt(outpath, minmap.minmap_encoded, fmt='%d')
 
-    # Also save the encoder if user requests it
-        if msgbox.cboxChecked():
-            encoder_path = cf.extend_filename(outpath, '_transDict')
-            rows, cols = minmap.shape
-            with open(encoder_path, 'w') as ep:
-                ep.write(json.dumps(minmap.encoder, indent=2))
-            # Include number of rows and columns
-                ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
+        try:
+        # Save the mineral map to disk
+            np.savetxt(outpath, minmap.minmap_encoded, fmt='%d')
+
+        # Also save the encoder if user requests it
+            if msgbox.cboxChecked():
+                encoder_path = cf.extend_filename(outpath, '_transDict')
+                rows, cols = minmap.shape
+                with open(encoder_path, 'w') as ep:
+                    ep.write(json.dumps(minmap.encoder, indent=2))
+                # Include number of rows and columns
+                    ep.write(f'\nNROWS: {rows}\nNCOLS: {cols}')
+            CW.MsgBox(self, 'Info', 'Map exported successfully.')
+
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to export map.', dtext)
 
 
     def fixDataSource(self, item: CW.DataObject) -> None:
@@ -1315,8 +1331,10 @@ class DataManager(QW.QTreeWidget):
             item.setNotFound(False)
             item.setEdited(False)
             
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', f'Unexpected file: {path}', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}', dtext)
             return
 
     # Try fixing data objects in the same group that are also "not found" by 
@@ -1356,7 +1374,7 @@ class DataManager(QW.QTreeWidget):
                     obj.setNotFound(False)
                     obj.setEdited(False)
 
-                except:
+                except (OSError, ValueError, TypeError):
                     continue
 
     # Check for maps shapes warnings within the group and refresh view
@@ -1372,7 +1390,7 @@ class DataManager(QW.QTreeWidget):
         items = self.getSelectedDataObjects()
         groups = [self.getItemParentGroup(i) for i in items]
         pbar = CW.PopUpProgBar(self, len(items), 'Reloading data')
-        errors = []
+        failed: list[str] = []
         for n, i in enumerate(items, start=1):
             comps = i.getComponents()
             data, path, name = comps['data'], comps['filepath'], comps['name']
@@ -1380,15 +1398,18 @@ class DataManager(QW.QTreeWidget):
                 # None path indicates unsaved data and cannot be refreshed
                 if path is None: 
                     continue
-                path_exists = os.path.exists(path)
-                i.setNotFound(not path_exists)
-                if path_exists and (subgr := i.subgroup()) is not None:
+                if (subgr := i.subgroup()) is not None:
                     data = subgr.datatype if data is None else data
                     i.setObjectData(data.load(path))
                     i.setEdited(False)
+                    i.setNotFound(False)
 
-            except Exception as e:
-                errors.append((name, path, e))
+            except FileNotFoundError:
+                i.setNotFound(True)
+
+            except (OSError, ValueError, TypeError) as e:
+                failed.append(f'{name} ({path})')
+                crashlog.logger.handle_caught_exception(e, self)
 
             finally:
                 pbar.setValue(n)
@@ -1401,9 +1422,9 @@ class DataManager(QW.QTreeWidget):
         self.refreshView()
 
     # Send detailed error message if any file failed to be refreshed
-        if n_err := len(errors):
-            text = f'A total of {n_err} file(s) failed to load.'
-            dtext = '\n\n'.join((f'{fn} ({fp}): {ex}' for fn, fp, ex in errors))
+        if n := len(failed):
+            text = f'A total of {n} file(s) failed to refresh.'
+            dtext = f'{'\n'.join(failed)}\n\n{crashlog.logger.log_location_msg}'
             CW.MsgBox(self, 'Crit', text, dtext)
 
 
@@ -1874,8 +1895,10 @@ class HistogramViewer(QW.QWidget):
             return
         try:
             mask.save(outpath)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', dtext)
             return
             
 
@@ -2292,8 +2315,10 @@ class ModeViewer(CW.StyledTabWidget):
             return
         try:
             mask.save(outpath)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', dtext)
             return
             
 
@@ -3128,8 +3153,10 @@ class RoiEditor(QW.QWidget):
             return
         try:
             mask.save(outpath)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', dtext)
 
 
     def extractMaskFromRois(self) -> None:
@@ -3166,8 +3193,10 @@ class RoiEditor(QW.QWidget):
             return
         try:
             mask.save(outpath)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', dtext)
 
 
     def removeRoi(self) -> None:
@@ -3253,9 +3282,12 @@ class RoiEditor(QW.QWidget):
             self.set_current_roimap(RoiMap.load(path))
             self.mappath.setPath(path)
             pbar.increase()
-        except Exception as e:
+
+        except (OSError, ValueError, TypeError) as e:
             pbar.reset()
-            CW.MsgBox(self, 'C', f'Unexpected file:\n{path}', str(e))
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}', dtext)
             return
 
     # Populate the canvas and the ROIs table with the loaded ROIs
@@ -3326,8 +3358,10 @@ class RoiEditor(QW.QWidget):
         try:
             self.current_roimap.save(outpath)
             self.mappath.setPath(outpath)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save ROI map.', dtext)
 
 
     def isRoiMapUnsaved(self):
@@ -3351,7 +3385,7 @@ class RoiEditor(QW.QWidget):
     # If current ROI map has a valid but broken filepath, it is unsaved
         try:
             saved_roimap = RoiMap.load(roimap_path)
-        except Exception: # path deleted, moved, renamed or with broken data
+        except (OSError, ValueError, TypeError):
             return True 
 
     # Check if saved ROI map data differs from current ROI map data
@@ -3702,8 +3736,10 @@ class ProbabilityMapViewer(QW.QWidget):
             return
         try:
             mask.save(outpath)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save mask.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save mask.', dtext)
 
 
     def resetConfig(self) -> None:
@@ -4008,8 +4044,7 @@ class RgbaCompositeMapViewer(QW.QWidget):
         self.clearAllChannels()
         for ch in self._CHANNELS:
             path = config['Channels'][ch]
-            if os.path.exists(path):
-                try:
-                    self.setChannel(ch, InputMap.load(path))
-                except ValueError: # triggered by InputMap.load()
-                    continue
+            try:
+                self.setChannel(ch, InputMap.load(path))
+            except (OSError, ValueError, TypeError):
+                continue

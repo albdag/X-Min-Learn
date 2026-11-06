@@ -22,6 +22,7 @@ from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
 import convenient_functions as cf
+import crashlog
 import custom_widgets as CW
 import dataset_tools as dtools
 import image_analysis_tools as iatools
@@ -728,9 +729,11 @@ class MineralClassifier(DraggableTool):
     
     # Try loading mask
         try:
-            mask = Mask.load(path)     
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}.', str(e))
+            mask = Mask.load(path)
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}', dtext)
             return
 
     # Update GUI
@@ -985,8 +988,10 @@ class MineralClassifier(DraggableTool):
         thresh = self._thresholdMineralMap(minmap)
         try:
             thresh.save(path)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', dtext)
 
 
     def removeMineralMap(self) -> None: 
@@ -1269,8 +1274,10 @@ class MineralClassifier(DraggableTool):
             self.minmaps_list.setCurrentItem(item)
             self.showMineralMap(item)
 
-        else:
-            CW.MsgBox(self, 'Crit', 'Classification failed.', str(result[0]))
+        elif not success:
+            crashlog.logger.handle_caught_exception(result[0], self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Classification failed.', dtext)
 
         self._endClassification(success)
 
@@ -1439,8 +1446,10 @@ class MineralClassifier(DraggableTool):
 
             try:
                 self.model = mltools.EagerModel.load(path)
-            except Exception as e:
-                CW.MsgBox(self, 'Crit', 'Incompatible model.', str(e))
+            except (OSError, ValueError, TypeError) as e:
+                crashlog.logger.handle_caught_exception(e, self)
+                dtext = crashlog.logger.log_location_msg
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}', dtext)
                 return
 
         # Model's path changed if model was converted to a newer version
@@ -1663,9 +1672,11 @@ class MineralClassifier(DraggableTool):
             try:
                 new_roimap = RoiMap.load(path)
                 pbar.increase()
-            except Exception as e:
+            except (OSError, ValueError, TypeError) as e:
                 pbar.reset()
-                CW.MsgBox(self, 'C', f'Unexpected file:\n{path}.', str(e))
+                crashlog.logger.handle_caught_exception(e, self)
+                dtext = crashlog.logger.log_location_msg
+                CW.MsgBox(self, 'Crit', f'Unexpected file:\n{path}', dtext)
                 return
 
         # Remove previous ROI map from canvas
@@ -2574,9 +2585,16 @@ class DatasetBuilder(DraggableTool):
         pbar.startPulse()
         dec = self.decimal_combox.currentText()
         sep = self.separator_combox.currentText()
-        self.dataset.save(path, sep, dec, split=self.split_cbox.isChecked())
-        pbar.stopPulse()
-        CW.MsgBox(self, 'Info', 'Dataset succesfully saved.')
+        try:
+            self.dataset.save(path, sep, dec, split=self.split_cbox.isChecked())
+            pbar.stopPulse()
+            CW.MsgBox(self, 'Info', 'Dataset succesfully saved.')
+        except (OSError, ValueError, TypeError) as e:
+            pbar.stopPulse()
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save dataset.', dtext)
+            
 
 
 
@@ -3698,17 +3716,19 @@ class ModelLearner(DraggableTool):
                 self.split_dataset_btn.setEnabled(True)
                 return
 
-            except Exception as e:
-                err_txt = str(e)
+            except (ValueError, IndexError) as e:
+                exc = e
 
         else:
-            err_txt = str(result[0])
+            exc = result[0]
 
         # If we are here, either the thread or the dataset compilation failed
         self._dataset = None
         self.dataset_preview.clear()
         self.dataset_path_lbl.clearPath()
-        CW.MsgBox(self, 'Crit', 'Loading dataset failed.', err_txt)
+        crashlog.logger.handle_caught_exception(exc, self)
+        dtext = crashlog.logger.log_location_msg
+        CW.MsgBox(self, 'Crit', 'Loading dataset failed.', dtext)
 
 
     def _fixSubsetsRatios(self, new_value: int) -> None:
@@ -3795,9 +3815,11 @@ class ModelLearner(DraggableTool):
             dataset.split_subsets(tr_ratio, vd_ratio, ts_ratio, seed) 
             pbar.increase()
 
-        except Exception as e:
+        except (OSError, ValueError, TypeError, IndexError) as e:
             pbar.reset()
-            CW.MsgBox(self, 'Crit', 'Unexpected data type', str(e))
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to split dataset.', dtext)
             return
 
     # Update GUI elements
@@ -4074,7 +4096,9 @@ class ModelLearner(DraggableTool):
         
         else:
         # Forward error if balancing operations failed
-            CW.MsgBox(self, 'Crit', 'Balancing failed.', str(result[0]))
+            crashlog.logger.handle_caught_exception(result[0], self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Balancing failed.', dtext)
             
     # End balancing session in any case
         self._endBalancingSession(success)
@@ -4298,7 +4322,7 @@ class ModelLearner(DraggableTool):
                 self._reset()
         
         pbar = CW.PopUpProgBar(self, 4, 'Loading Model')
-        
+        err_msg = ''
         try:
         # Import parent model
             pmodel = mltools.EagerModel.load(path)
@@ -4307,13 +4331,13 @@ class ModelLearner(DraggableTool):
 
         # Check if parent model shares the same features of loaded dataset
             if pmodel.features != dataset.columns_names()[:-1]:
-                err = 'Model and loaded dataset have incompatible features.'
-                raise ValueError(err)
+                err_msg = 'Model and dataset have incompatible features.'
+                raise ValueError(err_msg)
             
         # Check if parent model shares the same targets of loaded dataset
             if pmodel.targets != dataset.column_unique(-1):
-                err = 'Model and loaded dataset have incompatible target classes.'
-                raise ValueError(err)
+                err_msg = 'Model and dataset have incompatible target classes.'
+                raise ValueError(err_msg)
             pbar.increase()
 
         # Show parent model preview. Ask for rebuilding missing model log file.
@@ -4345,10 +4369,13 @@ class ModelLearner(DraggableTool):
             pbar.increase()
             CW.MsgBox(self, 'Info', 'Model loaded successfully.')
         
-        except Exception as e:
+        except (OSError, ValueError, TypeError, IndexError) as e:
+            if not err_msg:
+                crashlog.logger.handle_caught_exception(e, self)
+                err_msg = crashlog.logger.log_location_msg
             pbar.reset()
             self.removeParentModel()
-            CW.MsgBox(self, 'Crit', 'Failed to load model.', str(e))
+            CW.MsgBox(self, 'Crit', 'Failed to load model.', err_msg)
 
 
     def removeParentModel(self) -> None:
@@ -4667,8 +4694,10 @@ class ModelLearner(DraggableTool):
             CW.MsgBox(self, 'Info', 'Learning Session completed successfully.')
 
     # Forward error if learning session failed
-        else:
-            CW.MsgBox(self, 'Crit', 'Learning Session failed.', str(result[0]))
+        elif not success:
+            crashlog.logger.handle_caught_exception(result[0], self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Learning Session failed.', dtext)
 
     # Update Start-Stop-Learn buttons on exit in any case
         self.start_learn_btn.setEnabled(True)
@@ -4881,8 +4910,10 @@ class ModelLearner(DraggableTool):
             extended_log = settings.manager.get('data/extended_model_log')
             model.save(path, log_path, extended_log)
             CW.MsgBox(self, 'Info', 'Model saved successfully.')
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save model.', str(e))
+        except (OSError, ValueError, TypeError, KeyError, IndexError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save model.', dtext)
 
     # deprecated
     # def killReferences(self) -> None:
@@ -6249,8 +6280,10 @@ class PhaseRefiner(DraggableTool):
         try:
             self.minmap.save(outpath)
             CW.MsgBox(self, 'Info', 'Map saved successfully.')
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', dtext)
 
     # deprecated
     # def killReferences(self) -> None:

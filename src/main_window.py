@@ -15,6 +15,7 @@ from PyQt5 import QtGui as QG
 from PyQt5 import QtWidgets as QW
 
 import convenient_functions as cf
+import crashlog
 import custom_widgets as CW
 import dialogs
 import docks
@@ -1074,8 +1075,10 @@ class MainWindow(QW.QMainWindow):
                 xmj.writestr('CurrentView', json.dumps(current_view, indent=4))
                 xmj.writestr('PanesData', json.dumps(panes_data, indent=4))
                 xmj.writestr('ToolsData', pickle.dumps(tools_data))
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save project.', str(e))
+        except (OSError, ValueError, TypeError, pickle.PicklingError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save project.', dtext)
             return False
 
     # Update window attributes 
@@ -1164,8 +1167,10 @@ class MainWindow(QW.QMainWindow):
                 current_view = json.loads(xmj.read('CurrentView'))
                 panes_data = json.loads(xmj.read('PanesData'))
                 tools_data = pickle.loads(xmj.read('ToolsData')) # noqa: F841
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to open project.', str(e))
+        except (OSError, ValueError, TypeError, KeyError, pickle.UnpicklingError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to open project.', dtext)
             return
         
     # Ask for user's choice if the project and the app version do not coincide
@@ -1176,7 +1181,7 @@ class MainWindow(QW.QMainWindow):
                 return
 
     # Initialize a list to store any loading error
-        loading_errors = []
+        failed: list[str] = []
 
     # Clear scene
         self.clearScene()
@@ -1190,8 +1195,9 @@ class MainWindow(QW.QMainWindow):
             pane_name = pane.objectName()
             try:
                 pane.widget().loadConfig(panes_data[pane_name])
-            except Exception as e:
-                loading_errors.append((pane_name, e))
+            except KeyError as e:
+                failed.append(f'{pane_name} pane')
+                crashlog.logger.handle_caught_exception(e, self)
 
     # Load current view object
         for item in self.dataManager.getAllDataObjects():
@@ -1209,9 +1215,12 @@ class MainWindow(QW.QMainWindow):
         self.setWindowModified(False)   
 
     # Send any catched loading error via warning
-        if len(loading_errors):
-            CW.MsgBox(self, 'Warn', 'Found corrupted data in the project.',
-                      '\n\n'.join((f'{k} -> {e}' for k, e in loading_errors)))
+        if len(failed):
+            dtext = (
+                f'Something failed to load in:\n{'\n'.join(failed)}'
+                f'\n\n{crashlog.logger.log_location_msg}'
+            )
+            CW.MsgBox(self, 'Warn', 'Found corrupted data in project.', dtext)
 
 
     def _onCloseAction(self):

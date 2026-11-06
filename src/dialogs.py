@@ -353,7 +353,9 @@ class AutoRoiDetector(QW.QDialog):
 
         else:
             (e,) = thread_result
-            CW.MsgBox(self, 'Crit', 'NPV calculation failed.', str(e))
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'NPV calculation failed.', dtext)
             self._end_threaded_session()
 
     
@@ -433,7 +435,9 @@ class AutoRoiDetector(QW.QDialog):
             self._auto_roimap = result
 
         elif not success and isinstance(result, Exception):
-            CW.MsgBox(self, 'Crit', 'ROI detection failed.', str(result))
+            crashlog.logger.handle_caught_exception(result, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'ROI detection failed.', dtext)
 
         else: # safety
             pass
@@ -765,8 +769,10 @@ class MergeDatasets(QW.QDialog):
         try:
             self.merged_dataset.save(outpath, sep, dec)
             CW.MsgBox(self, 'Info', 'Succesfully saved merged dataset.')
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save merged dataset.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save merged dataset.', dtext)
 
 
 
@@ -998,10 +1004,12 @@ class SubSampleDataset(QW.QDialog):
                 targets = self.original_dataset.encoder.keys()
                 self.original_classes.addItems(targets)
                 self.progbar.setValue(3)
-            except Exception as e:
+            except (ValueError, TypeError, IndexError) as e:
                 self.original_dataset = None
                 self.in_dataset_path.clearPath()
-                CW.MsgBox(self, 'Crit', 'Invalid dataset.', str(e))
+                crashlog.logger.handle_caught_exception(e, self)
+                dtext = crashlog.logger.log_location_msg
+                CW.MsgBox(self, 'Crit', 'Dataset contains invalid data.', dtext)
 
             finally:
                 self.progbar.reset()
@@ -1009,7 +1017,9 @@ class SubSampleDataset(QW.QDialog):
         else:
             self.original_dataset = None
             self.in_dataset_path.clearPath()
-            CW.MsgBox(self, 'Crit', 'Dataset loading failed.', str(result[0]))
+            crashlog.logger.handle_caught_exception(result[0], self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Dataset loading failed.', dtext)
             
 
     def showDatasetPreview(self, dataset: Literal['original', 'sub-sampled']) -> None:
@@ -1126,8 +1136,10 @@ class SubSampleDataset(QW.QDialog):
             self.subsampled_dataset.save(outpath, separator_char, decimal_char)
             CW.MsgBox(self, 'Info', 'Dataset successfully saved.')
 
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save dataset.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save dataset.', dtext)
         
 
 
@@ -1224,7 +1236,7 @@ class ImageToInputMap(QW.QDialog):
 
     def importImages(self) -> None:
         '''
-        Import images and show their paths as well as a small preview.
+        Import image paths and show small image previews.
 
         '''
     # Do nothing if paths are invalid or the file dialog is canceled
@@ -1240,15 +1252,9 @@ class ImageToInputMap(QW.QDialog):
             self.progbar.setValue(n)
             if len(self.img_list.findItems(p, Qt.MatchFlag.MatchExactly)): 
                 continue
-            try:
-                # TIFF file previews may spam warnings on the console (BUG)
-                pixmap = QPixmap(p).scaled(self.preview_size, style.ARM_KEEP)
-                self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
-            except Exception as e:
-                self.progbar.reset()
-                CW.MsgBox(self, 'C', 'File import failed.', str(e))
-                return
-
+            # TIFF file previews may spam warnings on the console (BUG)
+            pixmap = QPixmap(p).scaled(self.preview_size, style.ARM_KEEP)
+            self.img_list.addItem(QW.QListWidgetItem(QIcon(pixmap), p))
         self.progbar.reset()
 
 
@@ -1269,7 +1275,7 @@ class ImageToInputMap(QW.QDialog):
             return
     
     # Try converting images to Input Maps and saving them
-        errors_log: list[tuple[str, Exception]] = []
+        failed: list[str] = []
         ext = str(self.map_ext_combox.currentText())
         self.progbar.setRange(0, img_count)
 
@@ -1293,22 +1299,25 @@ class ImageToInputMap(QW.QDialog):
                     out = os.path.join(outdir, fname)
                     InputMap(array).save(out)
 
-            except Exception as e:
-                errors_log.append((path, e))
+            except (OSError, ValueError, TypeError, MemoryError) as e:
+                failed.append(path)
+                crashlog.logger.handle_caught_exception(e, self)
         
         self.progbar.reset()
 
     # Send message box with success confirm or error warnings
-        if len(errors_log):
-            fpaths, err = zip(*errors_log)
-            dtext = '\n'.join(str(e) for e in err)
-            CW.MsgBox(self, 'Warn', f'Failed conversions:\n\n{fpaths}', dtext)
+        if len(failed):
+            dtext = (
+                f'Affected files:\n{'\n'.join(failed)}'
+                f'\n\n{crashlog.logger.log_location_msg}'
+            )
+            CW.MsgBox(self, 'Warn', 'Failed to convert some images.', dtext)
             return
 
         else:
             CW.MsgBox(self, 'Info', 'Images successfully converted.')
             return
-        
+
 
 
 class ImageToMineralMap(QW.QDialog):
@@ -1455,8 +1464,10 @@ class ImageToMineralMap(QW.QDialog):
         try:
             self.image_array = iatools.image2array(path, dtype='int32')
             self.path_lbl.setPath(path)
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to import image.', str(e))
+        except (OSError, ValueError, MemoryError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to import image.', dtext)
 
 
     def convertImage(self) -> None:
@@ -1545,8 +1556,14 @@ class ImageToMineralMap(QW.QDialog):
             return
     
     # Save mineral map
-        self.minmap.save(outpath)
-        CW.MsgBox(self, 'Info', 'Map successfully saved.')
+        try:
+            self.minmap.save(outpath)
+            CW.MsgBox(self, 'Info', 'Map successfully saved.')
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', dtext)
+            
         
 
     def changeColor(
@@ -1822,8 +1839,10 @@ class DummyMapsBuilder(QW.QDialog):
         try:
             InputMap(self.dummy_map).save(path)
             CW.MsgBox(self, 'Info', 'Map saved succesfully.')
-        except Exception as e:
-            CW.MsgBox(self, 'Crit', 'Failed to save map.', str(e))
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, 'Crit', 'Failed to save map.', dtext)
 
 
 

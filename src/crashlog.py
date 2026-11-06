@@ -62,6 +62,20 @@ class CrashLogger:
         return str(self._path)
 
 
+    @property
+    def log_location_msg(self) -> str:
+        '''
+        Standard instruction message pointing to the active log file location.
+
+        Returns
+        -------
+        str
+            Log location message.
+
+        '''
+        return f'For more details, check log file at: {self.log_filepath}'
+
+
     def _get_logs_dir(self, root: Path) -> Path:
         '''
         Get the full path to logs folder. If not existing, the logs folder is
@@ -199,6 +213,31 @@ class CrashLogger:
         self._fault_file.flush()
 
 
+    def handle_caught_exception(
+            self, e: BaseException, c: object | type | None = None) -> None:
+        '''
+        Deal with caught exception 'e' that was handled by the application.
+
+        Parameters
+        ----------
+        e : BaseException
+            Caught exception.
+        c : object | type | None, optional
+            Class instance or class type whose method raised the exception. If 
+            provided, the class name will be appended to the context message in
+            log file. The default is None.
+
+        '''
+        # Generate context message
+        msg = 'Caught exception'
+        if c is not None:
+            name = c.__name__ if isinstance(c, type) else c.__class__.__name__
+            msg += f' raised in class {name}'
+
+        # Log exception as with WARNING level (the default)
+        self.log_exception(e, msg)
+
+
     def open_log(self) -> None:
         '''
         Open the log file. This works cross-platform.
@@ -290,26 +329,3 @@ def custom_excepthook(
     dialog = CrashDialog(logger)
     dialog.exec_()
     sys.exit(1)
-
-
-def generate_context_msg(class_name: str = '') -> str:
-    '''
-    Generate a default context message that can be attached to a logged caught
-    exception.
-
-    Parameters
-    ----------
-    class_name : str, optional
-        Name of the class whose method raised the exception. If non-empty, it
-        will be added to the context message. The default is ''. 
-
-    Returns
-    -------
-    str
-        The context message.
-
-    '''
-    msg = 'Caught exception'
-    if class_name:
-        msg += f' raised in class {class_name}'
-    return msg

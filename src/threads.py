@@ -257,7 +257,7 @@ class LearningThread(DynamicStepsThread):
             self.taskFinished.emit((
                 tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list), True)
 
-        except Exception as exc:
+        except Exception as exc: # noqa: BLE001
         # Exit with error
             self.taskFinished.emit((exc, ), False)
 
@@ -300,7 +300,7 @@ class CsvChunkReadingThread(DynamicStepsThread):
 
             self.taskFinished.emit(tuple(chunk_list), True)
         
-        except Exception as exc:
+        except Exception as exc: # noqa: BLE001
         # Exit with error
             self.taskFinished.emit((exc, ), False)
 
@@ -353,7 +353,7 @@ class ModelBasedClassificationThread(FixedStepsThread):
         # Send the workFinished signal with success
             self.workFinished.emit((pred, prob), True)
 
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
         # Send the workFinished signal with error
             self.workFinished.emit((e, ), False)
 
@@ -412,7 +412,7 @@ class RoiBasedClassificationThread(FixedStepsThread):
         # Send the workFinished signal with success
             self.workFinished.emit((pred, prob), True)
 
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
         # Send the workFinished signal with error
             self.workFinished.emit((e, ), False)
 
@@ -492,7 +492,7 @@ class UnsupervisedClassificationThread(FixedStepsThread):
             out = (pred, prob, sil_avg, sil_clust, chi, dbi)
             self.workFinished.emit(out, True)
 
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
         # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
 
@@ -573,7 +573,7 @@ class BalancingThread(FixedStepsThread):
         # Send the workFinished signal with success
             self.workFinished.emit((x_train, y_train, balancing_info), True)
 
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
         # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
 
@@ -671,7 +671,7 @@ class NpvThread(FixedStepsThread):
             npv_sum = npv_sum / np.max(npv_sum) # normalize to range [0, 1]
             self.workFinished.emit((npv_sum, ), True)
 
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
         # Send the workFinished signal with error
             self.workFinished.emit((e, ), False)
 
@@ -811,7 +811,7 @@ class RoiDetectionThread(FixedStepsThread):
         # detected roimap
             self.workFinished.emit((auto_roimap,), True)
 
-        except Exception as e:
+        except Exception as e: # noqa: BLE001
         # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
 

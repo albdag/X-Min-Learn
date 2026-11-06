@@ -4914,7 +4914,7 @@ class DatasetDesigner(StyledTable):
                         mineral_map = MineralMap.load(path)
                     else: 
                         input_maps.append(InputMap.load(path))
-                except:
+                except (OSError, ValueError, TypeError):
                     loader.setStatus('Invalid')
 
             pbar.setValue(col)
