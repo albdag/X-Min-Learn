@@ -1169,8 +1169,8 @@ class DataManager(QW.QTreeWidget):
         colors = list(minmap.palette.values())
         try:
             data = json.dumps(colors).encode('utf-8')
-        except TypeError as e:
-            CW.MsgBox(self, 'Crit', 'Invalid palette data', str(e))
+        except TypeError:
+            CW.MsgBox(self, "Crit", "Invalid palette data.")
             return
 
     # Set JSON data as MIME data for the clipboard
@@ -1207,8 +1207,8 @@ class DataManager(QW.QTreeWidget):
         try:
             data = mimedata.data(self._PALETTE_MIMETYPE).data().decode('utf-8')
             colors = [tuple(rgb) for rgb in json.loads(data)]
-        except json.JSONDecodeError as e:
-            CW.MsgBox(self, 'Crit', 'Invalid palette data in clipboard', str(e))
+        except json.JSONDecodeError:
+            CW.MsgBox(self, "Crit", "Invalid palette data in clipboard.")
             return
     
     # Set the palette to the mineral map and mark it as edited

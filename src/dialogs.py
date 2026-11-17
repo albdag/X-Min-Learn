@@ -676,17 +676,24 @@ class MergeDatasets(QW.QDialog):
         '''
         if item is None:
             return
-        
-    # Clear info area
-        self.input_info.clear()
 
-    # Get dataset preview
-        dec = self.in_csv_decimal.currentText()
-        nrows = self.nrows_spbox.value()
-        preview = dtools.dataframe_preview(item.text(), dec, n_rows=nrows)
-    
-    # Show preview in the info area
-        text = f'DATAFRAME PREVIEW\n(First {nrows} rows)\n\n{preview!r}'
+        # Get dataset preview
+        try:
+            dec = self.in_csv_decimal.currentText()
+            nrows = self.nrows_spbox.value()
+            preview = dtools.dataframe_preview(item.text(), dec, n_rows=nrows)
+        except FileNotFoundError:
+            CW.MsgBox(self, "Crit", "File was deleted, moved or renamed.")
+            return
+        except (OSError, ValueError, TypeError) as e:
+            crashlog.logger.handle_caught_exception(e, self)
+            dtext = crashlog.logger.log_location_msg
+            CW.MsgBox(self, "Crit", "Failed to read dataset.", dtext)
+            return
+
+        # Show preview in the info area
+        self.input_info.clear()
+        text = f"DATAFRAME PREVIEW\n(First {nrows} rows)\n\n{preview!r}"
         self.input_info.setText(text)
 
 
@@ -734,11 +741,11 @@ class MergeDatasets(QW.QDialog):
         for n, p in enumerate(paths, start=2):
             try:
                 self.progbar.setValue(n)
-                merged.merge(dtools.GroundTruthDataset.load(p, dec, chunks=True))
-            except ValueError:
+            except (OSError, ValueError, TypeError) as e:
+                crashlog.logger.handle_caught_exception(e, self)
+                dtext = crashlog.logger.log_location_msg
                 self.progbar.reset()
-                CW.MsgBox(self, 'Crit', 'Datasets columns do not fit.')
-                return
+                CW.MsgBox(self, "Crit", "Failed to merge datasets.", dtext)
 
         self.progbar.reset()
 
