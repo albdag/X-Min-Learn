@@ -18,7 +18,7 @@ from base import RoiMap
 
 # Custom types of this module
 type LearningTask = Callable[[], tuple[float, float, float, float]]
-type LearningArgs = tuple[
+LearningArgs = tuple[
     int, int, float, list[float], list[float], list[float], list[float]
 ]
 
