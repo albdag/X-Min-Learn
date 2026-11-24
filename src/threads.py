@@ -1,13 +1,14 @@
 """
-Implements multithreading capabilities to enable parallel processing, improving
-application responsiveness during computationally intensive tasks.
+Implements multithreading capabilities to enable parallel processing,
+improving application responsiveness during computationally intensive
+tasks.
 
 Created on Fri Jan 21 21:54:40 2022
 @author: albdag
 """
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -15,596 +16,612 @@ from scipy import ndimage
 
 from base import RoiMap
 
+# Custom types of this module
+type LearningTask = Callable[[], tuple[float, float, float, float]]
+type LearningArgs = tuple[
+    int, int, float, list[float], list[float], list[float], list[float]
+]
 
-class DynamicStepsThread(QThread):
 
-    iterCompleted = pyqtSignal(int)
+class DynamicStepsThread[TaskT: Callable[..., Any], *Ts](QThread):
+    iterCompleted = pyqtSignal(int)  # n. iter
     taskInterrupted = pyqtSignal()
-    taskFinished = pyqtSignal(tuple, bool)
+    taskFinished = pyqtSignal(tuple, bool)  # result/error, success
 
     def __init__(self) -> None:
-        '''
-        Base class for working threads operating a main task with a variable
-        amount of iterations. It is equipped with custom signals to inform when
-        each iteration is completed and when the entire procedure is completed
-        or interrupted.
+        """
+        Base class for working threads operating a main task with a
+        variable amount of iterations. It is equipped with custom
+        signals to inform when each iteration is completed and when the
+        entire procedure is completed or interrupted.
 
-        '''
+        """
         super().__init__()
-        self.task: Callable | None = None 
-        self.params: tuple[Any, ...] = ()
+        self.task: TaskT | None = None
+        self.params: tuple[*Ts] | None = None
 
-
-    def set_task(self, function: Callable) -> None:
-        '''
-        Set the main task of the thread. This method must be called before
-        starting the thread.
+    def set_task(self, function: TaskT) -> None:
+        """
+        Set the main task of the thread. This method must be called
+        before starting the thread.
 
         Parameters
         ----------
-        function : Callable
+        function : TaskT
             The main task of the thread.
-
-        '''
+        """
         self.task = function
 
-
-    def set_params(self, *args: Any) -> None:
-        '''
-        Set optional parameters for the task.
+    def set_params(self, *args: *Ts) -> None:
+        """
+        Set optional parameters for the task. This method must be called
+        before starting the thread.
 
         Parameters
         ----------
-        *args : Any
+        *args : *Ts
             Sequence of parameters.
-
-        '''
+        """
         self.params = args
 
-
     def isInterruptionRequested(self) -> bool:
-        '''
-        Add a custom signal to the default 'isInterruptionRequested' method.
+        """
+        Reimplementation of the parent method that emits a custom signal
+        and resets the thread.
 
         Returns
         -------
         interrupt : bool
             If the thread interruption has been requested.
-
-        '''
+        """
         interrupt = super().isInterruptionRequested()
         if interrupt:
             self.taskInterrupted.emit()
             self.reset()
         return interrupt
 
-
-    def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        task. To be reimplemented in each child.
-
-        Raises
-        ------
-        ValueError
-            Raised if the thread's task is not set.
-
-        '''
-        if self.task is None:
-            raise ValueError('Task is not set.')
-    
-
     def reset(self) -> None:
-        '''
-        Reset the thread parameters for safety measures. This method should be
-        internally called by the thread when terminated.
+        """
+        Reset the thread parameters for safety measures. This method
+        should be called by the thread when terminated.
 
-        '''
+        """
         self.task = None
-        self.params = ()
+        self.params = None
 
 
-
-class FixedStepsThread(QThread):
-
-    taskInitialized = pyqtSignal(str)
+class FixedStepsThread[StepsT: tuple[Callable[..., Any], ...], *Ts](QThread):
+    taskInitialized = pyqtSignal(str)  # task name
     workInterrupted = pyqtSignal()
-    workFinished = pyqtSignal(tuple, bool)
+    workFinished = pyqtSignal(tuple, bool)  # result/error, success
 
     def __init__(self) -> None:
-        '''
-        Base class for working threads operating a fixed amount of tasks, which
-        are provided as a pipeline of functions. It is equipped with custom
-        signals to inform when each task is initialized and when the entire 
-        procedure is completed or interrupted.
+        """
+        Base class for working threads operating a fixed amount of
+        tasks, which are provided as a pipeline of functions. It is
+        equipped with custom signals to inform when each task is
+        initialized and when the entire procedure is completed or
+        interrupted.
 
-        '''
+        """
         super().__init__()
-        self.pipeline: tuple[Callable, ...] = ()
-        self.args: tuple[Any, ...] = ()
-    
+        self.pipeline: StepsT | None = None
+        self.args: tuple[*Ts] | None = None
 
-    def set_pipeline(
-        self,
-        pipeline: tuple[Callable, ...],
-        *args: Any
-    ) -> None:
-        '''
-        Set the tasks pipeline. This method must be called before starting the
-        thread.
+    def set_pipeline(self, pipeline: StepsT, *args: *Ts) -> None:
+        """
+        Set the steps pipeline and their potential extra parameters.
+        This method must be called before starting the thread.
 
         Parameters
         ----------
-        pipeline : tuple[Callable]
+        pipeline : StepsT
             Sequence of functions to be performed by the thread.
-        *args : Any 
-            Sequence of extra parameters required by pipeline's functions. 
-
-        '''
+        *args : *Ts
+            Sequence of extra parameters required by pipeline functions.
+        """
         self.pipeline = pipeline
         self.args = args
 
-    
     def isInterruptionRequested(self) -> bool:
-        '''
-        Add a custom signal to the default 'isInterruptionRequested' method.
+        """
+        Reimplementation of the parent method that emits a custom signal
+        and resets the thread.
 
         Returns
         -------
         interrupt : bool
             If the thread interruption has been requested.
-
-        '''
+        """
         interrupt = super().isInterruptionRequested()
         if interrupt:
             self.workInterrupted.emit()
             self.reset()
         return interrupt
 
+    def reset(self) -> None:
+        """
+        Reset the thread parameters for safety measures. This method
+        should be called by the thread when terminated.
+
+        """
+        self.pipeline = None
+        self.args = None
+
+
+class LearningThread(DynamicStepsThread[LearningTask, *LearningArgs]):
+    # signal: (tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list)
+    renderRequested = pyqtSignal(tuple)
+
+    def __init__(self) -> None:
+        """
+        Dynamic steps thread specialized for supervised learning
+        sessions. The required task (see the parent 'set_task' method),
+        must return the following four outputs:
+         o1. Training loss -> float
+         o2. Testing loss -> float
+         o3. Training accuracy -> float
+         o4. Testing accuracy -> float
+        The following parameters must also be provided (see the parent
+        'set_params' method):
+         p1. Starting epoch -> int
+         p2. Ending epoch -> int
+         p3. Graphics update rate -> int
+         p4. Training losses -> list[float]
+         p5. Testing losses -> list[float]
+         p6. Training accuracies -> list[float]
+         p7. Testing accuracies -> list[float]
+
+        """
+        super().__init__()
 
     def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        task. To be reimplemented in each child.
+        """
+        Main method of the thread. Defines how the worker should perform
+        its task.
 
         Raises
         ------
         ValueError
-            Raised if the thread's pipeline is not set.
+            Raised if the thread's task is not set.
+        ValueError
+            Raised if the thread's parameters are not set.
+        """
+        if self.task is None:
+            raise ValueError("Task is not set.")
+        if self.params is None:
+            raise ValueError("Parameters are not set.")
 
-        '''
-        if not self.pipeline:
-            raise ValueError('Tasks pipeline is not set.')
-    
-
-    def reset(self) -> None:
-        '''
-        Reset the thread parameters for safety measures. This method should 
-        be called by the thread when terminated.
-
-        '''
-        self.pipeline = ()
-        self.args = ()
-
-
-
-class LearningThread(DynamicStepsThread):
-
-    renderRequested = pyqtSignal(tuple) # tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list
-
-    def __init__(self) -> None:
-        '''
-        Dynamic steps thread specialized for supervised learning sessions. This
-        thread expects a task (see 'set_task' method from parent class) that
-        returns the following four outputs:
-            o1. Training loss -> float
-            o2. Testing loss -> float
-            o3. Training accuracy -> float
-            o4. Testing accuracy -> float
-        Moreover, the following parameters must be provided (see 'set_params'
-        method from parent class):
-            p1. Starting epoch -> int
-            p2. Ending epoch -> int
-            p3. Graphics update rate -> int
-            p4. Training losses -> list[float]
-            p5. Testing losses -> list[float]
-            p6. Training accuracies -> list[float]
-            p7. Testing accuracies -> list[float]
-
-        '''
-        super().__init__()
-
-
-    def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        task. 
-
-        '''
-        super().run()
-
-        (e_min, e_max, uprate, tr_loss_list, ts_loss_list, tr_acc_list, 
-         ts_acc_list) = self.params
+        # Extract parameters
+        (
+            e_min,
+            e_max,
+            uprate,
+            tr_loss_list,
+            ts_loss_list,
+            tr_acc_list,
+            ts_acc_list,
+        ) = self.params
 
         try:
             for e in range(e_min, e_max):
-            # Check for user cancel request
+                # Check for user cancel request
                 if self.isInterruptionRequested():
                     e -= 1
                     break
 
-            # Learn
-                task = cast(Callable, self.task) # sure from super().run()
-                tr_loss, ts_loss, tr_acc, ts_acc = task()
-            
-            # Store loss and accuracy values
+                # Learn
+                tr_loss, ts_loss, tr_acc, ts_acc = self.task()
+
+                # Store loss and accuracy values
                 tr_loss_list.append(tr_loss)
                 ts_loss_list.append(ts_loss)
                 tr_acc_list.append(tr_acc)
                 ts_acc_list.append(ts_acc)
 
-            # Update progress bar
+                # Update progress bar
                 self.iterCompleted.emit(e)
 
-            # Update loss and accuracy plots and labels
+                # Update loss and accuracy plots and labels
                 if (e + 1) % uprate == 0:
-                    self.renderRequested.emit((
-                        tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list))
+                    self.renderRequested.emit(
+                        (tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list)
+                    )
 
-        # Force last plot and labels rendering and exit with success 
-            self.renderRequested.emit((
-                tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list)) 
-            self.taskFinished.emit((
-                tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list), True)
+            # Force last plot and labels rendering and exit with success
+            self.renderRequested.emit(
+                (tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list)
+            )
+            self.taskFinished.emit(
+                (tr_loss_list, ts_loss_list, tr_acc_list, ts_acc_list), True
+            )
 
-        except Exception as exc: # noqa: BLE001
-        # Exit with error
-            self.taskFinished.emit((exc, ), False)
+        except Exception as exc:  # noqa: BLE001
+            # Exit and forward error
+            self.taskFinished.emit((exc,), False)
 
         finally:
-        # Reset parameters for safety measures
+            # Reset parameters for safety measures
             self.reset()
 
 
-
 class CsvChunkReadingThread(DynamicStepsThread):
-
     def __init__(self) -> None:
-        '''
-        Dynamic steps thread specialized for CSV chunk reading. This thread 
-        expects the 'read_csv' function from pandas to be set as task (see
-        'set_task' method from parent class). No extra parameters are required.
+        """
+        Dynamic steps thread specialized for CSV chunk reading. The
+        required task (see the parent 'set_task' method), is expected to
+        be the 'read_csv' function from Pandas. No extra parameters are
+        required.
 
-        '''
+        """
         super().__init__()
 
-
     def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        task. 
+        """
+        Main method of the thread. Defines how the worker should perform
+        its task.
 
-        '''
-        super().run()
+        Raises
+        ------
+        ValueError
+            Raised if the thread's task is not set.
+        """
+        if self.task is None:
+            raise ValueError("Task is not set.")
+
         chunk_list = []
-        
         try:
-        # Read CSV and return chunks
-            task = cast(Callable, self.task) # sure from super().run()
-            with task() as reader:
+            # Read CSV and return chunks
+            with self.task() as reader:
                 for i, chunk in enumerate(reader, start=1):
-                    if self.isInterruptionRequested(): 
+                    if self.isInterruptionRequested():
                         return
                     chunk_list.append(chunk)
                     self.iterCompleted.emit(i)
 
             self.taskFinished.emit(tuple(chunk_list), True)
-        
-        except Exception as exc: # noqa: BLE001
-        # Exit with error
-            self.taskFinished.emit((exc, ), False)
+
+        except Exception as exc:  # noqa: BLE001
+            # Exit and forward error
+            self.taskFinished.emit((exc,), False)
 
         finally:
-        # Reset parameters for safety measures
+            # Reset parameters for safety measures
             self.reset()
-
 
 
 class ModelBasedClassificationThread(FixedStepsThread):
-
     def __init__(self) -> None:
-        '''
+        """
         A fixed steps thread specialized for supervised model-based
-        classifications. This thread expects a pipeline (see 'set_pipeline'
-        method from parent class) that consists of the following functions:
-            f1. Pre-process features (None) -> o1 (Tensor)
-            f2. Predict targets (o1) -> o2.1 (Tensor), o2.2 (Tensor)
-            f3. Post-process targets (o2.1, o2.2) -> o3.1 (array), o3.2 (array)
+        classifications. The required pipeline (see the parent
+        'set_pipeline' method) must contain the following functions:
+         f1. Pre-process features () -> o1 (Tensor)
+         f2. Predict targets (o1) -> o2.1, o2.2 (Tensor, Tensor)
+         f3. Post-process targets (o2.1, o2.2) -> o3.1, o3.2 (NDArray, NDArray)
         No extra arguments are required.
 
-        '''
+        """
         super().__init__()
 
-
     def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        tasks. 
+        """
+        Main method of the thread. Defines how the worker should perform
+        its tasks.
 
-        '''
-        super().run()
+        Raises
+        ------
+        ValueError
+            Raised if the thread's pipeline is not set.
+        """
+        if not self.pipeline: 
+            raise ValueError("Tasks pipeline is not set.")
         pre_process, predict, post_process = self.pipeline
 
         try:
-        # Pre-process feature data
-            self.taskInitialized.emit('Pre-processing data')
+            # Pre-process feature data
+            self.taskInitialized.emit("Pre-processing data")
             feat_data = pre_process()
 
-        # Predict unknown data and calculate probability scores
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Identifying mineral classes')
+            # Predict unknown data and calculate probability scores
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Identifying mineral classes")
             prob, pred = predict(feat_data)
 
-        # Reconstruct the result
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Reconstructing mineral map')
+            # Reconstruct the result
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Reconstructing mineral map")
             prob, pred = post_process(prob, pred)
 
-        # Send the workFinished signal with success
+            # Send the workFinished signal with success
             self.workFinished.emit((pred, prob), True)
 
-        except Exception as e: # noqa: BLE001
-        # Send the workFinished signal with error
-            self.workFinished.emit((e, ), False)
-
-        finally:
-        # Reset parameters for safety measures
-            self.reset()
-
-
-
-class RoiBasedClassificationThread(FixedStepsThread):
-
-    def __init__(self) -> None:
-        '''
-        A fixed steps thread specialized for ROI-based classifications. This
-        thread expects a pipeline (see 'set_pipeline' method from parent class)
-        that consists of the following functions:
-            f1. Get training data (None) -> o1.1 (array), o1.2 (array), o1.3 (array)
-            f2. Fit classifier (o1.1, o1.2) -> None
-            f3. Predict targets (o1.3) -> o3 (array)
-            f4. Compute probability score (o1.3) -> o4 (array)
-        No extra arguments are required.
-
-        '''
-        super().__init__()
-
-
-    def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        tasks. 
-
-        '''
-        super().run()
-        get_train_data, fit, predict, compute_prob = self.pipeline
-
-        try:
-        # Extract training data
-            self.taskInitialized.emit('Collecting training data')
-            x_train, y_train, in_data = get_train_data()
-
-        # "Train" the classifier
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Training classifier')
-            fit(x_train, y_train)
-
-        # Predict unknown data
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Identifying mineral classes')
-            pred = predict(in_data)
-
-        # Compute probability score
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Calculating probability map')
-            prob = compute_prob(in_data)
-
-        # Send the workFinished signal with success
-            self.workFinished.emit((pred, prob), True)
-
-        except Exception as e: # noqa: BLE001
-        # Send the workFinished signal with error
-            self.workFinished.emit((e, ), False)
-
-        finally:
-        # Reset parameters for safety measures
-            self.reset()
-
-
-
-class UnsupervisedClassificationThread(FixedStepsThread):
-
-    def __init__(self) -> None:
-        '''
-        A fixed steps thread specialized for unsupervised classifications. This
-        thread expects a pipeline (see 'set_pipeline' method from parent class)
-        that consists of the following functions:
-            f1. Pre-process data (None) -> o1 (array)
-            f2. Fit classifier (o1) -> None
-            f3. Cluster data (o1) -> o3 (array)
-            f4. Compute probability score (o1) -> o4 (array)
-            f5. Compute Silhouette score (o1, o3) -> o5.1 (dict), o5.2 (float)
-            f6. Compute Calinski-Harabasz Index (o1, o3) -> o6 (float)
-            f7. Compute Davies-Bouldin Index (o1, o3) -> o7 (float)
-        No extra arguments are required.
-
-        '''
-        super().__init__()
-
-
-    def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        tasks. 
-        
-        '''
-        super().run()
-        (pre_process, fit, predict, compute_prob, sil_score, chi_score, 
-         dbi_score) = self.pipeline
-
-        try:
-        # Pre-process input data
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Pre-processing data')
-            in_data = pre_process()
-            
-        # Fit data
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Fitting data')
-            fit(in_data)
-
-        # Cluster data
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Clustering data')
-            pred = predict(in_data)
-
-        # Compute probability score
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Computing probability score')
-            prob = compute_prob(in_data)
-
-        # Compute silhouette score
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Computing silhouette score')
-            sil_clust, sil_avg = sil_score(in_data, pred)
-
-        # Compute Calinski-Harabasz Index (CHI) score
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Computing Calinski-Harabasz Index')
-            chi = chi_score(in_data, pred)
-
-        # Compute Davies-Bouldin Index (DBI) score
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Computing Davies-Bouldin Index')
-            dbi = dbi_score(in_data, pred)
-
-        # Send the workFinished signal with success
-            out = (pred, prob, sil_avg, sil_clust, chi, dbi)
-            self.workFinished.emit(out, True)
-
-        except Exception as e: # noqa: BLE001
-        # Send the workFinished signal with error
+        except Exception as e:  # noqa: BLE001
+            # Send the workFinished signal and forward error
             self.workFinished.emit((e,), False)
 
         finally:
-        # Reset parameters for safety measures
+            # Reset parameters for safety measures
             self.reset()
 
 
-
-class BalancingThread(FixedStepsThread):
-
+class RoiBasedClassificationThread(FixedStepsThread):
     def __init__(self) -> None:
-        '''
-        Fixed steps thread specialized for balancing training sets. This thread
-        expects a pipeline (see 'set_pipeline' method from parent class) that
-        consists of the following functions:
-            f1. Parse strategy (a1) -> o1.1 (dict), o1.2 (dict), o1.3 (dict)
-            f2. Undersample (o1.2, a4, a2, a7, a8) -> o2.1 (array), o2.2 (array)
-            f3. Oversample (o1.1, a3, a2, a5, a6, o2.1, o2.2) -> o3.1 (array), o3.2 (array)
-            f4. Shuffle (o3.1, o3.2, a2) -> o4.1 (array), o4.2 (array)
-        Moreover, the following extra arguments (see 'set_pipeline' method from
-        parent class) are required:
-            a1. Balancing strategy -> BalancingStrategy (see 'dataset_tools.py')
-            a2. Seed -> int
-            a3. Oversampling algorithm -> str | None
-            a4. Undersampling algorithm -> str | None
-            a5. K-neighbors for oversampler -> int
-            a6. M-neighbors for oversampler -> int
-            a7. N-neigbors for oversampler -> int
-            a8. Number of CPU cores -> int
+        """
+        A fixed steps thread specialized for ROI-based classifications.
+        The required pipeline (see the parent 'set_pipeline' method)
+        must contain the following functions:
+         f1. Get ROI data () -> o1.1, o1.2, o1.3 (NDArray, NDArray, NDArray)
+         f2. Fit classifier (o1.1, o1.2) -> None
+         f3. Predict targets (o1.3) -> o3 (NDArray)
+         f4. Probability score (o1.3) -> o4 (NDArray)
+        No extra arguments are required.
 
-        '''
+        """
         super().__init__()
 
+    def run(self) -> None:
+        """
+        Main method of the thread. Defines how the worker should perform
+        its tasks.
+
+        Raises
+        ------
+        ValueError
+            Raised if the thread's pipeline is not set.
+        """
+        if not self.pipeline: 
+            raise ValueError("Tasks pipeline is not set.")
+        get_train_data, fit, predict, compute_prob = self.pipeline
+
+        try:
+            # Extract training data
+            self.taskInitialized.emit("Collecting training data")
+            x_train, y_train, in_data = get_train_data()
+
+            # "Train" the classifier
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Training classifier")
+            fit(x_train, y_train)
+
+            # Predict unknown data
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Identifying mineral classes")
+            pred = predict(in_data)
+
+            # Compute probability score
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Calculating probability map")
+            prob = compute_prob(in_data)
+
+            # Send the workFinished signal with success
+            self.workFinished.emit((pred, prob), True)
+
+        except Exception as e:  # noqa: BLE001
+            # Send the workFinished signal and forward error
+            self.workFinished.emit((e,), False)
+
+        finally:
+            # Reset parameters for safety measures
+            self.reset()
+
+
+class UnsupervisedClassificationThread(FixedStepsThread):
+    def __init__(self) -> None:
+        """
+        A fixed steps thread specialized for unsupervised
+        classifications. The required pipeline (see the parent 
+        'set_pipeline' method) must contain the following functions:
+         f1. Pre-process data () -> o1 (array)
+         f2. Fit classifier (o1) -> None
+         f3. Cluster data (o1) -> o3 (array)
+         f4. Probability score (o1) -> o4 (array)
+         f5. Silhouette score (o1, o3) -> o5.1, o5.2 (dict[int, array], float)
+         f6. Calinski-Harabasz Index (o1, o3) -> o6 (float)
+         f7. Davies-Bouldin Index (o1, o3) -> o7 (float)
+        No extra arguments are required.
+
+        """
+        super().__init__()
 
     def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        tasks. 
+        """
+        Main method of the thread. Defines how the worker should perform
+        its tasks.
 
-        '''
-        super().run()
+        Raises
+        ------
+        ValueError
+            Raised if the thread's pipeline is not set.
+        """
+        if not self.pipeline: 
+            raise ValueError("Tasks pipeline is not set.")
+        (
+            pre_process,
+            fit,
+            predict,
+            compute_prob,
+            sil_score,
+            chi_score,
+            dbi_score,
+        ) = self.pipeline
+
+        try:
+            # Pre-process input data
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Pre-processing data")
+            in_data = pre_process()
+
+            # Fit data
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Fitting data")
+            fit(in_data)
+
+            # Cluster data
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Clustering data")
+            pred = predict(in_data)
+
+            # Compute probability score
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Computing probability score")
+            prob = compute_prob(in_data)
+
+            # Compute silhouette score
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Computing silhouette score")
+            sil_clust, sil_avg = sil_score(in_data, pred)
+
+            # Compute Calinski-Harabasz Index (CHI) score
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Computing Calinski-Harabasz Index")
+            chi = chi_score(in_data, pred)
+
+            # Compute Davies-Bouldin Index (DBI) score
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Computing Davies-Bouldin Index")
+            dbi = dbi_score(in_data, pred)
+
+            # Send the workFinished signal with success
+            out = (pred, prob, sil_avg, sil_clust, chi, dbi)
+            self.workFinished.emit(out, True)
+
+        except Exception as e:  # noqa: BLE001
+            # Send the workFinished signal with error
+            self.workFinished.emit((e,), False)
+
+        finally:
+            # Reset parameters for safety measures
+            self.reset()
+
+
+class BalancingThread(FixedStepsThread):
+    def __init__(self) -> None:
+        """
+        Fixed steps thread specialized for balancing training sets. The
+        required pipeline (see the parent 'set_pipeline' method) must
+        contain the following functions:
+         f1. Parse strategy (a1) -> o1.1, o1.2, o1.3 (dict[int, int], dict[int, int], dict[str, str])
+         f2. Undersample (o1.2, a4, a2, a7, a8) -> o2.1, o2.2 (array, array)
+         f3. Oversample (o1.1, a3, a2, a5, a6, o2.1, o2.2) -> o3.1, o3.2 (array, array)
+         f4. Shuffle (o3.1, o3.2, a2) -> o4.1, o4.2 (array, array)
+        The following parameters must also be provided in 'set_pipeline':
+         a1. Balancing strategy -> BalancingStrategy (see 'dataset_tools.py')
+         a2. Seed -> int
+         a3. Oversampling algorithm -> str | None
+         a4. Undersampling algorithm -> str | None
+         a5. K-neighbors for oversampler -> int
+         a6. M-neighbors for oversampler -> int
+         a7. N-neigbors for oversampler -> int
+         a8. Number of CPU cores -> int
+
+        """
+        super().__init__()
+
+    def run(self) -> None:
+        """
+        Main method of the thread. Defines how the worker should perform
+        its tasks.
+
+        Raises
+        ------
+        ValueError
+            Raised if the thread's task is not set.
+        ValueError
+            Raised if the thread's extra parameters are not set.
+        """
+        if self.pipeline is None:
+            raise ValueError("Tasks pipeline is not set.")
+        if self.args is None:
+            raise ValueError("Required extra parameters are not set.")
 
         parse_strat, oversample, undersample, shuffle = self.pipeline
         strategy, seed, osa, usa, kos, mos, nus, njobs = self.args
         balancing_info = {}
 
         try:
-        # Parse over-sampling and under-sampling strategies
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Parsing strategy')
-            os_strat, us_strat, strat_info = parse_strat(strategy, verbose=True)
-            balancing_info['Strategy'] = strat_info
-            balancing_info['Over-sampling algorithm'] = osa
-            balancing_info['Under-sampling algorithm'] = usa
-            balancing_info['K-neighbours'] = kos
-            balancing_info['M-neighbours'] = mos
-            balancing_info['N-neighbours'] = nus
-            balancing_info['Seed'] = seed
+            # Parse over-sampling and under-sampling strategies
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Parsing strategy")
+            os_strat, us_strat, strat_info = parse_strat(
+                strategy, verbose=True
+            )
+            balancing_info["Strategy"] = strat_info
+            balancing_info["Over-sampling algorithm"] = osa
+            balancing_info["Under-sampling algorithm"] = usa
+            balancing_info["K-neighbours"] = kos
+            balancing_info["M-neighbours"] = mos
+            balancing_info["N-neighbours"] = nus
+            balancing_info["Seed"] = seed
 
-        # Compute under-sampling
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Under-sampling dataset')
-            x_train, y_train = undersample(us_strat, usa, seed, nus, njobs)
+            # Compute under-sampling
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Under-sampling dataset")
+            x_train, y_train = undersample(us_strat, "bad", seed, nus, njobs)
 
-        # Compute over-sampling
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Over-sampling dataset')
-            x_train, y_train = oversample(os_strat, osa, seed, kos, mos,
-                                          x=x_train, y=y_train)
+            # Compute over-sampling
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Over-sampling dataset")
+            x_train, y_train = oversample(
+                os_strat, osa, seed, kos, mos, x=x_train, y=y_train
+            )
 
-        # Shuffle dataset
-            if self.isInterruptionRequested(): return
-            self.taskInitialized.emit('Shuffling dataset')
+            # Shuffle dataset
+            if self.isInterruptionRequested():
+                return
+            self.taskInitialized.emit("Shuffling dataset")
             if osa or usa:
                 x_train, y_train = shuffle(x_train, y_train, seed=seed)
 
-        # Send the workFinished signal with success
+            # Send the workFinished signal with success
             self.workFinished.emit((x_train, y_train, balancing_info), True)
 
-        except Exception as e: # noqa: BLE001
-        # Send the workFinished signal with error
+        except Exception as e:  # noqa: BLE001
+            # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
 
         finally:
-        # Reset parameters for safety measures
+            # Reset parameters for safety measures
             self.reset()
 
 
-
-class NpvThread(FixedStepsThread): 
-    # Should NOT inherit from FixedStepsThread, as the n. of possible steps is
-    # data driven. Should be moved to DynamicStepsThread. Also move the logic
-    # of the function to master code, as thread is just a worker and should
-    # just execute commands.
+class NpvThread(FixedStepsThread):
+    # Should NOT inherit from FixedStepsThread, as the n. of possible
+    # steps is data driven. Should be moved to DynamicStepsThread. Also,
+    # move the logic of the function to master code, as thread is just a
+    # worker and should just execute commands.
 
     def __init__(self) -> None:
-        '''
-        Multi task thread specialized for computing a cumulative Neighborhood
-        Pixel Variance (NPV) map.
+        """
+        Multi task thread specialized for computing a cumulative
+        Neighborhood Pixel Variance (NPV) map.
 
-        '''
+        """
         super().__init__()
 
     def set_params(
         self,
         arrays: list[np.ndarray],
-        map_names: list[str], 
+        map_names: list[str],
         size: int,
-        npv_func: Callable
+        npv_func: Callable,
     ) -> None:
-        '''
+        """
         Set worker's required parameters.
 
         Parameters
@@ -617,100 +634,98 @@ class NpvThread(FixedStepsThread):
             Size of the squared kernel.
         npv_func : Callable
             NPV type function. Can be one of np.sum, np.median, np.mean.
-
-        '''
+        """
         self.arrays = arrays
         self.map_names = map_names
         self.size = size
         self.npv_func = npv_func
 
-
     def reset(self) -> None:
-        '''
-        Reset the thread parameters for safety measures. This method is 
+        """
+        Reset the thread parameters for safety measures. This method is
         automatically called by the thread when terminated.
 
-        '''
+        """
         self.arrays = []
         self.map_names = []
         self.size = 0
         self.npv_func = None
 
-
     def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        tasks. 
+        """
+        Main method of the thread. Defines how the worker should perform
+        its tasks.
 
-        '''
-        # Exit funtion if not npv_func is set (safety)
+        """
+        # Exit funtion if npv_func is not set (safety)
         if (npv_func := self.npv_func) is None:
             return
 
         try:
-        # Set derived parameters
+            # Set derived parameters
             c = self.size**2 // 2  # central pixel index of NPV kernel
 
-        # Compute NPV for each map
+            # Compute NPV for each map
             npv_list: list[np.ndarray] = []
             for arr, name in zip(self.arrays, self.map_names):
-                if self.isInterruptionRequested(): return
+                if self.isInterruptionRequested():
+                    return
 
-            # Neighborhood pixel variance (NPV)
-                self.taskInitialized.emit(f'Computing NPV for {name} map')
-                npv = ndimage.generic_filter(arr, lambda a: npv_func(
-                                             np.abs(a-a[c])), self.size)
-            # NPV rescaling
-                npv = npv/(arr.max() - arr.min())
-            # Append npv map to npv_list
+                    # Neighborhood pixel variance (NPV)
+                self.taskInitialized.emit(f"Computing NPV for {name} map")
+                npv = ndimage.generic_filter(
+                    arr, lambda a: npv_func(np.abs(a - a[c])), self.size
+                )
+                # NPV rescaling
+                npv = npv / (arr.max() - arr.min())
+                # Append npv map to npv_list
                 npv_list.append(npv)
 
-        # Send the workFinished signal with success and return the 
-        # (normalized) cumulative NPV map
+            # Send the workFinished signal with success and return the
+            # (normalized) cumulative NPV map
             npv_sum = sum(npv_list)
-            npv_sum = npv_sum / np.max(npv_sum) # normalize to range [0, 1]
-            self.workFinished.emit((npv_sum, ), True)
+            npv_sum = npv_sum / np.max(npv_sum)  # normalize to [0, 1]
+            self.workFinished.emit((npv_sum,), True)
 
-        except Exception as e: # noqa: BLE001
-        # Send the workFinished signal with error
-            self.workFinished.emit((e, ), False)
+        except Exception as e:  # noqa: BLE001
+            # Send the workFinished signal with error
+            self.workFinished.emit((e,), False)
 
         finally:
-        # Reset parameters for safety measures
+            # Reset parameters for safety measures
             self.reset()
 
 
-
 class RoiDetectionThread(FixedStepsThread):
-    # Should NOT inherit from FixedStepsThread, as the n. of possible steps is
-    # data driven. Should be moved to DynamicStepsThread. Also move the logic
-    # of the function to master code, as thread is just a worker and should
-    # just execute commands.
+    # Should NOT inherit from FixedStepsThread, as the n. of possible
+    # steps is data driven. Should be moved to DynamicStepsThread. Also,
+    # move the logic of the function to master code, as thread is just a
+    # worker and should just execute commands.
 
     def __init__(self) -> None:
-        '''
-        Multi task thread that automatically identifies ROIs from an NPV map.
+        """
+        Multi task thread that automatically identifies ROIs from an NPV
+        map.
 
-        '''
+        """
         super().__init__()
 
-    # Set main attributes
+        # Set main attributes
         self.n_roi = 0
         self.size = 0
         self.distance = 0
         self.npv_map = None
         self.current_roimap = None
 
-
     def set_params(
         self,
         n_roi: int,
         size: int,
-        distance: int, 
+        distance: int,
         npv_map: np.ndarray,
-        current_roimap: RoiMap
+        current_roimap: RoiMap,
     ) -> None:
-        '''
+        """
         Set worker's required parameters.
 
         Parameters
@@ -724,97 +739,94 @@ class RoiDetectionThread(FixedStepsThread):
         npv_map : np.ndarray
             Neighborhood Pixel Variance map.
         current_roimap : RoiMap
-            Currently existent ROI map.
-
-        '''
+            Currently existing ROI map.
+        """
         self.n_roi = n_roi
         self.size = size
         self.distance = distance
         self.npv_map = npv_map
         self.current_roimap = current_roimap
 
-
     def reset(self) -> None:
-        '''
-        Reset the thread parameters for safety measures. This method is 
+        """
+        Reset the thread parameters for safety measures. This method is
         automatically called by the thread when terminated.
 
-        '''
+        """
         self.n_roi = 0
         self.size = 0
         self.distance = 0
         self.npv_map = None
         self.current_roimap = None
 
-
     def run(self) -> None:
-        '''
-        Main method of the thread. Defines how the worker should perform its
-        tasks. 
+        """
+        Main method of the thread. Defines how the worker should perform
+        its tasks.
 
-        '''
+        """
         # Exit function if npv_map or current_roimap are invalid (safety)
         if self.npv_map is None or self.current_roimap is None:
             return
 
         try:
-        # Set derived parameters
-            r = self.size // 2    # ROI radius
+            # Set derived parameters
+            r = self.size // 2  # ROI radius
             d = r + self.distance
             nrows, ncols = self.npv_map.shape
 
-        # Exclude borders
+            # Exclude borders
             mask = np.ones((nrows, ncols))
             mask[r:-r, r:-r] = 0
             self.npv_map[mask == 1] = np.nan
 
-        # Sort flattened cumulative NPV map by values (smaller values first)
-            idx = np.argsort(self.npv_map, axis=None) 
+            # Sort flattened cumulative NPV map by values (smaller first)
+            idx = np.argsort(self.npv_map, axis=None)
 
-        # Create a new empty ROI map
+            # Create a new empty ROI map
             auto_roimap = RoiMap.from_shape((nrows, ncols))
 
-        # Detect best ROIs
-            rois_found = 0 
-            self.taskInitialized.emit(f'Detecting ROI (1/{self.n_roi})')
+            # Detect best ROIs
+            rois_found = 0
+            self.taskInitialized.emit(f"Detecting ROI (1/{self.n_roi})")
             for i in idx:
-                if self.isInterruptionRequested(): return
+                if self.isInterruptionRequested():
+                    return
 
-            # Get the original row-col coords from the index of the pixel
+                # Get the original row-col coords from pixels' index
                 row, col = np.unravel_index(i, (nrows, ncols))
-            # Skip NaN pixels (border of NPV cumulative map)
+                # Skip NaN pixels (border of NPV cumulative map)
                 if np.isnan(self.npv_map[row, col]):
                     continue
-            # Fix out of range ROI extents
+                # Fix out of range ROI extents
                 y0, y1, x0, x1 = row - d, row + d, col - d, col + d
                 y0 = max(y0, 0)
                 y1 = min(y1, nrows)
                 x0 = max(x0, 0)
                 x1 = min(x1, ncols)
-            # Allow only ROIs that do not overlap with existent ROIs
-                if (
-                    not self.current_roimap.extents_overlaps((x0, x1, y0, y1)) 
-                    and not auto_roimap.extents_overlaps((x0, x1, y0, y1))
-                ):
+                # Allow only ROIs that do not overlap with existing ROIs
+                if not self.current_roimap.extents_overlaps(
+                    (x0, x1, y0, y1)
+                ) and not auto_roimap.extents_overlaps((x0, x1, y0, y1)):
                     extents = (col - r, col + r + 1, row - r, row + r + 1)
                     bbox = auto_roimap.extents_to_bbox(extents)
-                    auto_roimap.add_roi('-', bbox)
+                    auto_roimap.add_roi("-", bbox)
                     rois_found += 1
-                # Kill the loop if the requested number of ROIs are found
+                    # Kill the loop if the requested number of ROIs are found
                     if rois_found == self.n_roi:
                         break
                     else:
-                        txt = f'Detecting ROI ({rois_found+1}/{self.n_roi})'
+                        txt = f"Detecting ROI ({rois_found + 1}/{self.n_roi})"
                         self.taskInitialized.emit(txt)
 
-        # Send the workFinished signal with success and return the auto 
-        # detected roimap
+            # Send the workFinished signal with success and return the auto
+            # detected roimap
             self.workFinished.emit((auto_roimap,), True)
 
-        except Exception as e: # noqa: BLE001
-        # Send the workFinished signal with error
+        except Exception as e:  # noqa: BLE001
+            # Send the workFinished signal with error
             self.workFinished.emit((e,), False)
 
         finally:
-        # Reset parameters for safety measures
+            # Reset parameters for safety measures
             self.reset()
