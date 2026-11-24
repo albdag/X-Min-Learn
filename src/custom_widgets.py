@@ -2748,8 +2748,8 @@ class SplitterGroup(QW.QSplitter):
         ------
         TypeError
             Raised if 'qobjects' contains an invalid object.
-        AssertionError
-            Raised if 'qobjects' and 'stretches' have different sizes.
+        ValueError
+            Raised if 'qobjects' and 'stretches' have different lengths.
         """
         # Use super class to create the splitter and set its stylesheet
         self.orient = orient
@@ -2775,7 +2775,8 @@ class SplitterGroup(QW.QSplitter):
 
         # Add stretches to each object
         if stretches is not None:
-            assert len(stretches) == len(qobjects)
+            if len(stretches) != len(qobjects):
+                raise ValueError('Different "stretches" and "qobjects" length')
             for i, s in enumerate(stretches):
                 self.setStretchFactor(i, s)
 
